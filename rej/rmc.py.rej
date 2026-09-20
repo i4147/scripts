@@ -1,0 +1,10 @@
+--- script.py
++++ script.py
+@@ -1,6 +1,7 @@
+ import argparse
+ import ast
+ import shutil
+ import sys
+ import tempfile
++import zipfile
+ from concurrent.futures import ProcessPoolExecutor, as_completed

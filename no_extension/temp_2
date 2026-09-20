@@ -1,0 +1,9 @@
+export _wifi='^swifi^^c
+export _cpu='^scpu^^c
+export _mem='^smem^^c
+export _vol='^svol^^c
+export _icons='^sicons^^c
+export _bat='^sbat^^c
+export _light="^slight^^c
+export _date='^sdate^^c
+export _music="^smusic^^c
