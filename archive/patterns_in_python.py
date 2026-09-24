@@ -1,1 +1,0 @@
-/data/data/com.termux/files/home/isaac/may/telegram/patterns_in_python.py

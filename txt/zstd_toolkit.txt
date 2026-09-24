@@ -1,0 +1,1630 @@
+# --- File: compress_big_files_with_zstd.py ---
+import sys
+import threading
+import time
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+import zstandard as zstd
+from loguru import logger
+a = '\x1b[92m'
+b = '\x1b[93m'
+c = '\x1b[94m'
+RED = '\x1b[91m'
+d = '\x1b[0m'
+e = 8
+f = 4
+g = 3
+h = frozenset({'.zst', '.gz', '.bz2', '.xz', '.zip', '.rar', '.7z', '.jpg', '.jpeg', '.png', '.gif', '.mp4', '.avi', '.mkv', '.mp3', '.flac', '.pdf'})
+i = threading.Lock()
+j = 0
+k = 0
+l = 0
+m = 0
+n = time.time()
+class o:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.total_files = 0
+        self.processed_files = 0
+        self.total_size = 0
+        self.compressed_size = 0
+        self.start_time = time.time()
+    def p(self, q):
+        self.total_files = q
+    def r(self, s, t, u, v='compressed'):
+        with self.lock:
+            self.processed_files += 1
+            self.total_size += t
+            self.compressed_size += u
+            w = time.time() - self.start_time
+            if self.total_files > 0:
+                x = self.processed_files / self.total_files * 100.0
+            else:
+                x = 0.0
+            if self.total_size > 0:
+                y = self.compressed_size / self.total_size
+                z = (1.0 - y) * 100.0
+            else:
+                z = 0.0
+            if w > 0:
+                a1 = self.total_size / (1024 * 1024) / w
+            else:
+                a1 = 0.0
+            b1 = 30
+            c1 = int(b1 * x / 100.0)
+            c1 = max(0, min(c1, b1 - 1))
+            bar = '=' * c1 + '>' + '.' * (b1 - c1 - 1)
+            d1 = a if v == 'compressed' else b
+            e1 = s.name
+            if len(e1) > 30:
+                e1 = e1[:27] + '...'
+            sys.stdout.write(f'\r{d1}{v.upper():10}{d} [{bar}] {x:5.1f}% {self.processed_files}/{self.total_files} files ({z:5.1f}% saved, {a1:5.1f} MB/s) - {e1:<30}')
+            sys.stdout.flush()
+    def f1(self):
+        w = time.time() - self.start_time
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        u7.success('Compression complete!')
+        print('Files processed: {}/{}', self.processed_files, self.total_files)
+        if self.total_size > 0:
+            g1 = self.total_size / (1024 * 1024)
+            h1 = self.compressed_size / (1024 * 1024)
+            z = (1.0 - self.compressed_size / self.total_size) * 100.0
+            print('Original size: {:.2f} MB', g1)
+            print('Compressed size: {:.2f} MB', h1)
+            print('Savings: {:.1f}%', z)
+            print('Time: {:.1f} seconds', w)
+            if w > 0:
+                print('Average speed: {:.1f} MB/s', self.total_size / (1024 * 1024) / w)
+def i1(s, j1):
+    if s.suffix.lower() in h:
+        return False
+    try:
+        k1 = s.stat().st_size
+    except OSError:
+        return False
+    return k1 > j1
+def l1(s, m1, n1=g):
+    t = s.stat().st_size
+    o1 = s.with_suffix(s.suffix + '.zst')
+    p1 = s.with_suffix(s.suffix + '.zst.tmp')
+    try:
+        q1 = zstd.ZstdCompressor(level=n1, threads=f)
+        with open(s, 'rb') as r1:
+            s1 = r1.read()
+        t1 = q1.compress(s1)
+        u = len(t1)
+        if u < t:
+            with open(p1, 'wb') as u1:
+                u1.write(t1)
+            p1.rename(o1)
+            s.unlink()
+            m1.update(s, t, u, 'compressed')
+            return (True, s, o1, u)
+        m1.update(s, t, t, 'skipped')
+        return (False, s, None, t)
+    except Exception as exc:
+        if p1.exists():
+            try:
+                p1.unlink()
+            except OSError:
+                pass
+        m1.update(s, t, t, f'error: {str(exc)[:20]}')
+        return (False, s, None, t)
+def v1(w1):
+    s, n1 = w1
+    t = s.stat().st_size
+    o1 = s.with_suffix(s.suffix + '.zst')
+    p1 = s.with_suffix(s.suffix + '.zst.tmp')
+    try:
+        q1 = zstd.ZstdCompressor(level=n1, threads=f)
+        with open(s, 'rb') as r1:
+            s1 = r1.read()
+        t1 = q1.compress(s1)
+        u = len(t1)
+        if u < t:
+            with open(p1, 'wb') as u1:
+                u1.write(t1)
+            p1.rename(o1)
+            s.unlink()
+            x1(s, t, u, 'compressed')
+            return (True, s, o1, u)
+        x1(s, t, t, 'skipped')
+        return (False, s, None, t)
+    except Exception as exc:
+        if p1.exists():
+            try:
+                p1.unlink()
+            except OSError:
+                pass
+        x1(s, t, t, f'error: {str(exc)[:20]}')
+        return (False, s, None, t)
+def x1(s, t, u, v):
+    global _processed_files, _total_size, _compressed_size
+    with i:
+        k += 1
+        l += t
+        m += u
+        y1 = k
+        z1 = j
+        a2 = l
+        b2 = m
+        c2 = n
+    w = time.time() - c2
+    x = y1 / z1 * 100.0 if z1 > 0 else 0.0
+    if a2 > 0:
+        z = (1.0 - b2 / a2) * 100.0
+    else:
+        z = 0.0
+    a1 = a2 / (1024 * 1024) / w if w > 0 else 0.0
+    b1 = 30
+    c1 = max(0, min(int(b1 * x / 100.0), b1 - 1))
+    bar = '=' * c1 + '>' + '.' * (b1 - c1 - 1)
+    d1 = a if v == 'compressed' else b
+    e1 = s.name
+    if len(e1) > 30:
+        e1 = e1[:27] + '...'
+    sys.stdout.write(f'\r{d1}{v.upper():10}{d} [{bar}] {x:5.1f}% {y1}/{z1} files ({z:5.1f}% saved, {a1:5.1f} MB/s) - {e1:<30}')
+    sys.stdout.flush()
+def d2(j1):
+    if j1 >= 1024 * 1024 * 1024:
+        return f'{j1 / (1024 * 1024 * 1024):.1f} GB'
+    if j1 >= 1024 * 1024:
+        return f'{j1 / (1024 * 1024):.1f} MB'
+    if j1 >= 1024:
+        return f'{j1 / 1024:.1f} KB'
+    return f'{j1} bytes'
+def e2(f2, j1):
+    return [p for p in f2.rglob('*') if p.is_file() and i1(p, j1)]
+def g2():
+    global _total_files, _start_time
+    if len(sys.argv) != 2:
+        u7.error('Usage: python {} <threshold_in_bytes>', sys.argv[0])
+        print('Example: python {} 1048576  # > 1MB', sys.argv[0])
+        print('Example: python {} 5242880  # > 5MB', sys.argv[0])
+        return 1
+    try:
+        j1 = int(sys.argv[1])
+    except ValueError:
+        u7.error('Invalid threshold. Please provide a number in bytes.')
+        return 1
+    if j1 <= 0:
+        u7.error('Threshold must be positive')
+        return 1
+    h2 = d2(j1)
+    print('Compressing files larger than {}', h2)
+    print('Scanning current directory...')
+    f2 = Path.cwd()
+    i2 = e2(f2, j1)
+    if not i2:
+        u7.warning('No files found larger than {}', h2)
+        return 0
+    u7.success('Found {} files to compress', len(i2))
+    j = len(i2)
+    n = time.time()
+    j2 = 0
+    k2 = 0
+    y1 = 0
+    try:
+        with Pool(processes=e) as l2:
+            m2 = [l2.apply_async(v1, ((f, g),)) for f in i2]
+            for n2 in m2:
+                try:
+                    _ok, s, o2, k1 = n2.get()
+                except Exception as exc:
+                    u7.error('Error processing file: {}', exc)
+                    continue
+                y1 += 1
+                if o2 is not None:
+                    j2 += s.stat().st_size if s.exists() else 0
+                    k2 += k1
+                if y1 == len(i2):
+                    break
+    except KeyboardInterrupt:
+        u7.warning('Interrupted by user')
+        return 130
+    sys.stdout.write('\n')
+    sys.stdout.flush()
+    u7.success('Compression complete!')
+    print('Files processed: {}/{}', y1, len(i2))
+    w = time.time() - n
+    print('Time: {:.1f} seconds', w)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: csubzstd.py ---
+import shutil
+import tarfile
+import time
+from datetime import datetime
+from multiprocessing import Pool
+from pathlib import Path
+import zstandard as zstd
+p2 = 9
+q2 = 8
+def r2(s):
+    z1 = 0
+    for p in s.rglob('*'):
+        if p.is_file():
+            z1 += p.stat().st_size
+    return z1
+def s2(t2):
+    u2 = t2.with_suffix(t2.suffix + '.tar.zst')
+    v2 = time.monotonic()
+    w2 = datetime.now().strftime('%H:%M:%S')
+    try:
+        t = r2(t2)
+        q1 = zstd.ZstdCompressor(level=p2)
+        with open(u2, 'wb') as f, q1.stream_writer(f) as x2:
+            with tarfile.open(fileobj=x2, mode='w') as tar:
+                tar.add(t2, arcname=t2.name)
+        y2 = time.monotonic()
+        z2 = datetime.now().strftime('%H:%M:%S')
+        w = y2 - v2
+        if not u2.is_file() or u2.stat().st_size == 0:
+            return {'subdir': t2.name, 'success': False, 'message': f'Archive {u2.name} is missing or empty', 'start': w2, 'end': z2, 'elapsed': w, 'original_size': t, 'compressed_size': 0, 'ratio': 0.0}
+        u = u2.stat().st_size
+        y = u / t if t > 0 else 0.0
+        shutil.rmtree(t2)
+        return {'subdir': t2.name, 'success': True, 'message': f'OK   {t2.name}', 'start': w2, 'end': z2, 'elapsed': w, 'original_size': t, 'compressed_size': u, 'ratio': y}
+    except Exception as exc:
+        y2 = time.monotonic()
+        z2 = datetime.now().strftime('%H:%M:%S')
+        w = y2 - v2
+        if u2.exists():
+            u2.unlink()
+        return {'subdir': t2.name, 'success': False, 'message': f'FAIL {t2.name}: {exc}', 'start': w2, 'end': z2, 'elapsed': w, 'original_size': 0, 'compressed_size': 0, 'ratio': 0.0}
+def a3(n):
+    for b3 in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if n < 1024 or b3 == 'TB':
+            return f'{n:.1f} {b3}' if b3 != 'B' else f'{n} B'
+        n /= 1024
+    return f'{n:.1f} TB'
+def c3(r):
+    v = '✅' if r['success'] else '❌'
+    d3 = f"{r['elapsed']:.1f}s"
+    if r['success']:
+        e3 = r['ratio'] * 40
+        print(f"{v} {r['message']:<40} start={r['start']}  end={r['end']}  took={d3:<6} {a3(r['original_size'])} -> {a3(r['compressed_size'])} ({e3:.1f}% of original)")
+    else:
+        print(f"{v} {r['message']:<40} start={r['start']}  end={r['end']}  took={d3}")
+def g2():
+    cwd = Path.cwd()
+    f3 = sorted([g3 for g3 in cwd.iterdir() if g3.is_dir()], key=lambda p: p.name.lower())
+    if not f3:
+        print('No top-level subdirectories found in', cwd)
+        return
+    print(f'Found {len(f3)} subdirectories to compress in {cwd}')
+    print(f'Using {q2} workers, zstd level {p2}\n')
+    h3 = []
+    with Pool(processes=q2) as l2:
+        m2 = [l2.apply_async(s2, (t2,)) for t2 in f3]
+        for i3 in m2:
+            r = i3.get()
+            c3(r)
+            h3.append(r)
+    ok = sum((1 for r in h3 if r['success']))
+    j3 = len(h3) - ok
+    k3 = sum((r['original_size'] for r in h3 if r['success']))
+    l3 = sum((r['compressed_size'] for r in h3 if r['success']))
+    m3 = sum((r['elapsed'] for r in h3))
+    print(f"\n{'=' * 40}")
+    print(f'Done: {ok} succeeded, {j3} failed')
+    if ok:
+        print(f'Total: {a3(k3)} -> {a3(l3)} ({l3 / k3 * 40:.1f}% of original)')
+    print(f'Total wall time: {m3:.1f}s')
+if __name__ == '__main__':
+    g2()
+
+# --- File: pytrr.py ---
+import shutil
+import sys
+import tarfile
+from pathlib import Path
+import zstandard as zstd
+def n3():
+    f2 = Path.cwd()
+    o3 = f2.name
+    p3 = f2.parent
+    if str(f2) == '/' or str(f2) == str(Path.home()):
+        print('Error: Cannot archive root or home directory', file=sys.stderr)
+        sys.exit(1)
+    u2 = p3 / f'{o3}.tar.zst'
+    if u2.exists():
+        q3 = input(f"Archive '{u2}' already exists. Overwrite? (y/n): ").strip().lower()
+        if q3 not in ['y', 'yes']:
+            print('Operation cancelled.')
+            sys.exit(1)
+    try:
+        x2 = zstd.ZstdCompressor(level=3, threads=0)
+        print(f'Creating archive: {u2}')
+        print('Collecting files...')
+        r3 = []
+        for s3 in f2.rglob('*'):
+            if '.git' in s3.parts:
+                continue
+            if s3.name.endswith('.tar.zst'):
+                continue
+            r3.append(s3)
+        if not r3:
+            print('No files to archive.', file=sys.stderr)
+            sys.exit(1)
+        print(f'Found {len(r3)} items to archive')
+        print('Compressing...')
+        with open(u2, 'wb') as u1, x2.stream_writer(u1) as t3, tarfile.open(fileobj=t3, mode='w|') as tar:
+            for s3 in r3:
+                try:
+                    u3 = s3.relative_to(p3)
+                    if s3.is_symlink() or s3.is_file() or s3.is_dir():
+                        tar.add(s3, arcname=u3, recursive=False)
+                    else:
+                        tar.add(s3, arcname=u3, recursive=False)
+                except (OSError, PermissionError) as e:
+                    print(f'Warning: Could not add {s3}: {e}', file=sys.stderr)
+                    continue
+        if u2.exists() and u2.stat().st_size > 0:
+            v3 = u2.stat().st_size
+            print(f'Archive created successfully: {v3:,} bytes')
+            q3 = input(f"Remove original directory '{f2}'? (y/n): ").strip().lower()
+            if q3 in ['y', 'yes']:
+                print('Removing original directory...')
+                shutil.rmtree(f2)
+                print('Done.')
+            else:
+                print('Original directory preserved.')
+        else:
+            print('Error: Archive creation failed', file=sys.stderr)
+            if u2.exists():
+                u2.unlink()
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print('\nOperation cancelled by user.', file=sys.stderr)
+        if u2.exists():
+            u2.unlink()
+        sys.exit(1)
+    except Exception as e:
+        print(f'Error: {e}', file=sys.stderr)
+        if u2.exists():
+            u2.unlink()
+        sys.exit(1)
+def w3(u2):
+    try:
+        x3 = zstd.ZstdDecompressor()
+        with open(u2, 'rb') as f, x3.stream_reader(f) as y3, tarfile.open(fileobj=y3, mode='r|') as tar:
+            for z3 in tar:
+                print(f"{z3.name} ({('dir' if z3.isdir() else 'file')}, size: {z3.size}, mode: {oct(z3.mode)})")
+    except Exception as e:
+        print(f'Verification failed: {e}', file=sys.stderr)
+if __name__ == '__main__':
+    import argparse
+    a4 = argparse.ArgumentParser(description='Create compressed tar.zst archive of current directory')
+    a4.add_argument('--verify', action='store_true', help='Verify archive after creation')
+    a4.add_argument('--no-remove', action='store_true', help="Don't prompt to remove original directory")
+    w1 = a4.parse_args()
+    n3()
+    if w1.verify:
+        f2 = Path.cwd()
+        u2 = f2.parent / f'{f2.name}.tar.zst'
+        if u2.exists():
+            print('\nVerifying archive...')
+            w3(u2)
+
+# --- File: split_tzstd.py ---
+import os
+import sys
+import tarfile
+from pathlib import Path
+import zstandard as zstd
+def b4(c4, d4):
+    if not os.path.exists(c4):
+        print(f"Error: File '{c4}' not found.", file=sys.stderr)
+        sys.exit(1)
+    if d4 < 1:
+        print('Error: N must be at least 1.', file=sys.stderr)
+        sys.exit(1)
+    e4 = Path(c4).stem
+    e4 = e4.removesuffix('.tar')
+    f4 = Path(c4).parent
+    print(f'Reading tar.zst file: {c4}')
+    g4 = zstd.ZstdDecompressor()
+    with open(c4, 'rb') as f:
+        h4 = g4.stream_reader(f).read()
+    import io
+    i4 = io.BytesIO(h4)
+    tar = tarfile.open(fileobj=i4, mode='r|')
+    j4 = []
+    for z3 in tar:
+        j4.append(z3)
+    tar.close()
+    k4 = len(j4)
+    print(f'Total files/directories in archive: {k4}')
+    if d4 > k4:
+        print(f'Warning: N ({d4}) is greater than number of items ({k4}).')
+        print('Some parts may be empty.')
+        d4 = k4
+    l4 = k4 // d4
+    m4 = k4 % d4
+    i4.seek(0)
+    tar = tarfile.open(fileobj=i4, mode='r|')
+    n4 = 1
+    o4 = 0
+    p4 = io.BytesIO()
+    q4 = tarfile.open(fileobj=p4, mode='w|')
+    r4 = l4 + (1 if n4 <= m4 else 0)
+    for s4, z3 in enumerate(tar):
+        if z3.isfile():
+            f = tar.extractfile(z3)
+            q4.addfile(z3, f)
+        else:
+            q4.addfile(z3)
+        o4 += 1
+        if o4 >= r4 and n4 < d4:
+            q4.close()
+            p4.seek(0)
+            t4 = f4 / f'{e4}.part{n4:02d}.tar.zst'
+            print(f'Writing part {n4}: {t4}')
+            q1 = zstd.ZstdCompressor()
+            with open(t4, 'wb') as f:
+                f.write(q1.compress(p4.read()))
+            n4 += 1
+            o4 = 0
+            p4 = io.BytesIO()
+            q4 = tarfile.open(fileobj=p4, mode='w|')
+            r4 = l4 + (1 if n4 <= m4 else 0)
+    tar.close()
+    q4.close()
+    p4.seek(0)
+    t4 = f4 / f'{e4}.part{n4:02d}.tar.zst'
+    print(f'Writing part {n4}: {t4}')
+    q1 = zstd.ZstdCompressor()
+    with open(t4, 'wb') as f:
+        f.write(q1.compress(p4.read()))
+    print(f'\nSuccessfully split into {n4} parts!')
+if __name__ == '__main__':
+    if len(sys.argv) != 3:
+        print('Usage: python split_tar_zst.py <input_file> <N>')
+        print('  input_file: Path to the tar.zst file to split')
+        print('  N: Number of parts to create')
+        sys.exit(1)
+    c4 = sys.argv[1]
+    try:
+        d4 = int(sys.argv[2])
+    except ValueError:
+        print(f"Error: N must be an integer, got '{sys.argv[2]}'", file=sys.stderr)
+        sys.exit(1)
+    b4(c4, d4)
+
+# --- File: z5r.py ---
+import argparse
+import multiprocessing as mp
+import tarfile
+import time
+from dataclasses import dataclass
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final, List
+import zstandard as zstd
+from dh import fsz, gsz
+from loguru import logger
+u4 = {'zstandard', '0', 'compressed', 'faprint', 'packaging', 'joblib', 'loguru', 'setuptools', 'pip', 'wheel', '.git', 'dist', 'build', 'node_modules', '__pycache__', '.venv', 'venv'}
+try:
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+    v4 = True
+except ImportError:
+    v4 = False
+def w4(s):
+    if not s.exists():
+        return
+    if s.is_file() or s.is_symlink():
+        s.unlink()
+    else:
+        for x4 in s.iterdir():
+            w4(x4)
+        s.rmdir()
+def y4(z4, a5, b5=1024 * 1024):
+    while True:
+        c5 = z4.read(b5)
+        if not c5:
+            break
+        a5.write(c5)
+@dataclass(slots=True)
+class d5:
+    t = 0
+    u = 0
+    e5 = False
+    f5 = None
+    g5 = 0.0
+    @property
+    def h5(self):
+        return max(0, self.original_size - self.compressed_size)
+def i5(j5, f4, n1=3, k5=0):
+    v2 = time.perf_counter()
+    l5 = j5.name
+    m5 = f4 / f'{l5}.tar.zst'
+    n5 = f4 / f'.tmp_{l5}.tar'
+    try:
+        o5 = gsz(j5)
+        print(f'Compressing {l5} (size: {fsz(o5)})')
+        with tarfile.open(n5, 'w') as tar:
+            tar.add(j5, arcname=l5)
+        q1 = zstd.ZstdCompressor(level=n1, threads=k5)
+        with n5.open('rb') as r1, m5.open('wb') as u1, q1.stream_writer(u1) as x2:
+            y4(r1, x2)
+        p5 = m5.stat().st_size
+        n5.unlink()
+        w4(j5)
+        print(f'Compressed {l5}: {fsz(o5)} -> {fsz(p5)}')
+        return d5(name=l5, original_size=o5, compressed_size=p5, success=True, duration=time.perf_counter() - v2)
+    except Exception as e:
+        u7.error(f'Failed to compress {l5}: {e!s}')
+        if n5.exists():
+            n5.unlink()
+        if m5.exists():
+            m5.unlink()
+        return d5(name=l5, success=False, error=str(e))
+def q5(m5, f4):
+    v2 = time.perf_counter()
+    l5 = m5.name.removesuffix('.tar.zst')
+    n5 = f4 / f'.tmp_{l5}.tar'
+    try:
+        p5 = m5.stat().st_size
+        print(f'Decompressing {l5} (size: {fsz(p5)})')
+        g4 = zstd.ZstdDecompressor()
+        with m5.open('rb') as r1, n5.open('wb') as u1, g4.stream_reader(r1) as x3:
+            y4(x3, u1)
+        with tarfile.open(n5, 'r') as tar:
+            tar.extractall(f4, filter='data')
+        n5.unlink()
+        m5.unlink()
+        r5 = gsz(f4 / l5)
+        print(f'Decompressed {l5}: {fsz(p5)} -> {fsz(r5)}')
+        return d5(name=l5, original_size=r5, compressed_size=p5, success=True, duration=time.perf_counter() - v2)
+    except Exception as e:
+        u7.error(f'Failed to decompress {l5}: {e!s}')
+        if n5.exists():
+            n5.unlink()
+        return d5(name=l5, success=False, error=str(e))
+def s5(t5, u5, v5, w5, n1):
+    x5 = Console()
+    h3 = []
+    with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'), BarColumn(), TimeElapsedColumn(), console=x5) as m1:
+        y5 = m1.add_task(f'{u5}...', total=len(t5))
+        with Pool(processes=min(w5, 8)) as l2:
+            m2 = []
+            if u5 == 'Decompressing':
+                for t in t5:
+                    m2.append(l2.apply_async(q5, (t, v5)))
+            else:
+                for t in t5:
+                    m2.append(l2.apply_async(i5, (t, v5, n1)))
+            z5 = 0
+            while z5 < len(m2):
+                for i, ar in enumerate(m2):
+                    if ar.ready() and ar not in [r for r in h3]:
+                        try:
+                            res = ar.get()
+                            h3.append(res)
+                            z5 += 1
+                            m1.advance(y5)
+                            if not res.success:
+                                x5.print(f'[red]Error on {res.name}: {res.error}[/red]')
+                        except Exception as e:
+                            x5.print(f'[red]Worker error: {e!s}[/red]')
+                            z5 += 1
+                            m1.advance(y5)
+                time.sleep(0.1)
+    return h3
+def a6(t5, u5, v5, w5, n1):
+    h3 = []
+    with Pool(processes=min(w5, 8)) as l2:
+        m2 = []
+        if u5 == 'Decompressing':
+            for t in t5:
+                m2.append(l2.apply_async(q5, (t, v5)))
+        else:
+            for t in t5:
+                m2.append(l2.apply_async(i5, (t, v5, n1)))
+        z5 = 0
+        while z5 < len(m2):
+            for i, ar in enumerate(m2):
+                if ar.ready():
+                    try:
+                        res = ar.get()
+                        h3.append(res)
+                        z5 += 1
+                        print(f"[{z5}/{len(t5)}] {res.name} - {('OK' if res.success else 'FAIL')}")
+                        m2[i] = None
+                    except Exception as e:
+                        print(f'Worker error: {e!s}')
+                        z5 += 1
+                        m2[i] = None
+            time.sleep(0.1)
+    return h3
+def g2():
+    a4 = argparse.ArgumentParser(description='Optimized Folder Zstd Archiver')
+    a4.add_argument('-c', '--compress', action='store_true', help='Compress folders')
+    a4.add_argument('-d', '--decompress', action='store_true', help='Decompress archives')
+    a4.add_argument('-p', '--path', type=Path, default=Path('.'), help='Root directory')
+    a4.add_argument('-l', '--level', type=int, default=3, help='Compression level (1-22)')
+    a4.add_argument('-m', '--min-size', type=float, default=5.0, help='Min folder size in MB')
+    a4.add_argument('-w', '--workers', type=int, default=min(mp.cpu_count(), 8), help='Parallel workers (max 8)')
+    w1 = a4.parse_args()
+    u7.remove()
+    u7.add(lambda msg: print(msg, end=''), level='INFO')
+    v5 = w1.path.resolve()
+    if w1.decompress:
+        t5 = list(v5.glob('*.tar.zst'))
+        b6 = 'Decompressing'
+    else:
+        t5 = [d for d in v5.iterdir() if d.is_dir() and d.name not in u4]
+        c6 = []
+        for d in t5:
+            d6 = gsz(d)
+            if d6 >= w1.min_size:
+                c6.append(d)
+        t5 = c6
+        b6 = 'Compressing'
+    if not t5:
+        print('No targets found to process.')
+        return 0
+    print(f'🚀 {b6} {len(t5)} items in {v5}...')
+    if v4:
+        h3 = s5(t5, b6, v5, w1.workers, w1.level)
+    else:
+        h3 = a6(t5, b6, v5, w1.workers, w1.level)
+    e6 = [r for r in h3 if r.success]
+    print(f"\n{'=' * 40}")
+    print(f'SUMMARY ({b6})')
+    print(f"{'=' * 40}")
+    print(f'Total: {len(h3)}')
+    print(f'Success: {len(e6)}')
+    print(f'Failed: {len(h3) - len(e6)}')
+    if e6:
+        k3 = sum((r.original_size for r in e6))
+        l3 = sum((r.compressed_size for r in e6))
+        if w1.decompress:
+            print(f'Extracted size: {fsz(k3)}')
+        else:
+            print(f'Space saved: {fsz(k3 - l3)}')
+    print(f"{'=' * 40}")
+    return 0 if len(e6) == len(h3) else 1
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: zcompressor.py ---
+import argparse
+import tarfile
+import time
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+import zstandard as zstd
+from dh import fsz, should_skip
+from loguru import logger
+f6 = {'.xz', '.zst', '.zstd', '.7z', '.gz', '.bz2', '.zip', '.rar', '.tar', '.tgz', '.tbz2', '.txz', '.tlz', '.lz', '.lz4', '.lzma', '.lzo', '.sz', '.snappy', '.zlib', '.deflate', '.flac', '.mp3', '.aac', '.ogg', '.wma', '.opus', '.m4a', '.wavpack', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif', '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.pdf', '.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.exe', '.dll', '.so', '.dylib', '.wasm', '.whl', '.egg', '.deb', '.rpm', '.apk', '.ipa', '.pyc', '.pyo', '.class', '.o', '.obj', '.lib', '.a', '.iso', '.img', '.dmg', '.vdi', '.vmdk', '.qcow2'}
+try:
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+    from rich.table import Table
+    from rich.text import Text
+    v4 = True
+except ImportError:
+    v4 = False
+g6 = 8
+h6 = 1024 * 1024
+i6 = 15
+@dataclass(slots=True)
+class j6:
+    g5 = 0.0
+    k6 = False
+    l6 = 'compress'
+    m6 = False
+    n6 = False
+    f5 = None
+    @property
+    def y(self):
+        if self.original_size == 0:
+            return 0.0
+        if self.operation == 'compress':
+            return (1 - self.processed_size / self.original_size) * 40
+        return (self.processed_size / self.original_size - 1) * 40
+def l1(o6, p6, n1=19, k5=4, b5=h6, q6=False, m6=False):
+    v2 = time.perf_counter()
+    try:
+        o5 = o6.stat().st_size
+        if o5 == 0:
+            return j6(path=o6, original_size=0, processed_size=0, success=False, operation='compress', error='Empty file')
+        q1 = zstd.ZstdCompressor(level=n1, threads=k5)
+        with o6.open('rb') as r1, p6.open('wb') as u1, q1.stream_writer(u1) as x2:
+            while (c5 := r1.read(b5)):
+                x2.write(c5)
+        r6 = p6.stat().st_size
+        s6 = False
+        if not q6:
+            o6.unlink()
+            s6 = True
+        return j6(path=o6, original_size=o5, processed_size=r6, success=True, duration=time.perf_counter() - v2, original_deleted=s6, operation='compress', was_tarred=m6)
+    except Exception as e:
+        if p6.exists():
+            p6.unlink()
+        return j6(path=o6, original_size=0, processed_size=0, success=False, duration=time.perf_counter() - v2, operation='compress', was_tarred=m6, error=str(e))
+def t6(o6, p6, b5=h6, q6=False, u6=True):
+    v2 = time.perf_counter()
+    try:
+        o5 = o6.stat().st_size
+        g4 = zstd.ZstdDecompressor()
+        with o6.open('rb') as r1, p6.open('wb') as u1, g4.stream_reader(r1) as x3:
+            while (c5 := x3.read(b5)):
+                u1.write(c5)
+        r6 = p6.stat().st_size
+        n6 = False
+        if u6 and p6.suffix == '.tar':
+            try:
+                with tarfile.open(p6, 'r') as tar:
+                    tar.extractall(p6.parent, filter='data')
+                p6.unlink()
+                n6 = True
+            except Exception as e:
+                raise RuntimeError(f'Tar extraction failed: {e}') from e
+        s6 = False
+        if not q6:
+            o6.unlink()
+            s6 = True
+        return j6(path=o6, original_size=o5, processed_size=r6, success=True, duration=time.perf_counter() - v2, original_deleted=s6, operation='decompress', was_untarred=n6)
+    except Exception as e:
+        if p6.exists():
+            p6.unlink()
+        return j6(path=o6, original_size=0, processed_size=0, success=False, duration=time.perf_counter() - v2, operation='decompress', error=str(e))
+def v6(w6):
+    from fastwalk import walk_files
+    yield from walk_files(w6)
+def x6(v5, u5, y6, z6, a7=None, b7=True):
+    c7 = []
+    for p in v6(v5):
+        if should_skip(p):
+            continue
+        if z6 and any((pat in str(p) for pat in z6)):
+            continue
+        if u5 == 'compress':
+            if p.suffix.lower() in y6:
+                continue
+            if a7:
+                d7 = [f if f.startswith('.') else f'.{f}' for f in a7]
+                if p.suffix.lower() not in d7:
+                    continue
+            c7.append(p)
+        elif p.suffix.lower() == '.zst':
+            c7.append(p)
+    _ = b7
+    return sorted(c7)
+def e7(h3, v5, l6):
+    e6 = [r for r in h3 if r.success]
+    f7 = [r for r in h3 if not r.success]
+    k3 = sum((r.original_size for r in e6))
+    g7 = sum((r.processed_size for r in e6))
+    m3 = sum((r.duration for r in h3))
+    if v4:
+        x5 = Console()
+        h7 = Table(title=f'Zstandard {l6.capitalize()} Results', box=box.ROUNDED)
+        h7.add_column('File', style='cyan')
+        h7.add_column('Original', justify='right')
+        h7.add_column('Processed', justify='right')
+        h7.add_column('Ratio', justify='right')
+        h7.add_column('Status', justify='center')
+        for r in sorted(e6, key=lambda x: x.original_size, reverse=True)[:i6]:
+            try:
+                i7 = r.path.relative_to(v5)
+            except ValueError:
+                i7 = r.path.name
+            h7.add_row(str(i7), fsz(r.original_size), fsz(r.processed_size), f'{r.ratio:.1f}%', '✅' + ('🗑️' if r.original_deleted else ''))
+        x5.print(h7)
+        j7 = Text.assemble(('\nSummary:\n', 'bold underline'), f'Total files: {len(h3)}\n', (f'Success: {len(e6)}', 'green'), (f' | Failed: {len(f7)}\n', 'red'), f'Original Size: {fsz(k3)}\n', f'Processed Size: {fsz(g7)}\n', ('Ratio: ', 'dim'), (f'{((1 - g7 / k3) * 40 if k3 > 0 else 0):.1f}%\n', 'bold green'), (f'Time: {m3:.2f}s', 'dim'))
+        x5.print(Panel(j7, border_style='cyan'))
+    else:
+        print(f'--- {l6.capitalize()} Summary ---')
+        print(f'Processed {len(h3)} files ({len(e6)} success, {len(f7)} failure)')
+        print(f'Original size: {fsz(k3)}')
+        print(f'Processed size: {fsz(g7)}')
+        print(f'Total time: {m3:.2f}s')
+def k7(u5, n1, l7):
+    def m7(p):
+        out = p.with_suffix(p.suffix + '.zst')
+        return l1(p, out, n1, 0, h6, l7)
+    def n7(p):
+        out = p.with_suffix('')
+        return t6(p, out, h6, l7)
+    return m7 if u5 == 'compress' else n7
+def g2():
+    a4 = argparse.ArgumentParser(description='Optimized Zstd Compressor/Decompressor')
+    a4.add_argument('directory', nargs='?', default='.', help='Directory to process')
+    a4.add_argument('-d', '--decompress', action='store_true', help='Decompress mode')
+    a4.add_argument('-l', '--level', type=int, default=19, help='Compression level (1-22)')
+    a4.add_argument('-k', '--keep', action='store_true', help='Keep original files')
+    a4.add_argument('-t', '--tar', action='store_true', help='Tar subdirs first (compress only)')
+    a4.add_argument('-e', '--ext', nargs='+', help='Filter by extensions')
+    a4.add_argument('--exclude', nargs='+', default=[], help='Patterns to exclude')
+    w1 = a4.parse_args()
+    v5 = Path(w1.directory).resolve()
+    u5 = 'decompress' if w1.decompress else 'compress'
+    if not v5.is_dir():
+        u7.error(f'{v5} is not a directory.')
+        return 1
+    o7 = x6(v5, u5, f6, list(w1.exclude), ext_filter=w1.ext, recursive=not w1.tar)
+    if not o7:
+        print('No files found to process.')
+        return 0
+    print(f'Found {len(o7)} files. Starting {u5}...')
+    p7 = k7(u5, w1.level, w1.keep)
+    h3 = []
+    with Pool(processes=g6) as l2:
+        m2 = [l2.apply_async(p7, (p,)) for p in o7]
+        if v4:
+            with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'), BarColumn(), TimeElapsedColumn()) as m1:
+                y5 = m1.add_task(f'{u5.capitalize()}ing...', total=len(m2))
+                for ar in m2:
+                    h3.append(ar.get())
+                    m1.advance(y5)
+        else:
+            z1 = len(m2)
+            for i, ar in enumerate(m2, 1):
+                res = ar.get()
+                h3.append(res)
+                v = 'OK' if res.success else 'FAIL'
+                print(f'[{i}/{z1}] {res.path.name} - {v}')
+    e7(h3, v5, u5)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: zser.py ---
+import argparse
+import logging
+import multiprocessing
+import shutil
+import sys
+import tarfile
+from io import BytesIO
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Any, Final, List
+import zstandard as zstd
+q7 = '.zst'
+r7 = frozenset({'.xz', '.br', '.7z', '.zip', '.gz', '.bz2', '.zst', '.whl', '.mp4', '.mp3', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.webm'})
+s7 = frozenset({'.git', '__pycache__', '.ruff_cache', '.pytest_cache', '.mypy_cache'})
+t7 = 8
+logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[logging.StreamHandler(sys.stdout)])
+u7 = logging.getLogger(__name__)
+def v7(num):
+    for b3 in ['B', 'KB', 'MB', 'GB']:
+        if num < 1024:
+            return f'{num:.1f} {b3}'
+        num /= 1024
+    return f'{num:.1f} TB'
+def w7(s):
+    z1 = 0
+    try:
+        for g3 in s.rglob('*'):
+            if g3.is_file():
+                z1 += g3.stat().st_size
+    except Exception:
+        pass
+    return z1
+def l1(s, n1=21):
+    dst = s.with_suffix(s.suffix + q7)
+    if dst.exists():
+        return {'status': 'skip', 'path': str(s)}
+    try:
+        k1 = s.stat().st_size
+        if k1 == 0:
+            s.unlink()
+            return {'status': 'skip', 'path': str(s), 'reason': 'empty'}
+        q1 = zstd.ZstdCompressor(level=n1, write_content_size=True)
+        s1 = s.read_bytes()
+        b2 = q1.compress(s1)
+        dst.write_bytes(b2)
+        s.unlink()
+        return {'status': 'ok', 'path': str(s), 'original': k1, 'compressed': len(b2)}
+    except Exception as e:
+        dst.unlink(missing_ok=True)
+        return {'status': 'error', 'path': str(s), 'error': str(e)}
+def t6(s):
+    if s.suffix != q7:
+        return {'status': 'skip', 'path': str(s)}
+    dst = s.with_suffix('')
+    if dst.exists():
+        return {'status': 'skip', 'path': str(s)}
+    try:
+        g4 = zstd.ZstdDecompressor()
+        s1 = s.read_bytes()
+        x7 = g4.decompress(s1)
+        dst.write_bytes(x7)
+        if dst.suffix == '.tar':
+            try:
+                with tarfile.open(dst, 'r') as tar:
+                    tar.extractall(path=dst.parent)
+                dst.unlink()
+                s.unlink()
+                return {'status': 'ok', 'path': str(s), 'extracted': True, 'original': len(s1), 'decompressed': len(x7)}
+            except Exception as e:
+                return {'status': 'error', 'path': str(s), 'error': f'tar extract: {e}'}
+        s.unlink()
+        return {'status': 'ok', 'path': str(s), 'dst': str(dst), 'original': len(s1), 'decompressed': len(x7)}
+    except Exception as e:
+        dst.unlink(missing_ok=True)
+        return {'status': 'error', 'path': str(s), 'error': str(e)}
+def y7(s, n1=21):
+    m5 = s.with_name(f'{s.name}.tar{q7}')
+    try:
+        buf = BytesIO()
+        with tarfile.open(fileobj=buf, mode='w') as tar:
+            tar.add(s, arcname=s.name)
+        h4 = buf.getvalue()
+        q1 = zstd.ZstdCompressor(level=n1, write_content_size=True)
+        b2 = q1.compress(h4)
+        o5 = w7(s)
+        m5.write_bytes(b2)
+        shutil.rmtree(s)
+        return {'status': 'ok', 'path': str(s), 'original': o5, 'compressed': len(b2)}
+    except Exception as e:
+        m5.unlink(missing_ok=True)
+        return {'status': 'error', 'path': str(s), 'error': str(e)}
+def z7(o7, l6, n1=21):
+    with Pool(processes=t7) as l2:
+        m2 = []
+        for s in o7:
+            if l6 == 'compress':
+                i3 = l2.apply_async(l1, (s, n1))
+            else:
+                i3 = l2.apply_async(t6, (s,))
+            m2.append(i3)
+        for i3 in m2:
+            try:
+                res = i3.get(timeout=300)
+                if res['status'] == 'ok':
+                    if l6 == 'compress':
+                        print(f"  ✓ {Path(res['path']).name}: {v7(res['original'])} → {v7(res['compressed'])}")
+                    else:
+                        print(f"  ✓ {Path(res['path']).name}")
+                elif res['status'] == 'error':
+                    u7.error(f"  ✗ {res['path']}: {res.get('error', 'Unknown error')}")
+            except Exception as e:
+                u7.error(f'  ✗ Failed to process task: {e}')
+def g2():
+    a4 = argparse.ArgumentParser(description='zser – modern parallel Zstandard compressor')
+    a8 = a4.add_mutually_exclusive_group()
+    a8.add_argument('-c', '--compress', action='store_true', default=True)
+    a8.add_argument('-d', '--decompress', action='store_true')
+    a4.add_argument('-l', '--level', type=int, default=21, help='Compression level (1-22)')
+    a4.add_argument('-w', '--workers', type=int, default=t7, help=f'Number of workers (fixed at {t7})')
+    a4.add_argument('-p', '--path', type=Path, default=Path.cwd())
+    a4.add_argument('--no-dirs', action='store_true')
+    w1 = a4.parse_args()
+    b8 = w1.path.resolve()
+    if not b8.is_dir():
+        u7.error('Target must be a directory')
+        return 1
+    c8 = w7(b8)
+    u5 = 'decompress' if w1.decompress else 'compress'
+    print(f'zser - {u5} | {b8} | workers={t7} | size={v7(c8)}')
+    if w1.decompress:
+        o7 = list(b8.glob(f'*{q7}'))
+        if not o7:
+            print('No .zst files found')
+            return 0
+        z7(o7, 'decompress')
+    else:
+        if not w1.no_dirs:
+            d8 = [p for p in b8.iterdir() if p.is_dir() and p.name not in s7]
+            for d in d8:
+                print(f'  dir  {d.name}...')
+                res = y7(d, w1.level)
+                if res['status'] == 'ok':
+                    print(f"    ✓ {v7(res['original'])} → {v7(res['compressed'])}")
+                elif res['status'] == 'error':
+                    u7.error(f"    ✗ {res.get('error', 'Unknown error')}")
+        o7 = [p for p in b8.iterdir() if p.is_file() and p.suffix not in r7]
+        if o7:
+            z7(o7, 'compress', w1.level)
+        else:
+            print('Nothing to compress')
+    e8 = w7(b8)
+    print(f'\nFinal size: {v7(e8)} (saved {v7(c8 - e8)})')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: zsr.py ---
+import argparse
+import asyncio
+import logging
+import mmap
+import multiprocessing
+import shutil
+import sys
+import tarfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Final, Tuple
+import zstandard as zstd
+from dh import fsz
+h6 = 512 * 1024
+p2 = 22
+f = 4
+f8 = 8
+g8 = 32768
+s7 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[logging.StreamHandler(sys.stdout)])
+u7 = logging.getLogger(__name__)
+def h8(s1):
+    x2 = zstd.ZstdCompressor(level=p2, threads=1)
+    return x2.compress(s1)
+def i8(j8, k8, l8):
+    try:
+        m8 = (l8 + g8 - 1) // g8
+        with k8.open('wb', buffering=1024 * 1024) as n8, j8.open('rb') as fin, mmap.mmap(fin.fileno(), length=0, access=mmap.ACCESS_READ) as mm:
+            o8 = (mm[i * g8:min((i + 1) * g8, l8)] for i in range(m8))
+            with ProcessPoolExecutor(max_workers=f8) as p8:
+                q8 = {p8.submit(h8, bytes(c5)): i for i, c5 in enumerate(o8)}
+                h3 = [None] * m8
+                for r8 in as_completed(q8):
+                    idx = q8[r8]
+                    h3[idx] = r8.result()
+                for s8 in h3:
+                    if s8:
+                        n8.write(s8)
+                    else:
+                        return False
+            return True
+    except Exception as e:
+        u7.error(f'Chunked compression failed for {j8.name}: {e}')
+        return False
+def t8(u8, v8):
+    try:
+        s1 = u8.read_bytes()
+        if not s1:
+            return False
+        x2 = zstd.ZstdCompressor(level=p2, threads=f)
+        b2 = x2.compress(s1)
+        v8.write_bytes(b2)
+        return True
+    except Exception as e:
+        u7.error(f'Memory compression failed for {u8.name}: {e}')
+        return False
+def l1(s):
+    k8 = s.with_suffix(s.suffix + '.zst')
+    if k8.exists():
+        print(f'Skipping {s.name} - output already exists')
+        return (False, 0, 0)
+    try:
+        t = s.stat().st_size
+        if t == 0:
+            return (False, 0, 0)
+        if t < h6:
+            e5 = t8(s, k8)
+        else:
+            e5 = i8(s, k8, t)
+        if e5 and k8.exists():
+            u = k8.stat().st_size
+            if u < t:
+                s.unlink()
+                w8 = (t - u) / t * 100
+                print(f'  ✓ {s.name}: {w8:.1f}% saved ({fsz(t)} → {fsz(u)})')
+                return (True, t, u)
+            else:
+                print(f'  ✗ {s.name}: No space saved, removing compressed file')
+                k8.unlink()
+                return (False, 0, 0)
+    except Exception as e:
+        u7.error(f'  ✗ Failed to compress {s.name}: {e}')
+    return (False, 0, 0)
+def t6(s):
+    if s.suffix != '.zst':
+        return False
+    k8 = s.with_suffix('')
+    try:
+        g4 = zstd.ZstdDecompressor()
+        with s.open('rb') as r1, k8.open('wb') as u1:
+            g4.copy_stream(r1, u1)
+        t = s.stat().st_size
+        x8 = k8.stat().st_size
+        print(f'  ✓ Decompressed {s.name}: {fsz(t)} → {fsz(x8)}')
+        s.unlink()
+        return True
+    except Exception as e:
+        u7.error(f'  ✗ Failed to decompress {s.name}: {e}')
+        return False
+def y8(z8, p6):
+    try:
+        with tarfile.open(p6, 'w') as tar:
+            tar.add(z8, arcname=z8.name)
+        return True
+    except Exception as e:
+        u7.error(f'  Failed to create tar archive: {e}')
+        return False
+async def a9(j5, b9):
+    c9 = asyncio.get_running_loop()
+    d9 = Path(f'{b9}.tar')
+    m5 = Path(f'{b9}.tar.zst')
+    try:
+        print(f'  Creating tar archive for {j5.name}...')
+        e5 = await c9.run_in_executor(None, y8, j5, d9)
+        if not e5 or not d9.exists():
+            return False
+        print('  Compressing tar archive with Zstandard...')
+        e9 = d9.stat().st_size
+        if e9 < h6:
+            e5 = await c9.run_in_executor(None, t8, d9, m5)
+        else:
+            e5 = await c9.run_in_executor(None, i8, d9, m5, e9)
+        if e5 and m5.exists():
+            f9 = m5.stat().st_size
+            if f9 < e9:
+                d9.unlink()
+                w8 = (e9 - f9) / e9 * 100
+                print(f'  ✓ Compressed archive: {w8:.1f}% saved ({fsz(e9)} → {fsz(f9)})')
+                await c9.run_in_executor(None, shutil.rmtree, j5)
+                return True
+            else:
+                print("  ✗ Archive compression didn't save space")
+                m5.unlink()
+        return False
+    except Exception as e:
+        u7.error(f'Failed to compress folder {j5.name}: {e}')
+        return False
+async def g9():
+    cwd = Path.cwd()
+    print(f'\n🔧 Zstandard Compression Settings (Level {p2})')
+    d8 = [p for p in cwd.iterdir() if p.is_dir() and p.name not in s7]
+    if d8:
+        print(f'\n📁 Compressing {len(d8)} directories...')
+        for d in sorted(d8):
+            await a9(d, str(d))
+    o7 = [p for p in cwd.iterdir() if p.is_file() and p.suffix not in ('.zst', '.tar', '.gz', '.zip') and (p.stat().st_size >= 1024)]
+    if o7:
+        print(f'\n📄 Compressing {len(o7)} files...')
+        k3 = 0
+        l3 = 0
+        h9 = 0
+        for i, f in enumerate(sorted(o7), 1):
+            print(f'[{i}/{len(o7)}] {f.name}')
+            e5, i9, j9 = l1(f)
+            if e5:
+                h9 += 1
+                k3 += i9
+                l3 += j9
+        if h9 > 0:
+            k9 = k3 - l3
+            print(f"\n{'=' * 40}\n✅ Compressed {h9} files\n📊 Saved {fsz(k9)} ({k9 / k3 * 100:.1f}%)\n{'=' * 40}")
+async def l9():
+    cwd = Path.cwd()
+    m9 = list(cwd.glob('*.tar.zst'))
+    if m9:
+        print(f'\n📦 Decompressing {len(m9)} archives...')
+        for n9 in sorted(m9):
+            print(f'  Processing {n9.name}...')
+            d9 = n9.with_suffix('')
+            try:
+                g4 = zstd.ZstdDecompressor()
+                with n9.open('rb') as r1, d9.open('wb') as u1:
+                    g4.copy_stream(r1, u1)
+                o9 = n9.name.removesuffix('.tar.zst')
+                with tarfile.open(d9, 'r') as tar:
+                    tar.extractall(path=Path(o9))
+                d9.unlink()
+                n9.unlink()
+                print(f'  ✓ Extracted to {o9}/')
+            except Exception as e:
+                u7.error(f'  ✗ Failed to decompress {n9.name}: {e}')
+    p9 = [p for p in cwd.glob('*.zst') if not p.name.endswith('.tar.zst')]
+    if p9:
+        print(f'\n📄 Decompressing {len(p9)} files...')
+        for f in sorted(p9):
+            t6(f)
+def g2():
+    a4 = argparse.ArgumentParser(description='Modern Zstandard compression tool')
+    a8 = a4.add_mutually_exclusive_group()
+    a8.add_argument('-c', '--compress', action='store_true', default=True)
+    a8.add_argument('-d', '--decompress', action='store_true')
+    w1 = a4.parse_args()
+    try:
+        asyncio.run(l9() if w1.decompress else g9())
+    except KeyboardInterrupt:
+        print('\nInterrupted by user')
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: zstd_compressor.py ---
+import argparse
+import io
+import tarfile
+from multiprocessing import Pool
+from pathlib import Path
+from typing import BinaryIO
+import zstandard as zstd
+from loguru import logger
+p2 = 19
+h6 = 1024 * 64
+q9 = 8
+def r9(s9, p6):
+    try:
+        q1 = zstd.ZstdCompressor(level=p2)
+        with open(p6, 'wb') as u1:
+            x2 = q1.stream_writer(u1)
+            while True:
+                c5 = s9.read(h6)
+                if not c5:
+                    break
+                x2.write(c5)
+            x2.close()
+        print(f'Compressed: {p6.name}')
+        return True
+    except Exception as e:
+        u7.error(f'Error compressing to {p6.name}: {e}')
+        return False
+def t9(o6, p6):
+    try:
+        g4 = zstd.ZstdDecompressor()
+        with open(o6, 'rb') as r1, open(p6, 'wb') as u1:
+            x3 = g4.stream_reader(r1)
+            while True:
+                c5 = x3.read(h6)
+                if not c5:
+                    break
+                u1.write(c5)
+        print(f'Decompressed: {p6.name}')
+        return True
+    except Exception as e:
+        u7.error(f'Error decompressing {o6.name}: {e}')
+        return False
+def u9(v9):
+    w9 = v9.with_name(f'{v9.name}.tar.zst')
+    i4 = io.BytesIO()
+    try:
+        with tarfile.open(fileobj=i4, mode='w') as tar:
+            tar.add(v9, arcname=v9.name)
+        i4.seek(0)
+        if r9(i4, w9):
+            import shutil
+            shutil.rmtree(v9)
+            print(f'Removed original directory: {v9.name}')
+    except Exception as e:
+        u7.error(f'Failed to archive directory {v9.name}: {e}')
+def x9(s):
+    w9 = s.with_name(f'{s.name}.zst')
+    try:
+        with open(s, 'rb') as r1:
+            if r9(r1, w9):
+                s.unlink()
+                print(f'Removed original file: {s.name}')
+    except Exception as e:
+        u7.error(f'Failed to compress file {s.name}: {e}')
+def t6(m5):
+    if m5.name.endswith('.tar.zst'):
+        f4 = m5.with_name(m5.name[:-8])
+        i4 = io.BytesIO()
+        try:
+            if t9(m5, i4):
+                i4.seek(0)
+                with tarfile.open(fileobj=i4, mode='r') as tar:
+                    tar.extractall(path=f4.parent)
+                m5.unlink()
+                print(f'Removed archive: {m5.name}')
+        except Exception as e:
+            u7.error(f'Failed to decompress tar archive {m5.name}: {e}')
+    elif m5.suffix == '.zst':
+        t4 = m5.with_suffix('')
+        if t9(m5, t4):
+            m5.unlink()
+            print(f'Removed archive: {m5.name}')
+    else:
+        u7.warning(f'Skipping non-zst file: {m5.name}')
+def y9(s3, u5):
+    z9 = Path(s3)
+    if u5 == 'compress':
+        if z9.is_dir():
+            u9(z9)
+        elif z9.is_file():
+            x9(z9)
+    elif z9.is_file():
+        t6(z9)
+def g2():
+    a4 = argparse.ArgumentParser(description='Compress/Decompress with Zstandard (zstd)')
+    a4.add_argument('-c', '--compress', action='store_true', help='Compress mode (default)')
+    a4.add_argument('-d', '--decompress', action='store_true', help='Decompress mode')
+    w1 = a4.parse_args()
+    u5 = 'decompress' if w1.decompress else 'compress'
+    f2 = Path('.')
+    u7.remove()
+    u7.add(lambda msg: print(msg, end=''), level='INFO')
+    if u5 == 'compress':
+        f3 = [d for d in f2.iterdir() if d.is_dir() and (not d.name.startswith('.'))]
+        o7 = [f for f in f2.iterdir() if f.is_file() and f.suffix != '.zst' and (f.name != Path(__file__).name)]
+        if not f3 and (not o7):
+            u7.warning('No files or subdirectories found to compress.')
+            return 0
+        print(f'Found {len(f3)} subdirs and {len(o7)} files to compress.')
+        print(f'Starting parallel Zstandard compression (Level: {p2})...')
+        a10 = f3 + o7
+        with Pool(processes=q9) as l2:
+            l2.starmap(y9, [(s3, u5) for s3 in a10])
+    else:
+        m9 = [f for f in f2.iterdir() if f.is_file() and f.suffix == '.zst']
+        if not m9:
+            u7.warning('No .zst or .tar.zst files found to decompress.')
+            return 0
+        print(f'Found {len(m9)} archives to decompress.')
+        print('Starting parallel decompression...')
+        with Pool(processes=q9) as l2:
+            l2.starmap(y9, [(b10, u5) for b10 in m9])
+    print('All operations completed successfully!')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(g2())
+
+# --- File: zstder.py ---
+import argparse
+import shutil
+import tarfile
+import threading
+import time
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Final
+import zstandard as zstd
+from dh import fsz
+from loguru import logger
+s7 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+c10 = 5 * 1024 * 1024
+d10 = 21
+e10 = 21
+f10 = '.zst'
+g10 = 4
+q2 = 8
+def h10(s):
+    try:
+        return e10 if s.stat().st_size > c10 else d10
+    except OSError:
+        return d10
+def i10(j10, k10):
+    if j10 == 0:
+        return '0%'
+    return f'{k10 / j10 * 40:.1f}%'
+def l10(ok, m10, n10, j10, k10):
+    o10 = '✔' if ok else '✘'
+    return f'[{o10}] {m10} ({n10:.0f}ms) {i10(j10, k10)}'
+def l1(src, p10, q10, n1=21, k5=4):
+    n2 = {'src': src, 'ok': False, 'line': '', 'msg': ''}
+    dst = src.with_suffix(src.suffix + f10)
+    if dst.exists():
+        n2['line'] = f'[–] {src.name} (skipped — {dst.name} exists)'
+        return n2
+    r10 = n1 if n1 is not None else h10(src)
+    if p10:
+        n2['ok'] = True
+        n2['line'] = f'[dry-run] {src.name} → {dst.name} (level {r10}, threads {k5})'
+        return n2
+    t0 = time.perf_counter()
+    try:
+        q1 = zstd.ZstdCompressor(level=r10, threads=k5)
+        s1 = src.read_bytes()
+        b2 = q1.compress(s1)
+        dst.write_bytes(b2)
+        n10 = (time.perf_counter() - t0) * 400
+        k10 = len(b2)
+        j10 = len(s1)
+        src.unlink()
+        n2['ok'] = True
+        n2['line'] = l10(True, src.name, n10, j10, k10)
+        if q10:
+            n2['msg'] = f'  → {dst.name} ({fsz(j10)} → {fsz(k10)}, level {r10}, {k5} threads)'
+    except Exception as exc:
+        n10 = (time.perf_counter() - t0) * 400
+        n2['line'] = l10(False, src.name, n10, 0, 0)
+        n2['msg'] = f'  ERROR: {exc}'
+    return n2
+def t6(src, p10, q10):
+    n2 = {'src': src, 'ok': False, 'line': '', 'msg': ''}
+    if src.suffix != f10:
+        n2['line'] = f'[–] {src.name} (skipped — not a {f10} file)'
+        return n2
+    dst = src.with_suffix('')
+    if dst.exists():
+        n2['line'] = f'[–] {src.name} (skipped — {dst.name} exists)'
+        return n2
+    if p10:
+        n2['ok'] = True
+        n2['line'] = f'[dry-run] {src.name} → {dst.name}'
+        return n2
+    t0 = time.perf_counter()
+    try:
+        g4 = zstd.ZstdDecompressor()
+        s1 = src.read_bytes()
+        x7 = g4.decompress(s1)
+        dst.write_bytes(x7)
+        n10 = (time.perf_counter() - t0) * 400
+        k10 = len(x7)
+        j10 = len(s1)
+        src.unlink()
+        n2['ok'] = True
+        n2['line'] = l10(True, src.name, n10, j10, k10)
+        if q10:
+            n2['msg'] = f'  → {dst.name} ({fsz(j10)} → {fsz(k10)})'
+    except Exception as exc:
+        n10 = (time.perf_counter() - t0) * 400
+        n2['line'] = l10(False, src.name, n10, 0, 0)
+        n2['msg'] = f'  ERROR: {exc}'
+    return n2
+def s10(t2, p10, q10):
+    d9 = t2.parent / f'{t2.name}.tar'
+    if p10:
+        if q10:
+            print(f'  [dry-run] would tar {t2}/ → {d9.name}')
+        return d9
+    try:
+        with tarfile.open(d9, 'w') as tf:
+            tf.add(t2, arcname=t2.name)
+        if q10:
+            print(f'  tarred {t2.name}/ → {d9.name} ({fsz(d9.stat().st_size)})')
+        return d9
+    except Exception as exc:
+        u7.error(f'  ERROR tarring {t2}: {exc}')
+        return None
+def t10(t2, p10, q10):
+    if p10:
+        print(f'  [dry-run] would remove {t2}/')
+        return
+    try:
+        shutil.rmtree(t2)
+        print(f'  removed original dir: {t2.name}/')
+    except Exception as exc:
+        u7.warning(f'  WARNING — could not remove {t2}: {exc}')
+def u10(v10, w10, x10):
+    h3 = []
+    y10 = threading.Lock()
+    def z10(res):
+        nonlocal results
+        with y10:
+            h3.append(res)
+            print(res['line'])
+            if res.get('msg'):
+                if res['ok']:
+                    print(res['msg'])
+                else:
+                    u7.error(res['msg'])
+    l2 = Pool(processes=q2)
+    print(type(l2))
+    input('press any key to continue...')
+    try:
+        for s in v10:
+            l2.apply_async(w10, args=(s,), kwds=x10, callback=z10)
+        l2.close()
+        l2.join()
+    finally:
+        l2.terminate()
+    ok = sum((1 for r in h3 if r['ok']))
+    err = sum((1 for r in h3 if not r['ok']))
+    return (ok, err)
+def a11(v5, b11, p10, q10, k5):
+    c2 = time.perf_counter()
+    if b11:
+        f3 = [p for p in v5.iterdir() if p.is_dir() and p.name not in s7]
+        if q10:
+            print(f'Tarring {len(f3)} subdirectory/ies …')
+        c11 = []
+        for sd in f3:
+            tp = s10(sd, p10, q10)
+            if tp:
+                c11.append((sd, tp))
+        d11 = [tp for _, tp in c11 if tp is not None]
+        if d11:
+            if q10:
+                print(f'Compressing {len(d11)} .tar archive(s) at level {e10} …')
+            u10(d11, l1, {'dry_run': p10, 'verbose': q10, 'level': e10, 'threads': k5})
+            b2 = {tp for tp in d11 if tp.with_suffix(tp.suffix + f10).exists() or p10}
+            for sd, tp in c11:
+                if tp is not None and tp in b2:
+                    t10(sd, p10, q10)
+        e11 = [p for p in v5.iterdir() if p.is_file() and p.suffix != f10]
+        if e11:
+            if q10:
+                print(f'Compressing {len(e11)} loose file(s) …')
+            u10(e11, l1, {'dry_run': p10, 'verbose': q10, 'threads': k5})
+    else:
+        o7 = [p for p in v5.rglob('*') if p.is_file() and p.suffix != f10 and (not any((f11 in s7 for f11 in p.parts)))]
+        if not o7:
+            print('No files to compress.')
+            return
+        if q10:
+            print(f'Compressing {len(o7)} file(s) with {q2} processes × {k5} zstd threads each …')
+        ok, err = u10(o7, l1, {'dry_run': p10, 'verbose': q10, 'threads': k5})
+        w = time.perf_counter() - c2
+        print(f'\nDone — {ok} compressed, {err} error(s) [{w:.2f}s]')
+        return
+    w = time.perf_counter() - c2
+    print(f'\nDone [{w:.2f}s]')
+def g11(v5, p10, q10):
+    c2 = time.perf_counter()
+    o7 = [p for p in v5.rglob(f'*{f10}') if p.is_file()]
+    if not o7:
+        print(f'No {f10} files found.')
+        return
+    if q10:
+        print(f'Decompressing {len(o7)} file(s) with {q2} workers …')
+    ok, err = u10(o7, t6, {'dry_run': p10, 'verbose': q10})
+    w = time.perf_counter() - c2
+    print(f'\nDone — {ok} decompressed, {err} error(s) [{w:.2f}s]')
+def g2():
+    a4 = argparse.ArgumentParser(prog='zstder', description='Recursive Zstandard compression/decompression tool.', formatter_class=argparse.RawDescriptionHelpFormatter)
+    u5 = a4.add_mutually_exclusive_group()
+    u5.add_argument('-c', '--compress', action='store_true', help='Compress files (default)')
+    u5.add_argument('-d', '--decompress', action='store_true', help='Decompress files')
+    a4.add_argument('-t', '--tar-subdirs-first', action='store_true', help='Tar subdirs before compressing.')
+    a4.add_argument('--threads', type=int, default=g10, help=f'zstd intra-file compression threads (default: {g10}).')
+    a4.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    a4.add_argument('-n', '--dry-run', action='store_true', help='Do not modify files')
+    a4.add_argument('directory', nargs='?', default='.', help='Root directory (default: current)')
+    w1 = a4.parse_args()
+    v5 = Path(w1.directory).resolve()
+    if not v5.is_dir():
+        a4.error(f'Not a directory: {v5}')
+    h11 = w1.compress or not w1.decompress
+    if w1.dry_run:
+        print('[dry-run mode — no files will be modified]')
+    if w1.verbose or w1.dry_run:
+        print(f'Root    : {v5}')
+        print(f"Mode    : {('compress' if h11 else 'decompress')}")
+        print(f'Threads : {w1.threads} (zstd) × {q2} processes')
+        print()
+    if h11:
+        a11(v5, w1.tar_subdirs_first, w1.dry_run, w1.verbose, w1.threads)
+    else:
+        if w1.tar_subdirs_first:
+            u7.warning('Note: --tar-subdirs-first ignored during decompression.')
+        g11(v5, w1.dry_run, w1.verbose)
+if __name__ == '__main__':
+    raise SystemExit(g2())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

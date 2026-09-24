@@ -1,4 +1,3 @@
-
 import ast
 import subprocess
 import sys
@@ -70,7 +69,6 @@ def strip_python_strings_and_comments(code: str) -> str:
         tree = ast.parse(code)
 
         class StringCommentStripper(ast.NodeTransformer):
-
             def visit_Expr(self, node):
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
                     return None
@@ -192,7 +190,6 @@ def main() -> None:
         shebang = detect_shebang(content)
         if shebang:
             content = shebang + content
-    
 
     lines = content.splitlines()
     if len(lines) > 1 and lines[0].startswith("#!") and lines[1].startswith("#!"):

@@ -59,17 +59,14 @@ def main():
     print("🔐 File Hash Comparison Tool")
     print("=" * 60)
 
-    
     system_hashes = get_system_bin_hashes()
 
     if not system_hashes:
         print("❌ No files found in /system/bin or directory inaccessible")
         return
 
-    
     matches = check_current_directory(system_hashes)
 
-    
     print("\n" + "=" * 60)
     print("📊 SUMMARY")
     print("=" * 60)

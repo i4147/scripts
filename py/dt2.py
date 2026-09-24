@@ -141,8 +141,7 @@ def save_progress(
                     f.write(f"{line}\n")
                     if line in results:
                         tgt = results[line]
-                        
-                        
+
                         if not tgt or tgt == line:
                             f.write("\n")
                         else:

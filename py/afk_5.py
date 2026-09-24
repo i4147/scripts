@@ -1,4 +1,3 @@
-
 import re
 import sys
 from dataclasses import dataclass
@@ -9,7 +8,6 @@ from typing import Dict, List, Optional, Set, Tuple
 
 @dataclass
 class FileResult:
-
     path: str
     removed_imports: List[str]
     modified: bool
@@ -17,8 +15,6 @@ class FileResult:
 
 
 class ImportCleaner:
-
-    
     ALWAYS_KEEP = {
         ("__future__", "annotations"),
         ("__future__", "print_function"),
@@ -50,10 +46,7 @@ class ImportCleaner:
         return python_files
 
     def remove_comments_and_strings(self, source: str) -> str:
-        
-        
 
-        
         def remove_triple_quotes(text, quote_char):
             pattern = re.compile(
                 f"{quote_char}{quote_char}{quote_char}.*?{quote_char}{quote_char}{quote_char}", re.DOTALL
@@ -63,15 +56,11 @@ class ImportCleaner:
         source = remove_triple_quotes(source, '"')
         source = remove_triple_quotes(source, "'")
 
-        
-        
         source = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"', " ", source)
         source = re.sub(r"'[^'\\]*(?:\\.[^'\\]*)*'", " ", source)
 
-        
         lines = []
         for line in source.split("\n"):
-            
             hash_pos = line.find("#")
             if hash_pos >= 0:
                 line = line[:hash_pos]
@@ -83,7 +72,6 @@ class ImportCleaner:
     def extract_imports(self, source_lines: List[str]) -> Dict[int, Dict]:
         imports = {}
 
-        
         import_pattern = re.compile(r"^\s*import\s+(.+?)(?:\s*#.*)?$")
         from_import_pattern = re.compile(r"^\s*from\s+([\w.]+)\s+import\s+(.+?)(?:\s*#.*)?$")
 
@@ -92,28 +80,23 @@ class ImportCleaner:
             if not stripped or stripped.startswith("#"):
                 continue
 
-            
             m = import_pattern.match(line)
             if m:
                 imports_line = m.group(1)
                 names = set()
-                
+
                 for part in imports_line.split(","):
                     part = part.strip()
                     if " as " in part:
-                        
                         original, alias = part.split(" as ")
                         names.add(alias.strip())
                     else:
-                        
-                        
                         base_name = part.split(".")[0]
                         names.add(base_name)
                 if names:
                     imports[i] = {"type": "import", "names": names, "line": line.rstrip("\n"), "module": None}
                 continue
 
-            
             m = from_import_pattern.match(line)
             if m:
                 module = m.group(1)
@@ -122,51 +105,40 @@ class ImportCleaner:
                 for part in imports_part.split(","):
                     part = part.strip()
                     if part == "*":
-                        
                         names.add("*")
                     elif " as " in part:
                         original, alias = part.split(" as ")
                         names.add(alias.strip())
                     else:
                         names.add(part.strip())
-                if names and "*" not in names:  
+                if names and "*" not in names:
                     imports[i] = {"type": "from", "names": names, "line": line.rstrip("\n"), "module": module}
 
         return imports
 
     def get_all_used_names(self, source_clean: str) -> Set[str]:
-        
+
         words = re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", source_clean)
         return set(words)
 
     def import_is_used(self, import_info: Dict, used_names: Set[str], source_lines: List[str]) -> bool:
-        
+
         if import_info["type"] == "from" and import_info.get("module") == "__future__":
             return True
 
         names = import_info["names"]
 
-        
         if import_info["type"] == "from":
             for name in names:
                 if name in used_names:
                     return True
-            
+
             return False
 
-        
-        
         for name in names:
             if name in used_names:
                 return True
-            
-            
-            
-            
-            
-            
 
-        
         return False
 
     def clean_file(self, file_path: Path, in_place: bool = False) -> FileResult:
@@ -179,14 +151,11 @@ class ImportCleaner:
 
             source = "".join(original_lines)
 
-            
             clean_source = self.remove_comments_and_strings(source)
             used_names = self.get_all_used_names(clean_source)
 
-            
             imports = self.extract_imports(original_lines)
 
-            
             lines_to_remove = set()
             removed_list = []
 
@@ -200,11 +169,9 @@ class ImportCleaner:
                     print(f"✓ No unused imports: {file_path}")
                 return FileResult(str(file_path), [], False)
 
-            
             cleaned_lines = [line for i, line in enumerate(original_lines, 1) if i not in lines_to_remove]
             cleaned_content = "".join(cleaned_lines)
 
-            
             if in_place:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(cleaned_content)

@@ -1,0 +1,429 @@
+# --- File: ewhl.py ---
+import argparse
+import shutil
+import zipfile
+from pathlib import Path
+def a(b):
+    try:
+        with zipfile.ZipFile(b, 'r') as c:
+            d = c.namelist()
+            e = any((f.endswith('.py') for f in d))
+            g = any((not f.startswith(('dist-info/', '__pycache__/')) and (not f.endswith('/')) and (not f.endswith('.dist-info/')) for f in d))
+            return not (e or g)
+    except zipfile.BadZipFile:
+        print(f'Error: {b} is not a valid zip file')
+        return False
+    except Exception as e:
+        print(f'Error reading {b}: {e}')
+        return False
+def h(i, j='empty_wheels'):
+    k = Path(i)
+    l = k / j
+    l.mkdir(exist_ok=True)
+    m = list(k.glob('*.whl'))
+    if not m:
+        print(f'No .whl files found in {i}')
+        return
+    print(f'Found {len(m)} wheel files to check')
+    n = []
+    o = []
+    for p in m:
+        print(f'Checking {p.name}...', end=' ')
+        if a(p):
+            print('EMPTY')
+            n.append(p)
+        else:
+            print('OK')
+            o.append(p)
+    if not n:
+        print('\nNo empty wheels found!')
+        return
+    print(f'\nFound {len(n)} empty wheel(s)')
+    for p in n:
+        q = l / p.name
+        if q.exists():
+            r = 1
+            while q.exists():
+                q = l / f'{p.stem}_{r}{p.suffix}'
+                r += 1
+        shutil.move(str(p), str(q))
+        print(f'Moved: {p.name} -> {j}/{q.name}')
+    print('\nSummary:')
+    print(f'  - Empty wheels moved to: {j}/')
+    print(f'  - Valid wheels remaining: {len(o)}')
+    print(f'  - Total checked: {len(m)}')
+def s():
+    t = argparse.ArgumentParser(description='Move empty .whl files (only dist-info, no Python code) to a subdirectory')
+    t.add_argument('directory', nargs='?', default='.', help='Directory containing .whl files (default: current directory)')
+    t.add_argument('-d', '--dest', default='empty_wheels', help="Destination subdirectory name (default: 'empty_wheels')")
+    t.add_argument('-v', '--verbose', action='store_true', help='Show detailed output')
+    u = t.parse_args()
+    v = Path(u.directory)
+    if not v.exists():
+        print(f"Error: Directory '{u.directory}' does not exist")
+        return
+    h(u.directory, u.dest)
+if __name__ == '__main__':
+    raise SystemExit(s())
+
+# --- File: ewhl2.py ---
+import argparse
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+def a(b):
+    try:
+        with zipfile.ZipFile(b, 'r') as c:
+            d = c.namelist()
+            e = any((f.endswith('.py') for f in d))
+            g = any((not f.startswith(('dist-info/', '__pycache__/')) and (not f.endswith('/')) and (not f.endswith('.dist-info/')) for f in d))
+            return not (e or g)
+    except Exception as e:
+        print(f'  Error reading {b}: {e}')
+        return False
+def w(b):
+    x = b.stem
+    y = x.split('-')
+    if len(y) >= 2:
+        z = y[0]
+        a1 = y[1]
+        z = z.replace('_', '-')
+        return (z, a1)
+    return (None, None)
+def b1():
+    try:
+        c1 = subprocess.run([sys.executable, '-m', 'pip', 'list', '--format=freeze'], capture_output=True, text=True, check=True)
+        d1 = {}
+        for e1 in c1.stdout.strip().split('\n'):
+            if '==' in e1:
+                z, a1 = e1.split('==')
+                d1[z.lower()] = a1
+        return d1
+    except Exception as e:
+        print(f'Warning: Could not get installed packages: {e}')
+        return {}
+def f1(g1):
+    try:
+        c1 = subprocess.run([sys.executable, '-m', 'pip', 'show', g1], capture_output=True, text=True)
+        if c1.returncode == 0:
+            h1 = {}
+            for e1 in c1.stdout.strip().split('\n'):
+                if ': ' in e1:
+                    key, i1 = e1.split(': ', 1)
+                    h1[key.lower()] = i1
+            return h1
+    except Exception:
+        pass
+    return None
+def j1(g1):
+    try:
+        c1 = subprocess.run([sys.executable, '-m', 'pip', 'show', '-f', g1], capture_output=True, text=True)
+        if c1.returncode == 0:
+            k1 = c1.stdout.strip().split('\n')
+            l1 = None
+            m1 = False
+            for i, e1 in enumerate(k1):
+                if e1.startswith('Location:'):
+                    l1 = e1.split(':', 1)[1].strip()
+                elif e1.startswith('Files:') and any((n1.strip() and '.dist-info' not in n1 for n1 in k1[i + 1:i + 10])):
+                    m1 = True
+            return (l1, m1)
+    except Exception:
+        pass
+    return (None, False)
+def o1(i, j='empty_wheels', p1=True):
+    k = Path(i)
+    l = k / j
+    q1 = b1() if p1 else {}
+    m = list(k.glob('*.whl'))
+    if not m:
+        print(f'No .whl files found in {i}')
+        return
+    print(f'Found {len(m)} wheel files to check')
+    if p1:
+        print(f'Found {len(q1)} installed packages in current environment\n')
+    n = []
+    r1 = []
+    o = []
+    for p in m:
+        print(f'Checking {p.name}...')
+        if a(p):
+            print('  ✓ EMPTY wheel')
+            s1, t1 = w(p)
+            if p1 and s1:
+                u1 = q1.get(s1.lower())
+                if u1:
+                    print(f"  ⚠ WARNING: Package '{s1}' is INSTALLED (version {u1})")
+                    l1, m1 = j1(s1)
+                    if l1:
+                        print(f'  📍 Installed at: {l1}')
+                        if not m1:
+                            print('  ⚠ Installation appears incomplete!')
+                    r1.append({'wheel': p, 'package': s1, 'version': u1})
+                else:
+                    print(f"  ℹ Package '{s1}' not found in installed packages")
+            n.append(p)
+        else:
+            print('  ✓ VALID wheel (contains code)')
+            o.append(p)
+        print()
+    print('-' * 40)
+    print('SUMMARY')
+    print('-' * 40)
+    print(f'Total wheels: {len(m)}')
+    print(f'Valid wheels: {len(o)}')
+    print(f'Empty wheels: {len(n)}')
+    if r1:
+        print(f'\n⚠ CRITICAL: {len(r1)} empty wheels correspond to INSTALLED packages!')
+        for v1 in r1:
+            print(f"  - {v1['wheel'].name} -> {v1['package']}=={v1['version']}")
+        print('\nRECOMMENDATIONS:')
+        print('  1. DO NOT move/delete these wheels if you need the packages')
+        print('  2. The packages are likely broken installs')
+        print('  3. Consider reinstalling these packages:')
+        for v1 in r1:
+            print(f"     pip uninstall {v1['package']} -y")
+            print(f"     pip install {v1['package']}")
+    if n:
+        print(f'\nFound {len(n)} empty wheel(s) total')
+        if r1:
+            w1 = input('\nSome empty wheels are INSTALLED. Move ONLY the uninstalled empty wheels? (y/n): ')
+            x1 = [w for w in n if w not in [v1['wheel'] for v1 in r1]]
+        else:
+            w1 = input(f"\nMove all {len(n)} empty wheels to '{j}/'? (y/n): ")
+            x1 = n if w1.lower() == 'y' else []
+        if x1:
+            l.mkdir(exist_ok=True)
+            y1 = 0
+            for p in x1:
+                q = l / p.name
+                if q.exists():
+                    r = 1
+                    while q.exists():
+                        q = l / f'{p.stem}_{r}{p.suffix}'
+                        r += 1
+                shutil.move(str(p), str(q))
+                print(f'Moved: {p.name} -> {j}/{q.name}')
+                y1 += 1
+            print(f'\nMoved {y1} empty wheels to {j}/')
+        else:
+            print('No wheels were moved.')
+    if r1:
+        print('\n' + '=' * 40)
+        print('IMPORTANT ACTIONS TO TAKE')
+        print('-' * 40)
+        print('These packages were installed from empty wheels and are likely broken:')
+        for v1 in r1:
+            print(f"  - {v1['package']} (version {v1['version']})")
+        print('\nTo fix them:')
+        print('1. Check if the packages work correctly')
+        print('2. If broken, reinstall with valid wheels:')
+        for v1 in r1:
+            print(f"   pip uninstall {v1['package']}")
+            print(f"   pip install {v1['package']}  # or use a valid wheel")
+        print('\n3. Or completely remove them: pip uninstall ' + ' '.join([v1['package'] for v1 in r1]))
+def s():
+    t = argparse.ArgumentParser(description='Identify and move empty .whl files, with detection of potentially installed ones')
+    t.add_argument('directory', nargs='?', default='.', help='Directory containing .whl files (default: current directory)')
+    t.add_argument('-d', '--dest', default='empty_wheels', help="Destination subdirectory name (default: 'empty_wheels')")
+    t.add_argument('--no-install-check', action='store_true', help='Skip checking installed packages')
+    t.add_argument('--auto-move-all', action='store_true', help='Automatically move all empty wheels without prompting')
+    u = t.parse_args()
+    v = Path(u.directory)
+    if not v.exists():
+        print(f"Error: Directory '{u.directory}' does not exist")
+        return
+    o1(u.directory, u.dest, check_installed=not u.no_install_check)
+if __name__ == '__main__':
+    try:
+        pass
+    except ImportError:
+        print("Note: 'packaging' module not found. Install it with: pip install packaging")
+        print('Continuing with limited version parsing...\n')
+    raise SystemExit(s())
+
+# --- File: emptypkg.py ---
+import csv
+import sysconfig
+import zipfile
+from pathlib import Path
+def z1(a2):
+    a2 = Path(a2)
+    b2 = a2 / 'RECORD'
+    if not b2.is_file():
+        return False
+    with b2.open(newline='', encoding='utf-8') as f:
+        c2 = csv.reader(f)
+        for row in c2:
+            if not row:
+                continue
+            d2 = row[0]
+            e2 = (a2.parent / d2).resolve()
+            if not str(e2).startswith(str(a2.resolve()) + '/'):
+                return False
+    return True
+def f2(g2):
+    try:
+        with zipfile.ZipFile(g2, 'r') as zf:
+            h2 = [z for z in zf.namelist() if '.dist-info/' in z]
+            if not h2:
+                return False
+            i2 = h2[0].split('/')[0] + '/'
+            for j2 in zf.namelist():
+                if j2.endswith('/'):
+                    continue
+                if not j2.startswith(i2):
+                    return False
+            return True
+    except zipfile.BadZipFile:
+        print(f'Warning: {g2} is not a valid zip file')
+        return False
+def k2(l2):
+    m2 = Path(l2)
+    n2 = []
+    if not m2.is_dir():
+        return n2
+    for o2 in m2.iterdir():
+        if o2.name.endswith('.dist-info') and o2.is_dir() and z1(o2):
+            n2.append(str(o2))
+    return n2
+def p2(cwd):
+    n = []
+    for f in cwd.glob('*.whl'):
+        if f2(f):
+            n.append(str(f))
+    return n
+def s():
+    l2 = sysconfig.get_paths()['purelib']
+    q2 = k2(l2)
+    cwd = Path.cwd()
+    n = p2(cwd)
+    if q2:
+        print('\n=== Empty installed packages (site-packages) ===')
+        for pkg in q2:
+            print(f'  {pkg}')
+    else:
+        print('\nNo empty installed packages found.')
+    if n:
+        print('\n=== Empty wheel files in current directory ===')
+        for whl in n:
+            print(f'  {whl}')
+    else:
+        print('\nNo empty wheel files found in current directory.')
+    if not q2 and (not n):
+        print('\nNo empty packages or wheels found.')
+if __name__ == '__main__':
+    raise SystemExit(s())
+
+# --- File: emptywhl.py ---
+import csv
+import zipfile
+from pathlib import Path
+def a(b):
+    print(f'checking {b}')
+    try:
+        with zipfile.ZipFile(b, 'r') as z:
+            [z.rstrip('/') for z in z.namelist() if z.endswith('.dist-info/') or (z == z.rstrip('/') + '/' and z.endswith('.dist-info'))]
+            r2 = next((z.rstrip('/') for z in z.namelist() if '.dist-info' in z), None)
+            if not r2:
+                return False
+            s2 = f'{r2}/RECORD'
+            if s2 not in z.namelist():
+                return False
+            with z.open(s2) as f:
+                c2 = csv.reader((e1.decode('utf-8') for e1 in f))
+                for row in c2:
+                    if not row:
+                        continue
+                    t2 = row[0]
+                    if not t2.startswith(f'{r2}/'):
+                        return False
+            return True
+    except (zipfile.BadZipFile, KeyError, UnicodeDecodeError):
+        return False
+def s():
+    u2 = Path('.')
+    m = list(u2.glob('*.whl'))
+    if not m:
+        return
+    n = [str(w) for w in m if a(str(w))]
+    if not n:
+        print('No empty wheel files found')
+        return
+    print('\n'.join(n))
+if __name__ == '__main__':
+    raise SystemExit(s())
+
+# --- File: find_empty_wheels.py ---
+import zipfile
+from pathlib import Path
+def a(g2):
+    try:
+        with zipfile.ZipFile(g2, 'r') as zf:
+            for z in zf.namelist():
+                if z.lower().endswith(('.py', '.so', '.pyi')):
+                    return False
+    except zipfile.BadZipFile:
+        print(f'Warning: {g2} is not a valid ZIP file. Skipping.')
+        return False
+    return True
+def s():
+    n = []
+    cwd = Path.cwd()
+    v2 = cwd / 'empty_wheels'
+    for whl in cwd.rglob('*.whl'):
+        if whl.is_file():
+            w2 = a(whl)
+            if w2:
+                n.append(whl)
+    if n:
+        print(f'\nFound {len(n)} empty wheel(s).')
+        v2.mkdir(exist_ok=True)
+        for k in n:
+            print(k.relative_to(cwd))
+            x2 = v2 / k.name
+            k.rename(x2)
+    else:
+        print('No empty wheels found.')
+if __name__ == '__main__':
+    raise SystemExit(s())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

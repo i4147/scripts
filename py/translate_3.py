@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -64,7 +63,6 @@ def create_chunks(lines: list[str], max_chunk_size: int) -> list[list[str]]:
 
 
 class TranslationCache:
-
     def __init__(self, db_path: Path) -> None:
         self.db_path: Path = db_path.expanduser()
         parent: Path = Path(self.db_path).parent

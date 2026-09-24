@@ -10,7 +10,6 @@ def reverse_video_parallel(input_file, output_file="reversed.mp4", num_threads=8
         print(f"Error: Could not open video file {input_file}")
         return
 
-    
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -18,7 +17,6 @@ def reverse_video_parallel(input_file, output_file="reversed.mp4", num_threads=8
 
     print(f"Video: {width}x{height}, {fps}fps, {total_frames} frames")
 
-    
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     frames = []
     while True:
@@ -28,27 +26,23 @@ def reverse_video_parallel(input_file, output_file="reversed.mp4", num_threads=8
         frames.append(frame)
     cap.release()
 
-    
     def process_chunk(chunk_indices):
         return [frames[i] for i in chunk_indices]
 
-    
     chunk_size = max(1, total_frames // num_threads)
     chunks = []
     for i in range(0, total_frames, chunk_size):
         end = min(i + chunk_size, total_frames)
-        
+
         indices = list(range(total_frames - 1 - end, total_frames - 1 - i, -1))
         chunks.append(indices)
 
-    
     reversed_frames = []
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         results = executor.map(process_chunk, chunks)
         for result in results:
             reversed_frames.extend(result)
 
-    
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
 

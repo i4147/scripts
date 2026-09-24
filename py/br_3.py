@@ -1,5 +1,3 @@
-
-
 import mmap
 import sys
 import argparse
@@ -10,7 +8,7 @@ from brotlicffi import compress as brotli_compress
 from brotlicffi import decompress as brotli_decompress
 from dh import cprint, fsz, get_files, gsz, mpf3
 
-CHUNK_SIZE = 524288  
+CHUNK_SIZE = 524288
 N_JOBS = -1
 
 
@@ -96,27 +94,22 @@ def parallel_decompress(in_path, out_path) -> bool:
         if not file_size:
             return False
 
-        
         if file_size < CHUNK_SIZE * 2:
             return decompress_in_memory(in_path, out_path)
 
-        
         with out_path.open("wb", buffering=1024 * 1024) as fout:
             with in_path.open("rb", buffering=1024 * 1024) as fin:
                 while True:
-                    
                     size_bytes = fin.read(4)
                     if not size_bytes:
                         break
 
                     chunk_size = int.from_bytes(size_bytes, "big")
 
-                    
                     compressed_chunk = fin.read(chunk_size)
                     if not compressed_chunk:
                         break
 
-                    
                     block = decompress_chunk(compressed_chunk)
                     fout.write(block)
 
@@ -158,7 +151,6 @@ def process_decompress(fp) -> None:
     if not fp.exists() or fp.suffix != ".br":
         return
 
-    
     outfile = fp.with_suffix("")
 
     before = gsz(fp)
@@ -198,7 +190,6 @@ def main() -> int:
     files = [Path(arg) for arg in args.files] if args.files else get_files(cwd)
 
     if args.decompress:
-        
         files = [f for f in files if f.suffix == ".br"]
         if not files:
             cprint("No .br files found to decompress", "yellow")
@@ -206,7 +197,6 @@ def main() -> int:
         cprint(f"Decompressing {len(files)} file(s)...", "blue")
         mpf3(process_decompress, files)
     else:
-        
         files = [f for f in files if f.suffix != ".br"]
         if not files:
             cprint("No files to compress (excluding .br files)", "yellow")

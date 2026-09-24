@@ -11,13 +11,11 @@ def parse_gitsources_file(input_file, output_file):
             if not line:
                 continue
 
-            
             description_match = re.search(r"《([^》]+)》", line)
             if not description_match:
                 continue
             description = description_match.group(1)
 
-            
             url_match = re.search(r"GitHub:\s*(https?://[^\s]+)", line)
             if not url_match:
                 continue
@@ -25,7 +23,6 @@ def parse_gitsources_file(input_file, output_file):
 
             results.append({"url": url, "description": description})
 
-    
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 

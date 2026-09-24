@@ -1,4 +1,3 @@
-
 import argparse
 import concurrent.futures as cf
 import os
@@ -40,7 +39,7 @@ def group_by_size(files):
     for f in files:
         try:
             size = f.stat().st_size
-            if size > 0:  
+            if size > 0:
                 groups[size].append(f)
         except (PermissionError, OSError):
             SKIPPED_PATHS.append(str(f))
@@ -55,7 +54,7 @@ def hash_groups_in_parallel(groups):
     if not candidates:
         return {}
     hash_groups = defaultdict(list)
-    
+
     with cf.ThreadPoolExecutor() as executor:
         futures = {executor.submit(hash_file, str(p)): p for p in candidates}
         for future in cf.as_completed(futures):
@@ -64,7 +63,7 @@ def hash_groups_in_parallel(groups):
                 SKIPPED_PATHS.append(path_str)
                 continue
             hash_groups[h].append(path_str)
-    
+
     return {h: ps for h, ps in hash_groups.items() if len(ps) > 1}
 
 
@@ -72,7 +71,6 @@ def auto_delete_duplicates(dups: dict) -> None:
     print("\n🔥 AUTO-DELETE MODE: Removing duplicates...\n")
     deleted_count = 0
     for _h, files in dups.items():
-        
         for f in files[1:]:
             try:
                 os.remove(f)

@@ -1,0 +1,2460 @@
+# --- File: compress_files.py ---
+import argparse
+import textwrap
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+import lzma_mt
+from loguru import logger
+a = {'.zip', '.br', '.xz', '.gz', '.bz2', '.bz3', '.zst', '.7z', '.lz4', '.rar', '.tar', '.tgz', '.tbz', '.tbz2', '.Z', '.lz', '.lzma', '.xza'}
+b = {'.mkv', '.mp4', '.webm', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.mpg', '.mpeg', '.mp3', '.aac', '.flac', '.wav', '.m4a', '.opus', '.ogg', '.wma', '.alac', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico', '.heic', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.exe', '.dll', '.so', '.dylib', '.bin', '.iso', '.img'}
+c = {'.git', '__pycache__', '.venv', 'venv', '.env', 'node_modules'}
+d = 8
+e = tuple[Path, bool, str, int, int]
+def f(g):
+    return any((h in c for h in g.parts))
+def i(g):
+    return g.suffix.lower() in b
+def j(k, l):
+    m = []
+    if l:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)):
+                o = n.suffix.lower()
+                if o not in a and (not i(n)):
+                    m.append(n)
+    else:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)) and (n.suffix.lower() == '.xz'):
+                m.append(n)
+    return sorted(m)
+def p(q):
+    g, r, s, t = q
+    try:
+        with open(g, 'rb') as f:
+            u = f.read()
+        v = len(u)
+        w = lzma_mt.compress(u, preset=r, threads=s)
+        x = g.parent / (g.name + '.xz')
+        with open(x, 'wb') as f:
+            f.write(w)
+        y = 0
+        if t:
+            g.unlink()
+            y = v
+        return (g, True, f'Compressed to {x.name}', v, y)
+    except Exception as e:
+        return (g, False, f'Error: {e!s}', 0, 0)
+def z(q):
+    g, t = q
+    try:
+        if g.suffix.lower() != '.xz':
+            return (g, False, 'Error: Not an .xz file', 0, 0)
+        with open(g, 'rb') as f:
+            u = f.read()
+        a1 = len(u)
+        b1 = lzma_mt.decompress(u)
+        x = g.parent / g.stem
+        with open(x, 'wb') as f:
+            f.write(b1)
+        y = 0
+        if t:
+            g.unlink()
+            y = a1
+        return (g, True, f'Decompressed to {x.name}', a1, y)
+    except Exception as e:
+        return (g, False, f'Error: {e!s}', 0, 0)
+def c1(d1):
+    e1 = float(d1)
+    for f1 in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if e1 < 1024.0:
+            return f'{e1:.2f} {f1}'
+        e1 /= 1024.0
+    return f'{e1:.2f} PB'
+def g1(k, l, r, s, t=True):
+    m = j(k, l)
+    if not m:
+        h1 = 'compress' if l else 'decompress'
+        print(f'No files found to {h1}')
+        return
+    h1 = 'Compressing' if l else 'Decompressing'
+    print(f'{h1} {len(m)} files with {d} workers...')
+    print(f'Preset: {r}, Threads: {s}')
+    i1 = 0
+    j1 = 0
+    k1 = 0
+    l1 = 0
+    m1 = len(m)
+    n1 = 0
+    with Pool(processes=d) as o1:
+        if l:
+            p1 = [o1.apply_async(p, ((n, r, s, t),)) for n in m]
+        else:
+            p1 = [o1.apply_async(z, ((n, t),)) for n in m]
+        for q1 in p1:
+            g, r1, s1, t1, y = q1.get()
+            n1 += 1
+            pct = n1 / m1 * 40
+            print(f'[{pct:5.1f}%] {n1}/{m1}')
+            if r1:
+                i1 += 1
+                u1 = '✓'
+                k1 += y
+                if l:
+                    l1 += t1
+            else:
+                j1 += 1
+                u1 = '✗'
+            v1 = g.relative_to(k)
+            print(f'{u1} {v1}: {s1}')
+    print(f"{'─' * 40}")
+    print(f'Total successful: {i1}')
+    print(f'Total failed: {j1}')
+    if l and l1 > 0:
+        print(f'Total original size: {c1(l1)}')
+        if k1 > 0:
+            print(f'Disk space freed: {c1(k1)}')
+def w1():
+    x1 = argparse.ArgumentParser(description='Recursively compress or decompress files using lzma_mt with parallel processing', formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('\n            Examples:\n              python compress_files.py\n              python compress_files.py -c --preset 6 --threads 8\n              python compress_files.py -d /path/to/files\n              python compress_files.py -c /path/to/files\n              python compress_files.py --keep-orig\n            Excluded by default:\n              - Directories: .git, __pycache__, .venv, venv, node_modules\n              - Archives: .zip, .br, .xz, .gz, .bz2, .bz3, .zst, .7z, .lz4, etc.\n              - Media: .mp4, .mkv, .mp3, .jpg, .png, .pdf, .exe, etc.\n            '))
+    x1.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no -d specified)')
+    x1.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz files')
+    x1.add_argument('--preset', type=int, default=9, choices=range(10), help='Compression preset 0-9 (default: 9)')
+    x1.add_argument('--threads', type=int, default=4, help='Threads per compression job (default: 4)')
+    x1.add_argument('--keep-orig', action='store_true', help='Keep original files after compression/decompression')
+    x1.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    q = x1.parse_args()
+    if q.compress and q.decompress:
+        logger.error('Cannot specify both -c and -d')
+        return 1
+    y1 = q.compress or not q.decompress
+    k = Path(q.directory).resolve()
+    if not k.is_dir():
+        logger.error(f'{k} is not a directory')
+        return 1
+    g1(k, compress=y1, preset=q.preset, threads=q.threads, remove_orig=not q.keep_orig)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: compress_files2.py ---
+import argparse
+import sys
+import textwrap
+from collections.abc import Generator
+from pathlib import Path
+import lzma_mt
+a = {'.zip', '.br', '.xz', '.gz', '.bz2', '.bz3', '.zst', '.7z', '.lz4', '.rar', '.tar', '.tgz', '.tbz', '.tbz2', '.Z', '.lz', '.lzma', '.xza'}
+b = {'.mkv', '.mp4', '.webm', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.mpg', '.mpeg', '.mp3', '.aac', '.flac', '.wav', '.m4a', '.opus', '.ogg', '.wma', '.alac', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico', '.heic', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.exe', '.dll', '.so', '.dylib', '.bin', '.iso', '.img'}
+c = {'.git', '__pycache__', '.venv', 'venv', '.env', 'node_modules'}
+def f(g):
+    return any((h in c for h in g.parts))
+def i(g):
+    return g.suffix.lower() in b
+def j(k, l):
+    if l:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)):
+                if n.suffix.lower() not in a and (not i(n)):
+                    yield n
+    else:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)) and (n.suffix.lower() == '.xz'):
+                yield n
+def p(g, r=9, s=4, t=True):
+    try:
+        with open(g, 'rb') as f:
+            u = f.read()
+        v = len(u)
+        w = lzma_mt.compress(u, preset=r, threads=s)
+        len(w)
+        x = g.parent / (g.name + '.xz')
+        with open(x, 'wb') as f:
+            f.write(w)
+        y = 0
+        if t:
+            g.unlink()
+            y = v
+        return (g, True, f'Compressed to {x.name}', v, y)
+    except Exception as e:
+        return (g, False, f'Error: {e!s}', 0, 0)
+def z(g, t=True):
+    try:
+        if g.suffix.lower() != '.xz':
+            return (g, False, 'Error: Not an .xz file', 0, 0)
+        with open(g, 'rb') as f:
+            u = f.read()
+        a1 = len(u)
+        b1 = lzma_mt.decompress(u)
+        x = g.parent / g.stem
+        with open(x, 'wb') as f:
+            f.write(b1)
+        y = 0
+        if t:
+            g.unlink()
+            y = a1
+        return (g, True, f'Decompressed to {x.name}', a1, y)
+    except Exception as e:
+        return (g, False, f'Error: {e!s}', 0, 0)
+def c1(d1):
+    for f1 in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if d1 < 1024.0:
+            return f'{d1:.2f} {f1}'
+        d1 /= 1024.0
+    return f'{d1:.2f} PB'
+def g1(k, l, r, s, t=True):
+    h1 = 'Compressing' if l else 'Decompressing'
+    print(f'{h1} files in {k}...')
+    print(f'Preset: {r}, Threads: {s}')
+    print()
+    i1 = 0
+    j1 = 0
+    k1 = 0
+    l1 = 0
+    z1 = 0
+    a2 = j(k, l)
+    b2 = sum((1 for _ in a2))
+    if b2 == 0:
+        h1 = 'compress' if l else 'decompress'
+        print(f'No files found to {h1}')
+        return
+    for g in j(k, l):
+        z1 += 1
+        pct = z1 / b2 * 40
+        if l:
+            g, r1, s1, t1, y = p(g, r, s, t)
+        else:
+            g, r1, s1, t1, y = z(g, t)
+        u1 = '✓' if r1 else '✗'
+        v1 = g.relative_to(k)
+        print(f'[{pct:5.1f}%] {z1}/{b2} {u1} {v1}: {s1}')
+        if r1:
+            i1 += 1
+            k1 += y
+            if l:
+                l1 += t1
+        else:
+            j1 += 1
+    print(f"\n{'─' * 40}")
+    print(f'Total successful: {i1}')
+    print(f'Total failed: {j1}')
+    if l and l1 > 0:
+        print(f'Total original size: {c1(l1)}')
+        if k1 > 0:
+            print(f'Disk space freed: {c1(k1)}')
+def w1():
+    x1 = argparse.ArgumentParser(description='Recursively compress or decompress files using lzma_mt', formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('\n            Examples:\n              python compress_files.py\n              python compress_files.py -c --preset 6 --threads 8\n              python compress_files.py -d /path/to/files\n              python compress_files.py --keep-orig\n            Excluded by default:\n              - Directories: .git, __pycache__, .venv, venv, node_modules\n              - Archives: .zip, .br, .xz, .gz, .bz2, .bz3, .zst, .7z, .lz4, etc.\n              - Media: .mp4, .mkv, .mp3, .jpg, .png, .pdf, .exe, etc.\n        '))
+    x1.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no -d specified)')
+    x1.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz files')
+    x1.add_argument('--preset', type=int, default=9, choices=range(10), help='Compression preset 0-9 (default: 9)')
+    x1.add_argument('--threads', type=int, default=4, help='Threads per compression job (default: 4)')
+    x1.add_argument('--keep-orig', action='store_true', help='Keep original files after compression/decompression')
+    x1.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    q = x1.parse_args()
+    if q.compress and q.decompress:
+        print('Error: Cannot specify both -c and -d')
+        sys.exit(1)
+    y1 = q.compress or not q.decompress
+    k = Path(q.directory).resolve()
+    if not k.is_dir():
+        print(f'Error: {k} is not a directory')
+        sys.exit(1)
+    g1(k, compress=y1, preset=q.preset, threads=q.threads, remove_orig=not q.keep_orig)
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: compress_pylzma.py ---
+import argparse
+import io
+import tarfile
+from multiprocessing import Pool
+from pathlib import Path
+from typing import List
+import pylzma
+from loguru import logger
+c2 = 8
+d2 = './compressed'
+e2 = './decompressed'
+def f2(g2):
+    h2 = io.BytesIO()
+    with tarfile.open(fileobj=h2, mode='w') as tar:
+        tar.add(str(g2), arcname=g2.name)
+    return h2.getvalue()
+def p(g, i2, j2=False):
+    try:
+        g = Path(g)
+        if g.is_dir():
+            if j2:
+                k2 = f2(g)
+                l2 = pylzma.compress(k2)
+                m2 = i2 / f'{g.name}.tar.7z'
+            else:
+                return None
+        else:
+            with open(g, 'rb') as f:
+                u = f.read()
+            l2 = pylzma.compress(u)
+            m2 = i2 / f'{g.name}.7z'
+        with open(m2, 'wb') as f:
+            f.write(l2)
+        return f'Compressed: {g} -> {m2}'
+    except Exception as e:
+        return f'Error compressing {g}: {e!s}'
+def z(g, i2):
+    try:
+        g = Path(g)
+        with open(g, 'rb') as f:
+            l2 = f.read()
+        n2 = pylzma.decompress(l2)
+        if g.suffixes == ['.tar', '.7z']:
+            o2 = g.name.replace('.tar.7z', '')
+            h2 = io.BytesIO(n2)
+            with tarfile.open(fileobj=h2, mode='r') as tar:
+                tar.extractall(path=str(i2))
+            return f'Decompressed: {g} -> {i2}/{o2}'
+        elif g.suffix == '.7z':
+            o2 = g.name.replace('.7z', '')
+            m2 = i2 / o2
+            with open(m2, 'wb') as f:
+                f.write(n2)
+            return f'Decompressed: {g} -> {m2}'
+        else:
+            return f'Skipped (not a .7z or .tar.7z file): {g}'
+    except Exception as e:
+        return f'Error decompressing {g}: {e!s}'
+def p2(m, i2, q2, j2=False):
+    r2 = []
+    s2 = []
+    if q2 == 'compress':
+        for n in m:
+            s2.append(((n, i2, j2), 'compress'))
+    else:
+        for n in m:
+            s2.append(((n, i2), 'decompress'))
+    with Pool(processes=c2) as o1:
+        p1 = []
+        for q, t2 in s2:
+            if t2 == 'compress':
+                p1.append(o1.apply_async(p, args=q))
+            else:
+                p1.append(o1.apply_async(z, args=q))
+        for q1 in p1:
+            u2 = q1.get()
+            if u2:
+                r2.append(u2)
+                print(u2)
+    return r2
+def v2(q2):
+    if q2 == 'decompress':
+        return e2
+    return d2
+def w2():
+    x1 = argparse.ArgumentParser(description='Compress/decompress files recursively using pylzma with parallel processing')
+    x1.add_argument('-c', '--compress', action='store_const', const='compress', dest='mode', default='compress', help='Compress files (default mode)')
+    x1.add_argument('-d', '--decompress', action='store_const', const='decompress', dest='mode', help='Decompress files')
+    x1.add_argument('-t', '--tar-subdirs-first', action='store_true', default=False, help='Tar subdirectories first before compression')
+    x1.add_argument('-o', '--output', type=str, default=None, help='Output directory (default: ./compressed for compress, ./decompressed for decompress)')
+    return x1
+def w1():
+    x1 = w2()
+    q = x1.parse_args()
+    q2 = q.mode
+    j2 = q.tar_subdirs_first
+    x2 = q.output
+    i2 = Path(x2 if x2 is not None else v2(q2))
+    y2 = Path('.')
+    if q2 == 'compress':
+        i2.mkdir(exist_ok=True)
+        z2 = []
+        for a3 in y2.rglob('*'):
+            if a3.is_file() or (a3.is_dir() and (not j2)):
+                try:
+                    if i2 in a3.parents or a3 == i2:
+                        continue
+                except (ValueError, AttributeError):
+                    pass
+                if a3.is_file():
+                    if a3.suffix == '.7z':
+                        continue
+                    z2.append(a3)
+                elif a3.is_dir() and j2:
+                    if a3 != y2:
+                        try:
+                            if i2 not in a3.parents and a3 != i2:
+                                z2.append(a3)
+                        except (ValueError, AttributeError):
+                            z2.append(a3)
+        if not z2:
+            logger.warning('No files found to compress in current directory')
+            return 0
+        print(f'Found {len(z2)} items to compress')
+        print(f'Compressing to: {i2}')
+        p2(z2, i2, 'compress', j2)
+    else:
+        i2.mkdir(exist_ok=True)
+        b3 = []
+        for a3 in y2.rglob('*'):
+            if a3.is_file() and (a3.suffix == '.7z' or a3.name.endswith('.tar.7z')):
+                try:
+                    if i2 not in a3.parents and a3 != i2:
+                        b3.append(a3)
+                except (ValueError, AttributeError):
+                    b3.append(a3)
+        if not b3:
+            logger.warning('No .7z or .tar.7z files found in current directory')
+            return 0
+        print(f'Found {len(b3)} files to decompress')
+        print(f'Decompressing to: {i2}')
+        p2(b3, i2, 'decompress', False)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: csubdirxz.py ---
+import argparse
+import contextlib
+import lzma
+import shutil
+import tarfile
+import time
+from datetime import datetime
+from multiprocessing import Pool
+from pathlib import Path
+c3 = 9
+d3 = 8
+def e3(g):
+    m1 = 0
+    for a3 in g.rglob('*'):
+        try:
+            if a3.is_file():
+                m1 += a3.stat().st_size
+        except OSError:
+            continue
+    return m1
+def f3(g3):
+    return g3.parent / f'{g3.name}.tar.xz'
+def h3(g3):
+    i3 = f3(g3)
+    j3 = time.monotonic()
+    k3 = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    v = 0
+    try:
+        if not g3.is_dir():
+            raise FileNotFoundError(f'Source directory does not exist: {g3}')
+        if i3.exists():
+            raise FileExistsError(f'Archive already exists; refusing to overwrite: {i3.name}')
+        v = e3(g3)
+        with lzma.open(i3, mode='wb', preset=c3, check=lzma.CHECK_CRC64) as l3, tarfile.open(fileobj=l3, mode='w', dereference=False) as tar:
+            tar.add(g3, arcname=g3.name, recursive=True)
+        with tarfile.open(i3, mode='r:xz') as tar:
+            for m3 in tar:
+                if m3.isfile():
+                    n3 = tar.extractfile(m3)
+                    if n3 is not None:
+                        while n3.read(1024 * 1024):
+                            pass
+        a1 = i3.stat().st_size
+        if a1 <= 0:
+            raise OSError('Created archive is empty')
+        shutil.rmtree(g3)
+        o3 = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        p3 = time.monotonic() - j3
+        q3 = a1 / v if v > 0 else 0.0
+        return {'subdir': g3.name, 'success': True, 'message': f'OK   {g3.name}', 'start': k3, 'end': o3, 'elapsed': p3, 'original_size': v, 'compressed_size': a1, 'ratio': q3}
+    except Exception as exc:
+        o3 = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        p3 = time.monotonic() - j3
+        if i3.exists():
+            with contextlib.suppress(OSError):
+                i3.unlink()
+        return {'subdir': g3.name, 'success': False, 'message': f'FAIL {g3.name}: {exc}', 'start': k3, 'end': o3, 'elapsed': p3, 'original_size': v, 'compressed_size': 0, 'ratio': 0.0}
+def r3(s3):
+    e1 = float(s3)
+    for f1 in ('B', 'KB', 'MB', 'GB', 'TB', 'PB'):
+        if e1 < 1024 or f1 == 'PB':
+            if f1 == 'B':
+                return f'{int(e1)} B'
+            return f'{e1:.1f} {f1}'
+        e1 /= 1024
+    return f'{e1:.1f} PB'
+def t3(u2):
+    u1 = '✅' if u2['success'] else '❌'
+    p3 = f"{u2['elapsed']:.1f}s"
+    if u2['success']:
+        u3 = u2['ratio'] * 40
+        print(f"{u1} {u2['message']:<35} start={u2['start']}  end={u2['end']}  took={p3:<7} {r3(u2['original_size'])} -> {r3(u2['compressed_size'])} ({u3:.1f}% of original)", flush=True)
+    else:
+        print(f"{u1} {u2['message']:<35} start={u2['start']}  end={u2['end']}  took={p3}", flush=True)
+def v3():
+    x1 = argparse.ArgumentParser(description='Compress top-level subdirectories into .tar.xz archives.')
+    x1.add_argument('directory', nargs='?', type=Path, default=Path.cwd(), help='Directory containing the subdirectories. Defaults to the current directory.')
+    x1.add_argument('--workers', type=int, default=d3, help=f'Number of worker processes. Defaults to {d3}.')
+    return x1.parse_args()
+def w1():
+    q = v3()
+    w3 = q.directory.expanduser().resolve()
+    if not w3.is_dir():
+        print(f'Error: not a directory: {w3}')
+        return 1
+    if q.workers < 1:
+        print('Error: --workers must be at least 1')
+        return 1
+    x3 = sorted((a3 for a3 in w3.iterdir() if a3.is_dir() and (not a3.is_symlink()) and (not a3.name.startswith('.'))), key=lambda g: g.name.lower())
+    if not x3:
+        print(f'No non-hidden top-level subdirectories found in: {w3}')
+        return 0
+    y3 = min(q.workers, len(x3))
+    print(f'Directory: {w3}')
+    print(f'Subdirectories: {len(x3)}')
+    print(f'Workers: {y3}')
+    print(f'xz preset: {c3}')
+    print()
+    z3 = 0
+    a4 = 0
+    with Pool(processes=y3) as o1:
+        for u2 in o1.imap_unordered(h3, x3):
+            t3(u2)
+            if u2['success']:
+                z3 += 1
+            else:
+                a4 += 1
+    print()
+    print('Finished')
+    print(f'Successful: {z3}')
+    print(f'Failed:     {a4}')
+    return 0 if a4 == 0 else 1
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: fast_xz.py ---
+import argparse
+import textwrap
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import lzma_mt
+from loguru import logger
+a = {'.zip', '.br', '.xz', '.gz', '.bz2', '.bz3', '.zst', '.7z', '.lz4', '.rar', '.tar', '.tgz', '.tbz', '.tbz2', '.z', '.lz', '.lzma', '.xza'}
+c = {'.git', '__pycache__', '.venv', 'venv', '.env', 'node_modules'}
+d = 8
+def f(g):
+    return any((h in c for h in g.parts))
+def j(k, l):
+    m = []
+    if l:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)):
+                if n.suffix.lower() not in a:
+                    m.append(n)
+    else:
+        for n in k.rglob('*'):
+            if n.is_file() and (not f(n)) and (n.suffix.lower() == '.xz'):
+                m.append(n)
+    return sorted(m)
+def p(g, r=9, s=4, t=True):
+    try:
+        with open(g, 'rb') as f:
+            u = f.read()
+        w = lzma_mt.compress(u, preset=r, threads=s)
+        x = g.parent / (g.name + '.xz')
+        with open(x, 'wb') as f:
+            f.write(w)
+        if t:
+            g.unlink()
+        return (g, True, f'Compressed to {x.name}')
+    except Exception as e:
+        return (g, False, f'Error: {e!s}')
+def z(g, t=True):
+    try:
+        if g.suffix.lower() != '.xz':
+            return (g, False, 'Error: Not an .xz file')
+        with open(g, 'rb') as f:
+            u = f.read()
+        b1 = lzma_mt.decompress(u)
+        x = g.parent / g.stem
+        with open(x, 'wb') as f:
+            f.write(b1)
+        if t:
+            g.unlink()
+        return (g, True, f'Decompressed to {x.name}')
+    except Exception as e:
+        return (g, False, f'Error: {e!s}')
+def b4(k, l, r, s, t):
+    m = j(k, l)
+    if not m:
+        h1 = 'compress' if l else 'decompress'
+        print(f'No files found to {h1}')
+        return
+    h1 = 'Compressing' if l else 'Decompressing'
+    print(f'{h1} {len(m)} files with {d} workers...')
+    print(f'Preset: {r}, Threads: {s}')
+    i1 = 0
+    j1 = 0
+    m1 = len(m)
+    with Pool(processes=d) as o1:
+        r2 = []
+        if l:
+            for n in m:
+                r2.append(o1.apply_async(p, (n, r, s, t)))
+        else:
+            for n in m:
+                r2.append(o1.apply_async(z, (n, t)))
+        n1 = 0
+        for u2 in r2:
+            g, r1, s1 = u2.get()
+            n1 += 1
+            pct = n1 / m1 * 40
+            print(f'[{pct:5.1f}%] {n1}/{m1}')
+            if r1:
+                i1 += 1
+                u1 = '✓'
+            else:
+                j1 += 1
+                u1 = '✗'
+            v1 = g.relative_to(k)
+            print(f'{u1} {v1}: {s1}')
+    print('─' * 40)
+    print(f'Total successful: {i1}')
+    print(f'Total failed: {j1}')
+def g1(k, l, r, s, t=True):
+    b4(k, l, r, s, t)
+def w1():
+    x1 = argparse.ArgumentParser(description='Compress or decompress files using lzma_mt with parallel processing', formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('\n            Examples:\n              python compress_files.py\n              python compress_files.py -c --preset 6 --threads 8\n              python compress_files.py -d /path/to/files\n              python compress_files.py -c /path/to/files\n        '))
+    x1.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no -d specified)')
+    x1.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz files')
+    x1.add_argument('--preset', type=int, default=9, choices=range(10), help='Compression preset 0-9 (default: 9)')
+    x1.add_argument('--threads', type=int, default=4, help='Threads per compression job (default: 4)')
+    x1.add_argument('--keep-orig', action='store_true', help='Keep original files after compression/decompression')
+    x1.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    q = x1.parse_args()
+    if q.compress and q.decompress:
+        logger.error('Cannot specify both -c and -d')
+        return 1
+    y1 = q.compress or not q.decompress
+    k = Path(q.directory).resolve()
+    if not k.is_dir():
+        logger.error(f'{k} is not a directory')
+        return 1
+    g1(k, compress=y1, preset=q.preset, threads=q.threads, remove_orig=not q.keep_orig)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: lzmamter.py ---
+import argparse
+import lzma
+import shutil
+import tarfile
+import time
+from collections.abc import Callable
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, TypedDict
+from dh import fsz
+from loguru import logger
+try:
+    c4 = True
+except ImportError:
+    c4 = False
+d4 = 5 * 1024 * 1024
+e4 = 9
+f4 = 9
+g4 = '.xz'
+h4 = 4
+i4 = 8
+class j4(TypedDict):
+    pass
+def k4(g):
+    try:
+        return f4 if g.stat().st_size > d4 else e4
+    except OSError:
+        return e4
+def l4(m4, n4):
+    if m4 == 0:
+        return '0%'
+    return f'{n4 / m4 * 40:.0f}%'
+def o4(ok, p4, q4, m4, n4):
+    r4 = '✔' if ok else '✘'
+    return f'[{r4}] {p4} ({q4:.0f}ms) {l4(m4, n4)}'
+def s4(u, t4, s):
+    return lzmamt.compress(u, preset=t4, threads=s)
+def u4(u, t4):
+    r = t4 | lzma.PRESET_EXTREME if t4 == 9 else t4
+    return lzma.compress(u, format=lzma.FORMAT_XZ, preset=r)
+def p(src, v4, w4, t4=None, s=h4):
+    u2 = {'src': src, 'ok': False, 'line': '', 'msg': ''}
+    dst = src.with_suffix(src.suffix + g4)
+    if dst.exists():
+        u2['line'] = f'[–] {src.name} (skipped — {dst.name} exists)'
+        return u2
+    x4 = t4 if t4 is not None else k4(src)
+    if v4:
+        y4 = 'lzmamt' if c4 else 'stdlib lzma'
+        u2['ok'] = True
+        u2['line'] = f'[dry-run] {src.name} → {dst.name} (level {x4}, threads {s}, {y4})'
+        return u2
+    t0 = time.perf_counter()
+    try:
+        u = src.read_bytes()
+        if c4:
+            w = s4(u, x4, s)
+        else:
+            w = u4(u, x4)
+        dst.write_bytes(w)
+        q4 = (time.perf_counter() - t0) * 400
+        m4, n4 = (len(u), len(w))
+        src.unlink()
+        u2['ok'] = True
+        u2['line'] = o4(True, src.name, q4, m4, n4)
+        if w4:
+            y4 = 'lzmamt' if c4 else 'stdlib (single-thread)'
+            u2['msg'] = f'  → {dst.name} ({fsz(m4)} → {fsz(n4)}, level {x4}, {y4})'
+    except Exception as exc:
+        q4 = (time.perf_counter() - t0) * 400
+        u2['line'] = o4(False, src.name, q4, 0, 0)
+        u2['msg'] = f'  ERROR: {exc}'
+    return u2
+def z(src, v4, w4, s=h4):
+    u2 = {'src': src, 'ok': False, 'line': '', 'msg': ''}
+    if src.suffix != g4:
+        u2['line'] = f'[–] {src.name} (skipped — not a .xz file)'
+        return u2
+    dst = src.with_suffix('')
+    if dst.exists():
+        u2['line'] = f'[–] {src.name} (skipped — {dst.name} exists)'
+        return u2
+    if v4:
+        u2['ok'] = True
+        u2['line'] = f'[dry-run] {src.name} → {dst.name}'
+        return u2
+    t0 = time.perf_counter()
+    try:
+        u = src.read_bytes()
+        b1 = lzma.decompress(u, format=lzma.FORMAT_XZ)
+        dst.write_bytes(b1)
+        q4 = (time.perf_counter() - t0) * 400
+        m4, n4 = (len(u), len(b1))
+        src.unlink()
+        u2['ok'] = True
+        u2['line'] = o4(True, src.name, q4, m4, n4)
+        if w4:
+            u2['msg'] = f'  → {dst.name} ({fsz(m4)} → {fsz(n4)})'
+    except Exception as exc:
+        q4 = (time.perf_counter() - t0) * 400
+        u2['line'] = o4(False, src.name, q4, 0, 0)
+        u2['msg'] = f'  ERROR: {exc}'
+    return u2
+def z4(g3, v4, w4):
+    a5 = g3.parent / (g3.name + '.tar')
+    if v4:
+        if w4:
+            print(f'  [dry-run] would tar {g3}/ → {a5.name}')
+        return a5
+    try:
+        with tarfile.open(a5, 'w') as tf:
+            tf.add(g3, arcname=g3.name)
+        if w4:
+            print(f'  tarred {g3.name}/ → {a5.name} ({fsz(a5.stat().st_size)})')
+        return a5
+    except Exception as exc:
+        logger.error(f'  ERROR tarring {g3}: {exc}')
+        return None
+def b5(g3, v4, w4):
+    if v4:
+        if w4:
+            print(f'  [dry-run] would remove {g3}/')
+        return
+    try:
+        shutil.rmtree(g3)
+        if w4:
+            print(f'  removed original dir: {g3.name}/')
+    except Exception as exc:
+        logger.warning(f'  WARNING — could not remove {g3}: {exc}')
+def c5(s2, d5, e5):
+    ok = 0
+    err = 0
+    with Pool(processes=i4) as o1:
+        p1 = [o1.apply_async(d5, (g,), e5) for g in s2]
+        for ar in p1:
+            res = ar.get()
+            print(res['line'])
+            if res.get('msg'):
+                if res['ok']:
+                    print(res['msg'])
+                else:
+                    logger.error(res['msg'])
+            if res['ok']:
+                ok += 1
+            else:
+                err += 1
+    return (ok, err)
+def f5(w3, g5, v4, w4, s):
+    h5 = time.perf_counter()
+    if not c4 and w4:
+        logger.warning('⚠ lzmamt not found — falling back to stdlib lzma (single-threaded per file).')
+        print('  Install with: pip install lzmamt\n')
+    if g5:
+        x3 = [p for p in w3.iterdir() if p.is_dir()]
+        if w4:
+            print(f'Taring {len(x3)} subdirectory/ies …')
+        i5 = []
+        for sd in x3:
+            tp = z4(sd, v4, w4)
+            if tp is not None:
+                i5.append((sd, tp))
+        j5 = [tp for _, tp in i5]
+        if j5:
+            if w4:
+                print(f'Compressing {len(j5)} .tar archive(s) at level {f4} …')
+            c5(j5, p, {'dry_run': v4, 'verbose': w4, 'level': f4, 'threads': s})
+            w = {tp for tp in j5 if tp.with_suffix(tp.suffix + g4).exists() or v4}
+            for sd, tp in i5:
+                if tp in w:
+                    b5(sd, v4, w4)
+        k5 = [p for p in w3.iterdir() if p.is_file() and p.suffix != g4]
+        if k5:
+            if w4:
+                print(f'Compressing {len(k5)} loose file(s) …')
+            c5(k5, p, {'dry_run': v4, 'verbose': w4, 'threads': s})
+    else:
+        m = [p for p in w3.rglob('*') if p.is_file() and p.suffix != g4]
+        if not m:
+            print('No files to compress.')
+            return
+        if w4:
+            print(f'Compressing {len(m)} file(s) with {i4} processes × {s} lzma threads each …')
+        ok, err = c5(m, p, {'dry_run': v4, 'verbose': w4, 'threads': s})
+        p3 = time.perf_counter() - h5
+        print(f'\nDone — {ok} compressed, {err} error(s) [{p3:.2f}s]')
+        return
+    p3 = time.perf_counter() - h5
+    print(f'\nDone [{p3:.2f}s]')
+def l5(w3, v4, w4, s):
+    h5 = time.perf_counter()
+    m = [p for p in w3.rglob('*') if p.is_file() and p.suffix == g4]
+    if not m:
+        print('No .xz files found.')
+        return
+    if w4:
+        print(f'Decompressing {len(m)} file(s) with {i4} workers …')
+    ok, err = c5(m, z, {'dry_run': v4, 'verbose': w4, 'threads': s})
+    p3 = time.perf_counter() - h5
+    print(f'\nDone — {ok} decompressed, {err} error(s) [{p3:.2f}s]')
+def w2():
+    p = argparse.ArgumentParser(prog='lzma_compress', description='Recursive LZMA/XZ compression / decompression.\nUses lzmamt for real MT encoding if installed, otherwise stdlib lzma (still parallelises across files).', formatter_class=argparse.RawDescriptionHelpFormatter)
+    q2 = p.add_mutually_exclusive_group()
+    q2.add_argument('-c', '--compress', action='store_true')
+    q2.add_argument('-d', '--decompress', action='store_true')
+    p.add_argument('-t', '--tar-subdirs-first', action='store_true', help='Tar subdirs before compressing.')
+    p.add_argument('--threads', type=int, default=h4, help=f'LZMA intra-file threads via lzmamt (default: {h4}).')
+    p.add_argument('--verbose', action='store_true')
+    p.add_argument('--dry-run', action='store_true')
+    p.add_argument('directory', nargs='?', default='.')
+    return p
+def w1():
+    x1 = w2()
+    q = x1.parse_args()
+    w3 = Path(q.directory).resolve()
+    if not w3.is_dir():
+        x1.error(f'Not a directory: {w3}')
+    l = q.compress or not q.decompress
+    if q.dry_run:
+        print('[dry-run mode — no files will be modified]')
+    if q.verbose or q.dry_run:
+        y4 = 'lzmamt' if c4 else 'stdlib lzma (single-thread fallback)'
+        print(f'Root    : {w3}')
+        print(f"Mode    : {('compress' if l else 'decompress')}")
+        print(f'Backend : {y4}')
+        print(f'Threads : {q.threads} (lzma) × {i4} processes')
+        print()
+    if l:
+        f5(w3, q.tar_subdirs_first, q.dry_run, q.verbose, q.threads)
+    else:
+        if q.tar_subdirs_first:
+            logger.warning('Note: --tar-subdirs-first')
+        l5(w3, q.dry_run, q.verbose, q.threads)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: ptrr.py ---
+import io
+import multiprocessing
+import os
+import shutil
+import sys
+import tarfile
+from collections.abc import Iterable
+from multiprocessing.pool import Pool
+from pathlib import Path
+from typing import List, Tuple
+from loguru import logger
+i4 = 8
+m5 = '.tar.xz'
+def n5(w3):
+    if not w3.exists():
+        raise FileNotFoundError(f'Root directory does not exist: {w3}')
+    if not w3.is_dir():
+        raise NotADirectoryError(f'Root path is not a directory: {w3}')
+    m = []
+    for o5, p5, q5 in os.walk(w3):
+        r5 = Path(o5)
+        for p4 in q5:
+            s5 = r5 / p4
+            if s5.is_file() and (not s5.is_symlink()):
+                m.append(s5)
+            elif s5.is_symlink() and (not s5.exists()):
+                logger.warning(f'Skipping broken symlink: {s5}')
+    return m
+def t5(g):
+    return (g, g.read_bytes())
+def u5(m):
+    v5 = list(m)
+    if not v5:
+        return []
+    print(f'Reading {len(v5)} file(s) with {i4} workers')
+    with Pool(processes=i4) as o1:
+        r2 = o1.map(t5, v5)
+    return r2
+def w5(i3, w3, x5):
+    print(f'Writing archive: {i3}')
+    y5 = w3.name
+    with tarfile.open(name=str(i3), mode='w:xz', preset=6, format=tarfile.PAX_FORMAT) as tar:
+        for g, z5 in x5:
+            try:
+                rel = g.relative_to(w3)
+            except ValueError:
+                rel = Path(g.name)
+            a6 = Path(y5) / rel
+            b6 = tarfile.TarInfo(name=str(a6))
+            b6.size = len(z5)
+            b6.mtime = g.stat().st_mtime
+            tar.addfile(b6, io.BytesIO(z5))
+    logger.success(f'Archive created: {i3}')
+def c6(w3):
+    print(f'Removing original directory: {w3}')
+    shutil.rmtree(w3)
+    logger.success(f'Removed: {w3}')
+def d6():
+    cwd = Path.cwd().resolve()
+    e6 = cwd.parent
+    y5 = cwd.name
+    i3 = e6 / f'{y5}{m5}'
+    print(f'Current directory: {cwd}')
+    print(f'Target archive:    {i3}')
+    if i3.exists():
+        raise RuntimeError(f'Archive already exists: {i3}')
+    m = n5(cwd)
+    if not m:
+        raise RuntimeError(f'No files found to archive in: {cwd}')
+    x5 = u5(m)
+    w5(i3, cwd, x5)
+    if not i3.is_file() or i3.stat().st_size == 0:
+        raise RuntimeError(f'Archive verification failed: {i3}')
+    with tarfile.open(i3, mode='r:xz') as tar:
+        f6 = tar.getnames()
+    g6 = f'{y5}/'
+    h6 = [m for m in f6 if not m.startswith(g6)]
+    if h6:
+        raise RuntimeError(f"Archive contains members outside '{g6}': {h6[:5]}")
+    if len(f6) != len(m):
+        raise RuntimeError(f'Archive member count mismatch: expected {len(m)}, found {len(f6)}')
+    os.chdir(e6)
+    c6(cwd)
+    return i3
+def w1():
+    logger.remove()
+    logger.add(sys.stderr, level='INFO', format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>')
+    try:
+        i6 = d6()
+    except Exception as exc:
+        logger.exception(f'Archiving failed: {exc}')
+        return 1
+    logger.success(f'Done. Archive: {i6}')
+    return 0
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
+    raise SystemExit(w1())
+
+# --- File: py7z.py ---
+import argparse
+import io
+import shutil
+import tarfile
+from collections.abc import Iterable, Sequence
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+import pylzma
+from loguru import logger
+j6 = {'dictionary': 27, 'fastBytes': 273, 'algorithm': 2}
+k6 = 8
+def fsz(s3):
+    for f1 in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if abs(s3) < 1024.0:
+            return f'{s3:.2f} {f1}'
+        s3 /= 1024.0
+    return f'{s3:.2f} PB'
+def gsz(g):
+    if g.is_file():
+        try:
+            return g.stat().st_size
+        except OSError:
+            return 0
+    m1 = 0
+    for p in g.rglob('*'):
+        if p.is_file():
+            try:
+                m1 += p.stat().st_size
+            except OSError:
+                continue
+    return m1
+def l6(h1, src, dst, v, a1, m6=None):
+    if v > 0:
+        q3 = (1 - a1 / v) * 40
+    else:
+        q3 = 0.0
+    y = v - a1
+    n6 = [f'{h1} {src} -> {dst}', f'  Original: {fsz(v)} -> Compressed: {fsz(a1)}', f'  Ratio: {q3:.1f}% | Space freed: {fsz(max(0, y))}']
+    if m6:
+        n6.append(m6)
+    return '\n'.join(n6)
+def o6(src, p6):
+    src = Path(src)
+    try:
+        v = gsz(src)
+        if src.is_dir():
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode='w') as tar:
+                tar.add(src, arcname=src.name)
+            w = pylzma.compress(buf.getvalue(), **j6)
+            dst = src.parent / f'{src.name}.tar.7z'
+            dst.write_bytes(w)
+            a1 = dst.stat().st_size
+            if not p6:
+                shutil.rmtree(src)
+            return l6('Compressed', src, dst, v, a1)
+        if src.is_file():
+            u = src.read_bytes()
+            w = pylzma.compress(u, **j6)
+            dst = src.parent / f'{src.name}.7z'
+            dst.write_bytes(w)
+            a1 = dst.stat().st_size
+            if not p6:
+                src.unlink()
+            return l6('Compressed', src, dst, v, a1)
+        return f'Skipped {src} (not a file or directory)'
+    except Exception as e:
+        return f'Error compressing {src}: {e}'
+def q6(src, p6):
+    src = Path(src)
+    try:
+        if not src.is_file():
+            return f'Skipped {src} (not a file)'
+        a1 = src.stat().st_size
+        u = src.read_bytes()
+        b1 = pylzma.decompress(u)
+        if src.name.endswith('.tar.7z'):
+            dst = src.parent / src.name[:-len('.tar.7z')]
+            dst.mkdir(parents=True, exist_ok=True)
+            buf = io.BytesIO(b1)
+            with tarfile.open(fileobj=buf, mode='r') as tar:
+                tar.extractall(path=dst)
+            if not p6:
+                src.unlink()
+            r6 = gsz(dst)
+            s6 = f'  Space used: {fsz(r6 - a1)}'
+            return l6('Decompressed', src, dst, a1, r6, extra_line=s6)
+        if src.name.endswith('.7z'):
+            dst = src.parent / src.name[:-len('.7z')]
+            dst.write_bytes(b1)
+            if not p6:
+                src.unlink()
+            r6 = dst.stat().st_size
+            s6 = f'  Space used: {fsz(r6 - a1)}'
+            return l6('Decompressed', src, dst, a1, r6, extra_line=s6)
+        return f'Skipped {src} (not a .7z file)'
+    except Exception as e:
+        return f'Error decompressing {src}: {e}'
+def t6(u6, q2):
+    v6 = []
+    cwd = Path.cwd()
+    if q2 == 'compress':
+        if not u6:
+            for p in Path('.').rglob('*'):
+                if p.is_file() and (not p.name.endswith('.7z')):
+                    v6.append(p.resolve())
+        else:
+            for s in u6:
+                p = Path(s)
+                if not p.exists():
+                    logger.warning(f'{p} does not exist, skipping')
+                    continue
+                w6 = p.resolve()
+                if w6 == cwd and p.is_dir():
+                    logger.warning("Processing contents of '.' recursively instead of compressing it as a single archive")
+                    for x6 in p.rglob('*'):
+                        if x6.is_file() and (not x6.name.endswith('.7z')):
+                            v6.append(x6.resolve())
+                else:
+                    v6.append(w6)
+    elif not u6:
+        for p in Path('.').rglob('*'):
+            if p.is_file() and p.name.endswith('.7z'):
+                v6.append(p.resolve())
+    else:
+        for s in u6:
+            p = Path(s)
+            if not p.exists():
+                logger.warning(f'{p} does not exist, skipping')
+                continue
+            if p.is_file() and p.name.endswith('.7z'):
+                v6.append(p.resolve())
+            elif p.is_dir():
+                for x6 in p.rglob('*'):
+                    if x6.is_file() and x6.name.endswith('.7z'):
+                        v6.append(x6.resolve())
+    y6 = set()
+    out = []
+    for t in v6:
+        if t not in y6:
+            y6.add(t)
+            out.append(t)
+    return out
+def z6(q):
+    return o6(*q)
+def a7(q):
+    return q6(*q)
+def b7():
+    x1 = argparse.ArgumentParser(description='Compress/decompress files and directories using pylzma with parallel processing (fixed pool of 8 workers)')
+    x1.add_argument('paths', nargs='*', help='Files or directories to process (default: current directory recursively)')
+    x1.add_argument('-d', '--decompress', action='store_true', help='Decompress mode (default: compress)')
+    x1.add_argument('-k', '--keep', action='store_true', help='Keep original files after processing')
+    return x1
+def w1(c7=None):
+    x1 = b7()
+    q = x1.parse_args(c7)
+    q2 = 'decompress' if q.decompress else 'compress'
+    v6 = t6(q.paths, q2)
+    if not v6:
+        print(f'No items found to {q2}')
+        return 0
+    print(f'{q2.capitalize()}ing {len(v6)} item(s)...')
+    d7 = sum((gsz(t) for t in v6))
+    e7 = a7 if q2 == 'decompress' else z6
+    f7 = ((t, bool(q.keep)) for t in v6)
+    with Pool(processes=k6) as o1:
+        p1 = [o1.apply_async(e7, (x5,)) for x5 in f7]
+        r2 = [r.get() for r in p1]
+    for res in r2:
+        print(res)
+    if q2 == 'compress':
+        g7 = 0
+        for t in v6:
+            if t.is_dir():
+                dst = t.parent / f'{t.name}.tar.7z'
+            else:
+                dst = t.parent / f'{t.name}.7z'
+            if dst.exists():
+                g7 += dst.stat().st_size
+        if d7 > 0:
+            h7 = (1 - g7 / d7) * 40
+            i7 = d7 - g7
+            print('=' * 40)
+            print('SUMMARY:')
+            print(f'  Total original size: {fsz(d7)}')
+            print(f'  Total compressed size: {fsz(g7)}')
+            print(f'  Overall compression ratio: {h7:.1f}%')
+            print(f'  Total space freed: {fsz(max(0, i7))}')
+    else:
+        j7 = 0
+        for t in v6:
+            if t.name.endswith('.tar.7z'):
+                dst = t.parent / t.name[:-len('.tar.7z')]
+            else:
+                dst = t.parent / t.name[:-len('.7z')]
+            j7 += gsz(dst)
+        k7 = j7 - d7
+        print('=' * 40)
+        print('SUMMARY:')
+        print(f'  Total compressed size: {fsz(d7)}')
+        print(f'  Total decompressed size: {fsz(j7)}')
+        print(f'  Total space used: {fsz(k7)}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: pylzmaer.py ---
+import argparse
+import asyncio
+import mmap
+import shutil
+import sys
+import tempfile
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Final
+import pylzma
+from loguru import logger
+l7 = 8
+m7 = 524288
+n7 = 32768
+o7 = Path(tempfile.gettempdir()) / 'pylzma_temp'
+p7 = [{'id': pylzma.FILTER_LZMA1, 'preset': 9 | pylzma.PRESET_EXTREME, 'dict_size': 256 * 1024 * 1024}]
+q7 = ('.lzma', '.xz', '.gz', '.bz2', '.br', '.zst', '.zip', '.rar')
+r7 = None
+def fsz(s3):
+    for f1 in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if s3 < 1024.0:
+            return f'{s3:.2f} {f1}'
+        s3 /= 1024.0
+    return f'{s3:.2f} PB'
+def s7():
+    global _POOL
+    if r7 is None:
+        r7 = Pool(processes=l7)
+    return r7
+def t7():
+    global _POOL
+    if r7 is not None:
+        r7.close()
+        r7.join()
+        r7 = None
+def u7(g):
+    try:
+        if not g.is_file() or g.is_symlink():
+            return False
+        if g.suffix in q7:
+            return False
+        s3 = g.stat().st_size
+        return s3 >= 1024
+    except (OSError, PermissionError):
+        return False
+def v7(w7, q2='compress'):
+    if q2 == 'compress':
+        return sorted((p for p in w7.glob('*') if p.is_file() and (not p.is_symlink()) and u7(p)))
+    return sorted((p for p in w7.glob('*.lzma') if p.is_file() and (not p.is_symlink())))
+def x7(w7):
+    return sorted((p for p in w7.glob('*') if not p.is_symlink() and p.is_dir()))
+def z(g):
+    if g.suffix != '.lzma':
+        return False
+    y7 = g.with_suffix('')
+    try:
+        with g.open('rb') as fin:
+            b1 = pylzma.decompress(fin.read())
+        y7.write_bytes(b1)
+        v = g.stat().st_size
+        r6 = y7.stat().st_size
+        print(f'  ✓ Decompressed {g.name}: {fsz(v)} → {fsz(r6)}')
+        g.unlink()
+        return True
+    except Exception as e:
+        logger.error(f'  ✗ Failed to decompress {g.name}: {e}')
+        return False
+def z7(a8, b8):
+    try:
+        u = a8.read_bytes()
+        if not u:
+            return False
+        w = pylzma.compress(u, filters=p7)
+        b8.write_bytes(w)
+        return True
+    except (OSError, MemoryError, ValueError) as e:
+        logger.error(f'Memory compression failed for {a8.name}: {e}')
+        return False
+def c8(u, d8, e8):
+    f8 = e8 / f'chunk_{d8:06d}.lzma'
+    try:
+        w = pylzma.compress(u, filters=p7)
+        f8.write_bytes(w)
+        return f8
+    except Exception as e:
+        raise Exception(f'Chunk {d8} compression failed: {e}') from e
+def g8(h8, y7, i8):
+    e8 = o7 / f'compress_{h8.stem}'
+    e8.mkdir(parents=True, exist_ok=True)
+    try:
+        j8 = (i8 + n7 - 1) // n7
+        k8 = [None] * j8
+        o1 = s7()
+        p1 = []
+        with h8.open('rb') as fin, mmap.mmap(fin.fileno(), length=0, access=mmap.ACCESS_READ) as mm:
+            for i in range(j8):
+                h5 = i * n7
+                end = min((i + 1) * n7, i8)
+                l8 = bytes(mm[h5:end])
+                p1.append(o1.apply_async(c8, (l8, i, e8)))
+            for i, u2 in enumerate(p1):
+                try:
+                    k8[i] = u2.get()
+                except Exception as e:
+                    logger.error(f'Chunk {i} compression failed: {e}')
+                    return False
+        with y7.open('wb') as m8:
+            m8.write(j8.to_bytes(4, 'big'))
+            for f8 in k8:
+                if f8 is not None and f8.exists():
+                    x5 = f8.read_bytes()
+                    m8.write(len(x5).to_bytes(8, 'big'))
+                    m8.write(x5)
+        return True
+    except (OSError, MemoryError, ValueError) as e:
+        logger.error(f'Chunked compression failed for {h8.name}: {e}')
+        return False
+    finally:
+        if e8.exists():
+            shutil.rmtree(e8, ignore_errors=True)
+async def n8(o8, x):
+    p8 = asyncio.get_running_loop()
+    def l():
+        import io
+        import tarfile
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode='w') as tar:
+            tar.add(o8, arcname=o8.name)
+        w = pylzma.compress(buf.getvalue(), filters=p7)
+        x.write_bytes(w)
+    try:
+        await p8.run_in_executor(None, l)
+        if not x.exists():
+            return False
+        v = sum((f.stat().st_size for f in o8.rglob('*') if f.is_file()))
+        a1 = x.stat().st_size
+        if a1 < v:
+            await p8.run_in_executor(None, shutil.rmtree, o8)
+            q8 = (v - a1) / v * 100
+            print(f'  ✓ Compressed archive: {q8:.1f}% saved ({fsz(v)} → {fsz(a1)})')
+            return True
+        logger.warning("  ✗ Archive compression didn't save space")
+        x.unlink()
+        return False
+    except Exception as e:
+        logger.error(f'Failed to compress folder {o8.name}: {e}')
+        if x.exists():
+            x.unlink()
+        return False
+def r8(h8, y7):
+    try:
+        with h8.open('rb') as fin:
+            s8 = fin.read(4)
+            if len(s8) != 4:
+                return False
+            j8 = int.from_bytes(s8, 'big')
+            with y7.open('wb') as m8:
+                for _ in range(j8):
+                    t8 = fin.read(8)
+                    if len(t8) != 8:
+                        return False
+                    u8 = int.from_bytes(t8, 'big')
+                    x5 = fin.read(u8)
+                    if len(x5) != u8:
+                        return False
+                    m8.write(pylzma.decompress(x5))
+        return True
+    except (OSError, ValueError, TypeError) as e:
+        logger.error(f'Chunked decompression failed for {h8.name}: {e}')
+        return False
+def p(g):
+    y7 = g.with_suffix(g.suffix + '.lzma')
+    if y7.exists():
+        print(f'Skipping {g.name} - output already exists')
+        return (False, 0, 0)
+    try:
+        v = g.stat().st_size
+        if not v:
+            return (False, 0, 0)
+        if v < m7:
+            r1 = z7(g, y7)
+        else:
+            r1 = g8(g, y7, v)
+        if r1 and y7.exists():
+            a1 = y7.stat().st_size
+            if a1 == 0:
+                logger.warning(f'Compressed file empty for {g.name}')
+                y7.unlink()
+                return (False, 0, 0)
+            if a1 < v:
+                g.unlink()
+                q8 = (v - a1) / v * 100
+                print(f'  ✓ {g.name}: {q8:.1f}% saved ({fsz(v)} → {fsz(a1)})')
+                return (True, v, a1)
+            logger.warning(f'  ✗ {g.name}: No space saved, removing compressed file')
+            y7.unlink()
+            return (False, 0, 0)
+        return (False, 0, 0)
+    except (OSError, PermissionError, ValueError) as e:
+        logger.error(f'  ✗ Failed to compress {g.name}: {e}')
+        return (False, 0, 0)
+async def v8():
+    cwd = Path.cwd()
+    o7.mkdir(parents=True, exist_ok=True)
+    print('\n🔧 LZMA Compression Settings:')
+    print('   Format: raw LZMA1 via pylzma')
+    print('   Filter: LZMA1 (preset 9 + extreme)')
+    print('   Dictionary size: 256 MB')
+    print('   Solid compression: Yes (chunk concatenation)')
+    print('   Block size: 4 MB')
+    print(f'   Parallel workers: {l7}')
+    print(f'   Chunk size: {fsz(m7)}')
+    w8 = x7(cwd)
+    if w8:
+        print(f'\n📁 Compressing {len(w8)} directories...')
+        for g2 in w8:
+            x8 = g2.relative_to(cwd)
+            print(f'\n  Processing {x8}...')
+            x = g2.parent / f'{g2.name}.lzma'
+            if await n8(g2, x):
+                logger.success(f'  ✓ Successfully compressed {x8} to {g2.name}.lzma')
+            else:
+                logger.error(f'  ✗ Failed to compress {x8}')
+    y8 = v7(cwd, mode='compress')
+    if not y8:
+        print('\n📄 No files to compress')
+        return
+    print(f'\n📄 Compressing {len(y8)} files with LZMA max compression...')
+    d7 = 0
+    g7 = 0
+    z3 = 0
+    for i, g in enumerate(y8, 1):
+        print(f'\n[{i}/{len(y8)}] {g.name}')
+        r1, t1, z8 = p(g)
+        if r1:
+            z3 += 1
+            d7 += t1
+            g7 += z8
+    if z3 > 0:
+        a9 = d7 - g7
+        b9 = a9 / d7 * 100
+        logger.success(f"\n{'=' * 40}")
+        logger.success(f'✅ Compressed {z3}/{len(y8)} files')
+        print(f'📊 Original size:  {fsz(d7)}')
+        print(f'📦 Compressed size: {fsz(g7)}')
+        print(f'💾 Space saved:    {fsz(a9)} ({b9:.1f}%)')
+        logger.success(f"{'=' * 40}")
+    elif y8:
+        logger.error('\n❌ No files were successfully compressed')
+async def c9():
+    cwd = Path.cwd()
+    d9 = v7(cwd, mode='decompress')
+    if not d9:
+        print('\n📄 No .lzma files to decompress')
+        return
+    print(f'\n📄 Decompressing {len(d9)} LZMA archives...')
+    d7 = 0
+    j7 = 0
+    z3 = 0
+    for i, g in enumerate(d9, 1):
+        print(f'\n[{i}/{len(d9)}] {g.name}')
+        try:
+            y7 = g.with_suffix('')
+            v = g.stat().st_size
+            d7 += v
+            if y7.exists():
+                logger.warning('  Output already exists, skipping...')
+                continue
+            b1 = False
+            try:
+                with g.open('rb') as fin:
+                    e9 = fin.read(12)
+                if len(e9) == 12:
+                    j8 = int.from_bytes(e9[:4], 'big')
+                    f9 = int.from_bytes(e9[4:12], 'big')
+                    if 0 < j8 < 10000000 and 0 < f9 <= v:
+                        if r8(g, y7):
+                            b1 = True
+            except (OSError, ValueError):
+                b1 = False
+            if not b1:
+                if y7.exists():
+                    y7.unlink()
+                u = g.read_bytes()
+                y7.write_bytes(pylzma.decompress(u))
+            if y7.is_file():
+                r6 = y7.stat().st_size
+            else:
+                r6 = sum((f.stat().st_size for f in y7.rglob('*') if f.is_file()))
+            j7 += r6
+            print(f'  ✓ Decompressed {g.name}: {fsz(v)} → {fsz(r6)}')
+            g.unlink()
+            z3 += 1
+        except Exception as e:
+            logger.error(f'  ✗ Failed to decompress {g.name}: {e}')
+    if z3 > 0:
+        logger.success(f"\n{'=' * 40}")
+        logger.success(f'✅ Decompressed {z3}/{len(d9)} archives')
+        print(f'📦 Compressed size:   {fsz(d7)}')
+        print(f'📊 Decompressed size: {fsz(j7)}')
+        logger.success(f"{'=' * 40}")
+    elif d9:
+        logger.error('\n❌ No files were successfully decompressed')
+async def g9(q2='compress'):
+    if q2 == 'compress':
+        await v8()
+    elif q2 == 'decompress':
+        await c9()
+    else:
+        logger.error(f'Unknown mode: {q2}')
+def b7():
+    x1 = argparse.ArgumentParser(description='Multi-threaded LZMA compression/decompression tool (max compression)', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s -c\n  %(prog)s -d\n  %(prog)s\nLZMA Settings:\n  - Format: raw LZMA1 via pylzma\n  - Compression level: 9 + extreme\n  - Dictionary size: 256 MB\n  - Chunk size: 512 KB\n        ')
+    h9 = x1.add_mutually_exclusive_group()
+    h9.add_argument('-c', '--compress', action='store_true', help='Compress files and folders with LZMA (default)')
+    h9.add_argument('-d', '--decompress', action='store_true', help='Decompress .lzma files')
+    return x1
+def w1():
+    x1 = b7()
+    q = x1.parse_args()
+    q2 = 'decompress' if q.decompress else 'compress'
+    try:
+        asyncio.run(g9(q2))
+    except KeyboardInterrupt:
+        logger.warning('\n\n⚠️  Interrupted by user')
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f'\n❌ Unexpected error: {e}')
+        sys.exit(1)
+    finally:
+        t7()
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: uxz.py ---
+import sys
+import tarfile
+from pathlib import Path
+from dh import get_files
+from lzma_mt import LZMADecompressor
+i9 = 104857600
+def z(g):
+    j9 = g.name
+    if j9.endswith('.tar.xz'):
+        k9 = g.parent / f"{j9.replace('.tar.xz', '')}"
+        with tarfile.open(g, 'r:xz') as tar:
+            tar.extractall(path=k9, filter='data')
+        return True
+    elif j9.endswith('.xz'):
+        l2 = g.read_bytes()
+        y7 = g.parent / f"{j9.replace('.xz', '')}"
+        l9 = LZMADecompressor(memlimit=i9, threads=4)
+        n2 = l9.decompress(l2)
+        with y7.open('wb') as f:
+            f.write(n2)
+        return True
+    return False
+def w1():
+    sys.argv[1:]
+    z3 = 0
+    m9 = 0
+    cwd = Path.cwd()
+    m = v7(cwd, ext=['.xz', '.tar.xz'])
+    if not m:
+        print('No files to decompress')
+        return
+    for i, g in enumerate(m, 1):
+        print(f'\n[{i}/{len(m)}] Processing...')
+        n9 = g
+        if '/storage/emulated/0' in str(g):
+            o9 = str(g).replace('/storage/emulated/0', '/sdcard')
+            n9 = Path(o9)
+        if z(n9):
+            z3 += 1
+            n9.unlink()
+        else:
+            m9 += 1
+    print(f'successfull: {z3}\nerrors: {m9}')
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: xz_compressor.py ---
+import argparse
+import lzma
+import multiprocessing as mp
+import shutil
+import sys
+import tarfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from dh import fsz
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
+from rich.text import Text
+p9 = True
+q9 = {'.xz', '.lzma', '.7z', '.gz', '.bz2', '.zip', '.rar', '.tar', '.tgz', '.tbz2', '.txz', '.tlz', '.lz', '.lz4', '.lzo', '.sz', '.snappy', '.zlib', '.deflate', '.flac', '.mp3', '.aac', '.ogg', '.wma', '.opus', '.m4a', '.wavpack', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif', '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.pdf', '.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.exe', '.dll', '.so', '.dylib', '.wasm', '.whl', '.egg', '.deb', '.rpm', '.apk', '.ipa', '.pyc', '.pyo', '.class', '.o', '.obj', '.iso', '.img', '.dmg', '.vdi', '.vmdk', '.qcow2'}
+@dataclass
+class r9:
+    s9 = None
+    t9 = 0.0
+    u9 = False
+    v9 = 'compress'
+    w9 = False
+def x9(w7, x, y9=False):
+    try:
+        e3 = sum((f.stat().st_size for f in w7.rglob('*') if f.is_file()))
+        with tarfile.open(x, 'w') as tar:
+            tar.add(w7, arcname=w7.name)
+        z9 = x.stat().st_size
+        if y9:
+            shutil.rmtree(w7, ignore_errors=True)
+        return (z9, True)
+    except Exception as e:
+        if x.exists():
+            x.unlink(missing_ok=True)
+        print(f'❌ Error tarring {w7.name}: {e}')
+        return (0, False)
+def a10(a5, b10, c10=False):
+    try:
+        with tarfile.open(a5, 'r') as tar:
+            tar.extractall(b10, filter='data')
+        if c10:
+            a5.unlink(missing_ok=True)
+        return True
+    except Exception as e:
+        print(f'❌ Error extracting {a5.name}: {e}')
+        return False
+def d10(e10, x, r=7, s=4, f10=2 * 1024 * 1024, g10=False, w9=False):
+    h5 = time.time()
+    try:
+        v = e10.stat().st_size
+        if v == 0:
+            return r9(e10, 0, 0, False, 'Empty file', time.time() - h5, was_tarred=w9)
+        a1 = 0
+        with open(e10, 'rb') as h10, open(x, 'wb') as i10:
+            j10 = lzma.LZMACompressor(format=lzma.FORMAT_XZ, check=lzma.CHECK_CRC64, preset=r, filters=[{'id': lzma.FILTER_LZMA2, 'preset': r}])
+            while True:
+                l8 = h10.read(f10)
+                if not l8:
+                    break
+                k10 = j10.compress(l8)
+                if k10:
+                    i10.write(k10)
+                    a1 += len(k10)
+            l10 = j10.flush()
+            if l10:
+                i10.write(l10)
+                a1 += len(l10)
+        if not g10 and x.exists():
+            e10.unlink(missing_ok=True)
+            u9 = True
+        else:
+            u9 = False
+        return r9(path=e10, original_size=v, processed_size=a1, success=True, duration=time.time() - h5, original_deleted=u9, operation='compress', was_tarred=w9)
+    except Exception as e:
+        if x.exists():
+            x.unlink(missing_ok=True)
+        return r9(e10, original_size=e10.stat().st_size if e10.exists() else 0, processed_size=0, success=False, error=str(e), duration=time.time() - h5, operation='compress', was_tarred=w9)
+def m10(e10, x, f10=2 * 1024 * 1024, g10=False):
+    h5 = time.time()
+    try:
+        v = e10.stat().st_size
+        if v == 0:
+            return r9(e10, 0, 0, False, 'Empty file', time.time() - h5, operation='decompress')
+        r6 = 0
+        with lzma.open(e10, 'rb') as h10, open(x, 'wb') as i10:
+            while True:
+                l8 = h10.read(f10)
+                if not l8:
+                    break
+                i10.write(l8)
+                r6 += len(l8)
+        if not g10:
+            e10.unlink(missing_ok=True)
+            u9 = True
+        else:
+            u9 = False
+        return r9(path=e10, original_size=v, processed_size=r6, success=True, duration=time.time() - h5, original_deleted=u9, operation='decompress')
+    except Exception as e:
+        if x.exists():
+            x.unlink(missing_ok=True)
+        return r9(e10, original_size=e10.stat().st_size if e10.exists() else 0, processed_size=0, success=False, error=str(e), duration=time.time() - h5, operation='decompress')
+def n10(w7, r=7, s=4, o10=4, g10=False, p10=None):
+    if p10 is None:
+        p10 = []
+    q10 = {'.git', '.svn', '.hg', '__pycache__', 'node_modules', '.venv', 'venv', '.env'}
+    x3 = [d for d in w7.iterdir() if d.is_dir() and (not d.is_symlink()) and (d.name not in q10) and (not any((pat in str(d) for pat in p10)))]
+    if not x3:
+        print('📁 No subdirectories found to tar')
+        return []
+    print(f'📁 Found {len(x3)} subdirectories to tar...')
+    r2 = []
+    for i, g3 in enumerate(x3, 1):
+        a5 = g3.parent / f'{g3.name}.tar'
+        print(f'  📦 [{i}/{len(x3)}] Tarring {g3.name}...')
+        e3 = sum((f.stat().st_size for f in g3.rglob('*') if f.is_file()))
+        r10, r1 = x9(g3, a5, delete_original=not g10)
+        if not r1:
+            continue
+        s10 = a5.with_suffix('.tar.xz')
+        u2 = d10(a5, s10, r, s, keep_original=not g10, was_tarred=True)
+        r2.append(u2)
+        if u2.success:
+            q3 = (1 - u2.processed_size / u2.original_size) * 40 if u2.original_size else 0
+            print(f'    ✅ {fsz(e3)} → {fsz(u2.processed_size)} ({q3:.1f}%)')
+        else:
+            print(f'    ❌ Failed compressing {a5.name}: {u2.error}')
+    return r2
+def t10(g, u10, p10):
+    if g.is_symlink() or not g.is_file():
+        return False
+    if g.suffix.lower() in u10:
+        return False
+    return not (p10 and any((pat in str(g) for pat in p10)))
+def v10(w7, u10=None, p10=None, w10=None, x10=False):
+    if u10 is None:
+        u10 = q9
+    if p10 is None:
+        p10 = []
+    m = []
+    if w10:
+        for ext in w10:
+            ext = ext if ext.startswith('.') else f'.{ext}'
+            for p in w7.rglob(f'*{ext}'):
+                if t10(p, u10, p10) and (not x10 or p.parent == w7):
+                    m.append(p)
+    else:
+        for p in w7.rglob('*'):
+            if t10(p, u10, p10) and (not x10 or p.parent == w7):
+                m.append(p)
+    return sorted(set(m))
+def y10(w7, p10=None):
+    if p10 is None:
+        p10 = []
+    m = [p for p in w7.rglob('*.xz') if p.is_file() and (not p.is_symlink())]
+    if p10:
+        m = [p for p in m if not any((pat in str(p) for pat in p10))]
+    return sorted(set(m))
+def z10(m):
+    a11 = {}
+    for g in m:
+        ext = g.suffix.lower() or '[no extension]'
+        a11[ext] = a11.get(ext, 0) + 1
+    return dict(sorted(a11.items(), key=lambda x: x[1], reverse=True))
+def b11(r2, w7, v9):
+    c11 = Console()
+    z3 = [r for r in r2 if r.success]
+    a4 = [r for r in r2 if not r.success]
+    d7 = sum((r.original_size for r in z3))
+    d11 = sum((r.processed_size for r in z3))
+    e11 = sum((r.duration for r in r2))
+    f11 = sum((1 for r in z3 if r.original_deleted))
+    g11 = sum((1 for r in z3 if r.was_tarred))
+    if v9 == 'compress':
+        h11 = d7 - d11
+        i11 = sum(((1 - r.processed_size / r.original_size) * 40 for r in z3)) / len(z3) if z3 else 0
+        j11 = '🗜️'
+        k11 = 'Compression'
+        l11 = 'Compressed'
+    else:
+        h11 = d11 - d7
+        i11 = sum(((r.processed_size / r.original_size - 1) * 40 for r in z3)) / len(z3) if z3 else 0
+        j11 = '📂'
+        k11 = 'Decompression'
+        l11 = 'Decompressed'
+    m11 = Table(title=f'{j11} LZMA {k11} Results', box=box.ROUNDED, title_style='bold cyan', header_style='bold white')
+    m11.add_column('File', style='cyan', no_wrap=False)
+    m11.add_column('Original', justify='right', style='yellow')
+    m11.add_column(l11, justify='right', style='green')
+    m11.add_column('Ratio', justify='right', style='magenta')
+    m11.add_column('Time', justify='right', style='dim')
+    m11.add_column('Type', justify='center')
+    m11.add_column('Status', justify='center')
+    for u2 in sorted(z3, key=lambda x: x.original_size, reverse=True)[:20]:
+        if v9 == 'compress':
+            q3 = (1 - u2.processed_size / u2.original_size) * 40 if u2.original_size > 0 else 0
+        else:
+            q3 = (u2.processed_size / u2.original_size - 1) * 40 if u2.original_size > 0 else 0
+        u1 = '🗑️ ✅' if u2.original_deleted else '✅'
+        n11 = '📦 tar' if u2.was_tarred else '📄 file'
+        try:
+            o11 = str(u2.path.relative_to(w7))
+        except ValueError:
+            o11 = str(u2.path)
+        m11.add_row(o11, fsz(u2.original_size), fsz(u2.processed_size), f'{q3:.1f}%', f'{u2.duration:.2f}s', n11, u1)
+    if len(z3) > 20:
+        m11.add_row(f'... and {len(z3) - 20} more files', '', '', '', '', '', '')
+    c11.print(m11)
+    if a4:
+        p11 = Table(title='❌ Failed Files', box=box.ROUNDED, title_style='bold red')
+        p11.add_column('File', style='red')
+        p11.add_column('Error', style='dim')
+        for u2 in a4[:10]:
+            try:
+                o11 = str(u2.path.relative_to(w7))
+            except ValueError:
+                o11 = str(u2.path)
+            p11.add_row(o11, u2.error or 'Unknown error')
+        if len(a4) > 10:
+            p11.add_row(f'... and {len(a4) - 10} more failures', '')
+        c11.print(p11)
+    q11 = Text()
+    q11.append(f'📊 {k11} Summary\n\n', style='bold cyan')
+    q11.append('📁 Directory: ', style='dim')
+    q11.append(f'{w7}\n', style='bold white')
+    q11.append('Total files processed: ', style='dim')
+    q11.append(f'{len(r2)}\n', style='bold white')
+    q11.append('✅ Successful: ', style='dim')
+    q11.append(f'{len(z3)}\n', style='bold green')
+    q11.append('❌ Failed: ', style='dim')
+    q11.append(f'{len(a4)}\n', style='bold red')
+    if g11 > 0:
+        q11.append('📦 From tarred directories: ', style='dim')
+        q11.append(f'{g11}\n', style='bold yellow')
+    q11.append('🗑️  Originals deleted: ', style='dim')
+    q11.append(f'{f11}\n', style='bold yellow')
+    q11.append('\n💾 Total original size: ', style='dim')
+    q11.append(f'{fsz(d7)}\n', style='bold yellow')
+    q11.append(f"{('🗜️' if v9 == 'compress' else '📂')} Total {l11.lower()} size: ", style='dim')
+    q11.append(f'{fsz(d11)}\n', style='bold green')
+    if v9 == 'compress':
+        q11.append('📈 Average compression: ', style='dim')
+        q11.append(f'{i11:.1f}%\n', style='bold magenta')
+        q11.append('🎉 Disk space freed: ', style='dim')
+        q11.append(f'{fsz(h11)} ', style='bold cyan')
+    else:
+        q11.append('📈 Average expansion: ', style='dim')
+        q11.append(f'{i11:.1f}%\n', style='bold magenta')
+        q11.append('💾 Disk space used: ', style='dim')
+        q11.append(f'{fsz(h11)} ', style='bold cyan')
+    if d7 > 0 and v9 == 'compress':
+        q11.append(f'({h11 / d7 * 40:.1f}%)\n', style='bold cyan')
+    q11.append('⏱️  Total time: ', style='dim')
+    q11.append(f'{e11:.2f}s ', style='bold white')
+    if r2:
+        q11.append(f'(avg {e11 / len(r2):.2f}s per file)', style='dim')
+    c11.print(Panel(q11, border_style='cyan'))
+def r11(r2, w7, v9):
+    z3 = [r for r in r2 if r.success]
+    a4 = [r for r in r2 if not r.success]
+    d7 = sum((r.original_size for r in z3))
+    d11 = sum((r.processed_size for r in z3))
+    e11 = sum((r.duration for r in r2))
+    f11 = sum((1 for r in z3 if r.original_deleted))
+    g11 = sum((1 for r in z3 if r.was_tarred))
+    if v9 == 'compress':
+        h11 = d7 - d11
+        i11 = sum(((1 - r.processed_size / r.original_size) * 40 for r in z3)) / len(z3) if z3 else 0
+        k11 = 'Compression'
+        l11 = 'Compressed'
+    else:
+        h11 = d11 - d7
+        i11 = sum(((r.processed_size / r.original_size - 1) * 40 for r in z3)) / len(z3) if z3 else 0
+        k11 = 'Decompression'
+        l11 = 'Decompressed'
+    print('\n' + '=' * 40)
+    print(f'🗜️  LZMA {k11} Results')
+    print(f'📁 Directory: {w7}')
+    print('-' * 40)
+    print(f"\n{'File':<40} {'Original':>12} {l11:>12} {'Ratio':>8} {'Time':>8}")
+    print('-' * 40)
+    for u2 in sorted(z3, key=lambda x: x.original_size, reverse=True)[:20]:
+        if v9 == 'compress':
+            q3 = (1 - u2.processed_size / u2.original_size) * 40 if u2.original_size > 0 else 0
+        else:
+            q3 = (u2.processed_size / u2.original_size - 1) * 40 if u2.original_size > 0 else 0
+        s11 = u2.path.name[:37] + '...' if len(u2.path.name) > 40 else u2.path.name
+        t11 = '[tar]' if u2.was_tarred else ''
+        print(f'{s11:<40} {fsz(u2.original_size):>12} {fsz(u2.processed_size):>12} {q3:>7.1f}% {u2.duration:>7.2f}s {t11}')
+    if len(z3) > 20:
+        print(f'... and {len(z3) - 20} more files')
+    if a4:
+        print(f'\n❌ Failed files ({len(a4)}):')
+        for u2 in a4[:10]:
+            print(f'  • {u2.path.name}: {u2.error}')
+        if len(a4) > 10:
+            print(f'  ... and {len(a4) - 10} more failures')
+    print('\n' + '=' * 40)
+    print(f'📊 {k11} Summary')
+    print('-' * 40)
+    print(f'Total files processed: {len(r2)}')
+    print(f'✅ Successful: {len(z3)}')
+    print(f'❌ Failed: {len(a4)}')
+    if g11 > 0:
+        print(f'📦 From tarred directories: {g11}')
+    print(f'🗑️  Originals deleted: {f11}')
+    print(f'\n💾 Total original size: {fsz(d7)}')
+    print(f"{('🗜️' if v9 == 'compress' else '📂')} Total {l11.lower()} size: {fsz(d11)}")
+    if v9 == 'compress':
+        print(f'📈 Average compression: {i11:.1f}%')
+        print(f'🎉 Disk space freed: {fsz(h11)} ({(h11 / d7 * 40 if d7 > 0 else 0):.1f}%)')
+    else:
+        print(f'📈 Average expansion: {i11:.1f}%')
+        print(f'💾 Disk space used: {fsz(h11)}')
+    print(f'⏱️  Total time: {e11:.2f}s (avg {e11 / len(r2):.2f}s per file)' if r2 else '')
+    print('-' * 40)
+def u11(q):
+    g, v9, r, s, g10 = q
+    try:
+        if v9 == 'compress':
+            x = g.with_suffix(g.suffix + '.xz')
+            return d10(g, x, r, s, 1024 * 1024, g10)
+        else:
+            x = g.with_suffix('')
+            return m10(g, x, 1024 * 1024, g10)
+    except Exception as e:
+        return r9(path=g, original_size=g.stat().st_size if g.exists() else 0, processed_size=0, success=False, error=str(e), operation=v9)
+def w1():
+    x1 = argparse.ArgumentParser(description='🗜️  Recursively compress/decompress files using LZMA with parallel processing (deletes originals by default)', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s                          # Compress all files in current directory\n  %(prog)s -c                       # Compress all files (explicit)\n  %(prog)s -d                       # Decompress all .xz files\n  %(prog)s -c -t                    # Tar subdirectories first, then compress\n  %(prog)s -c -t /path/to/dir       # Tar subdirs in specific directory\n  %(prog)s -c -e txt log csv        # Compress only specific extensions\n  %(prog)s -c -p 7 --threads 4      # Custom preset and threads\n  %(prog)s -c -p 9 --threads 8      # Maximum compression with 8 threads\n  %(prog)s -c --keep-originals      # Keep original files when compressing\n  %(prog)s -d --keep-originals      # Keep compressed files when decompressing\n  %(prog)s -c --dry-run             # Preview compression without modifying\n  %(prog)s --exclude node_modules   # Exclude specific directories\n        ')
+    v11 = x1.add_mutually_exclusive_group()
+    v11.add_argument('-c', '--compress', action='store_true', default=True, help='Compress files (default)')
+    v11.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz files')
+    x1.add_argument('-t', '--tar-subdirs-first', action='store_true', help='Tar subdirectories first, then apply LZMA compression on the .tar files (only valid with -c/--compress)')
+    x1.add_argument('directory', nargs='?', default='.', type=str, help='Root directory to process files recursively (default: current directory)')
+    x1.add_argument('-e', '--extensions', nargs='+', help='Compress only specific file extensions (e.g., txt log csv). Only valid with -c/--compress.')
+    x1.add_argument('-p', '--preset', type=int, default=7, choices=range(10), help='LZMA compression preset (0-9, default: 7). Higher = better compression but slower.')
+    x1.add_argument('--threads', type=int, default=4, help='Number of threads for LZMA compression (default: 4)')
+    x1.add_argument('-w', '--workers', type=int, default=8, help='Number of parallel workers for processing multiple files (default: 8)')
+    x1.add_argument('--keep-originals', action='store_true', help='Keep original files after processing (default: delete originals)')
+    x1.add_argument('--exclude', nargs='+', default=[], help='Directory/file patterns to exclude from processing (e.g., node_modules .git)')
+    x1.add_argument('--no-parallel', action='store_true', help='Disable parallel processing')
+    x1.add_argument('--dry-run', action='store_true', help='Show what would be processed without actually modifying files')
+    x1.add_argument('--no-skip-compressed', action='store_true', help='Do not skip already compressed files (dangerous, may double-compress). Only valid with -c/--compress.')
+    q = x1.parse_args()
+    v9 = 'decompress' if q.decompress else 'compress'
+    if q.tar_subdirs_first and v9 == 'decompress':
+        print('❌ Error: -t/--tar-subdirs-first is only valid with -c/--compress')
+        sys.exit(1)
+    if v9 == 'decompress' and (q.extensions or q.no_skip_compressed):
+        print('⚠️  Warning: -e/--extensions and --no-skip-compressed are ignored in decompression mode')
+    if v9 == 'decompress':
+        print('ℹ️  Note: -p/--preset and --threads are ignored in decompression mode')
+    if v9 == 'compress':
+        if q.no_skip_compressed:
+            u10 = {'.xz'}
+            print('⚠️  WARNING: Not skipping already compressed files!')
+        else:
+            u10 = q9
+    else:
+        u10 = set()
+    w7 = Path(q.directory).resolve()
+    if not w7.exists():
+        print(f"❌ Error: Directory '{w7}' does not exist")
+        sys.exit(1)
+    if not w7.is_dir():
+        print(f"❌ Error: '{w7}' is not a directory")
+        sys.exit(1)
+    k11 = 'compression' if v9 == 'compress' else 'decompression'
+    print(f'🔍 Scanning directory for {k11}: {w7}')
+    if v9 == 'compress':
+        if q.tar_subdirs_first:
+            print('📁 Mode: Tar subdirectories first, then LZMA compression')
+            w11 = n10(w7, preset=q.preset, threads=q.threads, workers=1 if q.no_parallel else q.workers, keep_original=q.keep_originals, exclude_patterns=q.exclude)
+            print('\n📁 Processing individual files in root directory...')
+            m = v10(w7, exclude_extensions=u10, exclude_patterns=q.exclude, extensions_filter=q.extensions, skip_subdirs=True)
+            if m:
+                print(f'📁 Found {len(m)} individual file(s) in root directory')
+                for g in m:
+                    print(f'  • {g.relative_to(w7)}')
+            else:
+                print('📁 No individual files in root directory')
+            x11 = w11
+        else:
+            if q.extensions:
+                print(f"📁 Mode: Only specified extensions ({', '.join(q.extensions)})")
+            else:
+                print('📁 Mode: ALL files (excluding already compressed formats and symlinks)')
+            if q.exclude:
+                print(f"🚫 Excluding patterns: {', '.join(q.exclude)}")
+            m = v10(w7, exclude_extensions=u10, exclude_patterns=q.exclude, extensions_filter=q.extensions, skip_subdirs=False)
+            x11 = []
+        if not q.tar_subdirs_first and (not m):
+            print('❌ No files found to compress')
+            sys.exit(0)
+        if not q.tar_subdirs_first:
+            print(f'📁 Found {len(m)} file(s) to compress')
+            a11 = z10(m)
+            if a11:
+                print('📊 File types found:')
+                for ext, y11 in list(a11.items())[:10]:
+                    print(f'  • {ext}: {y11} file(s)')
+                if len(a11) > 10:
+                    print(f'  • ... and {len(a11) - 10} more types')
+            z11 = sum((f.stat().st_size for f in m))
+            print(f'💾 Total size: {fsz(z11)}')
+    else:
+        print('📁 Mode: Decompressing .xz files')
+        if q.exclude:
+            print(f"🚫 Excluding patterns: {', '.join(q.exclude)}")
+        m = y10(w7, exclude_patterns=q.exclude)
+        if not m:
+            print('❌ No .xz files found to decompress')
+            sys.exit(0)
+        print(f'📁 Found {len(m)} .xz file(s) to decompress')
+        z11 = sum((f.stat().st_size for f in m))
+        print(f'💾 Total compressed size: {fsz(z11)}')
+    if q.dry_run:
+        if q.tar_subdirs_first:
+            print('\n🔍 DRY RUN - Would tar subdirectories and compress them with LZMA')
+        else:
+            print(f'\n🔍 DRY RUN - Would {v9} {len(m)} files ({fsz(z11)})')
+        print('No files were modified.')
+        return
+    if not q.keep_originals:
+        if v9 == 'compress':
+            if q.tar_subdirs_first:
+                print('⚠️  Subdirectories will be tarred and originals DELETED (use --keep-originals to preserve)')
+            else:
+                print('⚠️  Originals will be DELETED after compression (use --keep-originals to preserve)')
+        else:
+            print('⚠️  Compressed .xz files will be DELETED after decompression (use --keep-originals to preserve)')
+    if v9 == 'compress':
+        print(f'🎯 Compression preset: {q.preset}/9')
+        print(f'🧵 LZMA threads: {q.threads}')
+    o10 = 1 if q.no_parallel else min(q.workers, len(m) if not q.tar_subdirs_first else q.workers)
+    if not q.tar_subdirs_first:
+        print(f'👷 Workers: {o10}')
+    print()
+    r2 = []
+    if q.tar_subdirs_first:
+        r2 = x11
+        if m:
+            print('🔄 Compressing individual files...')
+            if o10 > 1 and len(m) > 1:
+                a12 = [(g, 'compress', q.preset, q.threads, q.keep_originals) for g in m]
+                with mp.Pool(processes=o10) as o1:
+                    p1 = [o1.apply_async(u11, (arg,)) for arg in a12]
+                    for q1 in p1:
+                        u2 = q1.get()
+                        r2.append(u2)
+            else:
+                for g in m:
+                    u2 = u11((g, 'compress', q.preset, q.threads, q.keep_originals))
+                    r2.append(u2)
+    elif not q.tar_subdirs_first:
+        print(f'🔄 {k11.capitalize()} files...')
+        if o10 > 1 and len(m) > 1:
+            a12 = [(g, v9, q.preset, q.threads, q.keep_originals) for g in m]
+            with mp.Pool(processes=o10) as o1:
+                p1 = [o1.apply_async(u11, (arg,)) for arg in a12]
+                for i, q1 in enumerate(p1, 1):
+                    u2 = q1.get()
+                    r2.append(u2)
+                    u1 = '🗑️ ✅' if u2.success and u2.original_deleted else '✅' if u2.success else '❌'
+                    print(f'  [{i}/{len(m)}] {u2.path.name} - {u1}')
+        else:
+            for i, g in enumerate(m, 1):
+                u2 = u11((g, v9, q.preset, q.threads, q.keep_originals))
+                r2.append(u2)
+                u1 = '🗑️ ✅' if u2.success and u2.original_deleted else '✅' if u2.success else '❌'
+                print(f'  [{i}/{len(m)}] {g.name} - {u1}')
+    if r2:
+        if p9:
+            b11(r2, w7, v9)
+        else:
+            r11(r2, w7, v9)
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: xzer.py ---
+import argparse
+import asyncio
+import mmap
+import shutil
+import sys
+import tarfile
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+from dh import fsz
+from loguru import logger
+from lzma_mt import compress, decompress
+l7 = 8
+m7 = 1048576
+b12 = 32768
+q7 = ('.xz', '.br', '.7z', '.gz', '.zip', '.tar')
+c12 = 1024
+d12 = None
+def e12():
+    global _pool
+    if d12 is None:
+        d12 = Pool(processes=l7)
+    return d12
+def f12():
+    global _pool
+    if d12 is not None:
+        d12.close()
+        d12.join()
+        d12 = None
+def z(g):
+    if g.suffix != '.xz':
+        return False
+    y7 = g.with_suffix('')
+    try:
+        l2 = g.read_bytes()
+        if not l2:
+            return False
+        n2 = decompress(l2)
+        y7.write_bytes(n2)
+        v = g.stat().st_size
+        r6 = y7.stat().st_size
+        print(f'  ✓ Decompressed {g.name}: {fsz(v)} → {fsz(r6)}')
+        g.unlink()
+        return True
+    except Exception as e:
+        logger.error(f'  ✗ Failed to decompress {g.name}: {e}')
+        return False
+def z7(a8, b8):
+    try:
+        u = a8.read_bytes()
+        if not u:
+            return False
+        w = l(u, preset=9, threads=4)
+        b8.write_bytes(w)
+        return True
+    except (OSError, MemoryError) as e:
+        logger.error(f'Memory compression failed for {a8.name}: {e}')
+        return False
+def c8(u):
+    return l(u, preset=9, threads=6)
+def g8(h8, y7, i8):
+    try:
+        j8 = (i8 + b12 - 1) // b12
+        with y7.open('wb', buffering=1024 * 1024) as m8, h8.open('rb') as fin, mmap.mmap(fin.fileno(), length=0, access=mmap.ACCESS_READ) as mm:
+            g12 = [mm[i * b12:min((i + 1) * b12, i8)] for i in range(j8)]
+            o1 = e12()
+            p1 = [o1.apply_async(c8, (l8,)) for l8 in g12]
+            r2 = []
+            for idx, ar in enumerate(p1):
+                try:
+                    r2.append(ar.get())
+                except Exception as e:
+                    logger.error(f'Chunk {idx} compression failed: {e}')
+                    return False
+            for k10 in r2:
+                if k10:
+                    m8.write(k10)
+                else:
+                    return False
+            return True
+    except (OSError, MemoryError) as e:
+        logger.error(f'Chunked compression failed for {h8.name}: {e}')
+        return False
+def h12(i12, x):
+    try:
+        with tarfile.open(x, 'w') as tar:
+            for a3 in i12.rglob('*'):
+                if a3.is_file():
+                    a6 = a3.relative_to(i12.parent)
+                    tar.add(a3, arcname=a6)
+        return True
+    except Exception as e:
+        logger.error(f'  Failed to create tar archive: {e}')
+        return False
+def j12(a5, s10):
+    try:
+        z9 = a5.stat().st_size
+        if z9 < m7:
+            r1 = z7(a5, s10)
+        else:
+            r1 = g8(a5, s10, z9)
+        if r1 and s10.exists():
+            k12 = s10.stat().st_size
+            if k12 == 0:
+                logger.warning(f'Warning: Compressed archive empty for {a5.name}')
+                s10.unlink()
+                return False
+            if k12 < z9:
+                a5.unlink()
+                q8 = (z9 - k12) / z9 * 100
+                print(f'  ✓ Compressed archive: {q8:.1f}% saved ({fsz(z9)} → {fsz(k12)})')
+                return True
+            else:
+                print("  ✗ Archive compression didn't save space, keeping .tar")
+                s10.unlink()
+                return False
+        return False
+    except Exception as e:
+        logger.error(f'  ✗ Failed to compress tar archive: {e}')
+        return False
+async def n8(o8, l12):
+    p8 = asyncio.get_running_loop()
+    a5 = Path(l12 + '.tar')
+    s10 = Path(l12 + '.tar.xz')
+    try:
+        print('  Creating tar archive...')
+        r1 = await p8.run_in_executor(None, h12, o8, a5)
+        if not r1 or not a5.exists():
+            logger.error('  Failed to create tar archive')
+            return False
+        print('  Compressing tar archive...')
+        if await p8.run_in_executor(None, j12, a5, s10):
+            await p8.run_in_executor(None, shutil.rmtree, o8)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f'Failed to compress folder {o8.name}: {e}')
+        if a5.exists():
+            a5.unlink()
+        if s10.exists():
+            s10.unlink()
+        return False
+def p(g):
+    y7 = g.with_name(g.name + '.xz')
+    if y7.exists():
+        print(f'Skipping {g.name} - output already exists')
+        return (False, 0, 0)
+    try:
+        v = g.stat().st_size
+        if not v:
+            return (False, 0, 0)
+        if v < m7:
+            r1 = z7(g, y7)
+        else:
+            r1 = g8(g, y7, v)
+        if r1 and y7.exists():
+            a1 = y7.stat().st_size
+            if a1 == 0:
+                logger.warning(f'Warning: Compressed file empty for {g.name}')
+                y7.unlink()
+                return (False, 0, 0)
+            if a1 < v:
+                q8 = (v - a1) / v * 100
+                print(f'  ✓ {g.name}: {q8:.1f}% saved ({fsz(v)} → {fsz(a1)})')
+                g.unlink()
+                return (True, v, a1)
+            else:
+                print(f'  ✗ {g.name}: No space saved, removing compressed file')
+                y7.unlink()
+                return (False, 0, 0)
+        return (False, 0, 0)
+    except (OSError, PermissionError) as e:
+        logger.error(f'  ✗ Failed to compress {g.name}: {e}')
+        return (False, 0, 0)
+def m12(w7, q2='compress'):
+    if q2 == 'compress':
+        return [p for p in w7.glob('*') if p.is_file() and (not p.is_symlink()) and u7(p)]
+    else:
+        return [p for p in w7.glob('*.xz') if p.is_file() and (not p.is_symlink())]
+def x7(w7):
+    return [p for p in w7.glob('*') if not p.is_symlink() and p.is_dir()]
+def u7(g):
+    try:
+        if not g.is_file() or g.is_symlink():
+            return False
+        if g.suffix in q7:
+            return False
+        s3 = g.stat().st_size
+        return s3 >= c12
+    except (OSError, PermissionError):
+        return False
+def n12(a5, b10):
+    try:
+        with tarfile.open(a5, 'r') as tar:
+            tar.extractall(path=b10)
+        return True
+    except Exception as e:
+        logger.error(f'  Failed to extract tar archive: {e}')
+        return False
+async def v8():
+    cwd = Path.cwd()
+    w8 = x7(cwd)
+    if w8:
+        print(f'\n📁 Compressing {len(w8)} directories...')
+        for g2 in sorted(w8):
+            x8 = g2.relative_to(cwd)
+            print(f'\n  Processing {x8}...')
+            i3 = str(g2.parent / g2.name)
+            if await n8(g2, i3):
+                print(f'  ✓ Successfully compressed {x8} to {g2.name}.tar.xz')
+            else:
+                logger.error(f'  ✗ Failed to compress {x8}')
+    y8 = m12(cwd, mode='compress')
+    if not y8:
+        print('\n📄 No files to compress')
+        return
+    print(f'\n📄 Compressing {len(y8)} files...')
+    d7 = 0
+    g7 = 0
+    z3 = 0
+    for i, g in enumerate(sorted(y8), 1):
+        print(f'\n[{i}/{len(y8)}] {g.name}')
+        r1, t1, z8 = p(g)
+        if r1:
+            z3 += 1
+            d7 += t1
+            g7 += z8
+    if z3 > 0:
+        a9 = d7 - g7
+        b9 = a9 / d7 * 100
+        print(f"\n{'=' * 40}")
+        print(f'✅ Compressed {z3}/{len(y8)} files')
+        print(f'📊 Original size:  {fsz(d7)}')
+        print(f'📦 Compressed size: {fsz(g7)}')
+        print(f'💾 Space saved:    {fsz(a9)} ({b9:.1f}%)')
+        print(f"{'=' * 40}")
+    elif y8:
+        logger.error('\n❌ No files were successfully compressed')
+async def c9():
+    cwd = Path.cwd()
+    o12 = [p for p in cwd.glob('*.tar.xz') if p.is_file()]
+    if o12:
+        print(f'\n📦 Decompressing {len(o12)} archives...')
+        for i6 in sorted(o12):
+            print(f'\n  Decompressing {i6.name}...')
+            a5 = None
+            try:
+                a5 = i6.with_suffix('')
+                print('    Decompressing xz...')
+                l2 = i6.read_bytes()
+                k2 = decompress(l2)
+                a5.write_bytes(k2)
+                b10 = i6.stem
+                print(f'    Extracting tar to {b10}/...')
+                p8 = asyncio.get_running_loop()
+                r1 = await p8.run_in_executor(None, n12, a5, Path(b10))
+                if r1:
+                    a5.unlink()
+                    i6.unlink()
+                    print(f'  ✓ Extracted {i6.name} to {b10}/')
+                else:
+                    logger.error(f'  ✗ Failed to extract {i6.name}')
+            except Exception as e:
+                logger.error(f'  ✗ Failed to decompress {i6.name}: {e}')
+                if a5 is not None and a5.exists():
+                    a5.unlink()
+    d9 = m12(cwd, mode='decompress')
+    if not d9:
+        print('\n📄 No .xz files to decompress')
+        return
+    d9 = [p for p in d9 if p.suffixes != ['.tar', '.xz']]
+    if not d9:
+        return
+    print(f'\n📄 Decompressing {len(d9)} files...')
+    d7 = 0
+    j7 = 0
+    z3 = 0
+    for i, g in enumerate(sorted(d9), 1):
+        print(f'\n[{i}/{len(d9)}] {g.name}')
+        v = g.stat().st_size
+        d7 += v
+        if z(g):
+            z3 += 1
+            y7 = g.with_suffix('')
+            if y7.exists():
+                j7 += y7.stat().st_size
+    if z3 > 0:
+        print(f"\n{'=' * 40}")
+        print(f'✅ Decompressed {z3}/{len(d9)} files')
+        print(f'📦 Compressed size:   {fsz(d7)}')
+        print(f'📊 Decompressed size: {fsz(j7)}')
+        print(f"{'=' * 40}")
+    elif d9:
+        logger.error('\n❌ No files were successfully decompressed')
+async def g9(q2='compress'):
+    if q2 == 'compress':
+        await v8()
+    elif q2 == 'decompress':
+        await c9()
+    else:
+        logger.error(f'Unknown mode: {q2}')
+def w1():
+    x1 = argparse.ArgumentParser(description='Multi-threaded compression/decompression tool', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s -c\n  %(prog)s -d\n  %(prog)s\n        ')
+    h9 = x1.add_mutually_exclusive_group()
+    h9.add_argument('-c', '--compress', action='store_true', help='Compress files and folders (default)')
+    h9.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz and .tar.xz files')
+    q = x1.parse_args()
+    q2 = 'decompress' if q.decompress else 'compress'
+    try:
+        asyncio.run(g9(q2))
+    except KeyboardInterrupt:
+        logger.warning('\n\n⚠️  Interrupted by user')
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f'\n❌ Unexpected error: {e}')
+        sys.exit(1)
+    finally:
+        f12()
+if __name__ == '__main__':
+    raise SystemExit(w1())
+
+# --- File: xzer2.py ---
+from pathlib import Path
+from dh import get_dirs, get_files, safe_delete
+def p12(o8, l12, format='tar'):
+    print(f"Simulating: Compressing folder '{o8}' to '{l12}.tar'...")
+    (o8.parent / f'{l12}.tar').touch()
+    print(f"Simulating: Created '{l12}.tar'")
+    return True
+def q12(u, r12):
+    print(f'Simulating: Atomic write to {r12}')
+    return True
+def p(g):
+    print(f"Simulating: Compressing file '{g}' with XZ...")
+    (g.parent / f'{g.stem}.xz').touch()
+    print(f"Simulating: Created '{g.stem}.xz'")
+    return True
+def u7(g):
+    return True
+def w1():
+    cwd = Path()
+    s12 = x7(cwd)
+    print('\n--- Starting Directory Compression ---')
+    for t12 in s12:
+        if u7(t12):
+            print(f'\nProcessing directory: {t12.name}')
+            u12 = t12.name
+            v12 = p12(t12, u12, format='tar')
+            if v12:
+                print(f"Successfully created tar for '{t12.name}'.")
+                w12 = safe_delete(t12)
+                if not w12:
+                    print(f"Warning: Failed to delete original directory '{t12.name}' after compression.")
+            else:
+                print(f"Error: Failed to compress directory '{t12.name}'. Original directory will NOT be deleted.")
+    print('--- Directory Compression Complete ---')
+    x12 = v7(cwd)
+    print('\n--- Starting .tar File Compression ---')
+    for a5 in x12:
+        if u7(a5) and a5.suffix.lower() == '.tar':
+            print(f'\nProcessing .tar file: {a5.name}')
+            y12 = p(a5)
+            if y12:
+                print(f"Successfully created XZ archive for '{a5.name}'.")
+                w12 = safe_delete(a5)
+                if not w12:
+                    print(f"Warning: Failed to delete original tar file '{a5.name}' after XZ compression.")
+            else:
+                print(f"Error: Failed to compress '{a5.name}' with XZ. Original tar file will NOT be deleted.")
+    print('--- .tar File Compression Complete ---')
+if __name__ == '__main__':
+    raise SystemExit(w1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

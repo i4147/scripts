@@ -1,0 +1,151 @@
+import httpx;from packaging.requirements import Requirement;from packaging.specifiers import InvalidSpecifier,SpecifierSet;from packaging.tags import Tag,compatible_tags,cpython_tags,generic_tags,interpreter_name,interpreter_version;from packaging.utils import InvalidWheelFilename,canonicalize_name,parse_wheel_filename;from packaging.version import InvalidVersion,Version;from packaging.version import parse as parse_version;by=at.getLogger('pkgfetch');__all__=['Link','Package','TargetPython','PackageFinder','download','main'];x='https://pypi.org/simple/';l=('.tar.gz','.tgz','.tar.bz2','.tbz','.tar.xz','.txz','.tar.lz','.tar.lzma','.tlz','.zip','.whl','.tar');m=('sha256','sha512','sha384','sha224','sha1','md5');z=','.join(('application/vnd.pypi.simple.v1+json','application/vnd.pypi.simple.v1+html; q=0.1','text/html; q=0.01'));e=frozenset({'application/vnd.pypi.simple.v1+json'});d=frozenset({'text/html','application/vnd.pypi.simple.v1+html'});O=65536;@W(frozen=True)
+class bb:"""A single downloadable artifact discovered on a simple index.""";Q=None;q=None;aP=None;aG=aV(default_factory=dict)
+    def __post_init__(self):ag=am(self.url).fragment
+        if not ag:return
+        aI=dict(self.hashes)
+        for bq,aO in aj(ag).items():if bq in m and aO:aI.setdefault(bq,aO[0])
+        if aI!=self.hashes:object.__setattr__(self,'hashes',aI)
+    @property
+    def c(self):return self.url.split('#',1)[0]
+    @property
+    def ao(self):return am(self.url_without_fragment)
+    @property
+    def af(self):return az(self._parsed.path.rsplit('/',1)[-1])
+    @property
+    def ah(self):return self.filename.endswith('.whl')
+    @property
+    def ar(self):return self._parsed.scheme=='file'
+    @property
+    def X(self):return bc(az(self._parsed.path))
+    def __repr__(self):return f'<Link {self.url}>'
+@W(frozen=True)
+class an:"""A resolved ``name``/``version``/``Link`` triple.""";@n
+    def s(self):return parse_version(self.version)
+    def ap(self):return {'name':self.name,'version':self.version,'link':self.link.url,'requires_python':self.link.requires_python,'yanked':self.link.yanked,'hashes':self.link.hashes}
+@W
+class E:"""The set of wheel tags we consider installable.""";aK=None;bd=None;bk=None;aa=None;aQ=aV(default=None,init=False,repr=False)
+    def u(self):if self._tags is None:self._tags=self._compute_tags()
+        return self._tags
+    def f(self):"""The target version as ``'3.12'``.""";bE=self.py_ver or bB.version_info[:2];return '.'.join((str(v) for v in bE[:2]))
+    def B(self):bk=self.impl or interpreter_name();aK=self.py_ver[:2] if self.py_ver else None;aX=''.join(map(str,aK)) if aK else interpreter_version();aH=f'{bk}{aX}';bv=[]
+        if bk=='cp':bv.extend(cpython_tags(aK,self.abis,self.platforms))
+        else:bv.extend(generic_tags(aH,self.abis,self.platforms))
+        bv.extend(compatible_tags(aK,aH,self.platforms));return bv
+class A(P):"""Extract anchors and the base URL from an HTML simple index page."""
+    def __init__(self):super().__init__(convert_charrefs=True);self.base_url=None;self.anchors=[]
+    def o(self,bC,aR):if bC=='base' and self.base_url is None:bj=dict(aR).get('href')
+            if bj is not None:self.base_url=bj
+        elif bC=='a':self.anchors.append(dict(aR))
+def g(al):aJ=A();aJ.feed(al.text);bh=aJ.base_url or str(al.url)
+    for aC in aJ.anchors:bj=aC.get('href')
+        if not bj:continue
+        bD=aA(bh,bj);aP=aC.get('data-yanked');yield bb(bD=bD,Q=bh,q=aC.get('data-requires-python'),aP=aP if aP!='' else '')
+def h(al):av=al.json();bh=str(al.url)
+    for aU in av.get('files',()):aw=aU.get('url')
+        if not aw:continue
+        aP=aU.get('yanked');yield bb(bD=aA(bh,aw),Q=bh,q=aU.get('requires-python'),aP=aP if isinstance(aP,str) else 'yanked' if aP else None,aG=aU.get('hashes') or {})
+def K(aD,bD):"""Fetch and parse a simple index page (HTML or JSON).""";al=aD.get(bD,headers={'Accept':z});al.raise_for_status();H=al.headers.get('content-type','').split(';',1)[0].strip().lower()
+    if H in e:return list(h(al))
+    if H in d:return list(g(al))
+    raise ValueError(f'unsupported content-type:{H!r}')
+def b(af):for aM in l:if af.endswith(aM):return af[:-len(aM)]
+    return af
+def a(ak,aN):try:bt=SpecifierSet(ak)
+    except InvalidSpecifier:return True
+    return bt.contains(aN.python_version_str(),prereleases=True)
+def J(bo,T):"""Lower is better; ``len(priorities)+1`` means "no compatible tag".""";ba=len(T)+1
+    if not bo.is_wheel:return ba
+    try:*_,bv=parse_wheel_filename(bo.filename)
+    except (InvalidWheelFilename,InvalidVersion):return ba
+    return min((T.get(t,ba) for t in bv),default=ba)
+def C(bo,M,aN,w,*,k,Z,L):"""Return a ``Package`` if the link matches the requirement,else None.""";ah=bo.is_wheel
+    if ah and Z:return None
+    if not ah and L:return None
+    if ah:try:bq,aB,_,bv=parse_wheel_filename(bo.filename)
+        except (InvalidWheelFilename,InvalidVersion):return None
+        if canonicalize_name(bq)!=canonicalize_name(M.name):return None
+        if not M.specifier.contains(aB,prereleases=k):return None
+        if not any((t in w for t in bv)):return None
+    else:if not bo.filename.endswith(l):return None
+        bu=b(bo.filename);Y,_,N=bu.rpartition('-')
+        if not Y or not N:return None
+        if canonicalize_name(Y)!=canonicalize_name(M.name):return None
+        try:aB=Version(N)
+        except InvalidVersion:return None
+        if not M.specifier.contains(aB,prereleases=k):return None
+    if bo.requires_python and (not a(bo.requires_python,aN)):return None
+    return an(bq=M.name,aB=str(aB),bo=bo)
+class y:"""Collect,filter,and rank candidate distributions."""
+    def __init__(self,S=(),R=(),D=None,aD=None):self.sources=[];self.sources.extend((('index',bD) for bD in S));self.sources.extend((('find_links',bD) for bD in R))
+        if not self.sources:self.sources.append(('index',x))
+        self.target_python=D or E();self._client=aD;self._tag_priorities={bC:i for i,bC in enumerate(self.target_python.supported_tags())}
+    @property
+    def ay(self):if self._client is None:self._client=httpx.Client(follow_redirects=True,timeout=httpx.Timeout(30.0,connect=10.0))
+        return self._client
+    def aT(self):if self._client is not None:self._client.close();self._client=None
+    def __enter__(self):return self
+    def __exit__(self,*bx):self.close()
+    def I(self,M,*,k=None,Z=False,L=False):"""Return all matching packages,best candidate first.""";ai=[];bs=set()
+        for bn,aL in self.sources:try:aW=self._collect_links(bn,aL,M)
+            except (httpx.HTTPError,ValueError,OSError) as exc:by.warning('skipping%s%s:%s',bn,aL,bx);continue
+            for bo in aW:bz=C(bo,M,self.target_python,self._tag_priorities,k=k,Z=Z,L=L)
+                if bz is None or bz.link.url in bs:continue
+                bs.add(bz.link.url);ai.append(bz)
+        ai.sort(key=self._sort_key,reverse=True);return ai
+    def r(self,bn,aL,M):if bn=='index':bD=aA(aL.rstrip('/')+'/',canonicalize_name(M.name)+'/')
+        else:bD=aL
+            if not bD.startswith(('http://','https://','file://')):bD=bc(bD).absolute().as_uri()
+        return K(self.session,bD)
+    def V(self,bz):bo=bz.link;aP=bo.yanked is not None;U=J(bo,self._tag_priorities);return (-int(aP),bz.parsed_version,-U)
+def F(br,ae):if not ae:return True
+    for be,bw in ae.items():try:aF=aq.new(be)
+        except ValueError:continue
+        with br.open('rb') as fp:for aS in iter(lambda:fp.read(O),b''):aF.update(aS)
+        if aF.hexdigest()!=bw:return False
+    return True
+def ad(aD,bo,ac):"""Download ``link`` into ``dest_dir`` (idempotent) and return the path.""";ac.mkdir(parents=True,exist_ok=True)
+    if bo.is_file:bA=bo.file_path
+        if not bA.is_file():raise FileNotFoundError(bA)
+        return bA
+    af=bo.filename or 'download.bin';aN=ac/af
+    if aN.exists() and F(aN,bo.hashes):by.info('using cached%s',aN);return aN
+    by.info('downloading%s',bo.url)
+    with aD.stream('GET',bo.url) as al:al.raise_for_status()
+        with aN.open('wb') as fp:for aS in al.iter_bytes(O):fp.write(aS)
+    if not F(aN,bo.hashes):aN.unlink(missing_ok=True);raise ValueError(f'hash mismatch for {bo.url}')
+    return aN
+def j(aZ):aY=[p for p in aZ.split('.') if p.isdigit()]
+    if not aY:raise ab.ArgumentTypeError(f'invalid Python version:{aZ!r}')
+    return tuple((int(p) for p in aY))
+def G():aJ=ab.ArgumentParser(prog='pkgfetch',description='Find and download Python distributions from PEP 503/691 indices.');aJ.add_argument('requirement',type=Requirement,help="PEP 508 requirement string,e.g. 'requests>=2.28'.");aJ.add_argument('-i','--index-url',action='append',default=[],metavar='URL',help='Simple index URL (repeatable). Defaults to PyPI.');aJ.add_argument('-f','--find-link',action='append',default=[],metavar='DIR_OR_URL',help='Additional find-links source (repeatable).');aJ.add_argument('-d','--dest',default='.',metavar='DIR',help='Download destination directory (default:cwd).');aJ.add_argument('--py-version',type=j,default=None,metavar='X.Y',help='Override target Python version.');aJ.add_argument('--platform',action='append',default=[],metavar='TAG',help='Override target platform tag (repeatable).');aJ.add_argument('--abi',action='append',default=[],metavar='TAG',help='Override ABI tag (repeatable).');aJ.add_argument('--impl',default=None,metavar='IMPL',help='Override Python implementation (cp,pp,...).');aJ.add_argument('--no-binary',action='store_true',help='Exclude binary wheels.');aJ.add_argument('--only-binary',action='store_true',help='Accept only binary wheels.');aJ.add_argument('--pre',action='store_true',help='Allow pre-release versions.');aJ.add_argument('-a','--all',action='store_true',help='Return every matching version,not just the latest.');aJ.add_argument('-j','--json',action='store_true',help='Print JSON metadata.');aJ.add_argument('--no-download',action='store_true',help='Only resolve and print metadata; do not download.');aJ.add_argument('-v','--verbose',action='store_true');return aJ
+def bp(bg=None):bf=G().parse_args(bg);at.basicConfig(level=at.DEBUG if bf.verbose else at.INFO,format='%(levelname)s:%(message)s');aN=E(aK=bf.py_version,bd=bf.abi or None,bk=bf.impl,aa=bf.platform or None)
+    with y(S=bf.index_url,R=bf.find_link,D=aN) as aE:au=aE.find_matches(bf.requirement,k=True if bf.pre else None,Z=bf.no_binary,L=bf.only_binary)
+        if not au:print('No matching distributions found.',file=bB.stderr);return 1
+        if not bf.all:au=au[:1]
+        bi=bc(bf.dest);ax=[]
+        for bz in au:bl=bz.as_json()
+            if not bf.no_download:try:br=ad(aE.session,bz.link,bi)
+                except (httpx.HTTPError,OSError,ValueError) as exc:by.error('download failed for%s:%s',bz.link.url,bx);return 2
+                bl['local_path']=str(br)
+            ax.append(bl)
+    if bf.json or bf.no_download:av=ax[0] if len(ax)==1 else ax;print(bm.dumps(av,indent=2))
+    else:for bl in ax:print(bl.get('local_path',bl['link']))
+    return 0
+if __name__=='__main__':bB.exit(bp())
+
+
+You are a senior Python developer.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+  optimize, simplify and remove unused code as much as possible
+  target os linux(py3.12)
+  - prefer .tar.gz over .whl if exists
+    add support for .tar.bz, .zip too (archive types that pypi supports)
+  - add -b (backend) to select from[requests,pycurl,httpx,aria2c via subprocess]
+  - verify archive integrity
+  - log errors with loguru
+  - support chunked download if fsize>5mb
+  - and any other optimizations needed
+  - return full refactored and annotated code

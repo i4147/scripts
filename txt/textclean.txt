@@ -1,0 +1,456 @@
+# --- File: del_empty_lines.py ---
+import sys
+from pathlib import Path
+from binaryornot import is_binary
+from dh import cprint
+def a(cwd):
+    for f in cwd.rglob('*'):
+        if f.is_file() and (not f.is_symlink()):
+            yield f
+def b(c):
+    c = Path(c)
+    d = 0
+    e = c.read_text(encoding='utf-8')
+    f = e.splitlines(keepends=False)
+    g = []
+    g = [h for h in f if h.strip()]
+    i = len(f)
+    j = len(g)
+    d = i - j
+    if d:
+        print(f'{c.name}', end=' | ')
+        cprint(f'{d}', 'blue')
+        k = '\n'.join(g)
+        c.write_text(k, encoding='utf-8')
+    else:
+        print(f'{c.name}', end=' | ')
+        cprint('NO CHANGE', 'grey')
+if __name__ == '__main__':
+    cwd = Path.cwd()
+    l = sys.argv[1:]
+    if l:
+        m = [Path(p) for p in l]
+        for f in m:
+            b(f)
+    else:
+        for f in a(cwd):
+            if not is_binary(f):
+                b(f)
+
+# --- File: delinvis.py ---
+import shutil
+import string
+import sys
+from pathlib import Path
+def n(o):
+    p = set(string.printable) | {'\n', '\r', '\t'}
+    q = []
+    r = 1
+    s = 1
+    for ch in o:
+        if ch not in p:
+            q.append((r, s, ch, ord(ch)))
+        if ch == '\n':
+            r += 1
+            s = 1
+        else:
+            s += 1
+    return q
+def t(o):
+    p = set(string.printable) | {'\n', '\r', '\t'}
+    return ''.join((ch for ch in o if ch in p))
+def u(c):
+    v = c + '.bak'
+    shutil.copy2(c, v)
+    w = Path(c).read_text(encoding='utf-8', errors='ignore')
+    q = n(w)
+    if q:
+        print(f'Found {len(q)} unprintable character(s):')
+        for h, col, _ch, x in q:
+            print(f'  Line {h}, Col {col}: char code {x} (0x{x:02X})')
+    else:
+        print('No unprintable characters found.')
+    y = t(w)
+    Path(c).write_text(y, encoding='utf-8', errors='ignore')
+def z():
+    if len(sys.argv) != 2:
+        print(f'Usage: {Path(sys.argv[0]).name} <filename>')
+        sys.exit(1)
+    a1 = sys.argv[1]
+    if not Path(a1).is_file():
+        print(f"Error: '{a1}' is not a file")
+        sys.exit(1)
+    u(a1)
+if __name__ == '__main__':
+    raise SystemExit(z())
+
+# --- File: detect_multiline_text.py ---
+import argparse
+import hashlib
+import shutil
+import sys
+import tempfile
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from dh import TXT_EXT as TEXT_EXTENSIONS, get_nobinary
+from joblib import Parallel, delayed
+b1 = Path('/sdcard/lic')
+c1 = 8
+d1 = 8192
+@dataclass
+class e1:
+    f1 = 0
+    g1 = 0
+    h1 = 0
+    i1 = None
+    j1 = False
+    def __str__(self):
+        rel = self.path.relative_to(Path.cwd())
+        if self.error:
+            return f'{rel}: ERROR - {self.error}'
+        if self.modified:
+            return f'{rel}: Processed {self.bytes_processed:,} bytes, removed {self.removed_count} occurrence(s) ({self.bytes_removed:,} bytes)'
+        return f'{rel}: No changes needed ({self.bytes_processed:,} bytes)'
+def k1():
+    try:
+        if not b1.exists():
+            raise FileNotFoundError(f'License file not found: {b1}')
+        with open(b1, 'r', encoding='utf-8') as f:
+            l1 = f.read()
+        if not l1.strip():
+            raise ValueError('License file is empty')
+        return l1
+    except Exception as e:
+        print(f'Error reading license file: {e}', file=sys.stderr)
+        sys.exit(1)
+def m1(n1):
+    for o1 in n1:
+        if not o1.exists():
+            print(f'Warning: Directory does not exist: {o1}', file=sys.stderr)
+            continue
+        if o1.is_file():
+            if o1.suffix.lower() in TEXT_EXTENSIONS or not o1.suffix:
+                yield o1
+        else:
+            yield from get_nobinary(o1)
+def p1(l1):
+    return hashlib.sha256(l1.encode('utf-8')).hexdigest()
+def b(c, l1, q1):
+    r1 = e1(path=c)
+    try:
+        s1 = c.stat().st_size
+        r1.bytes_processed = s1
+        if l1 not in c.read_text(encoding='utf-8', errors='ignore'):
+            return r1
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.tmp') as t1:
+            u1 = Path(t1.name)
+            try:
+                with open(c, 'r', encoding='utf-8', errors='ignore') as v1:
+                    e = v1.read()
+                    w1 = e.count(l1)
+                    if w1 == 0:
+                        return r1
+                    x1 = e.replace(l1, '')
+                    t1.write(x1)
+                    t1.flush()
+                    r1.removed_count = w1
+                    r1.bytes_removed = len(l1) * w1
+                    r1.modified = True
+                shutil.move(str(u1), str(c))
+            except Exception:
+                if u1.exists():
+                    u1.unlink()
+                raise
+    except (OSError, UnicodeDecodeError) as e:
+        r1.error = str(e)
+    except Exception as e:
+        r1.error = f'Unexpected error: {e}'
+    return r1
+def z():
+    y1 = argparse.ArgumentParser(description='Remove multi-line text pattern from files recursively.', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s\n  %(prog)s /path/to/dir\n  %(prog)s file1.txt file2.txt\n  %(prog)s -a /path/to/dir\n  %(prog)s --auto-remove\n        ')
+    y1.add_argument('paths', nargs='*', type=Path, help='Files or directories to process (default: current directory)')
+    y1.add_argument('-a', '--auto-remove', action='store_true', help='Automatically remove found patterns (without confirmation)')
+    y1.add_argument('--dry-run', action='store_true', help='Show what would be done without making changes')
+    y1.add_argument('-j', '--jobs', type=int, default=c1, help=f'Number of parallel jobs (default: {c1})')
+    l = y1.parse_args()
+    print(f'Reading pattern from {b1}...')
+    l1 = k1()
+    q1 = p1(l1)
+    print(f'Pattern loaded ({len(l1)} characters, {len(l1.splitlines())} lines)')
+    if not l.paths:
+        z1 = [Path.cwd()]
+    else:
+        z1 = l.paths
+    print('Scanning for files...')
+    m = list(m1(z1))
+    if not m:
+        print('No text files found to process.')
+        return
+    print(f'Found {len(m)} text file(s) to process')
+    if l.dry_run:
+        print('\nDRY RUN - No changes will be made\n')
+    if l.auto_remove or l.dry_run:
+        print('Processing files in parallel...')
+        a2 = Parallel(n_jobs=l.jobs, verbose=1)((delayed(b)(c, l1, q1) for c in m))
+        print('\n' + '=' * 40)
+        print('PROCESSING REPORT')
+        print('=' * 40)
+        b2 = len(a2)
+        c2 = sum((1 for s in a2 if s.modified))
+        d2 = sum((s.removed_count for s in a2))
+        e2 = sum((s.bytes_removed for s in a2))
+        f2 = sum((s.bytes_processed for s in a2))
+        g2 = [s for s in a2 if s.error]
+        for r1 in a2:
+            print(r1)
+        print('\n' + '=' * 40)
+        print(f'Files processed: {b2}')
+        print(f'Files modified: {c2}')
+        print(f'Pattern removed: {d2} occurrence(s)')
+        print(f'Total bytes removed: {e2:,}')
+        print(f'Total bytes processed: {f2:,}')
+        if g2:
+            print(f'Errors encountered: {len(g2)}')
+    else:
+        print('\nDry run mode (no changes will be made). Use -a to apply changes.')
+        print('Files that contain the pattern:')
+        h2 = Parallel(n_jobs=l.jobs, verbose=0)((delayed(lambda f: (f, l1 in f.read_text(encoding='utf-8', errors='ignore') if f.stat().st_size < 10 * 1024 * 1024 else False))(c) for c in m))
+        for c, i2 in h2:
+            if i2:
+                rel = c.relative_to(Path.cwd())
+                print(f'  {rel}')
+if __name__ == '__main__':
+    try:
+        raise SystemExit(z())
+    except KeyboardInterrupt:
+        print('\nOperation cancelled by user.', file=sys.stderr)
+        sys.exit(130)
+    except Exception as e:
+        print(f'Fatal error: {e}', file=sys.stderr)
+        sys.exit(1)
+
+# --- File: remove_header.py ---
+import json
+import sys
+def z():
+    if len(sys.argv) < 2:
+        print('Usage: python script.py <json_file>')
+        sys.exit(1)
+    fn = sys.argv[1]
+    with open(fn, encoding='utf-8') as f:
+        w = json.load(f)
+    j2 = []
+    for k2 in w:
+        l2 = list(k2.values())
+        if len(l2) >= 2:
+            j2.append({f'field_{i + 1}': m2 for i, m2 in enumerate(l2)})
+        else:
+            j2.append(k2)
+    with open(fn, 'w', encoding='utf-8') as fo:
+        json.dump(j2, fo, ensure_ascii=False, indent=2)
+    print(f'Successfully transformed {fn}')
+if __name__ == '__main__':
+    raise SystemExit(z())
+
+# --- File: remove_lines_containing_str_from_files.py ---
+import sys
+from pathlib import Path
+from dh import get_nobinary, gsz
+n2 = ['dist-info', '.so', '.py', '.pth', '__', '.zip']
+def t(o):
+    return '\n'.join((h for h in o.splitlines() if not any((s in h for s in n2))))
+def u(c):
+    try:
+        o2 = Path(c).read_text(encoding='utf-8', errors='ignore')
+    except Exception:
+        return
+    y = t(o2)
+    if y != o2:
+        Path(c).write_text(y, encoding='utf-8')
+def z():
+    p2 = Path.cwd()
+    isz = gsz(p2)
+    l = sys.argv[1:]
+    m = [Path(arg) for arg in l] if l else get_nobinary(p2)
+    if len(m) == 1:
+        u(m[0])
+        sys.exit(0)
+    q2 = Pool(8)
+    for f in m:
+        p.apply_async(u, (f,))
+    q2.close()
+    q2.join()
+    esz = gsz(p2)
+    r2 = isz - esz
+    print(f'space freed : {fsz(r2)}')
+if __name__ == '__main__':
+    raise SystemExit(z())
+
+# --- File: rm_lines_that_contains.py ---
+import sys
+from pathlib import Path
+def z():
+    l = sys.argv[1:]
+    s2 = False
+    t2 = []
+    for arg in l:
+        if arg in ('-a', '--apply'):
+            s2 = True
+        else:
+            t2.append(arg)
+    if len(t2) != 2:
+        print('Usage: python3 remove_lines.py <input_file> <text_to_remove> [-a|--apply]')
+        print('\nOptions:')
+        print('  -a, --apply    Actually modify the file (default is dry-run)')
+        sys.exit(1)
+    u2 = Path(t2[0])
+    v2 = t2[1]
+    if not u2.exists():
+        print(f"Error: File '{u2}' not found.")
+        sys.exit(1)
+    f = u2.read_text(encoding='utf-8').splitlines()
+    w2 = [h for h in f if v2 not in h]
+    f1 = len(f) - len(w2)
+    print(f"Lines containing '{v2}': {f1}")
+    print(f'Remaining lines: {len(w2)}')
+    if f1 > 0:
+        print('\nLines that would be removed:')
+        print('-' * 40)
+        for h in f:
+            if v2 in h:
+                print(f'  - {h}')
+        print('-' * 40)
+    if s2:
+        u2.write_text('\n'.join(w2) + '\n', encoding='utf-8')
+        print(f"\n✅ Changes applied to '{u2}'")
+    else:
+        print(f'\n⚠️  Dry run - no changes made. Use -a or --apply to apply changes.')
+if __name__ == '__main__':
+    z()
+
+# --- File: rm_skipdirs.py ---
+import sys
+from pathlib import Path
+from dh import get_files, mpf3
+skl = 'SKIP_DIRS: frozenset = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})'
+def b(c):
+    c = Path(c)
+    f = c.read_text(encoding='utf-8').splitlines(keepends=True)
+    nl = []
+    for h in f:
+        if h.strip() != skl:
+            nl.append(h)
+    x2 = ''.join(nl)
+    c.write_text(x2, encoding='utf-8')
+def z():
+    cwd = Path.cwd()
+    l = sys.argv[1:]
+    if l:
+        for arg in l:
+            p = Path(arg)
+            if p.is_file():
+                m.append(p)
+            if p.is_dir():
+                m.extend(get_files(p))
+    else:
+        m = get_files(cwd)
+    mpf3(b, m)
+if __name__ == '__main__':
+    raise SystemExit(z())
+
+# --- File: rminfo.py ---
+import re
+from pathlib import Path
+y2 = re.compile('^# Author\\s*:.*\\n# Email\\s*:.*\\n# Time\\s*:.*\\n\\n?', re.MULTILINE)
+def z2(c):
+    o = c.read_text(encoding='utf-8')
+    a3 = y2.sub('', o, count=1)
+    if a3 != o:
+        c.write_text(a3, encoding='utf-8')
+        return True
+    return False
+def z():
+    p2 = Path.cwd()
+    j1 = 0
+    for b3 in p2.rglob('*.py'):
+        try:
+            if z2(b3):
+                print(f'Cleaned: {b3.relative_to(p2)}')
+                j1 += 1
+        except (UnicodeDecodeError, OSError) as e:
+            print(f'Skipped {b3}: {e}')
+    print(f'\nDone. {j1} file(s) modified.')
+if __name__ == '__main__':
+    z()
+
+# --- File: rmlines_with.py ---
+import sys
+from pathlib import Path
+def u(c, c3):
+    f = c.read_text(encoding='utf-8', errors='ignore').splitlines(keepends=True)
+    y = [p for p in f if c3 not in p]
+    d3 = ''.join(y)
+    c.write_text(d3, encoding='utf-8')
+def z():
+    fn = Path(sys.argv[1])
+    e3 = sys.argv[2]
+    u(fn, e3)
+if __name__ == '__main__':
+    raise SystemExit(z())
+
+# --- File: todel.py ---
+from pathlib import Path
+from dh import get_nobinary
+d1 = 1024 * 1024
+def f3(g3):
+    cwd = Path.cwd()
+    m = get_nobinary(cwd)
+    for c in m:
+        e = c.read_text(encoding='utf-8')
+        if g3 in e:
+            x2 = e.replace(g3, '')
+        c.write_text(x2, encoding='utf-8')
+def h3(i3='/sdcard/lic'):
+    c = Path(i3)
+    return c.read_text(encoding='utf-8')
+if __name__ == '__main__':
+    j3 = h3()
+    if j3:
+        f3(j3)
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

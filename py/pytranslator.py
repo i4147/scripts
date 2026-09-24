@@ -1,4 +1,3 @@
-
 import ast
 import io
 import time
@@ -10,13 +9,12 @@ from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory
 from dh import DOC_TH1, DOC_TH2
 
-DetectorFactory.seed = 0  
-
+DetectorFactory.seed = 0
 
 
 TARGET_LANG = "en"
-DELAY_SECONDS = 0.5  
-MAX_WORKERS = 4  
+DELAY_SECONDS = 0.5
+MAX_WORKERS = 4
 
 
 SHEBANG_PREFIX = "#!/"
@@ -44,22 +42,16 @@ KNOWN_ENGLISH_TOKENS = {
 def should_skip(text: str) -> bool:
     clean = text.strip()
 
-    
     if clean.startswith(SHEBANG_PREFIX):
         return True
 
-    
     if clean.isascii():
-        
-        
-        
         if any(word in clean.upper() for word in KNOWN_ENGLISH_TOKENS):
             return True
-        
+
         if len(clean.split()) <= 2 and len(clean) < 30:
             return True
 
-    
     if not any(c.isalpha() for c in clean):
         return True
 
@@ -70,7 +62,7 @@ def is_non_english(text: str) -> bool:
     clean = text.strip()
     if not clean or len(clean) < 4:
         return False
-    if should_skip(clean):  
+    if should_skip(clean):
         return False
     try:
         return detect(clean) != "en"
@@ -88,9 +80,6 @@ def translate_text(text: str) -> str:
         return text
 
 
-
-
-
 def find_print_string_tokens(source: str):
     try:
         tree = ast.parse(source)
@@ -98,7 +87,7 @@ def find_print_string_tokens(source: str):
         return
 
     lines = source.splitlines(keepends=True)
-    
+
     offsets = [0]
     for line in lines:
         offsets.append(offsets[-1] + len(line.encode()))
@@ -108,7 +97,7 @@ def find_print_string_tokens(source: str):
             continue
         for arg in node.args:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                yield arg.value  
+                yield arg.value
 
 
 def process_file(path: Path) -> bool:
@@ -123,20 +112,17 @@ def process_file(path: Path) -> bool:
         print(f"[skip] {path}: tokenize error – {exc}")
         return False
 
-    
-    
     lines = source.splitlines(keepends=True)
 
     def line_col_to_offset(lineno, col):
         return sum(len(lines[i]) for i in range(lineno - 1)) + col
 
-    replacements = []  
+    replacements = []
 
-    
     for tok in tokens:
         if tok.type != tokenize.COMMENT:
             continue
-        raw = tok.string  
+        raw = tok.string
         inner = raw.lstrip("#").strip()
         if not is_non_english(inner):
             continue
@@ -149,15 +135,12 @@ def process_file(path: Path) -> bool:
         end = line_col_to_offset(tok.end[0], tok.end[1])
         replacements.append((start, end, new_comment))
 
-    
-    
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
         print(f"[skip] {path}: ast.parse failed – {exc}")
         return False
 
-    
     print_arg_positions = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
@@ -165,7 +148,6 @@ def process_file(path: Path) -> bool:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     print_arg_positions.add((arg.col_offset, arg.lineno))
 
-    
     docstring_positions = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
@@ -193,7 +175,6 @@ def process_file(path: Path) -> bool:
 
         raw = tok.string
 
-        
         if raw.startswith(DOC_TH1) or raw.startswith(DOC_TH2):
             quote = raw[:3]
         elif raw.startswith('"'):
@@ -201,7 +182,7 @@ def process_file(path: Path) -> bool:
         else:
             quote = "'"
 
-        inner = ast.literal_eval(raw)  
+        inner = ast.literal_eval(raw)
         if not isinstance(inner, str) or not is_non_english(inner):
             continue
 
@@ -209,7 +190,6 @@ def process_file(path: Path) -> bool:
         label = "docstring" if is_docstring else "print-str"
         print(f"  [{label}]\n    orig : {inner}\n    trans: {translated}")
 
-        
         escaped = translated.replace("\\", "\\\\").replace(quote, "\\" + quote)
         new_tok = quote + escaped + quote
 
@@ -220,7 +200,6 @@ def process_file(path: Path) -> bool:
     if not replacements:
         return False
 
-    
     replacements.sort(key=lambda r: r[0], reverse=True)
     src_chars = list(source)
     for char_start, char_end, new_frag in replacements:
@@ -228,7 +207,6 @@ def process_file(path: Path) -> bool:
 
     new_source = "".join(src_chars)
 
-    
     try:
         ast.parse(new_source)
     except SyntaxError as exc:
@@ -241,11 +219,11 @@ def process_file(path: Path) -> bool:
 
 def process_file_wrapper(path_str: str):
     path = Path(path_str)
-    
+
     try:
         changed = process_file(path)
         status = "updated" if changed else "no changes"
-    
+
     except Exception as exc:
         print(f"  [error] {path}: {exc}")
 
@@ -261,9 +239,6 @@ def main():
 
     with multiprocessing.Pool(processes=MAX_WORKERS) as pool:
         pool.map(process_file_wrapper, py_files)
-
-
-
 
 
 if __name__ == "__main__":

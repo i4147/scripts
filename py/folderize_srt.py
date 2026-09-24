@@ -22,7 +22,6 @@ def detect_language_majority_vote(file_path: Path):
         for line in lines:
             line = line.strip()
 
-            
             if not line or "-->" in line or line.isdigit():
                 skipped_count += 1
                 continue
@@ -38,7 +37,6 @@ def detect_language_majority_vote(file_path: Path):
                 pass
 
         if detected_languages:
-            
             lang_counter = Counter(detected_languages)
             most_common_lang = lang_counter.most_common(1)[0][0]
 
@@ -83,7 +81,6 @@ def organize_subtitles(directory: Path = Path.cwd()) -> None:
             lang_code = detected_lang.iso_code_639_1.name
             print(f"\n   ✅ FINAL RESULT: {lang_name} ({lang_code})")
 
-            
             folder_name = f"{lang_name}_{lang_code}".lower()
 
             if folder_name not in language_folders:
@@ -115,5 +112,4 @@ def organize_subtitles(directory: Path = Path.cwd()) -> None:
 
 
 if __name__ == "__main__":
-    
     organize_subtitles()

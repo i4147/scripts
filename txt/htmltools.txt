@@ -1,0 +1,1776 @@
+# --- File: build_single_page.py ---
+import base64
+import hashlib
+import mimetypes
+import re
+from io import BytesIO
+from pathlib import Path
+import pycurl
+import requests
+from bs4 import BeautifulSoup
+from bs4.element import AttributeValueList
+cwd = Path.cwd()
+a = cwd / 'output'
+b = cwd / 'output' / 'assets'
+c = True
+d = 10
+if not a.exists():
+    a.mkdir(parents=True, exist_ok=True)
+if not b.exists():
+    b.mkdir(parents=True, exist_ok=True)
+e = {}
+def f(g):
+    return hashlib.sha256(g).hexdigest()
+def h(i, j):
+    k = f(i)
+    if k in e:
+        return e[k]
+    ext = mimetypes.guess_extension(j) or ''
+    l = f'{k}{ext}'
+    m = b / l
+    m.write_bytes(i)
+    e[k] = m
+    return m
+def n(o):
+    m = re.match('data:(.*?);base64,(.*)', o, re.DOTALL)
+    if not m:
+        return None
+    j, p = m.groups()
+    i = base64.b64decode(p)
+    return h(i, j)
+def q(url):
+    if not isinstance(url, str):
+        return None
+    r = BytesIO()
+    s = BytesIO()
+    c = pycurl.Curl()
+    try:
+        c.setopt(c.URL, url)
+        c.setopt(c.WRITEDATA, r)
+        c.setopt(c.HEADERDATA, s)
+        c.setopt(c.TIMEOUT, d)
+        c.setopt(c.FOLLOWLOCATION, True)
+        t = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Anonymously/1.0 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        c.setopt(c.USERAGENT, t)
+        c.setopt(c.SSL_VERIFYPEER, 1)
+        c.setopt(c.SSL_VERIFYHOST, 2)
+        c.perform()
+        u = c.getinfo(c.RESPONSE_CODE)
+        if u != 200:
+            c.close()
+            return None
+        v = s.getvalue().decode('iso-8859-1').lower()
+        w = 'application/octet-stream'
+        for x in v.split('\r\n'):
+            if x.startswith('content-type:'):
+                w = x.split(':', 1)[1].strip()
+                break
+        i = r.getvalue()
+        c.close()
+        return h(i, w.split(';')[0])
+    except Exception:
+        c.close()
+        return None
+def y(url):
+    try:
+        r = requests.get(url, timeout=d)
+        if r.status_code != 200:
+            return None
+        w = r.headers.get('Content-Type', 'application/octet-stream')
+        return h(r.content, w.split(';')[0])
+    except Exception:
+        return None
+z = []
+def a1(m):
+    b1 = m.read_text(encoding='utf-8', errors='ignore')
+    c1 = BeautifulSoup(b1, 'html.parser')
+    z.append(c1)
+    for d1 in c1.find_all('style'):
+        if not d1.string:
+            continue
+        css = d1.string.encode('utf-8')
+        m = h(css, 'text/css')
+        d1.replace_with(f'<link rel="stylesheet" href="{m.relative_to(a)}">')
+    for e1 in c1.find_all('script'):
+        if e1.get('src'):
+            src = e1['src']
+            if src.startswith('http') and c:
+                m = q(src)
+                if m:
+                    e1['src'] = str(m.relative_to(a))
+            continue
+        js = (e1.string or '').encode('utf-8')
+        m = h(js, 'application/javascript')
+        e1.replace_with(f'<script src="{m.relative_to(a)}"></script>')
+    for img in c1.find_all('img'):
+        src = img.get('src', '')
+        if src.startswith('data:'):
+            m = n(src)
+            if m:
+                img['src'] = str(m.relative_to(a))
+    f1 = re.compile('url\\("(data:.*?)"\\)')
+    for tag in c1.find_all(style=True):
+        m = f1.search(tag['style'])
+        if m:
+            o = m.group(1)
+            m = n(o)
+            if m:
+                tag['style'] = tag['style'].replace(o, str(m.relative_to(a)))
+    for svg in c1.find_all('svg'):
+        g1 = str(svg).encode('utf-8')
+        m = h(g1, 'image/svg+xml')
+        h1 = c1.new_tag('img')
+        h1['src'] = str(m.relative_to(a))
+        svg.replace_with(h1)
+    for i1 in c1.find_all('link', href=True):
+        j1 = i1['href']
+        if j1.startswith('http') and c:
+            print(j1)
+    k1 = a / m.relative_to(cwd)
+    k1.parent.mkdir(parents=True, exist_ok=True)
+    k1.write_text(str(c1), encoding='utf-8')
+    print('Processed:', m)
+def l1():
+    m1 = BeautifulSoup('<html><head></head><body></body></html>', 'html.parser')
+    n1 = m1.body
+    for c1 in z:
+        if c1.body:
+            for el in c1.body.contents:
+                n1.append(el)
+    for o1 in b.iterdir():
+        w = mimetypes.guess_type(o1.name)[0] or 'application/octet-stream'
+        g = o1.read_bytes()
+        p = base64.b64encode(g).decode()
+        o = f'data:{w};base64,{p}'
+        p1 = str(m1)
+        p1 = p1.replace(str(o1.relative_to(a)), o)
+        m1 = BeautifulSoup(p1, 'html.parser')
+    for i1 in m1.find_all('link', rel='stylesheet'):
+        j1 = i1.get('href', '')
+        if j1.startswith('data:'):
+            q1 = re.sub('^data:.*?;base64,', '', j1)
+            r1 = base64.b64decode(q1).decode('utf-8', errors='ignore')
+            s1 = m1.new_tag('style')
+            s1.string = r1
+            i1.replace_with(s1)
+    for e1 in m1.find_all('script', src=True):
+        src = e1['src']
+        if src.startswith('data:'):
+            t1 = re.sub('^data:.*?;base64,', '', src)
+            r1 = base64.b64decode(t1).decode('utf-8', errors='ignore')
+            u1 = m1.new_tag('script')
+            u1.string = r1
+            e1.replace_with(u1)
+    v1 = a / 'single_page_local.html'
+    v1.write_text(str(m1), encoding='utf-8')
+    print('\nCreated:', v1)
+if __name__ == '__main__':
+    for m in cwd.rglob('*'):
+        if m.suffix.lower() in {'.html', '.htm'} and 'output' not in m.parts:
+            a1(m)
+    l1()
+    print('\nDONE — all assets extracted, deduped, hashed, and packed!')
+
+# --- File: inline_assets.py ---
+import argparse
+import base64
+import mimetypes
+import re
+import sys
+import time
+from multiprocessing import Pool
+from pathlib import Path
+from re import Match
+from typing import Any
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup, Tag
+from loguru import logger
+logger.remove()
+logger.add(sys.stderr, level='WARNING', format='<red>{level}</red> | <cyan>{message}</cyan>')
+w1 = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.avif', '.bmp', '.tiff'}
+x1 = re.compile('url\\((["\\\']?)([^)"\\\']+)\\1\\)')
+d = 15
+y1 = 8
+def z1(url):
+    return urlparse(url).scheme in ('http', 'https') or url.startswith('//')
+def a2(url):
+    ext = Path(urlparse(url).path).suffix.lower()
+    return ext in w1
+def b2(m):
+    w, _ = mimetypes.guess_type(m)
+    if not w:
+        ext = Path(m).suffix.lower()
+        if ext == '.woff2':
+            return 'font/woff2'
+        if ext == '.woff':
+            return 'font/woff'
+        if ext == '.ttf':
+            return 'font/ttf'
+        if ext == '.eot':
+            return 'application/vnd.ms-fontobject'
+        return 'application/octet-stream'
+    return w
+def c2(url):
+    if url.startswith('//'):
+        url = 'https:' + url
+    try:
+        with requests.get(url, timeout=d) as d2:
+            d2.raise_for_status()
+            return d2.content
+    except Exception as e:
+        logger.error(f'Failed to fetch {url}: {e}')
+        return None
+def e2(m):
+    try:
+        return m.read_bytes()
+    except Exception as e:
+        logger.error(f'Failed to read {m}: {e}')
+        return None
+def f2(g2, h2, i2=None):
+    loc = 0
+    rem = 0
+    def j2(k2):
+        nonlocal loc, rem
+        l2 = k2.group(1)
+        url = k2.group(2)
+        if url.startswith('data:'):
+            return k2.group(0)
+        if z1(url):
+            if a2(url):
+                return k2.group(0)
+            m2 = urljoin(i2, url) if i2 else url
+            i = c2(m2)
+            if i:
+                w = b2(urlparse(m2).path)
+                b64 = base64.b64encode(i).decode('ascii')
+                rem += 1
+                return f'url({l2}data:{w};base64,{b64}{l2})'
+            return k2.group(0)
+        else:
+            n2 = url.split('?')[0].split('#')[0]
+            o2 = (h2.parent / n2).resolve()
+            if not o2.exists():
+                logger.warning(f'Missing local CSS asset referenced: {o2}')
+                return k2.group(0)
+            i = e2(o2)
+            if i:
+                w = b2(str(o2))
+                b64 = base64.b64encode(i).decode('ascii')
+                loc += 1
+                return f'url({l2}data:{w};base64,{b64}{l2})'
+            return k2.group(0)
+    p2 = x1.sub(j2, g2)
+    return (p2, loc, rem)
+def q2(m):
+    r2 = {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'success'}
+    s2 = time.perf_counter()
+    try:
+        t2 = m.read_text(encoding='utf-8')
+        c1 = BeautifulSoup(t2, 'html.parser')
+        for img in c1.find_all('img'):
+            src = img.get('src')
+            if not src or src.startswith('data:'):
+                continue
+            if z1(src):
+                continue
+            u2 = src.split('?')[0].split('#')[0]
+            v2 = (m.parent / u2).resolve()
+            if v2.exists():
+                i = e2(v2)
+                if i:
+                    b64 = base64.b64encode(i).decode('ascii')
+                    w = b2(str(v2))
+                    img['src'] = f'data:{w};base64,{b64}'
+                    r2['local'] += 1
+            else:
+                logger.warning(f'Missing local image: {v2} in {m}')
+        for i1 in c1.find_all('link', rel='stylesheet'):
+            j1 = i1.get('href')
+            if not j1:
+                continue
+            w2 = ''
+            i2 = None
+            x2 = m
+            if z1(j1):
+                raw = c2(j1)
+                if raw:
+                    w2 = raw.decode('utf-8', errors='ignore')
+                    i2 = j1
+                    r2['remote'] += 1
+            else:
+                y2 = j1.split('?')[0].split('#')[0]
+                z2 = (m.parent / y2).resolve()
+                if z2.exists():
+                    w2 = z2.read_text(encoding='utf-8', errors='ignore')
+                    x2 = z2
+                    r2['local'] += 1
+                else:
+                    logger.warning(f'Missing local CSS: {z2} in {m}')
+            if w2:
+                a3, b3, c3 = f2(w2, x2, i2)
+                r2['local'] += b3
+                r2['remote'] += c3
+                s1 = c1.new_tag('style')
+                s1.string = a3
+                i1.replace_with(s1)
+        for e1 in c1.find_all('script'):
+            src = e1.get('src')
+            if not src:
+                continue
+            d3 = ''
+            if z1(src):
+                raw = c2(src)
+                if raw:
+                    d3 = raw.decode('utf-8', errors='ignore')
+                    r2['remote'] += 1
+            else:
+                u2 = src.split('?')[0].split('#')[0]
+                e3 = (m.parent / u2).resolve()
+                if e3.exists():
+                    d3 = e3.read_text(encoding='utf-8', errors='ignore')
+                    r2['local'] += 1
+                else:
+                    logger.warning(f'Missing local script: {e3} in {m}')
+            if d3:
+                u1 = c1.new_tag('script')
+                u1.string = d3
+                e1.replace_with(u1)
+        for tag in c1.find_all(style=True):
+            f3 = tag['style']
+            g3, l, r = f2(f3, m)
+            tag['style'] = g3
+            r2['local'] += l
+            r2['remote'] += r
+        for d1 in c1.find_all('style'):
+            if d1.string:
+                g3, l, r = f2(d1.string, m)
+                d1.string = g3
+                r2['local'] += l
+                r2['remote'] += r
+        m.write_text(str(c1), encoding='utf-8')
+    except Exception as e:
+        r2['status'] = f'error: {e}'
+        logger.error(f'Failed to process HTML file {m}: {e}')
+    r2['time'] = time.perf_counter() - s2
+    return r2
+def h3(m):
+    r2 = {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'success'}
+    s2 = time.perf_counter()
+    try:
+        i = m.read_text(encoding='utf-8')
+        a3, l, r = f2(i, m)
+        r2['local'] += l
+        r2['remote'] += r
+        m.write_text(a3, encoding='utf-8')
+    except Exception as e:
+        r2['status'] = f'error: {e}'
+        logger.error(f'Failed to process CSS file {m}: {e}')
+    r2['time'] = time.perf_counter() - s2
+    return r2
+def i3(m):
+    if m.suffix.lower() == '.html':
+        return q2(m)
+    elif m.suffix.lower() == '.css':
+        return h3(m)
+    return {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'skipped'}
+def j3():
+    k3 = argparse.ArgumentParser(description='Standalone HTML/CSS Bundler Tool')
+    k3.add_argument('paths', nargs='*', default=['.'], help='Files or directories to process (default: current directory)')
+    l3 = k3.parse_args()
+    m3 = []
+    for n3 in l3.paths:
+        p = Path(n3)
+        if p.is_file() and p.suffix.lower() in ('.html', '.css'):
+            m3.append(p)
+        elif p.is_dir():
+            m3.extend(p.rglob('*.html'))
+            m3.extend(p.rglob('*.css'))
+    o3 = {p.resolve(): p for p in m3}
+    m3 = list(o3.values())
+    if not m3:
+        logger.warning('No HTML or CSS files found to process.')
+        return
+    print(f'Processing {len(m3)} files with a pool of {y1} workers...')
+    p3 = 0
+    q3 = 0
+    r3 = time.perf_counter()
+    s3 = Pool(processes=y1)
+    try:
+        t3 = [s3.apply_async(i3, (p,)) for p in m3]
+        for u3 in t3:
+            s = u3.get()
+            v3 = Path(s['path'])
+            try:
+                w3 = v3.relative_to(Path.cwd())
+            except ValueError:
+                w3 = v3
+            p3 += s['local']
+            q3 += s['remote']
+            x3 = s['status']
+            if x3 == 'success':
+                print(f"[SUCCESS] {w3} ({s['time']:.2f}s) - Embedded: {s['local']} local, {s['remote']} remote")
+            elif x3 == 'skipped':
+                pass
+            else:
+                logger.error(f'[ERROR] {w3} - {x3}')
+    finally:
+        s3.close()
+        s3.join()
+    y3 = time.perf_counter() - r3
+    logger.success(f'Build Complete in {y3:.2f}s!')
+    print(f'Total globally embedded resources: {p3} local, {q3} remote.')
+if __name__ == '__main__':
+    j3()
+
+# --- File: isolate_html.py ---
+import base64
+import re
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+from bs4.element import AttributeValueList
+class z3:
+    a4 = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf', '.eot': 'application/vnd.ms-fontobject', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain'}
+    def __init__(self, b4=False):
+        self.verbose = b4
+        self.embedded_count = 0
+        self.warning_count = 0
+    def log(self, c4, d4='INFO'):
+        if self.verbose or d4 == 'ERROR':
+            print(f'[{d4}] {c4}')
+    def b2(self, m):
+        ext = m.suffix.lower()
+        return self.MIME_MAP.get(ext, 'application/octet-stream')
+    def e4(self, m):
+        try:
+            if not m.exists():
+                self.log(f'File not found: {m}', 'ERROR')
+                return None
+            i = m.read_bytes()
+            return base64.b64encode(i).decode('utf-8')
+        except Exception as e:
+            self.log(f'Error encoding file {m}: {e}', 'ERROR')
+            return None
+    def f4(self, g4, h4):
+        i4 = str(g4)
+        j4 = urlparse(i4)
+        k4 = j4.path.lstrip('/')
+        l4 = [h4, Path('/sdcard/_static'), Path.cwd(), h4.parent.parent, h4.parent]
+        for m4 in l4:
+            m4 = m4.resolve()
+            n4 = m4 / i4
+            if n4.exists():
+                self.log(f"Found resource '{i4}' at: {n4}")
+                return n4
+            if i4.startswith('/'):
+                n4 = m4 / k4
+                if n4.exists():
+                    self.log(f"Found resource '{i4}' (stripped) at: {n4}")
+                    return n4
+            n4 = m4 / Path(i4).name
+            if n4.exists():
+                self.log(f"Found resource '{i4}' (filename only) at: {n4}")
+                return n4
+        self.log(f"Resource '{i4}' not found in search locations", 'WARNING')
+        self.warning_count += 1
+        return None
+    def f2(self, g2, o4):
+        if not g2:
+            return g2
+        p4 = 'url\\s*\\(\\s*[\'\\"]?([^\'\\")]+)[\'\\"]?\\s*\\)'
+        q4 = re.findall(p4, g2, re.IGNORECASE)
+        for r4 in q4:
+            if r4.startswith(('http://', 'https://', 'data:')):
+                continue
+            s4 = self.find_local_resource(r4, o4)
+            if s4:
+                t4 = self.encode_local_file_to_base64(s4)
+                if t4:
+                    j = self.get_mime_type(s4)
+                    u4 = re.escape(f'url({r4})')
+                    u4 = u4.replace('\\(', '\\(').replace('\\)', '\\)')
+                    g2 = re.sub(u4, f"url('data:{j};base64,{t4}')", g2, flags=re.IGNORECASE)
+                    self.embedded_count += 1
+                    self.log(f'Embedded font: {s4.name}')
+            else:
+                self.log(f"Font file '{r4}' not found, leaving reference", 'WARNING')
+        return g2
+    def v4(self, w4, h4):
+        src = w4.get('src')
+        if not src or src.startswith(('http://', 'https://', 'data:')):
+            return
+        v2 = self.find_local_resource(src, h4)
+        if v2:
+            x4 = self.encode_local_file_to_base64(v2)
+            if x4:
+                j = self.get_mime_type(v2)
+                w4['src'] = f'data:{j};base64,{x4}'
+                self.embedded_count += 1
+                self.log(f'Embedded image: {v2.name}')
+        else:
+            self.log(f"Image '{src}' not found, removing tag", 'WARNING')
+            w4.decompose()
+    def y4(self, z4, h4):
+        if z4.get('rel') != ['stylesheet']:
+            return
+        j1 = z4.get('href')
+        if not j1 or j1.startswith(('http://', 'https://', 'data:')):
+            return
+        z2 = self.find_local_resource(j1, h4)
+        if z2:
+            try:
+                g2 = z2.read_text(encoding='utf-8')
+                g2 = self.process_css_content(g2, z2.parent)
+                s1 = BeautifulSoup('', 'html.parser').new_tag('style')
+                s1.string = g2
+                z4.replace_with(s1)
+                self.log(f'Embedded CSS: {z2.name}')
+            except Exception as e:
+                self.log(f'Error processing CSS {z2}: {e}', 'ERROR')
+                z4.decompose()
+        else:
+            self.log(f"CSS '{j1}' not found, removing link", 'WARNING')
+            z4.decompose()
+    def a5(self, b5, h4):
+        src = b5.get('src')
+        if not src:
+            return
+        if src.startswith(('http://', 'https://')):
+            self.log(f'Removing external script: {src}')
+            b5.decompose()
+            return
+        c5 = self.find_local_resource(src, h4)
+        if c5:
+            try:
+                d5 = c5.read_text(encoding='utf-8')
+                b5.string = d5
+                b5['src'] = ''
+                self.log(f'Embedded script: {c5.name}')
+            except Exception as e:
+                self.log(f'Error reading script {c5}: {e}', 'ERROR')
+                b5.decompose()
+        else:
+            self.log(f"Script '{src}' not found, removing tag", 'WARNING')
+            b5.decompose()
+    def e5(self, s1, h4):
+        f5 = s1.string
+        if f5:
+            g5 = self.process_css_content(f5, h4)
+            s1.string = g5
+    def h5(self, i5):
+        try:
+            j5 = i5.read_text(encoding='utf-8')
+        except Exception as e:
+            self.log(f'Error reading HTML file {i5}: {e}', 'ERROR')
+            return None
+        c1 = BeautifulSoup(j5, 'html.parser')
+        h4 = i5.parent
+        self.log(f'Processing HTML: {i5.name}')
+        self.log(f'Base directory: {h4}')
+        for w4 in c1.find_all('img'):
+            self.process_image_tag(w4, h4)
+        for z4 in c1.find_all('link'):
+            self.process_link_tag(z4, h4)
+        for b5 in c1.find_all('script'):
+            self.process_script_tag(b5, h4)
+        for s1 in c1.find_all('style'):
+            self.process_inline_styles(s1, h4)
+        self.log(f'Embedded {self.embedded_count} resources')
+        self.log(f'Warnings: {self.warning_count}')
+        return c1.prettify()
+    def k5(self, i5, l5=None):
+        m5 = self.make_html_standalone(i5)
+        if not m5:
+            return False
+        if l5 is None:
+            l5 = i5.parent / f'{i5.stem}_standalone{i5.suffix}'
+        try:
+            l5.write_text(m5, encoding='utf-8')
+            self.log(f'Standalone HTML saved to: {l5}')
+            return True
+        except Exception as e:
+            self.log(f'Error writing to output file {l5}: {e}', 'ERROR')
+            return False
+def j3():
+    import argparse
+    k3 = argparse.ArgumentParser(description='Convert HTML to standalone by embedding all resources', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  python html_standalone.py index.html\n  python html_standalone.py index.html -o standalone.html\n  python html_standalone.py index.html -v\n  python html_standalone.py index.html --no-embed-scripts\n        ')
+    k3.add_argument('input', help='Input HTML file')
+    k3.add_argument('-o', '--output', help='Output file (default: input_standalone.html)')
+    k3.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    k3.add_argument('--no-embed-scripts', action='store_true', help="Don't embed scripts")
+    k3.add_argument('--no-embed-images', action='store_true', help="Don't embed images")
+    k3.add_argument('--no-embed-fonts', action='store_true', help="Don't embed fonts")
+    l3 = k3.parse_args()
+    try:
+        n5 = Path(l3.input)
+        if not n5.exists():
+            print(f'Error: Input file not found: {l3.input}')
+            sys.exit(1)
+        o5 = z3(verbose=l3.verbose)
+        if l3.output:
+            l5 = Path(l3.output)
+        else:
+            l5 = n5.parent / f'{n5.stem}_standalone{n5.suffix}'
+        p5 = o5.save_standalone(n5, l5)
+        sys.exit(0 if p5 else 1)
+    except Exception as e:
+        print(f'Error: {e}')
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(j3())
+
+# --- File: mkst.py ---
+import argparse
+import base64
+import mimetypes
+import re
+import sys
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from re import Match
+from typing import Any
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+from loguru import logger
+logger.remove()
+logger.add(sys.stderr, level='WARNING', format='<red>{level}</red> | <cyan>{message}</cyan>')
+w1 = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.avif', '.bmp', '.tiff'}
+x1 = re.compile('url\\((["\\\']?)([^)"\\\']+)\\1\\)')
+d = 10
+y1 = 8
+q5 = dict[str, Any]
+def z1(url):
+    return urlparse(url).scheme in ('http', 'https') or url.startswith('//')
+def a2(url):
+    ext = Path(urlparse(url).path).suffix.lower()
+    return ext in w1
+def b2(m):
+    w, _ = mimetypes.guess_type(m)
+    if not w:
+        ext = Path(m).suffix.lower()
+        if ext == '.woff2':
+            return 'font/woff2'
+        if ext == '.woff':
+            return 'font/woff'
+        if ext == '.ttf':
+            return 'font/ttf'
+        if ext == '.eot':
+            return 'application/vnd.ms-fontobject'
+        return 'application/octet-stream'
+    return w
+def c2(url):
+    if url.startswith('//'):
+        url = 'https:' + url
+    try:
+        with requests.get(url, timeout=d) as d2:
+            d2.raise_for_status()
+            return d2.content
+    except Exception as e:
+        logger.error(f'Failed to fetch {url}: {e}')
+        return None
+def e2(m):
+    try:
+        return m.read_bytes()
+    except Exception as e:
+        logger.error(f'Failed to read {m}: {e}')
+        return None
+def f2(g2, h2, i2=None):
+    loc, rem = (0, 0)
+    def j2(k2):
+        nonlocal loc, rem
+        l2 = k2.group(1)
+        url = k2.group(2)
+        if url.startswith('data:'):
+            return k2.group(0)
+        if z1(url):
+            if a2(url):
+                return k2.group(0)
+            m2 = urljoin(i2, url) if i2 else url
+            i = c2(m2)
+            if i:
+                w = b2(urlparse(m2).path)
+                b64 = base64.b64encode(i).decode('ascii')
+                rem += 1
+                return f'url({l2}data:{w};base64,{b64}{l2})'
+            return k2.group(0)
+        else:
+            n2 = url.split('?')[0].split('#')[0]
+            o2 = (h2.parent / n2).resolve()
+            if not o2.exists():
+                logger.warning(f'Missing local CSS asset referenced: {o2}')
+                return k2.group(0)
+            i = e2(o2)
+            if i:
+                w = b2(str(o2))
+                b64 = base64.b64encode(i).decode('ascii')
+                loc += 1
+                return f'url({l2}data:{w};base64,{b64}{l2})'
+            return k2.group(0)
+    p2 = x1.sub(j2, g2)
+    return (p2, loc, rem)
+def q2(m):
+    r2 = {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'success'}
+    s2 = time.perf_counter()
+    try:
+        t2 = m.read_text(encoding='utf-8')
+        c1 = BeautifulSoup(t2, 'html.parser')
+        for img in c1.find_all('img'):
+            src = img.get('src')
+            if not src or src.startswith('data:'):
+                continue
+            if z1(src):
+                continue
+            u2 = src.split('?')[0].split('#')[0]
+            v2 = (m.parent / u2).resolve()
+            if v2.exists():
+                if (i := e2(v2)):
+                    b64 = base64.b64encode(i).decode('ascii')
+                    w = b2(str(v2))
+                    img['src'] = f'data:{w};base64,{b64}'
+                    r2['local'] += 1
+            else:
+                logger.warning(f'Missing local image: {v2} in {m}')
+        for i1 in c1.find_all('link', rel='stylesheet'):
+            j1 = i1.get('href')
+            if not j1:
+                continue
+            w2 = ''
+            i2 = None
+            x2 = m
+            if z1(j1):
+                if (raw := c2(j1)):
+                    w2 = raw.decode('utf-8', errors='ignore')
+                    i2 = j1
+                    r2['remote'] += 1
+            else:
+                y2 = j1.split('?')[0].split('#')[0]
+                z2 = (m.parent / y2).resolve()
+                if z2.exists():
+                    w2 = z2.read_text(encoding='utf-8', errors='ignore')
+                    x2 = z2
+                    r2['local'] += 1
+                else:
+                    logger.warning(f'Missing local CSS: {z2} in {m}')
+            if w2:
+                a3, b3, c3 = f2(w2, x2, i2)
+                r2['local'] += b3
+                r2['remote'] += c3
+                s1 = c1.new_tag('style')
+                s1.string = a3
+                i1.replace_with(s1)
+        for e1 in c1.find_all('script'):
+            src = e1.get('src')
+            if not src:
+                continue
+            d3 = ''
+            if z1(src):
+                if (raw := c2(src)):
+                    d3 = raw.decode('utf-8', errors='ignore')
+                    r2['remote'] += 1
+            else:
+                u2 = src.split('?')[0].split('#')[0]
+                e3 = (m.parent / u2).resolve()
+                if e3.exists():
+                    d3 = e3.read_text(encoding='utf-8', errors='ignore')
+                    r2['local'] += 1
+                else:
+                    logger.warning(f'Missing local script: {e3} in {m}')
+            if d3:
+                u1 = c1.new_tag('script')
+                u1.string = d3
+                e1.replace_with(u1)
+        for tag in c1.find_all(style=True):
+            g3, l, r = f2(tag['style'], m)
+            tag['style'] = g3
+            r2['local'] += l
+            r2['remote'] += r
+        for d1 in c1.find_all('style'):
+            if d1.string:
+                g3, l, r = f2(d1.string, m)
+                d1.string = g3
+                r2['local'] += l
+                r2['remote'] += r
+        m.write_text(str(c1), encoding='utf-8')
+    except Exception as e:
+        r2['status'] = f'error: {e}'
+        logger.error(f'Failed to process HTML file {m}: {e}')
+    r2['time'] = time.perf_counter() - s2
+    return r2
+def h3(m):
+    r2 = {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'success'}
+    s2 = time.perf_counter()
+    try:
+        i = m.read_text(encoding='utf-8')
+        a3, l, r = f2(i, m)
+        r2['local'] += l
+        r2['remote'] += r
+        m.write_text(a3, encoding='utf-8')
+    except Exception as e:
+        r2['status'] = f'error: {e}'
+        logger.error(f'Failed to process CSS file {m}: {e}')
+    r2['time'] = time.perf_counter() - s2
+    return r2
+def i3(m):
+    if m.suffix.lower() == '.html':
+        return q2(m)
+    elif m.suffix.lower() == '.css':
+        return h3(m)
+    return {'path': str(m), 'local': 0, 'remote': 0, 'time': 0.0, 'status': 'skipped'}
+def j3():
+    k3 = argparse.ArgumentParser(description='Standalone HTML/CSS Bundler Tool')
+    k3.add_argument('paths', nargs='*', default=['.'], help='Files or directories to process (default: current directory)')
+    l3 = k3.parse_args()
+    m3 = []
+    for n3 in l3.paths:
+        p = Path(n3)
+        if p.is_file() and p.suffix.lower() in ('.html', '.css'):
+            m3.append(p)
+        elif p.is_dir():
+            m3.extend(p.rglob('*.html'))
+            m3.extend(p.rglob('*.css'))
+    m3 = list({p.resolve(): p for p in m3}.values())
+    if not m3:
+        logger.warning('No HTML or CSS files found to process.')
+        return
+    print(f'Processing {len(m3)} files across multiple CPU cores...\n')
+    p3, q3 = (0, 0)
+    r3 = time.perf_counter()
+    with Pool(processes=y1) as s3:
+        t3 = [(s3.apply_async(i3, (p,)), p) for p in m3]
+        for ar, p in t3:
+            s = ar.get()
+            v3 = Path(s['path'])
+            try:
+                w3 = v3.relative_to(Path.cwd())
+            except ValueError:
+                w3 = v3
+            p3 += s['local']
+            q3 += s['remote']
+            x3 = s['status']
+            if x3 == 'success':
+                print(f"[SUCCESS] {w3} ({s['time']:.2f}s) - Embedded: {s['local']} local, {s['remote']} remote")
+            elif x3 == 'skipped':
+                pass
+            else:
+                logger.error(f'[ERROR] {w3} - {x3}')
+    y3 = time.perf_counter() - r3
+    print(f'\nBuild Complete in {y3:.2f}s!')
+    print(f'Total globally embedded resources: {p3} local, {q3} remote.')
+if __name__ == '__main__':
+    j3()
+
+# --- File: mkstand.py ---
+import base64
+import mimetypes
+import multiprocessing as mp
+import re
+import sys
+from collections.abc import Iterable
+from pathlib import Path
+from urllib.parse import unquote, urldefrag, urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+r5 = 8
+s5 = 5 * 1024 * 1024
+t5 = 'Mozilla/5.0 (compatible; StandaloneHTML/2.0)'
+u5 = {'.apng', '.avif', '.bmp', '.gif', '.ico', '.jpeg', '.jpg', '.png', '.svg', '.webp'}
+v5 = {'.html', '.htm'}
+w5 = {'link': ('href',), 'script': ('src',), 'img': ('src',), 'source': ('src',), 'video': ('src', 'poster'), 'audio': ('src',), 'object': ('data',), 'embed': ('src',), 'input': ('src',), 'track': ('src',)}
+x5 = {}
+def y5():
+    z5 = requests.Session()
+    z5.headers.update({'User-Agent': t5})
+    return z5
+def a6(b6):
+    return bool(b6 and b6.startswith(('http://', 'https://')))
+def c6(b6):
+    return bool(b6 and b6.lower().startswith('data:'))
+def n2(b6):
+    b6 = b6.strip()
+    b6, d6 = urldefrag(b6)
+    return b6
+def e6(b6, f6):
+    b6 = n2(b6)
+    if b6.startswith('//'):
+        return 'https:' + b6
+    if b6.startswith(('http://', 'https://', 'data:', '#')):
+        return b6
+    if isinstance(f6, Path):
+        if b6.startswith('/'):
+            return str(Path(b6).resolve())
+        return str((f6 / unquote(b6)).resolve())
+    return urljoin(str(f6), b6)
+def g6(url, h6=None):
+    if h6:
+        w = h6.split(';', 1)[0].strip().lower()
+        if w:
+            return w
+    m = urlparse(url).path
+    w, i6 = mimetypes.guess_type(m)
+    return w or 'application/octet-stream'
+def j6(url, h6=None):
+    if h6:
+        return h6.lower().split(';', 1)[0].startswith('image/')
+    k6 = Path(urlparse(url).path).suffix.lower()
+    return k6 in u5
+def l6(i, w):
+    p = base64.b64encode(i).decode('ascii')
+    return f'data:{w};base64,{p}'
+def m6(z5, url):
+    try:
+        d2 = z5.head(url, timeout=15, allow_redirects=True)
+        n6 = d2.headers.get('Content-Length')
+        h6 = d2.headers.get('Content-Type')
+        o6 = None
+        if n6:
+            try:
+                o6 = int(n6)
+            except ValueError:
+                o6 = None
+        return (o6, h6)
+    except requests.RequestException:
+        return (None, None)
+def p6(url, o6):
+    q6 = o6 / (1024 * 1024)
+    print()
+    print(f'⚠ Remote file is {q6:.2f} MiB:')
+    print(f'  {url}')
+    r6 = input('Download it? [y/N]: ').strip().lower()
+    return r6 in {'y', 'yes'}
+def s6(t6):
+    z5 = y5()
+    u6 = {}
+    for url in sorted(set(t6)):
+        o6, h6 = m6(z5, url)
+        if j6(url, h6):
+            print(f'  ⊘ skipped remote image: {url}')
+            continue
+        if o6 is not None and o6 >= s5 and (not p6(url, o6)):
+            print(f'  ⊘ skipped by user: {url}')
+            continue
+        try:
+            d2 = z5.get(url, timeout=30, allow_redirects=True)
+            d2.raise_for_status()
+            v6 = n2(d2.url)
+            w6 = d2.headers.get('Content-Type')
+            w = g6(v6, w6)
+            x6 = len(d2.content)
+            if x6 >= s5 and o6 is None:
+                if not p6(url, x6):
+                    print(f'  ⊘ skipped by user: {url}')
+                    continue
+            if j6(v6, w6):
+                print(f'  ⊘ skipped remote image: {url}')
+                continue
+            y6 = (d2.content, w)
+            u6[url] = y6
+            u6[v6] = y6
+            print(f'  ↓ downloaded once: {url}')
+        except requests.RequestException as exc:
+            print(f'  ⚠ failed to download {url}: {exc}')
+    return u6
+z6 = re.compile('url\\(\\s*[\\"\']?([^\\"\')]+?)[\\"\']?\\s*\\)', flags=re.IGNORECASE)
+a7 = re.compile('@import\\s+(?:url\\(\\s*)?[\\"\']?([^\\"\')\\s;]+)[\\"\']?\\s*\\)?', flags=re.IGNORECASE)
+def b7(t6, b6, f6):
+    if not b6:
+        return
+    b6 = b6.strip().strip('"\'')
+    if not b6 or c6(b6) or b6.startswith('#'):
+        return
+    c7 = e6(b6, f6)
+    if a6(c7):
+        t6.add(n2(c7))
+def d7(w2, f6, t6):
+    e7 = []
+    for k2 in a7.finditer(w2):
+        b6 = k2.group(1).strip()
+        c7 = e6(b6, f6)
+        if a6(c7):
+            t6.add(n2(c7))
+            e7.append((n2(c7), n2(c7)))
+        elif isinstance(f6, Path):
+            f7 = Path(c7)
+            if f7.is_file():
+                e7.append((str(f7), str(f7)))
+    for k2 in z6.finditer(w2):
+        b7(t6, k2.group(1), f6)
+    return e7
+def g7(i5):
+    t6 = set()
+    h7 = []
+    i7 = set()
+    try:
+        t2 = i5.read_text(encoding='utf-8-sig', errors='replace')
+    except OSError as exc:
+        print(f'⚠ cannot scan {i5}: {exc}')
+        return t6
+    c1 = BeautifulSoup(t2, 'html.parser')
+    for j7, k7 in w5.items():
+        for tag in c1.find_all(j7):
+            for l7 in k7:
+                b6 = tag.get(l7)
+                if not b6:
+                    continue
+                c7 = e6(b6, i5.parent)
+                if j7 == 'link' and 'stylesheet' in {m7.lower() for m7 in (tag.get('rel', []) if isinstance(tag.get('rel', []), list) else [tag.get('rel')]) if m7}:
+                    if a6(c7):
+                        t6.add(n2(c7))
+                        h7.append((n2(c7), n2(c7)))
+                    else:
+                        f7 = Path(c7)
+                        if f7.is_file():
+                            h7.append((str(f7), f7))
+                    continue
+                b7(t6, b6, i5.parent)
+    for tag in c1.find_all(srcset=True):
+        for m7 in tag['srcset'].split(','):
+            n4 = m7.strip().split()
+            if n4:
+                b7(t6, n4[0], i5.parent)
+    for d1 in c1.find_all('style'):
+        h7.extend(d7(d1.get_text(), i5.parent, t6))
+    for tag in c1.find_all(style=True):
+        d7(tag['style'], i5.parent, t6)
+    z5 = y5()
+    while h7:
+        n7, o7 = h7.pop()
+        if n7 in i7:
+            continue
+        i7.add(n7)
+        try:
+            if a6(n7):
+                d2 = z5.get(n7, timeout=30, allow_redirects=True)
+                d2.raise_for_status()
+                w2 = d2.content.decode('utf-8', errors='replace')
+                p7 = n2(d2.url)
+            else:
+                q7 = Path(n7)
+                w2 = q7.read_text(encoding='utf-8', errors='replace')
+                p7 = q7.parent
+            h7.extend(d7(w2, p7, t6))
+        except (OSError, requests.RequestException) as exc:
+            print(f'⚠ cannot scan CSS {n7}: {exc}')
+    return t6
+def r7(b6, h4, s7):
+    if not b6 or c6(b6) or b6.startswith('#'):
+        return (None, None)
+    c7 = e6(b6, h4)
+    if a6(c7):
+        if j6(c7):
+            print(f'  ⊘ skipped remote image: {b6}')
+            return (None, None)
+        y6 = s7.get(c7)
+        if y6 is None:
+            return (None, None)
+        print(f'  ⟳ reused cached asset: {c7}')
+        return y6
+    t7 = Path(c7)
+    if not t7.is_file():
+        print(f'  ⚠ local file not found: {t7}')
+        return (None, None)
+    try:
+        i = t7.read_bytes()
+        w = g6(str(t7))
+        return (i, w)
+    except OSError as exc:
+        print(f'  ⚠ cannot read {t7}: {exc}')
+        return (None, None)
+def u7(w2, h4, s7):
+    def v7(k2):
+        w7 = k2.group(0)
+        b6 = k2.group(1).strip()
+        i, x7 = r7(b6, h4, s7)
+        if i is None:
+            return w7
+        y7 = i.decode('utf-8', errors='replace')
+        z7 = h4
+        if a6(b6):
+            z7 = Path('.')
+        else:
+            z7 = Path(e6(b6, h4)).parent
+        return u7(y7, z7, s7)
+    w2 = a7.sub(v7, w2)
+    def a8(k2):
+        w7 = k2.group(0)
+        b6 = k2.group(1).strip()
+        if b6.startswith(('#', 'data:')):
+            return w7
+        c7 = e6(b6, h4)
+        if a6(c7) and j6(c7):
+            print(f'  ⊘ skipped remote CSS image: {c7}')
+            return w7
+        i, w = r7(b6, h4, s7)
+        if i is None:
+            return w7
+        return f'url("{l6(i, w)}")'
+    return z6.sub(a8, w2)
+def b8(c8, h4, s7):
+    d8 = []
+    for m7 in c8.split(','):
+        m7 = m7.strip()
+        if not m7:
+            continue
+        e8 = m7.split()
+        b6 = e8[0]
+        f8 = ' '.join(e8[1:])
+        c7 = e6(b6, h4)
+        if a6(c7) and j6(c7):
+            print(f'  ⊘ skipped remote srcset image: {c7}')
+            d8.append(m7)
+            continue
+        i, w = r7(b6, h4, s7)
+        if i is None:
+            d8.append(m7)
+            continue
+        g8 = l6(i, w)
+        d8.append(f'{g8} {f8}' if f8 else g8)
+    return ', '.join(d8)
+def h8(tag, l7, h4, s7):
+    b6 = tag.get(l7)
+    if not b6 or c6(b6):
+        return
+    c7 = e6(b6, h4)
+    if a6(c7) and j6(c7):
+        print(f'  ⊘ skipped remote image: {c7}')
+        return
+    i, w = r7(b6, h4, s7)
+    if i is not None:
+        tag[l7] = l6(i, w)
+def i8(j8):
+    i5 = Path(j8).resolve()
+    h4 = i5.parent
+    s7 = x5
+    try:
+        t2 = i5.read_text(encoding='utf-8-sig', errors='replace')
+    except OSError as exc:
+        print(f'ERROR: cannot read {i5}: {exc}')
+        return False
+    print(f'Processing: {i5}')
+    c1 = BeautifulSoup(t2, 'html.parser')
+    for i1 in c1.find_all('link', rel=True):
+        k8 = i1.get('rel', [])
+        k8 = k8 if isinstance(k8, list) else [k8]
+        k8 = {str(m7).lower() for m7 in k8 if m7}
+        if 'stylesheet' not in k8:
+            continue
+        j1 = i1.get('href')
+        i, x7 = r7(j1, h4, s7)
+        if i is None:
+            continue
+        css = i.decode('utf-8', errors='replace')
+        css = u7(css, h4, s7)
+        d1 = c1.new_tag('style')
+        d1.string = css
+        i1.replace_with(d1)
+    for i1 in c1.find_all('link', href=True):
+        k8 = i1.get('rel', [])
+        k8 = k8 if isinstance(k8, list) else [k8]
+        k8 = {str(m7).lower() for m7 in k8 if m7}
+        if 'stylesheet' in k8 or 'manifest' in k8:
+            continue
+        h8(i1, 'href', h4, s7)
+    for e1 in c1.find_all('script', src=True):
+        i, x7 = r7(e1.get('src'), h4, s7)
+        if i is None:
+            continue
+        l8 = i.decode('utf-8', errors='replace')
+        l8 = re.sub('\\n?//#\\s*sourceMappingURL=.*', '', l8)
+        l8 = re.sub('</script', '<\\\\/script', l8, flags=re.IGNORECASE)
+        del e1['src']
+        e1.string = l8
+    for img in c1.find_all('img', src=True):
+        h8(img, 'src', h4, s7)
+    for tag in c1.find_all(srcset=True):
+        tag['srcset'] = b8(tag['srcset'], h4, s7)
+    for j7, k7 in w5.items():
+        if j7 in {'link', 'script', 'img'}:
+            continue
+        for tag in c1.find_all(j7):
+            for l7 in k7:
+                h8(tag, l7, h4, s7)
+    for d1 in c1.find_all('style'):
+        css = d1.get_text()
+        if css:
+            css = re.sub('^\\s*<!--\\s*', '', css)
+            css = re.sub('\\s*-->\\s*$', '', css)
+            d1.string = u7(css, h4, s7)
+    for tag in c1.find_all(style=True):
+        if tag['style']:
+            tag['style'] = u7(tag['style'], h4, s7)
+    try:
+        i5.write_text(str(c1), encoding='utf-8')
+    except OSError as exc:
+        print(f'ERROR: cannot write {i5}: {exc}')
+        return False
+    print(f'✓ Done: {i5}')
+    return True
+def m8(s7):
+    global _WORKER_ASSET_CACHE
+    x5 = s7
+def n8(o8):
+    p8 = [Path(b6).resolve() for b6 in o8] if o8 else [Path.cwd()]
+    q8 = set()
+    for m in p8:
+        if m.is_file():
+            if m.suffix.lower() in v5:
+                q8.add(m)
+        elif m.is_dir():
+            for m7 in m.rglob('*'):
+                if m7.is_file() and m7.suffix.lower() in v5:
+                    q8.add(m7)
+        else:
+            print(f'⚠ input does not exist: {m}')
+    return sorted(q8)
+def j3():
+    r8 = n8(sys.argv[1:])
+    if not r8:
+        print('No HTML files found.')
+        return 1
+    print(f'Found {len(r8)} HTML file(s).')
+    print('Scanning for remote assets...')
+    s8 = set()
+    for i5 in r8:
+        s8.update(g7(i5))
+    print(f'Found {len(s8)} unique remote asset URL(s).')
+    s7 = s6(s8)
+    print(f'Cached {len(s7)} remote asset reference(s).')
+    print(f'Processing with {r5} workers...')
+    with mp.Pool(processes=r5, initializer=m8, initargs=(s7,)) as s3:
+        t8 = [s3.apply_async(i8, (str(i5),)) for i5 in r8]
+        q8 = []
+        for job in t8:
+            try:
+                q8.append(job.get())
+            except Exception as exc:
+                print(f'⚠ worker failed: {exc}')
+                q8.append(False)
+    u8 = sum((bool(v8) for v8 in q8))
+    print()
+    print(f'Processed {u8}/{len(r8)} file(s).')
+    return 0 if u8 == len(r8) else 1
+if __name__ == '__main__':
+    mp.freeze_support()
+    raise SystemExit(j3())
+
+# --- File: pymht.py ---
+import base64
+import os
+import re
+import sys
+from email import policy
+from email.message import EmailMessage
+from email.parser import BytesParser
+from pathlib import Path
+from dh import unique_path
+def w8(x8):
+    x8 = x8.strip().strip('"').strip("'")
+    x8 = x8.replace('\\\\', '/').split('/')[-1]
+    return re.sub('[^A-Za-z0-9._-]+', '_', x8) or 'resource'
+def y8(src):
+    if not src or not src.startswith('data:'):
+        return None
+    m = re.match('data:([^;]+);base64,(.*)$', src, flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    w = m.group(1)
+    b64 = m.group(2)
+    try:
+        raw = base64.b64decode(b64)
+        return (w, raw)
+    except Exception:
+        return None
+def j3():
+    if len(sys.argv) < 2:
+        print('Usage: python mhtml_to_html.py input.mhtml [output.html] [output_files_dir]')
+        sys.exit(1)
+    z8 = Path(sys.argv[1])
+    a9 = sys.argv[2] if len(sys.argv) >= 3 else Path(z8).with_suffix('.html')
+    b9 = sys.argv[3] if len(sys.argv) >= 4 else Path(z8).stem + '_files'
+    os.makedirs(b9, exist_ok=True)
+    with open(z8, 'rb') as f:
+        raw = f.read()
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    c9 = []
+    if msg.is_multipart():
+        def d9(m):
+            for p in m.iter_parts():
+                c9.append(p)
+                if p.is_multipart():
+                    d9(p)
+        d9(msg)
+    else:
+        c9 = [msg]
+    e9 = []
+    f9 = []
+    for p in c9:
+        g9 = p.get_content_type()
+        h9 = (p.get('Content-Disposition') or '').lower()
+        cid = (p.get('Content-ID') or '').strip()
+        if cid.startswith('<') and cid.endswith('>'):
+            cid = cid[1:-1]
+        i9 = p.get_payload(decode=True)
+        if g9 == 'text/html':
+            e9.append((cid, i9))
+        elif i9:
+            f9.append((cid, g9, h9, i9, p))
+    if not e9:
+        for p in c9:
+            if p.get_content_type().startswith('text/'):
+                i9 = p.get_payload(decode=True)
+                if i9:
+                    e9.append((None, i9))
+                    break
+    if not e9:
+        raise RuntimeError('No HTML part found in the MHTML.')
+    _, j9 = e9[0]
+    t2 = j9.decode(errors='replace')
+    k9 = {}
+    def l9(m9):
+        n9 = m9.get_param('name', header='Content-Type') if m9.get('Content-Type') else None
+        if n9:
+            return w8(n9)
+        cd = m9.get('Content-Disposition') or ''
+        m = re.search('filename-\\*?=(?:UTF-8\'\')?[\\"\']?([^\\"\';]+)', cd, flags=re.IGNORECASE)
+        if m:
+            return w8(m.group(1))
+        return None
+    for cid, g9, h9, i9, m9 in f9:
+        if not i9:
+            continue
+        if g9 == 'text/html':
+            continue
+        ext = None
+        m = re.match('^[^/]+/([^;\\s]+)', g9)
+        if m:
+            ext = m.group(1)
+        if ext == 'svg+xml':
+            ext = 'svg'
+        o9 = l9(m9) or cid or 'resource'
+        o9 = w8(o9)
+        if ext:
+            if not os.path.splitext(o9)[1]:
+                l = f'{o9}.{ext}'
+            else:
+                l = o9
+        else:
+            l = o9
+        k1 = os.path.join(b9, l)
+        if os.path.exists(k1):
+            p9, k6 = os.path.splitext(l)
+            i = 1
+            while True:
+                q9 = os.path.join(b9, f'{p9}_{i}{k6}')
+                if not os.path.exists(q9):
+                    k1 = q9
+                    l = os.path.basename(q9)
+                    break
+                i += 1
+        with open(k1, 'wb') as f:
+            f.write(i9)
+        if cid:
+            k9[cid] = l
+    def r9(k2):
+        cid = k2.group(1)
+        if cid in k9:
+            return f'src="{os.path.basename(b9)}/{k9[cid]}"'
+        return k2.group(0)
+    t2 = re.sub('(src|href)=[\\"\']cid:([^\\"\']+)[\\"\']', lambda m: f'{m.group(1)}="{os.path.basename(b9)}/{k9.get(m.group(2), m.group(2))}"' if m.group(2) in k9 else m.group(0), t2, flags=re.IGNORECASE)
+    def s9(k2):
+        t9 = k2.group(1)
+        o = k2.group(2)
+        j4 = y8(o)
+        if not j4:
+            return k2.group(0)
+        w, raw = j4
+        ext = None
+        m = re.match('^[^/]+/([^;\\s]+)', w)
+        if m:
+            ext = m.group(1)
+        if ext == 'svg+xml':
+            ext = 'svg'
+        l = f"data_resource_{abs(hash(o)) % 10 ** 8}.{ext or 'bin'}"
+        k1 = os.path.join(b9, l)
+        with open(k1, 'wb') as f:
+            f.write(raw)
+        return f'{t9}="{os.path.basename(b9)}/{l}"'
+    if a9.exists():
+        a9 = unique_path(a9)
+    t2 = re.sub('(src|href)=[\\"\'](data:[^\\"\']+)[\\"\']', s9, t2, flags=re.IGNORECASE)
+    with open(a9, 'w', encoding='utf-8') as f:
+        f.write(t2)
+    print('Done.')
+    print(f'HTML: {a9}')
+    print(f'Resources: {b9}/ (extracted {len(k9)} CID items)')
+if __name__ == '__main__':
+    raise SystemExit(j3())
+
+# --- File: pymhtml.py ---
+import base64
+import re
+import sys
+from email import policy
+from email.message import EmailMessage
+from email.parser import BytesParser
+from pathlib import Path
+from dh import get_files
+def w8(x8):
+    x8 = x8.strip().strip('"').strip("'")
+    return re.sub('[^A-Za-z0-9._-]+', '_', x8) or 'resource'
+def y8(src):
+    if not src or not src.startswith('data:'):
+        return None
+    m = re.match('data:([^;]+);base64,(.*)$', src, flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    w = m.group(1)
+    b64 = m.group(2)
+    try:
+        raw = base64.b64decode(b64)
+        return (w, raw)
+    except Exception:
+        return None
+def i3(m):
+    m = Path(m)
+    o9 = ''
+    l = ''
+    a9 = m.with_suffix('.html')
+    b9 = Path(m.stem + '_files')
+    b9.mkdir(parents=True, exist_ok=True)
+    with m.open('rb') as f:
+        raw = f.read()
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    c9 = []
+    if msg.is_multipart():
+        def d9(m):
+            for p in m.iter_parts():
+                c9.append(p)
+                if p.is_multipart():
+                    d9(p)
+        d9(msg)
+    else:
+        c9 = [msg]
+    e9 = []
+    f9 = []
+    for p in c9:
+        g9 = p.get_content_type()
+        h9 = (p.get('Content-Disposition') or '').lower()
+        cid = (p.get('Content-ID') or '').strip()
+        if cid.startswith('<') and cid.endswith('>'):
+            cid = cid[1:-1]
+        i9 = p.get_payload(decode=True)
+        if g9 == 'text/html':
+            e9.append((cid, i9))
+        elif i9:
+            f9.append((cid, g9, h9, i9, p))
+    if not e9:
+        for p in c9:
+            if p.get_content_type().startswith('text/'):
+                i9 = p.get_payload(decode=True)
+                if i9:
+                    e9.append((None, i9))
+                    break
+    if not e9:
+        u9 = 'error empty text'
+        raise RuntimeError(u9)
+    _, j9 = e9[0]
+    t2 = j9.decode(errors='replace')
+    k9 = {}
+    def l9(m9):
+        n9 = m9.get_param('name', header='Content-Type') if m9.get('Content-Type') else None
+        if n9:
+            return w8(n9)
+        cd = m9.get('Content-Disposition') or ''
+        m = re.search('filename\\*?=(?:UTF-8\'\')?[\\\\\\"\']?([^\\\\\\"\';]+)', cd, flags=re.IGNORECASE)
+        if m:
+            return w8(m.group(1))
+        return None
+    for cid, g9, h9, i9, m9 in f9:
+        l = ''
+        if not i9:
+            continue
+        if g9 == 'text/html':
+            continue
+        ext = None
+        m = re.match('^[^/]+/([^;\\\\s]+)', g9)
+        if m:
+            ext = m.group(1)
+        if ext == 'svg+xml':
+            o9 = l9(m9) or cid or 'resource'
+        o9 = w8(o9)
+        l = (f'{o9}.{ext}' if not Path(o9).suffix else o9) if ext else o9
+        k1 = b9 / l
+        if k1.exists():
+            v9 = Path(l)
+            p9, k6 = (v9.stem, v9.suffix)
+            i = 1
+            while True:
+                q9 = b9 / f'{p9}_{i}{k6}'
+                if not q9.exists():
+                    k1 = q9
+                    l = q9.name
+                    break
+                i += 1
+        with k1.open('wb') as f:
+            f.write(i9)
+    def r9(k2):
+        cid = k2.group(1)
+        if cid in k9:
+            return f'src="{b9.name}/{k9[cid]}"'
+        return k2.group(0)
+    t2 = re.sub('(src|href)=[\\\\\\"\']cid:([^\\\\\\"\']+)[\\\\\\"\']', lambda m: f'{m.group(1)}="{b9.name}/{k9.get(m.group(2), m.group(2))}"' if m.group(2) in k9 else m.group(0), t2, flags=re.IGNORECASE)
+    def s9(k2):
+        t9 = k2.group(1)
+        o = k2.group(2)
+        j4 = y8(o)
+        if not j4:
+            return k2.group(0)
+        w, raw = j4
+        ext = None
+        m = re.match('^[^/]+/([^;\\\\s]+)', w)
+        if m:
+            ext = m.group(1)
+        if ext == 'svg+xml':
+            l = f"data_resource_{abs(hash(o)) % 10 ** 8}.{ext or 'bin'}"
+        else:
+            l = f'data_resource_{abs(hash(o)) % 10 ** 8}.{bin}'
+        k1 = b9 / l
+        with k1.open('wb') as f:
+            f.write(raw)
+        return f'{t9}="{b9.name}/{l}"'
+    t2 = re.sub('(src|href)=[\\\\\\"\'](data:[^\\\\\\"\']+)[\\\\\\"\']', s9, t2, flags=re.IGNORECASE)
+    with a9.open('w', encoding='utf-8') as f:
+        f.write(t2)
+    print('Done.')
+    print(f'HTML: {a9}')
+    print(f'Resources: {b9}/ (extracted {len(k9)} CID items)')
+if __name__ == '__main__':
+    cwd = Path.cwd()
+    l3 = sys.argv[1:]
+    w9 = []
+    if l3:
+        for arg in l3:
+            p = Path(arg)
+            if p.is_file():
+                w9.append(p)
+            elif p.is_dir():
+                w9.extend(get_files(p))
+    else:
+        w9 = get_files(cwd)
+    for f in w9:
+        i3(f)
+
+# --- File: standalone_css.py ---
+import base64
+import os
+import re
+import sys
+from pathlib import Path
+import requests
+from loguru import logger
+x9 = '/sdcard/_static'
+def y9(url):
+    return os.path.splitext(url)[1].lower()
+def z9(url):
+    return any((url.lower().endswith(ext) for ext in extensions))
+def a10(b10):
+    if not Path(x9).is_dir():
+        return None
+    for c10, _, w9 in os.walk(x9):
+        if b10 in w9:
+            return os.path.join(c10, b10)
+    return None
+def d10(t7):
+    try:
+        i = Path(t7).read_bytes()
+        ext = y9(t7)
+        h6 = ''
+        if ext == '.eot':
+            h6 = 'application/vnd.ms-fontobject'
+        elif ext == '.ttf':
+            h6 = 'application/font-sfnt'
+        elif ext == '.woff':
+            h6 = 'application/font-woff'
+        elif ext == '.woff2':
+            h6 = 'font/woff2'
+        elif ext == '.svg':
+            h6 = 'image/svg+xml'
+        else:
+            return None
+        e10 = base64.b64encode(i).decode('utf-8')
+        return f'data:{h6};charset=utf-8;base64,{e10}'
+    except FileNotFoundError:
+        print(f'Error: Local font file not found at {t7}')
+        return None
+    except Exception as e:
+        print(f'An error occurred reading local font {t7}: {e}')
+        return None
+def f10(url):
+    try:
+        d2 = requests.get(url, timeout=15, stream=True)
+        d2.raise_for_status()
+        h6 = d2.headers.get('content-type', '').split(';')[0]
+        if not h6.lower().startswith('font') and 'svg' not in h6.lower():
+            print(f"Warning: Content-Type '{h6}' for {url} doesn't look like a font. Proceeding anyway.")
+        ext = y9(url)
+        if ext == '.eot':
+            h6 = 'application/vnd.ms-fontobject'
+        elif ext == '.ttf':
+            h6 = 'application/font-sfnt'
+        elif ext == '.woff':
+            h6 = 'application/font-woff'
+        elif ext == '.woff2':
+            h6 = 'font/woff2'
+        elif ext == '.svg':
+            h6 = 'image/svg+xml'
+        else:
+            return None
+        e10 = base64.b64encode(d2.content).decode('utf-8')
+        return f'data:{h6};charset=utf-8;base64,{e10}'
+    except requests.exceptions.RequestException as e:
+        print(f'Error fetching remote font {url}: {e}')
+        return None
+    except Exception as e:
+        print(f'An unexpected error occurred for remote font {url}: {e}')
+        return None
+def g10(url, h10):
+    i10 = url.strip('\'"')
+    b10 = Path(i10).name
+    logger.debug(f'looking for {b10} in {x9}')
+    t7 = a10(b10)
+    if t7:
+        print(f'Found local font: {b10} at {t7}')
+        return d10(t7)
+    j10 = i10
+    if not i10.startswith(('http://', 'https://', '//')):
+        h4 = Path(Path(h10).resolve()).parent
+        j10 = os.path.normpath(Path(h4) / i10)
+        if not j10.startswith(('http://', 'https://', '//')):
+            j10 = f'file:///{j10}'
+    print(f'Attempting to fetch remote font: {j10}')
+    return f10(j10)
+def k10(l10, m10):
+    l10 = Path(l10).resolve()
+    try:
+        i = Path(l10).read_text(encoding='utf-8')
+    except FileNotFoundError:
+        print(f'Error: Input CSS file not found at {l10}')
+        return
+    except Exception as e:
+        print(f'Error reading input CSS file {l10}: {e}')
+        return
+    n10 = re.compile('@import\\s+(?:url\\()?([\\"\\\'])(.*?)\\1\\)?;', re.IGNORECASE)
+    p4 = re.compile('url\\(([\\"\\\']?)([^)\\"\\\'\\s]+?)\\1?\\)', re.IGNORECASE)
+    g5 = i
+    o10 = []
+    for k2 in n10.finditer(i):
+        p10 = k2.group(2)
+        o10.append(p10)
+        g5 = g5.replace(k2.group(0), '', 1)
+    q10 = set()
+    r10 = o10.copy()
+    while r10:
+        s10 = r10.pop(0)
+        t10 = os.path.normpath(s10)
+        if t10 in q10:
+            continue
+        q10.add(t10)
+        print(f'Processing imported CSS: {s10}')
+        try:
+            if not s10.startswith(('http://', 'https://', '//')):
+                h4 = Path(Path(l10).resolve()).parent
+                u10 = os.path.normpath(Path(h4) / s10)
+                if not u10.startswith(('http://', 'https://', '//')):
+                    if Path(u10).exists():
+                        y7 = Path(u10).read_text(encoding='utf-8')
+                        v10 = u10
+                    else:
+                        print(f'Warning: Local import file not found: {u10}. Skipping.')
+                        continue
+                else:
+                    d2 = requests.get(s10, timeout=15)
+                    d2.raise_for_status()
+                    y7 = d2.text
+                    v10 = s10
+            else:
+                d2 = requests.get(s10, timeout=15)
+                d2.raise_for_status()
+                y7 = d2.text
+                v10 = s10
+            for w10 in n10.finditer(y7):
+                x10 = w10.group(2)
+                if os.path.normpath(x10) not in q10:
+                    r10.append(x10)
+                y7 = y7.replace(w10.group(0), '', 1)
+            g5 += f'\n/* Imported from: {v10} */\n{y7}\n'
+        except FileNotFoundError:
+            print(f'Could not import local file {s10} (resolved to {u10}): File not found.')
+        except requests.exceptions.RequestException as e:
+            print(f'Could not import remote CSS from {s10}: {e}')
+        except Exception as e:
+            print(f'An unexpected error occurred while processing import {s10}: {e}')
+    def y10(k2):
+        z10 = k2.group(2)
+        a11 = k2.group(1)
+        b11 = g10(z10, l10)
+        if b11:
+            if a11:
+                return f'url({a11}{b11}{a11})'
+            return f'url("{b11}")'
+        print(f'Failed to process font URL: {z10}. Keeping original.')
+        return k2.group(0)
+    g5 = p4.sub(y10, g5)
+    try:
+        c11 = Path(m10).parent
+        if c11:
+            Path(c11).mkdir(exist_ok=True, parents=True)
+        Path(m10).write_text(g5, encoding='utf-8')
+        print(f'Standalone CSS file created at: {m10}')
+    except Exception as e:
+        print(f'Error writing output CSS file {m10}: {e}')
+if __name__ == '__main__':
+    d11 = Path(sys.argv[1])
+    e11 = d11.with_stem(d11.stem + '_standalone')
+    k10(d11, e11)
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

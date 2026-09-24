@@ -1,0 +1,405 @@
+# --- File: tofa.py ---
+import sys
+import time
+from pathlib import Path
+from deep_translator import GoogleTranslator
+from tqdm import tqdm
+a = 5000
+def b(c):
+    d = Path(c)
+    e = d.stem
+    f = d.suffix
+    return d.parent / f'{e}_fa{f}'
+def g(c):
+    h = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+    for i in h:
+        try:
+            return Path(c).read_text(encoding=i)
+        except (OSError, UnicodeDecodeError):
+            continue
+    msg = f'Could not read file {c} with any encoding'
+    raise OSError(msg)
+def j(k, l):
+    Path(k).write_text(l, encoding='utf-8')
+def m(n, o):
+    if len(n) <= o:
+        return len(n)
+    p = n[:o]
+    for q in ['\n', '\r\n', '.  ', '!  ', '?  ', '; ', ', ', ' ']:
+        r = p.rfind(q)
+        if r > 0:
+            return r + len(q)
+    s = p.rfind(' ')
+    if s > 0:
+        return s + 1
+    return o
+def t(n, o):
+    u = []
+    pos = 0
+    while pos < len(n):
+        v = n[pos:]
+        if len(v) <= o:
+            u.append(v)
+            break
+        w = m(v, o)
+        u.append(v[:w])
+        pos += w
+    return u
+def x(n, y='auto'):
+    for z in range(3):
+        try:
+            a1 = GoogleTranslator(source=y, target='fa')
+            b1 = a1.translate(n)
+            return (b1, y)
+        except Exception as e:
+            print(f'[WARN] Translation failed (attempt {z + 1}/3): {e}')
+            time.sleep(1 + z)
+    msg = 'Failed to translate chunk after 3 attempts'
+    raise Exception(msg)
+def c1(c, y='auto'):
+    print(f'[INFO] Reading file: {c}')
+    l = g(c)
+    d1 = len(l)
+    print(f'[INFO] File size: {d1} characters')
+    if d1 <= a:
+        print(f'[INFO] Content fits in single request ({d1} chars)')
+        print('[INFO] Translating...')
+        b1, e1 = x(l, y)
+        print(f'[INFO] Detected language: {e1}')
+        return b1
+    u = t(l, a)
+    f1 = len(u)
+    print(f'[INFO] Content split into {f1} chunks')
+    print(f'[INFO] Chunk sizes: {[len(c) for c in u]}')
+    g1 = []
+    e1 = None
+    h1 = tqdm(total=f1, desc='Translating', unit='chunk')
+    try:
+        for i, i1 in enumerate(u):
+            print(f'\n[INFO] Translating chunk {i + 1}/{f1} ({len(i1)} chars)...')
+            try:
+                j1, e1 = x(i1, y)
+                g1.append(j1)
+                h1.update(1)
+            except Exception as e:
+                print(f'[ERROR] Failed to translate chunk {i + 1}: {e}')
+                h1.update(1)
+                g1.append(i1)
+    finally:
+        h1.close()
+    k1 = ''.join(g1)
+    print(f'\n[INFO] Detected language: {e1}')
+    return k1
+def l1():
+    if len(sys.argv) < 2:
+        print(f'Usage: {sys.argv[0]} <input_file> [source_language]')
+        print('\nExamples:')
+        print(f'  {sys.argv[0]} document.txt')
+        print(f'  {sys.argv[0]} file.txt de')
+        print(f'  {sys.argv[0]}document.txt en')
+        print('\nSupported languages:  auto, en ,fa , fr, de, es, it, pt, ru, zh, ja, ko, ar, etc.')
+        sys.exit(1)
+    c = sys.argv[1]
+    y = sys.argv[2] if len(sys.argv) > 2 else 'auto'
+    if not Path(c).exists():
+        print(f'[ERROR] File not found: {c}')
+        sys.exit(1)
+    k = b(c)
+    if Path(k).exists():
+        print(f'[INFO] Output file already exists: {k}')
+        print(f'[INFO] Skipping translation (delete {k} to re-translate)')
+        sys.exit(0)
+    print(f'[INFO] Input:   {c}')
+    print(f'[INFO] Output: {k}')
+    print(f'[INFO] Source language: {y}')
+    print()
+    try:
+        m1 = c1(c, y)
+        print(f'\n[INFO] Saving result to: {k}')
+        j(k, m1)
+        print('\n[SUCCESS] Translation complete!')
+        print(f'[INFO] Output file: {k}')
+        print(f'[INFO] Output size: {len(m1)} characters')
+    except Exception as e:
+        print(f'\n[ERROR] Translation failed: {e}')
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: transfa.py ---
+import logging
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+n1 = 4
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+o1 = logging.getLogger(__name__)
+def p1(q1):
+    if not (r1 := q1.strip()):
+        return None
+    try:
+        if not any(('\u0600' <= s1 <= 'ۿ' for s1 in r1)):
+            return None
+        a1 = GoogleTranslator(source='fa', target='en')
+        k1 = a1.translate(r1)
+        print(f'{r1} == {k1}')
+        return (r1, k1) if k1 else None
+    except Exception as e:
+        o1.debug("Translation error for '%s': %s", r1[:20], e)
+        return None
+def c1(t1):
+    d = Path(t1)
+    if not d.exists():
+        o1.error('File not found: %s', t1)
+        return
+    try:
+        u1 = d.read_text(encoding='utf-8').splitlines()
+    except Exception as e:
+        o1.error('Error reading file: %s', e)
+        return
+    v1 = d.parent / f'{d.stem}_en{d.suffix}'
+    print('Translating %d lines from %s...', len(u1), d.name)
+    w1 = []
+    with ProcessPoolExecutor(max_workers=n1) as x1:
+        y1 = {x1.submit(p1, q1): q1 for q1 in u1}
+        for z1 in as_completed(y1):
+            if (res := z1.result()):
+                n, b1 = res
+                print('%s -> %s', n, b1)
+                w1.append(res)
+    try:
+        with v1.open('w', encoding='utf-8') as f:
+            for n, b1 in w1:
+                f.write(f'{n} = {b1}\n')
+        print('✓ Translated output saved to %s', v1)
+    except Exception as e:
+        o1.error('Error writing output file: %s', e)
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Usage: python transfa.py <path>')
+        sys.exit(1)
+    c1(sys.argv[1])
+
+# --- File: transfa2.py ---
+import re
+import sys
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+a2 = 4500
+n1 = 8
+b2 = 1.5
+c2 = 2.0
+d2 = frozenset({'.txt', '.md', '.py', '.json', '.csv'})
+e2 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+f2 = re.compile('[\u0600-ۿݐ-ݿࢠ-ࣿ]')
+g2 = re.compile('[\\s\\n\\.\\!\\?\\;]+')
+def h2(n, i2=4900):
+    if len(n) <= i2:
+        return [n]
+    u = []
+    pos = 0
+    while pos < len(n):
+        end = min(pos + i2, len(n))
+        if end == len(n):
+            u.append(n[pos:])
+            break
+        j2 = None
+        for k2 in g2.finditer(n, pos, end):
+            j2 = k2
+        if j2 is not None and j2.end() > pos:
+            l2 = j2.end()
+        else:
+            l2 = end
+        u.append(n[pos:l2])
+        pos = l2
+    return u
+def x(i1):
+    if not f2.search(i1):
+        return i1
+    try:
+        a1 = GoogleTranslator(source='fa', target='en')
+        k1 = a1.translate(i1)
+        if k1:
+            print(f"Chunk translated: {k1[:30].replace(chr(10), ' ')}...")
+            time.sleep(b2)
+            return k1
+        return i1
+    except Exception as exc:
+        o1.error(f'Chunk translation error: {exc}')
+        return i1
+def c1(d):
+    try:
+        l = d.read_text(encoding='utf-8')
+    except Exception as exc:
+        o1.warning(f'Skipping unreadable file {d}: {exc}')
+        return
+    if not f2.search(l):
+        return
+    print(f'Translating: {d.name}')
+    u = h2(l)
+    g1 = []
+    with Pool(processes=n1) as m2:
+        n2 = [m2.apply_async(x, (i1,)) for i1 in u]
+        for o2 in n2:
+            g1.append(o2.get())
+    p2 = ''.join(g1)
+    try:
+        d.write_text(p2, encoding='utf-8')
+        print(f'✓ Updated: {d.name}')
+    except Exception as exc:
+        o1.error(f'Error writing to {d}: {exc}')
+    time.sleep(c2)
+def q2(d):
+    r2 = []
+    for p in d.rglob('*'):
+        if any((s2.startswith('.') or s2 in e2 for s2 in p.parts)):
+            continue
+        if p.is_file() and p.suffix.lower() in d2:
+            r2.append(p)
+    return sorted(r2)
+def l1():
+    t2 = sys.argv[1] if len(sys.argv) > 1 else '.'
+    u2 = Path(t2)
+    if not u2.exists():
+        o1.error(f'Path does not exist: {t2}')
+        sys.exit(1)
+    r2 = q2(u2)
+    if not r2:
+        print('No files found to process.')
+        return
+    print(f'Processing {len(r2)} files...')
+    for f in r2:
+        c1(f)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: transfamp.py ---
+import json
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+n1 = 8
+v2 = Path('./translations')
+w2 = tuple[Path, dict[str, str]]
+def c1(x2):
+    try:
+        l = x2.read_text(encoding='utf-8').strip()
+        if not l:
+            o1.warning(f'⚠️  Empty file: {x2.name}')
+            return (x2, {})
+        a1 = GoogleTranslator(source='fa', target='en')
+        p2 = a1.translate(l)
+        if p2 is None:
+            p2 = ''
+        y2 = [q1.strip() for q1 in l.split('\n') if q1.strip()]
+        z2 = [q1.strip() for q1 in p2.split('\n') if q1.strip()]
+        a3 = {}
+        if len(y2) != len(z2):
+            for i, q1 in enumerate(y2):
+                if q1:
+                    try:
+                        b3 = GoogleTranslator(source='fa', target='en').translate(q1)
+                        a3[q1] = b3 or ''
+                    except Exception as exc:
+                        a3[q1] = f'TRANSLATION_ERROR: {exc!s}'
+                        o1.warning(f'  ⚠️  Error translating line {i + 1} in {x2.name}: {exc}')
+        else:
+            a3 = dict(zip(y2, z2, strict=False))
+        print(f'✅ Translated: {x2.name} ({len(a3)} words)')
+        return (x2, a3)
+    except Exception as exc:
+        o1.error(f'❌ Error processing {x2.name}: {exc}')
+        return (x2, {})
+def c3(d3, a3, e3=None):
+    f3 = e3 if e3 is not None else d3.parent
+    f3.mkdir(parents=True, exist_ok=True)
+    g3 = d3.stem + '_translations.json'
+    h3 = f3 / g3
+    h3.write_text(json.dumps(a3, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(f'💾 Saved: {h3.name}')
+    return h3
+def l1():
+    i3 = Path('.')
+    j3 = list(i3.glob('*.txt'))
+    if not j3:
+        o1.error('❌ No .txt files found in the current directory')
+        print('   If your files have a different extension, modify the glob pattern')
+        return
+    print(f'📚 Found {len(j3)} file(s) to translate')
+    print(f'🚀 Starting translation with {n1} parallel workers')
+    print('-' * 40)
+    k3 = time.time()
+    l3 = 0
+    m3 = 0
+    with Pool(processes=n1) as m2:
+        n2 = [m2.apply_async(c1, (x2,)) for x2 in j3]
+        for x2, o2 in zip(j3, n2):
+            try:
+                d3, a3 = o2.get()
+                if a3:
+                    c3(d3, a3, v2)
+                    l3 += 1
+                else:
+                    m3 += 1
+            except Exception as exc:
+                o1.error(f'❌ Failed to process {x2.name}: {exc}')
+                m3 += 1
+    n3 = time.time() - k3
+    print('=' * 40)
+    print('✨ Translation complete!')
+    print(f'   ✅ Successful: {l3} files')
+    if m3 > 0:
+        o1.warning(f'   ❌ Failed: {m3} files')
+    print(f'   ⏱️  Time elapsed: {n3:.2f} seconds')
+    print(f'   📁 Output directory: {v2.absolute()}')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

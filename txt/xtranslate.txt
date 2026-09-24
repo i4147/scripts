@@ -1,0 +1,1399 @@
+# --- File: autotrans.py ---
+import re
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from dh import is_binary
+from loguru import logger
+a = '.'
+b = 32768
+c = 8
+d = re.compile('[^\\x00-\\x7F]')
+try:
+    from fastwalk import walk_files as _walk_files
+    e = True
+except ImportError:
+    f = None
+    e = False
+def g(h, i):
+    return [h[i:i + i] for i in range(0, len(h), i)]
+def j(k):
+    if not k.strip():
+        return k
+    try:
+        l = GoogleTranslator(source='auto', target='en')
+        m = l.translate(k)
+        return m if m else k
+    except Exception as exc:
+        g1.error(f'Chunk translation failed: {exc}')
+        return k
+def n(h):
+    return bool(d.search(h))
+def o(p):
+    print(f'Processing file: {p}')
+    try:
+        q = p.read_text(encoding='utf-8', errors='ignore')
+    except Exception as exc:
+        g1.error(f'Cannot read file {p}: {exc}')
+        return
+    if not n(q):
+        print(f'File is already English: {p.name}')
+        return
+    print(f'Non-English content detected in: {p.name}')
+    r = g(q, b)
+    print(f'Total chunks: {len(r)}. Translating...')
+    s = [j(k) for k in r]
+    t = ''.join(s)
+    u = p.with_stem(f'{p.stem}_eng')
+    try:
+        u.write_text(t, encoding='utf-8')
+        print(f'✓ Translated → {u.name}')
+    except Exception as exc:
+        g1.error(f'Failed to write output file {u}: {exc}')
+def v(w):
+    x = []
+    if e and f is not None:
+        y = f
+        for pth in y(str(w)):
+            p = Path(pth)
+            if p.is_file() and (not is_binary(p)):
+                x.append(p)
+    else:
+        for p in w.rglob('*'):
+            if p.is_file() and (not any((z.startswith('.') for z in p.parts))) and (not is_binary(p)):
+                x.append(p)
+    return x
+def a1(w):
+    print(f'Scanning directory: {w}')
+    b1 = Path(w)
+    x = v(b1)
+    print(f'Total text files found: {len(x)}')
+    if not x:
+        return
+    print('Starting parallel file translation...\n')
+    with Pool(processes=c) as c1:
+        d1 = [c1.apply_async(o, (f,)) for f in x]
+        for f, e1 in zip(x, d1):
+            try:
+                e1.get()
+            except Exception as exc:
+                g1.error(f'Unexpected error processing {f}: {exc}')
+def f1():
+    a1(a)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: dtransline.py ---
+import argparse
+import logging
+import multiprocessing as mp
+import time
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+def i1(h, j1=0.6):
+    k1 = h.strip()
+    if not k1:
+        return True
+    l1 = [c for c in k1 if c.isalpha()]
+    if not l1:
+        return True
+    m1 = sum((1 for c in l1 if ord(c) < 128))
+    return m1 / len(l1) > j1
+def n1(h, l, o1=3):
+    if not h.strip() or i1(h):
+        return h
+    for p1 in range(o1):
+        try:
+            m = l.translate(h)
+            if m:
+                return m
+        except Exception as e:
+            if p1 < o1 - 1:
+                time.sleep(1)
+            else:
+                g1.error('  Translation failed after %d attempts: %s', o1, e)
+    return h
+def q1(p):
+    print('Processing: %s', p)
+    try:
+        q = p.read_text(encoding='utf-8', errors='ignore')
+        r1 = q.splitlines(keepends=True)
+        l = GoogleTranslator(source='auto', target='en')
+        s1 = 0
+        t1 = []
+        for u1 in r1:
+            if u1.strip() and (not i1(u1)):
+                v1 = u1[:len(u1) - len(u1.lstrip())]
+                w1 = u1[len(u1.rstrip()):]
+                x1 = n1(u1.strip(), l)
+                t1.append(f'{v1}{x1}{w1}')
+                s1 += 1
+                if s1 % 10 == 0:
+                    print('  Progress: %d lines translated', s1)
+            else:
+                t1.append(u1)
+        if s1 == 0:
+            print('  No non-English lines found, skipping.')
+            return
+        p.write_text(''.join(t1), encoding='utf-8', errors='ignore')
+        print('  ✓ Completed: %d lines translated', s1)
+    except Exception as e:
+        g1.error('  ✗ Error processing %s: %s', p, e)
+def y1(p):
+    q1(p)
+def f1():
+    z1 = argparse.ArgumentParser(description='Translate non-English lines in-place.')
+    z1.add_argument('files', nargs='+', help='Files or directories to process')
+    z1.add_argument('--extensions', nargs='+', default=['.txt', '.md', '.py', '.js', '.html', '.css', '.json', '.xml', '.csv'], help='Extensions to process')
+    z1.add_argument('--workers', type=int, default=mp.cpu_count(), help=f'Number of workers (default: {mp.cpu_count()})')
+    z1.add_argument('--exclude', nargs='+', default=[], help='Paths to exclude')
+    a2 = z1.parse_args()
+    b2 = {Path(p).resolve() for p in a2.exclude}
+    c2 = []
+    for d2 in a2.files:
+        p = Path(d2)
+        if p.is_file():
+            if p.resolve() not in b2:
+                c2.append(p)
+        elif p.is_dir():
+            for ext in a2.extensions:
+                for fp in p.rglob(f'*{ext}'):
+                    if fp.is_file() and fp.resolve() not in b2 and (not any((z.startswith('.') for z in fp.parts))):
+                        c2.append(fp)
+    if not c2:
+        print('No files to process.')
+        return
+    print('Found %d files. Using %d workers...', len(c2), a2.workers)
+    if a2.workers == 1:
+        for fp in c2:
+            y1(fp)
+    else:
+        with mp.Pool(processes=a2.workers) as c1:
+            c1.map(y1, c2)
+    print('\n✓ All translations completed!')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: gtrans.py ---
+import argparse
+import logging
+import re
+import sys
+import time
+from pathlib import Path
+from typing import Final
+try:
+    from googletrans import Translator
+    e2 = True
+except ImportError:
+    e2 = False
+try:
+    from deep_translator import GoogleTranslator
+    f2 = True
+except ImportError:
+    f2 = False
+if not (e2 or f2):
+    print('Please install either googletrans (4.0.0rc1) or deep-translator.', file=sys.stderr)
+    sys.exit(1)
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+g2 = 3
+h2 = 0.5
+i2 = re.compile('[\\u0B80-\\u0BFF]+')
+j2 = re.compile('[\\u4E00-\\u9FFF\\u3040-\\u309F\\u30A0-\\u30FF]+')
+k2 = re.compile('^[A-Za-z0-9\\s\\.,;:!?\\\'\\"()\\-—]+$')
+class l2:
+    def __init__(self, m2='fa'):
+        self.target_lang = m2
+        self.google_translator = Translator() if e2 else None
+        self.deep_translator = GoogleTranslator(source='en', target=m2) if f2 else None
+    def n2(self, h):
+        if not h.strip():
+            return h
+        for p1 in range(g2):
+            try:
+                if e2:
+                    o2 = self.google_translator.detect(h)
+                    m = self.google_translator.translate(h, dest=self.target_lang)
+                    if m:
+                        return m.text
+            except Exception as e:
+                g1.warning('Attempt %d failed: %s', p1 + 1, e)
+                if p1 < g2 - 1:
+                    time.sleep(h2 * (p1 + 1))
+        return f'[Translation failed: {h[:50]}...]'
+def p2(u1):
+    k1 = u1.strip()
+    if not k1:
+        return 'empty'
+    if k1 == '%':
+        return 'marker'
+    if i2.search(k1):
+        return 'tamil'
+    if j2.search(k1):
+        return 'chinese'
+    if k2.match(k1):
+        return 'english'
+    return 'other'
+def q1(q2, r2=None):
+    try:
+        q = q2.read_text(encoding='utf-8')
+        r1 = q.splitlines()
+    except Exception as e:
+        g1.error('Error reading file %s: %s', q2, e)
+        return
+    l = l2()
+    s2 = []
+    for i, u1 in enumerate(r1):
+        t2 = p2(u1)
+        print('Translating line %d (%s)...', i + 1, t2)
+        x1 = l.translate(u1)
+        s2.append(u1)
+        s2.append(f'→ {x1}')
+        s2.append('')
+    u2 = '\n'.join(s2)
+    if r2:
+        try:
+            r2.write_text(u2, encoding='utf-8')
+            print('Output written to: %s', r2)
+        except Exception as e:
+            g1.error('Error writing output file: %s', e)
+    else:
+        print(u2)
+def f1():
+    z1 = argparse.ArgumentParser(description='Translate text to persian.')
+    z1.add_argument('input_file', type=Path, help='Input file path')
+    z1.add_argument('-o', '--output', type=Path, help='Output file path')
+    a2 = z1.parse_args()
+    if not a2.input_file.exists():
+        g1.error('Input file does not exist: %s', a2.input_file)
+        sys.exit(1)
+    q1(a2.input_file, a2.output)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: ptrans.py ---
+import argparse
+import logging
+import multiprocessing as mp
+import re
+import sys
+from pathlib import Path
+from typing import Final
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+try:
+    from googletrans import Translator
+    e2 = True
+except ImportError:
+    e2 = False
+try:
+    from deep_translator import GoogleTranslator
+    f2 = True
+except ImportError:
+    f2 = False
+if not (e2 or f2):
+    g1.error('Please install either googletrans (4.0.0rc1) or deep-translator.')
+    sys.exit(1)
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+j2 = re.compile('[\\u4e00-\\u9fff\\u3400-\\u4dbf\\u20000-\\u2a6df\\u2a700-\\u2b73f\\u2b740-\\u2b81f\\u2b820-\\u2ceaf\\uf900-\\ufaff]')
+def v2(h, j1=0.3):
+    w2 = ''.join(h.split())
+    if not w2:
+        return False
+    x2 = len(j2.findall(w2))
+    return x2 / len(w2) >= j1
+def y2(h):
+    if not h.strip():
+        return False
+    return v2(h) or not h.isascii()
+class z2:
+    def __init__(self):
+        if f2:
+            self.translator = GoogleTranslator(source='auto', target='en')
+            self.mode = 'deep'
+        else:
+            self.translator = Translator()
+            self.mode = 'google'
+    def n2(self, h):
+        if not h.strip():
+            return h
+        try:
+            if self.mode == 'deep':
+                return self.translator.translate(h)
+            else:
+                return self.translator.translate(h, dest='en').text
+        except Exception as e:
+            g1.warning('Translation error: %s', e)
+            return h
+def q1(p, a3=10):
+    print('Processing: %s', p)
+    try:
+        b3 = p.read_text(encoding='utf-8', errors='ignore')
+        r1 = b3.splitlines(keepends=True)
+        c3 = [i for i, u1 in enumerate(r1) if y2(u1)]
+        if not c3:
+            print('  No non-English lines found, skipping.')
+            return
+        l = z2()
+        s1 = 0
+        for i, idx in enumerate(c3):
+            u1 = r1[idx]
+            v1 = u1[:len(u1) - len(u1.lstrip())]
+            w1 = u1[len(u1.rstrip()):]
+            d3 = u1.strip()
+            x1 = l.translate(d3)
+            r1[idx] = f'{v1}{x1}{w1}'
+            s1 += 1
+            if (i + 1) % a3 == 0:
+                print('  Progress: %d/%d lines translated', i + 1, len(c3))
+        p.write_text(''.join(r1), encoding='utf-8', errors='ignore')
+        print('  ✓ Completed: %d lines translated', s1)
+    except Exception as e:
+        g1.error('  ✗ Error processing %s: %s', p, e)
+def y1(a2):
+    q1(*a2)
+def f1():
+    z1 = argparse.ArgumentParser(description='Translate non-English lines in-place.')
+    z1.add_argument('files', nargs='+', help='Files or directories to process')
+    z1.add_argument('--extensions', nargs='+', default=['.txt', '.md', '.py', '.js', '.html', '.css', '.json', '.xml', '.csv'], help='File extensions to process')
+    z1.add_argument('--workers', type=int, default=mp.cpu_count(), help=f'Number of parallel workers (default: {mp.cpu_count()})')
+    z1.add_argument('--batch-size', type=int, default=10, help='Batch size for progress logging')
+    z1.add_argument('--exclude', nargs='+', default=[], help='Paths to exclude')
+    a2 = z1.parse_args()
+    b2 = {Path(p).resolve() for p in a2.exclude}
+    c2 = []
+    for d2 in a2.files:
+        p = Path(d2)
+        if p.is_file():
+            if p.resolve() not in b2:
+                c2.append(p)
+        elif p.is_dir():
+            for ext in a2.extensions:
+                for p in p.rglob(f'*{ext}'):
+                    if p.is_file() and p.resolve() not in b2 and (not any((z.startswith('.') for z in p.parts))):
+                        c2.append(p)
+    if not c2:
+        print('No files to process.')
+        return
+    print('Found %d files. Using %d workers...', len(c2), a2.workers)
+    e3 = [(fp, a2.batch_size) for fp in c2]
+    if a2.workers == 1:
+        for t in e3:
+            y1(t)
+    else:
+        with mp.Pool(processes=a2.workers) as c1:
+            c1.map(y1, e3)
+    print('\n✓ All translations completed!')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: ptranslator.py ---
+import argparse
+import ast
+import logging
+import multiprocessing
+import os
+import time
+from collections.abc import Generator
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+f3 = 5000
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+def g3(p):
+    try:
+        with p.open('rb') as f:
+            k = f.read(512)
+            if not k:
+                return False
+            return b'\x00' not in k
+    except OSError:
+        return False
+def h3(h, i3=f3):
+    r1 = h.splitlines(keepends=True)
+    j3 = []
+    k3 = 0
+    for u1 in r1:
+        l3 = len(u1)
+        if k3 + l3 > i3 and j3:
+            yield ''.join(j3)
+            j3 = [u1]
+            k3 = l3
+        else:
+            j3.append(u1)
+            k3 += l3
+    if j3:
+        yield ''.join(j3)
+def m3(n3):
+    p, m2, o3, p3 = n3
+    print('[%d] Processing: %s', os.getpid(), p)
+    try:
+        q = p.read_text(encoding='utf-8', errors='ignore')
+    except Exception as e:
+        g1.error('  ✗ Cannot read: %s (%s)', p, e)
+        return
+    if not q.strip():
+        print('  ⊘ Empty file, skipping: %s', p)
+        return
+    l = GoogleTranslator(source='auto', target=m2)
+    s = []
+    r = list(h3(q))
+    for i, k in enumerate(r, 1):
+        try:
+            x1 = l.translate(k)
+            if x1:
+                q3 = x1[:80].replace('\n', ' ')
+                print('    [%d/%d] %s...', i, len(r), q3)
+                s.append(x1)
+            else:
+                s.append(k)
+        except Exception as e:
+            g1.error('  ✗ Translation error in chunk %d/%d: %s', i, len(r), e)
+            return
+        if i < len(r):
+            time.sleep(o3)
+    t = ''.join(s)
+    if p.suffix.lower() == '.py':
+        try:
+            ast.parse(t)
+            print('  ✓ Python syntax valid')
+        except SyntaxError as e:
+            g1.error('  ✗ Syntax error in translated Python, NOT writing: %s', e)
+            return
+    if p3:
+        try:
+            r3 = p.relative_to(Path.cwd())
+        except ValueError:
+            r3 = p.name
+        s3 = (p3 / r3).with_suffix(f'{p.suffix}.{m2}')
+    else:
+        s3 = p.with_suffix(f'{p.suffix}.{m2}')
+    try:
+        s3.parent.mkdir(parents=True, exist_ok=True)
+        s3.write_text(t, encoding='utf-8')
+        print('  → Written: %s\n', s3)
+    except Exception as e:
+        g1.error('  ✗ Cannot write output: %s (%s)\n', s3, e)
+def t3(u3):
+    x = set()
+    for p in u3:
+        p = Path(p).resolve()
+        if p.is_file():
+            if g3(p):
+                x.add(p)
+        elif p.is_dir():
+            for d2 in p.rglob('*'):
+                if d2.is_file() and (not any((z in h1 for z in d2.parts))) and g3(d2):
+                    x.add(d2)
+    return sorted(x)
+def f1():
+    z1 = argparse.ArgumentParser(description='Recursive text file translator.')
+    z1.add_argument('paths', nargs='*', default=['.'], help='Files/directories to process')
+    z1.add_argument('--target-lang', default='en', help='Target language (default: en)')
+    z1.add_argument('--delay', type=float, default=0.5, help='Delay between chunks (default: 0.5)')
+    z1.add_argument('--workers', type=int, help='Parallel workers (default: CPU count)')
+    z1.add_argument('--output-dir', type=Path, help='Target directory for translations')
+    a2 = z1.parse_args()
+    v3 = a2.workers or multiprocessing.cpu_count()
+    x = t3(a2.paths)
+    if not x:
+        print('No text files found to process.')
+        return
+    print('Found %d text files. Starting %d workers...\n', len(x), v3)
+    e3 = [(f, a2.target_lang, a2.delay, a2.output_dir) for f in x]
+    with multiprocessing.Pool(processes=v3) as c1:
+        c1.map(m3, e3)
+    print('\n✓ All files processed.')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: trans_file_linebyline.py ---
+import logging
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+from deep_translator import GoogleTranslator
+from langdetect import DetectorFactory, detect
+DetectorFactory.seed = 0
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+def i1(h):
+    if not (k1 := h.strip()):
+        return True
+    try:
+        return detect(k1) == 'en'
+    except Exception:
+        return True
+def w3(u1):
+    try:
+        l = GoogleTranslator(source='auto', target='en')
+        m = l.translate(u1.strip())
+        return m if m else u1
+    except Exception as e:
+        g1.error('Translation error: %s', e)
+        return u1
+def q1(p, x3=False):
+    if not p.exists():
+        g1.error('File not found: %s', p)
+        return
+    y3 = p.with_suffix(p.suffix + '.backup')
+    shutil.copyfile(p, y3)
+    try:
+        r1 = p.read_text(encoding='utf-8').splitlines(keepends=True)
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, dir=p.parent) as z3:
+            for i, u1 in enumerate(r1, 1):
+                k1 = u1.rstrip('\n')
+                if k1.strip() and (not i1(k1)):
+                    x1 = w3(k1)
+                    if not x3:
+                        z3.write(f'{k1} [TRANSLATION: {x1}]\n')
+                    else:
+                        z3.write(f'{x1}\n')
+                    print('Line %d translated.', i)
+                else:
+                    z3.write(u1)
+        shutil.move(z3.name, p)
+        print('✓ File updated successfully: %s', p.name)
+        print('✓ Backup saved as: %s', y3.name)
+    except Exception as e:
+        g1.error('Error processing file %s: %s', p, e)
+        if 'tmp_file' in locals() and Path(z3.name).exists():
+            Path(z3.name).unlink()
+def f1():
+    if len(sys.argv) < 2:
+        print('Usage: python trans_file_linebyline_optimized.py <filename> [--replace]')
+        print('  --replace: Replace original lines with translations')
+        sys.exit(1)
+    p = Path(sys.argv[1])
+    x3 = '--replace' in sys.argv
+    print('Processing file: %s', p)
+    q1(p, x3)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: trans_words.py ---
+import json
+import sys
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Any, Final
+import langdetect
+from deep_translator import GoogleTranslator
+from loguru import logger
+b = 4500
+c = 8
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+a4 = tuple[int, int, str]
+b4 = dict[str, Any]
+def c4(d4, i=32768):
+    r = []
+    j3 = []
+    e4 = 0
+    f4 = 0
+    try:
+        r1 = d4.read_text(encoding='utf-8').splitlines(keepends=True)
+        for i, u1 in enumerate(r1):
+            l3 = len(u1)
+            if e4 + l3 > i and j3:
+                r.append((f4, i - 1, ''.join(j3)))
+                j3 = [u1]
+                e4 = l3
+                f4 = i
+            else:
+                j3.append(u1)
+                e4 += l3
+        if j3:
+            r.append((f4, len(r1) - 1, ''.join(j3)))
+    except Exception as exc:
+        g1.error(f'Error chunking {d4}: {exc}')
+    return r
+def g4(h):
+    try:
+        return langdetect.detect(h[:500])
+    except Exception:
+        return None
+def j(h4, i4):
+    f4, j4, h = h4
+    if i4 > 0:
+        time.sleep(1)
+    k4 = g4(h)
+    if k4 == 'en':
+        return {'chunk_id': f'{f4}_{j4}', 'start_line': f4, 'end_line': j4, 'translated': h, 'skipped': True}
+    try:
+        l = GoogleTranslator(source='auto', target='en')
+        x1 = l.translate(h)
+        return {'chunk_id': f'{f4}_{j4}', 'start_line': f4, 'end_line': j4, 'translated': x1, 'skipped': False}
+    except Exception as exc:
+        g1.error(f'Error translating chunk {f4}-{j4}: {exc}')
+        return None
+def q1(d4):
+    print(f'Processing: {d4.name}')
+    r = c4(d4)
+    print(f'Total chunks: {len(r)}')
+    l4 = []
+    with Pool(processes=c) as c1:
+        d1 = [c1.apply_async(j, (k, idx)) for idx, k in enumerate(r)]
+        m4 = 0
+        for e1 in d1:
+            m = e1.get()
+            if m is not None:
+                l4.append(m)
+            m4 += 1
+            print(f'Progress ({d4.name}): {m4}/{len(r)}')
+    r2 = d4.with_suffix('.json')
+    try:
+        n4 = {'lines': sorted(l4, key=lambda x: x['start_line'])}
+        r2.write_text(json.dumps(n4, ensure_ascii=False, indent=2), encoding='utf-8')
+        print(f'✓ JSON output saved to: {r2.name}')
+    except Exception as exc:
+        g1.error(f'Error saving JSON output for {d4}: {exc}')
+def o4(u3):
+    x = []
+    p4 = [Path(p) for p in u3] if u3 else [Path.cwd()]
+    for p in p4:
+        if p.is_file():
+            x.append(p)
+        elif p.is_dir():
+            x.extend(p.rglob('*.txt'))
+    return [f for f in x if not any((z in h1 for z in f.parts))]
+def f1():
+    q4 = sys.argv[1:]
+    x = o4(q4)
+    if not x:
+        print('No text files found to process.')
+        return
+    for d4 in x:
+        try:
+            q1(d4)
+        except Exception as exc:
+            g1.error(f'Unexpected error processing {d4}: {exc}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: transasis.py ---
+import logging
+import re
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+b = 1024 * 1024
+b = 2000
+r4 = 'en'
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+d = re.compile('[^\\x00-\\x7F]')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+g1 = logging.getLogger(__name__)
+def s4(h, t4=32768):
+    u4 = h.split()
+    for i in range(0, len(u4), t4):
+        yield ' '.join(u4[i:i + t4])
+def n1(h):
+    try:
+        l = GoogleTranslator(source='auto', target=r4)
+        return l.translate(h)
+    except Exception as e:
+        g1.error('Error translating text chunk: %s', e)
+        return h
+def o(p):
+    try:
+        q = p.read_text(encoding='utf-8')
+    except Exception as e:
+        g1.warning('Skipping unreadable file %s: %s', p, e)
+        return
+    if not d.search(q):
+        print('No non-English content found in %s, skipping.', p.name)
+        return
+    print('Translating: %s', p.name)
+    s = [n1(k) for k in s4(q)]
+    v4 = '\n\n'.join(s)
+    u = p.parent / f'translated_{p.name}'
+    try:
+        u.write_text(v4, encoding='utf-8')
+        print('✓ Saved as: %s', u.name)
+    except Exception as e:
+        g1.error('Error writing to %s: %s', u, e)
+def w4(w):
+    for p in w.rglob('*'):
+        if any((z.startswith('.') or z in h1 for z in p.parts)):
+            continue
+        if p.is_file():
+            o(p)
+def f1():
+    x4 = input('Translate a (f)ile or (d)irectory? ').lower().strip()
+    if x4 == 'd':
+        w4(Path('.'))
+    elif x4 == 'f':
+        fn = input('Filename: ').strip()
+        p = Path(fn)
+        if p.exists():
+            o(p)
+        else:
+            g1.error('File not found: %s', fn)
+    else:
+        g1.error("Invalid choice. Enter 'd' for directory and 'f' for file.")
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: translate2.py ---
+import argparse
+import json
+import os
+import re
+import signal
+import sys
+import time
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from queue import Empty, Queue
+try:
+    from deep_translator import GoogleTranslator
+except ImportError:
+    sys.stderr.write('Missing dependency: pip install deep-translator\n')
+    raise
+y4 = re.compile('[\\u0400-\\u04FF]')
+z4 = 20
+a5 = 10.0
+b5 = False
+def c5(h):
+    return bool(y4.search(h))
+def d5(e5, f5):
+    global _shutdown
+    b5 = True
+    sys.stderr.write(f'\n[translate] received signal {e5}, finishing up...\n')
+def g5(h5, src, tgt):
+    l = GoogleTranslator(source=src, target=tgt)
+    m = l.translate_batch(h5)
+    if not m or len(m) != len(h5):
+        raise RuntimeError(f'translate_batch returned unexpected result (got {m!r})')
+    return [r if r is not None else t for r, t in zip(m, h5)]
+def i5(n3):
+    src, tgt, j5 = n3
+    k5 = []
+    l5 = []
+    for idx, h in j5:
+        if not h.strip():
+            k5.append((idx, h))
+            continue
+        if src == 'ru' and (not c5(h)):
+            k5.append((idx, h))
+            continue
+        l5.append((idx, h))
+    for i in range(0, len(l5), z4):
+        m5 = l5[i:i + z4]
+        h5 = [t for _, t in m5]
+        try:
+            x1 = g5(h5, src, tgt)
+        except Exception as exc:
+            sys.stderr.write(f'[translate] batch failed ({exc}); keeping originals\n')
+            x1 = h5
+        for (idx, n5), tr in zip(m5, x1):
+            k5.append((idx, tr))
+    return k5
+def o5(p5, q5, r1, l4, src, tgt, r5, s5=False):
+    t5 = [l4.get(i, r1[i]) for i in range(len(r1))]
+    u5 = p5 + '.tmp'
+    Path(u5).write_text('\n'.join(t5) + '\n', encoding='utf-8')
+    os.replace(u5, p5)
+    v5 = {'input': str(r5), 'output': p5, 'source_lang': src, 'target_lang': tgt, 'total_lines': len(r1), 'translated_lines': len(l4), 'complete': s5, 'updated_at': time.time()}
+    w5 = q5 + '.tmp'
+    Path(w5).write_text(json.dumps(v5, indent=2), encoding='utf-8')
+    os.replace(w5, q5)
+def x5(a2):
+    r5 = Path(a2.input)
+    if not r5.is_file():
+        sys.exit(f'Input file not found: {r5}')
+    r1 = r5.read_text(encoding='utf-8').splitlines()
+    if not r1:
+        sys.exit('Input file is empty')
+    p5 = a2.output or str(r5) + '.translated.txt'
+    q5 = p5 + '.meta.json'
+    y5 = list(enumerate(r1))
+    a3 = max(1, a2.batch_size)
+    z5 = [y5[i:i + a3] for i in range(0, len(y5), a3)]
+    e3 = [(a2.source, a2.target, b) for b in z5]
+    l4 = {}
+    a6 = time.time()
+    o5(p5, q5, r1, l4, a2.source, a2.target, r5)
+    print(f'[translate] {len(r1)} lines / {len(z5)} batches, {a2.workers} workers, src={a2.source} tgt={a2.target}', file=sys.stderr)
+    print(f'[translate] output : {p5}', file=sys.stderr)
+    b6 = Queue()
+    def c6(res):
+        b6.put(('ok', res))
+    def d6(exc):
+        b6.put(('err', exc))
+    c1 = Pool(processes=a2.workers)
+    try:
+        for t in e3:
+            c1.apply_async(i5, (t,), callback=c6, error_callback=d6)
+        l5 = len(e3)
+        while l5 > 0:
+            if b5:
+                break
+            try:
+                e6, f6 = b6.get(timeout=0.5)
+            except Empty:
+                continue
+            l5 -= 1
+            if e6 == 'ok':
+                l4.update(dict(f6))
+            else:
+                sys.stderr.write(f'[translate] task failed: {f6}\n')
+            now = time.time()
+            if now - a6 >= a2.save_interval:
+                o5(p5, q5, r1, l4, a2.source, a2.target, r5)
+                g6 = len(l4)
+                pct = 100.0 * g6 / len(r1)
+                print(f'[translate] progress: {g6}/{len(r1)} ({pct:.1f}%)', file=sys.stderr)
+                a6 = now
+    except KeyboardInterrupt:
+        b5 = True
+    finally:
+        c1.terminate()
+        c1.join()
+        s5 = not b5 and len(l4) == len(r1)
+        o5(p5, q5, r1, l4, a2.source, a2.target, r5, complete=s5)
+    g6 = len(l4)
+    tag = 'complete' if s5 else 'interrupted'
+    print(f'[translate] {tag}: wrote {p5} ({g6}/{len(r1)} lines)', file=sys.stderr)
+    if not s5:
+        sys.exit(130 if b5 else 1)
+def h6():
+    p = argparse.ArgumentParser(description='Translate a text file with deep_translator.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    p.add_argument('-i', '--input', help='Path to the input text file.')
+    p.add_argument('-s', '--source', default='auto', help="Source language code (e.g. 'ru', 'en', 'auto').")
+    p.add_argument('-t', '--target', default='en', help="Target language code (e.g. 'en').")
+    p.add_argument('-o', '--output', help='Output file path (default: <input>.translated.txt).')
+    p.add_argument('--workers', type=int, default=min(4, cpu_count() or 1), help='Number of worker processes.')
+    p.add_argument('--batch-size', type=int, default=100, help='Number of lines per worker task.')
+    p.add_argument('--save-interval', type=float, default=a5, help='Seconds between periodic progress saves.')
+    return p
+def f1(i6=None):
+    z1 = h6()
+    a2 = z1.parse_args(i6)
+    signal.signal(signal.SIGINT, d5)
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, d5)
+    if not a2.input:
+        z1.error('--input/-i is required')
+    if a2.workers < 1:
+        z1.error('--workers must be >= 1')
+    if a2.batch_size < 1:
+        z1.error('--batch-size must be >= 1')
+    x5(a2)
+if __name__ == '__main__':
+    f1()
+
+# --- File: translate_file.py ---
+import re
+import sys
+from collections.abc import Iterable
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final, List, Optional
+from deep_translator import GoogleTranslator
+from loguru import logger
+j6 = 8
+k6 = ('*.txt', '*.md', '*.py', '*.json', '*.csv')
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+l6 = re.compile('[\\u0600-\\u06FF\\u4E00-\\u9FFF\\u3040-\\u309F\\u30A0-\\u30FF\\uAC00-\\uD7AF\\u0400-\\u04FF]')
+def m6(u1):
+    return bool(l6.search(u1))
+def n6(p):
+    for z in p.parts:
+        if z.startswith('.') or z in h1:
+            return True
+    return False
+def q1(d4):
+    try:
+        q = d4.read_text(encoding='utf-8')
+        r1 = q.splitlines(keepends=True)
+        l = GoogleTranslator(source='auto', target='en')
+        o6 = False
+        t1 = []
+        for u1 in r1:
+            k1 = u1.strip()
+            if k1 and m6(k1):
+                try:
+                    p6 = l.translate(k1)
+                    x1 = p6 if isinstance(p6, str) else None
+                    if x1:
+                        q6 = u1[:len(u1) - len(u1.lstrip())]
+                        r6 = '\n' if u1.endswith('\n') else ''
+                        t1.append(f'{q6}{x1}{r6}')
+                        o6 = True
+                    else:
+                        t1.append(u1)
+                except Exception as exc:
+                    g1.error('Error translating line in {}: {}', d4, exc)
+                    t1.append(u1)
+            else:
+                t1.append(u1)
+        if o6:
+            d4.write_text(''.join(t1), encoding='utf-8')
+            return f'✓ Updated: {d4}'
+        return f'No changes: {d4}'
+    except Exception as exc:
+        return f'Error processing {d4}: {exc}'
+def s6(t6):
+    x = []
+    for u6 in k6:
+        for p in t6.rglob(u6):
+            if n6(p):
+                continue
+            if p.is_file():
+                x.append(p)
+    return x
+def f1(i6=None):
+    _ = list(i6) if i6 is not None else sys.argv[1:]
+    cwd = Path('.')
+    c2 = s6(cwd)
+    if not c2:
+        g1.info('No files found to process.')
+        return 0
+    g1.info('Starting processing of {} files...', len(c2))
+    with Pool(processes=j6) as c1:
+        for v6 in c1.imap_unordered(q1, c2):
+            g1.info('{}', v6)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: transline.py ---
+import json
+import re
+import signal
+import sys
+from collections.abc import Iterable
+from datetime import datetime
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Any, Final
+from deep_translator import GoogleTranslator
+from dh import get_nobinary
+from loguru import logger
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
+b = 32768
+h1 = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+j2 = re.compile('[\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]+')
+j6 = 8
+w6 = 1
+x6 = 20
+y6 = False
+z6 = tuple[int, int, str]
+a7 = tuple[int, int]
+b7 = dict[a7, str]
+c7 = dict[int, b7]
+def d7(sig, e7):
+    global _interrupted
+    g1.warning('Ctrl+C caught — completing current active requests and saving progress...')
+    y6 = True
+signal.signal(signal.SIGINT, d7)
+def f7(h):
+    return [(m.start(), m.end(), m.group()) for m in j2.finditer(h)]
+def g7(h7, l4):
+    m = []
+    i7 = 0
+    for (j7, end), x1 in sorted(l4.items()):
+        m.append(h7[i7:j7])
+        m.append(x1)
+        i7 = end
+    m.append(h7[i7:])
+    return ''.join(m)
+def k7(p):
+    for enc in ('utf-8', 'utf-8-sig', 'gb18030', 'gbk', 'cp1252'):
+        try:
+            return (p.read_text(encoding=enc, errors='strict'), enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return (p.read_bytes().decode('utf-8', errors='replace'), 'utf-8')
+class l7(Exception):
+    pass
+class m7(Exception):
+    pass
+@retry(reraise=True, stop=stop_after_attempt(w6), wait=wait_exponential_jitter(initial=1, max=10, jitter=2), retry=retry_if_exception_type((l7, m7)))
+def n7(h):
+    try:
+        m = GoogleTranslator(source='auto', target='en').translate(h)
+        if m is None:
+            raise m7('Translator returned None')
+        if j2.search(m):
+            raise m7('Result still contains Chinese')
+        return m
+    except (l7, m7):
+        raise
+    except Exception as e:
+        msg = str(e).lower()
+        if any((k in msg for k in ('429', 'rate limit', 'too many', 'quota'))):
+            raise l7(str(e)) from e
+        raise m7(str(e)) from e
+def o7(p7, j7, end, h):
+    if y6:
+        return (p7, j7, end, h, False)
+    try:
+        return (p7, j7, end, n7(h), True)
+    except Exception as e:
+        g1.debug('Translation failed for segment at line {}: {}', p7 + 1, e)
+        return (p7, j7, end, h, False)
+def q7(p):
+    return p.with_suffix(p.suffix + '.xlprogress')
+def r7(p, g6, s7):
+    try:
+        t7 = {str(k): {f'{pos[0]},{pos[1]}': v for pos, v in v.items()} for k, v in g6.items() if v}
+        u7 = {'file': str(p), 'saved_at': datetime.now().isoformat(), 'total_lines': s7, 'translations': t7}
+        q7(p).write_text(json.dumps(u7, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception as e:
+        g1.error('Could not save progress for {}: {}', p, e)
+def v7(p):
+    p = q7(p)
+    if not p.exists():
+        return {}
+    try:
+        u7 = json.loads(p.read_text(encoding='utf-8'))
+        w7 = {}
+        for x7, y7 in u7.get('translations', {}).items():
+            p7 = int(x7)
+            w7[p7] = {tuple(map(int, k.split(','))): v for k, v in y7.items()}
+        return w7
+    except Exception:
+        return {}
+def z7(p):
+    q7(p).unlink(missing_ok=True)
+def q1(p):
+    global _interrupted
+    print('📄 Processing: {}', p)
+    try:
+        h, enc = k7(p)
+    except Exception as e:
+        g1.error('Cannot read file: {}', e)
+        return False
+    r1 = h.splitlines(keepends=True)
+    a8 = {}
+    for i, ln in enumerate(r1):
+        k1 = ln.rstrip('\r\n')
+        if (y7 := f7(k1)):
+            a8[i] = y7
+    if not a8:
+        print('✅ No Chinese characters found — skipping')
+        z7(p)
+        return True
+    b8 = sum((len(c8) for c8 in a8.values()))
+    g6 = v7(p)
+    e3 = []
+    for p7, y7 in a8.items():
+        g6.setdefault(p7, {})
+        for j7, end, d8 in y7:
+            if (j7, end) not in g6[p7]:
+                e3.append((p7, j7, end, d8))
+    e8 = b8 - len(e3)
+    if e8 > 0:
+        print('🔄 Resuming: {}/{} segments already cached', e8, b8)
+    if e3 and (not y6):
+        print('⚡ Launching {} processes for {} segments...', j6, len(e3))
+        c1 = Pool(processes=j6)
+        try:
+            d1 = [(n3, c1.apply_async(o7, n3)) for n3 in e3]
+            for n3, ar in d1:
+                if y6:
+                    break
+                f8, s, e, u2, g8 = ar.get()
+                g6[f8][s, e] = u2
+                e8 += 1
+                e6 = '✓' if g8 else '❌ Failed'
+                print('[{:>4}/{}] {} line {}', e8, b8, e6, f8 + 1)
+                if e8 % x6 == 0:
+                    r7(p, g6, len(r1))
+        finally:
+            if y6:
+                c1.terminate()
+            else:
+                c1.close()
+            c1.join()
+        if y6:
+            r7(p, g6, len(r1))
+    if y6:
+        return False
+    h8 = []
+    for i, u1 in enumerate(r1):
+        if g6.get(i):
+            k1 = u1.rstrip('\r\n')
+            eol = u1[len(k1):]
+            h8.append(g7(k1, g6[i]) + eol)
+        else:
+            h8.append(u1)
+    try:
+        p.write_text(''.join(h8), encoding=enc, errors='replace')
+        z7(p)
+        print('✅ Done.')
+        return True
+    except Exception as e:
+        g1.error('Failed to write output: {}', e)
+        return False
+def f1():
+    a2 = sys.argv[1:]
+    x = [Path(p) for p in a2 if Path(p).is_file()] if a2 else get_nobinary(Path.cwd())
+    for f in x:
+        if y6:
+            break
+        q1(f)
+    if y6:
+        g1.warning('⚠️  Stopped early. Run again to resume.')
+        return 130
+    print('✅ All files processed successfully.')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: transline2.py ---
+import re
+import shutil
+import sys
+import tempfile
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+d = re.compile('[^\\x00-\\x7F]')
+c = 8
+h1 = frozenset({'.git', '.hg', '.svn', 'node_modules', '__pycache__', '.venv', 'venv', '.mypy_cache'})
+def i1(h):
+    return not d.search(h)
+def i8(p, j8=True, k8=None):
+    if not p.exists():
+        raise FileNotFoundError(f'Path does not exist: {p}')
+    if not p.is_dir():
+        raise NotADirectoryError(f'Path is not a directory: {p}')
+    x = []
+    l8 = [p]
+    while l8:
+        m8 = l8.pop()
+        try:
+            for d2 in m8.iterdir():
+                if d2.is_symlink():
+                    continue
+                if d2.is_dir():
+                    if d2.name not in h1:
+                        l8.append(d2)
+                elif d2.is_file():
+                    if not j8 and d2.name.startswith('.'):
+                        continue
+                    if k8 is None or d2.suffix.lower() in k8:
+                        x.append(d2)
+        except PermissionError:
+            g1.warning('Permission denied: {}', m8)
+            continue
+    return sorted(x)
+def n1(h):
+    if not h:
+        return h
+    r1 = h.splitlines(keepends=True)
+    n8 = []
+    l = GoogleTranslator(source='auto', target='en')
+    for u1 in r1:
+        d3 = u1.strip()
+        if not d3 or i1(d3):
+            n8.append(u1)
+        else:
+            try:
+                m = l.translate(d3)
+                r6 = '\n' if u1.endswith('\n') else ''
+                n8.append(f'{m}{r6}' if m else u1)
+            except Exception as e:
+                g1.error('Translation error on line: {}', e)
+                n8.append(u1)
+    return ''.join(n8)
+def o8(p, q):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, dir=p.parent) as tmp:
+        tmp.write(q)
+        p8 = Path(tmp.name)
+    try:
+        shutil.move(str(p8), str(p))
+    except Exception as e:
+        p8.unlink(missing_ok=True)
+        raise RuntimeError(f'Failed to overwrite {p}: {e}') from e
+def q1(p):
+    try:
+        h7 = p.read_text(encoding='utf-8', errors='ignore')
+    except Exception as e:
+        return f'Error reading {p}: {e}'
+    if i1(h7.strip()):
+        return f'Skipped (English): {p.name}'
+    try:
+        x1 = n1(h7)
+        if x1.strip() != h7.strip():
+            o8(p, x1)
+            return f'✓ Updated: {p.name}'
+        return f'No changes: {p.name}'
+    except Exception as e:
+        return f'Failed to process {p}: {e}'
+def f1():
+    a2 = sys.argv[1:]
+    cwd = Path.cwd()
+    if a2:
+        x = [Path(p) for p in a2 if Path(p).is_file()]
+    else:
+        x = i8(cwd, extensions=('.md', '.txt'))
+    if not x:
+        print('No files found to process.')
+        return
+    print('Starting processing of {} files...', len(x))
+    c1 = Pool(processes=c)
+    try:
+        k5 = [c1.apply_async(q1, (f,)) for f in x]
+        c1.close()
+        for m in k5:
+            try:
+                print(m.get())
+            except Exception as e:
+                g1.error('Worker error: {}', e)
+        c1.join()
+    finally:
+        c1.terminate()
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: ultratranslator.py ---
+import re
+import shutil
+import sys
+import tempfile
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from dh import get_nobinary
+from loguru import logger
+c = 8
+w6 = 2
+h2 = 3.0
+d = re.compile('[^\\x00-\\x7F]')
+def i1(h):
+    return not d.search(h)
+def o8(q8, q):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, dir=str(q8.parent)) as tmp:
+        tmp.write(q)
+        p8 = Path(tmp.name)
+    shutil.move(str(p8), str(q8))
+def r8(p, s8=w6):
+    for p1 in range(s8):
+        try:
+            l = GoogleTranslator(source='auto', target='en')
+            m = l.translate_file(str(p))
+            return m if m is not None else p.read_text(encoding='utf-8', errors='ignore')
+        except Exception as exc:
+            if p1 < s8 - 1:
+                g1.warning(f'File translation attempt {p1 + 1} failed for {p}: {exc}. Retrying in {h2}s...')
+                time.sleep(h2)
+            else:
+                g1.error(f'File translation failed after {s8} attempts for {p}: {exc}')
+                return p.read_text(encoding='utf-8', errors='ignore')
+    return p.read_text(encoding='utf-8', errors='ignore')
+def q1(p):
+    print(f'  Processing {p.name}...')
+    try:
+        h7 = p.read_text(encoding='utf-8', errors='ignore')
+        if i1(h7):
+            return None
+        x1 = r8(p)
+        g1.debug(x1)
+        if x1.strip() != h7.strip():
+            o8(p, x1)
+            print(f'  ✓ Updated {p.name}')
+        return None
+    except Exception as exc:
+        g1.error(f'  Failed to process {p}: {exc}')
+        return p
+def t8(x):
+    c2 = list(x)
+    u8 = 0
+    while c2 and u8 < w6:
+        if u8 > 0:
+            print('=' * 40)
+            print(f'Retry attempt {u8}/{w6}')
+            print(f'Retrying {len(c2)} failed files...')
+            print('=' * 40)
+            time.sleep(h2)
+        v8 = []
+        with Pool(processes=c) as c1:
+            d1 = [c1.apply_async(q1, (f,)) for f in c2]
+            for f, e1 in zip(c2, d1):
+                try:
+                    w8 = e1.get()
+                    if w8 is not None:
+                        v8.append(w8)
+                except Exception as exc:
+                    g1.error(f'File {f} generated an exception: {exc}')
+                    v8.append(f)
+        c2 = v8
+        u8 += 1
+        if v8:
+            g1.warning(f'{len(v8)} files failed and will be retried.')
+    if c2:
+        g1.error(f'Failed to process {len(c2)} files after {w6} retries:')
+        for f in c2:
+            g1.error(f'  - {f}')
+def f1():
+    a2 = sys.argv[1:]
+    x = [Path(p) for p in a2] if a2 else list(get_nobinary(Path.cwd()))
+    if not x:
+        print('No files found to process.')
+        return
+    print(f'Found {len(x)} files to process.')
+    t8(x)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

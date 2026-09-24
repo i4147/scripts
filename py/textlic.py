@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 from collections import defaultdict
@@ -23,12 +22,10 @@ def extract_blocks(lines: List[str], start_line: int, min_lines: int = 2) -> Lis
         original = raw_line.rstrip("\n\r")
         stripped = original.strip()
 
-        
         if stripped.startswith("#!"):
             i += 1
             continue
 
-        
         block_start = i
         block_lines = []
         block_stripped = []
@@ -111,7 +108,7 @@ def remove_repeated_blocks(repeated: Dict[str, List[Tuple[Path, int, List[str]]]
         lines_to_remove = set()
         for start_lineno, block_lines in removals:
             for offset in range(len(block_lines)):
-                lines_to_remove.add(start_lineno + offset - 1)  
+                lines_to_remove.add(start_lineno + offset - 1)
 
         new_lines = []
         file_removed = 0

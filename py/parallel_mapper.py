@@ -1,4 +1,3 @@
-
 from collections.abc import Callable, Iterable
 from multiprocessing import get_context
 from multiprocessing.pool import Pool
@@ -93,17 +92,13 @@ class ParallelExecutor:
         return self._pool.starmap(func, args)
 
 
-
-mpf3 = parallel_map  
+mpf3 = parallel_map
 
 
 def process_item(x: int) -> int:
     return x + x
 
 
-
 if __name__ == "__main__":
-    
-
     results = parallel_map(process_item, range(10))
     print(f"Basic: {results}")

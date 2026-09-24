@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import multiprocessing as mp
@@ -13,8 +12,6 @@ __all__ = ["MAX_WORKERS", "DEFAULT_CHUNKSIZE", "PoolMethod", "run_parallel"]
 MAX_WORKERS: int = 8
 
 
-
-
 DEFAULT_CHUNKSIZE: int | None = None
 
 
@@ -22,8 +19,6 @@ DEFAULT_EXECUTOR_CHUNKSIZE: int = 1
 
 
 class PoolMethod(str, Enum):
-
-    
     MAP = "map"
     MAP_ASYNC = "map_async"
     STARMAP = "starmap"
@@ -33,10 +28,9 @@ class PoolMethod(str, Enum):
     APPLY = "apply"
     APPLY_ASYNC = "apply_async"
 
-    
     JOBLIB = "joblib"
-    PROCESS_POOL = "process_pool"  
-    THREAD_POOL = "thread_pool"  
+    PROCESS_POOL = "process_pool"
+    THREAD_POOL = "thread_pool"
 
     @classmethod
     def parse(cls, value: "str | PoolMethod") -> "PoolMethod":
@@ -65,11 +59,6 @@ _MP_POOL_METHODS = frozenset(
         "apply_async",
     }
 )
-
-
-
-
-
 
 
 def _dispatch_mp_pool(
@@ -121,11 +110,6 @@ def _run_mp_pool(
         return _dispatch_mp_pool(pool, method, func, items, chunksize)
 
 
-
-
-
-
-
 def _run_executor(
     executor_cls: Type[ProcessPoolExecutor] | Type[ThreadPoolExecutor],
     func: Callable[..., Any],
@@ -141,25 +125,19 @@ def _run_executor(
     if initializer is not None:
         kwargs["initializer"] = initializer
         kwargs["initargs"] = tuple(initargs)
-    
+
     if maxtasksperchild is not None and executor_cls is ProcessPoolExecutor:
         kwargs["max_tasks_per_child"] = maxtasksperchild
 
     with executor_cls(**kwargs) as ex:
-        
         if unpack:
             futs = [ex.submit(func, *(item if isinstance(item, tuple) else (item,))) for item in items]
             return [f.result() for f in futs]
 
         if executor_cls is ProcessPoolExecutor:
             return list(ex.map(func, items, chunksize=chunksize or DEFAULT_EXECUTOR_CHUNKSIZE))
-        
+
         return list(ex.map(func, items))
-
-
-
-
-
 
 
 def _run_joblib(
@@ -170,20 +148,14 @@ def _run_joblib(
 ) -> list[Any]:
     try:
         from joblib import Parallel, delayed
-    except ImportError as exc:  
+    except ImportError as exc:
         raise ImportError("the 'joblib' backend requires joblib — `pip install joblib`") from exc
 
-    
     n_jobs = -1 if workers is None else workers
 
     if unpack:
         return Parallel(n_jobs=n_jobs)(delayed(func)(*(item if isinstance(item, tuple) else (item,))) for item in items)
     return Parallel(n_jobs=n_jobs)(delayed(func)(item) for item in items)
-
-
-
-
-
 
 
 def run_parallel(

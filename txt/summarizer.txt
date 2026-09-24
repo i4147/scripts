@@ -1,0 +1,93 @@
+# filename: /data/data/com.termux/files/home/tmp/bin_sep/summarize_text/summa.py
+from nltk.corpus import stopwords;from nltk.tokenize import sent_tokenize,word_tokenize
+class j:def __init__(self,y='english'):self.language=y;self.stop_words=set(stopwords.words(y))
+    def e(self,H):H=M.sub('\\s+',' ',H).strip();return H
+    def c(self,H):u=sent_tokenize(H);return [s.strip() for s in u if len(s.split())>2]
+    def a(self,u):w=n(int);p=0
+        for z in u:E=word_tokenize(z.lower())
+            for I in E:if I.isalnum() and I not in self.stop_words:w[I]+=1;p+=1
+        if p>0:for I in w:w[I]/=p
+        return dict(w)
+    def f(self,u,w):h={}
+        for J,z in enumerate(u):E=word_tokenize(z.lower());D=0;t=0
+            for I in E:if I.isalnum() and I in w:D+=w[I];t+=1
+            if t>0:h[J]=D/t
+            else:h[J]=0
+        return h
+    def b(self,h,k):o=sorted(h.keys(),key=lambda x:h[x],reverse=True)[:k];return sorted(o)
+    def v(self,H,C=0.3):if not H or not isinstance(H,str):return ''
+        if not 0<C<=1:raise ValueError('Ratio must be between 0 and 1')
+        H=self._preprocess_text(H);u=self._tokenize_sentences(H)
+        if len(u)<=1:return H
+        k=max(1,int(len(u)*C));w=self._calculate_word_frequencies(u);h=self._score_sentences(u,w);g=self._select_top_sentences(h,k);A=' '.join([u[i] for i in g]);return A
+    def d(self,H,k=3):if not H or not isinstance(H,str):return ''
+        if k<1:raise ValueError('Number of sentences must be>=1')
+        H=self._preprocess_text(H);u=self._tokenize_sentences(H)
+        if len(u)<=k:return H
+        w=self._calculate_word_frequencies(u);h=self._score_sentences(u,w);g=self._select_top_sentences(h,k);A=' '.join([u[i] for i in g]);return A
+    def q(self,H):H=self._preprocess_text(H);u=self._tokenize_sentences(H);w=self._calculate_word_frequencies(u);B=self._score_sentences(u,w);return {u[J]:D for J,D in B.items()}
+if __name__=='__main__':L=F(K.argv[1]);G=L.read_text(encoding='utf8');r=j(y='english');print('===Summarize by Ratio (30%)===');m=r.summarize(G,C=0.3);print(m);print();print('===Summarize by Count (3 sentences)===');l=r.summarize_by_count(G,k=3);print(l);print();print('===Sentence Scores===');B=r.get_scores(G)
+    for z,D in sorted(B.items(),key=lambda x:x[1],reverse=True):print(f'Score:{D:.4f}|{z[:60]}...')
+    print()
+# filename: /data/data/com.termux/files/home/tmp/bin_sep/summarize_text/sumr.py
+from sumy.nlp.stemmers import Stemmer;from sumy.nlp.tokenizers import Tokenizer;from sumy.parsers.plaintext import PlaintextParser;from sumy.summarizers.lex_rank import LexRankSummarizer;from sumy.summarizers.lsa import LsaSummarizer;from sumy.summarizers.text_rank import TextRankSummarizer;from sumy.utils import get_stop_words
+def b(d,a=5,l='lexrank',i='english'):m=PlaintextParser.from_file(d,Tokenizer(i))
+    if l=='lexrank':g=LexRankSummarizer(Stemmer(i))
+    elif l=='lsa':g=LsaSummarizer(Stemmer(i))
+    elif l=='textrank':g=TextRankSummarizer(Stemmer(i))
+    else:raise ValueError(f'Unknown summarization method:{l}')
+    g.stop_words=get_stop_words(i);k=g(m.document,a);return ' '.join([str(j) for j in k])
+def n():if len(o.argv)<2:print('Usage:python summarize.py<input_file>[sentences_count] [method]');print('Methods:lexrank (default),lsa,textrank');o.exit(1)
+    d=o.argv[1]
+    if not p.path.exists(d):print(f"Error:File '{d}' not found");o.exit(1)
+    a=int(o.argv[2]) if len(o.argv)>2 else 5;l=o.argv[3] if len(o.argv)>3 else 'lexrank';h=p.path.splitext(d)[0];c=f'{h}_summary.txt'
+    try:print(f"Summarizing '{d}' using {l} method...");k=b(d,a,l)
+        with open(c,'w',encoding='utf-8') as f:f.write(k)
+        print(f"Summary saved to '{c}'");print(f'\nSummary preview ({a} sentences):');print('-'*40);print(k[:500]+'...' if len(k)>500 else k)
+    except Exception as e:print(f'Error:{e}');o.exit(1)
+if __name__=='__main__':raise SystemExit(n())
+# filename: /data/data/com.termux/files/home/tmp/bin_sep/summarize_text/sumr_nltk.py
+from nltk.corpus import stopwords;from nltk.tokenize import sent_tokenize,word_tokenize
+def b(p,c=5):h=sent_tokenize(p);n=word_tokenize(p.lower());g=set(stopwords.words('english'));j=k([w for w in n if w.isalnum() and w not in g]);a={}
+    for i,o in enumerate(h):e=word_tokenize(o.lower());m=sum((j.get(w,0) for w in e if w.isalnum()));a[i]=m/max(1,len(e))
+    d=sorted(a,key=a.get,reverse=True)[:c];l=' '.join([h[i] for i in sorted(d)]);return l
+with open(q.argv[1],'r') as f:p=f.read()
+l=b(p,5)
+with open(q.argv[1].replace('.txt','_summary.txt'),'w') as f:f.write(l)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

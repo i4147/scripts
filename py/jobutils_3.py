@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -29,17 +28,10 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-
-
-
-
 MAX_WORKERS: int = 8
 
 
-
-
 DEFAULT_CHUNKSIZE: int | None = None
-
 
 
 DEFAULT_EXECUTOR_CHUNKSIZE: int = 1
@@ -48,14 +40,7 @@ DEFAULT_EXECUTOR_CHUNKSIZE: int = 1
 ExecutorType = type[ProcessPoolExecutor] | type[ThreadPoolExecutor]
 
 
-
-
-
-
-
 class PoolMethod(str, Enum):
-
-    
     MAP = "map"
     MAP_ASYNC = "map_async"
     STARMAP = "starmap"
@@ -65,7 +50,6 @@ class PoolMethod(str, Enum):
     APPLY = "apply"
     APPLY_ASYNC = "apply_async"
 
-    
     JOBLIB = "joblib"
     PROCESS_POOL = "process_pool"
     THREAD_POOL = "thread_pool"
@@ -99,11 +83,6 @@ _MP_POOL_METHODS = frozenset(
 )
 
 
-
-
-
-
-
 def _dispatch_mp_pool(
     pool: "mp.pool.Pool",
     method: PoolMethod,
@@ -117,7 +96,6 @@ def _dispatch_mp_pool(
         return pool.map_async(func, items, chunksize=chunksize).get()
 
     if method in (PoolMethod.STARMAP, PoolMethod.STARMAP_ASYNC):
-        
         args = [item if isinstance(item, tuple) else (item,) for item in items]
         if method is PoolMethod.STARMAP:
             return pool.starmap(func, args, chunksize=chunksize)
@@ -129,8 +107,6 @@ def _dispatch_mp_pool(
         return list(pool.imap_unordered(func, items, chunksize=chunksize))
 
     if method is PoolMethod.APPLY:
-        
-        
         return [pool.apply(func, args=(item,)) for item in items]
     if method is PoolMethod.APPLY_ASYNC:
         futs = [pool.apply_async(func, args=(item,)) for item in items]
@@ -155,7 +131,7 @@ def _run_mp_pool(
     if not items_list:
         return []
 
-    ctx = mp.get_context(context)  
+    ctx = mp.get_context(context)
     pool_kwargs: dict[str, Any] = {"processes": workers}
     if initializer is not None:
         pool_kwargs["initializer"] = initializer
@@ -165,11 +141,6 @@ def _run_mp_pool(
 
     with ctx.Pool(**pool_kwargs) as pool:
         return _dispatch_mp_pool(pool, method, func, items_list, chunksize)
-
-
-
-
-
 
 
 def _submit_args(item: Any, unpack: bool) -> tuple:
@@ -207,20 +178,14 @@ def _run_executor(
             raise ValueError("maxtasksperchild requires Python 3.11+")
         kwargs["max_tasks_per_child"] = maxtasksperchild
 
-    
-    
-    
     if not unpack and timeout is None and on_progress is None and not return_exceptions and max_pending is None:
         with executor_cls(**kwargs) as ex:
             if is_process:
                 cs = chunksize if chunksize is not None else DEFAULT_EXECUTOR_CHUNKSIZE
                 return list(ex.map(func, items, chunksize=cs))
-            
+
             return list(ex.map(func, items))
 
-    
-    
-    
     items_list = list(items)
     n = len(items_list)
     if n == 0:
@@ -249,7 +214,6 @@ def _run_executor(
         _fill(ex)
 
         while pending:
-            
             if timeout is not None:
                 earliest = min(t for _, t in pending.values())
                 wait_for = max(0.0, timeout - (time.monotonic() - earliest))
@@ -262,11 +226,10 @@ def _run_executor(
                 timeout=wait_for,
             )
 
-            
             for fut in done:
                 info = pending.pop(fut, None)
                 if info is None:
-                    continue  
+                    continue
                 idx = info[0]
                 try:
                     results[idx] = fut.result()
@@ -276,7 +239,6 @@ def _run_executor(
                 if on_progress is not None:
                     on_progress(idx, results[idx])
 
-            
             if timeout is not None:
                 now = time.monotonic()
                 timed_out = [f for f, (_, t) in pending.items() if now - t >= timeout]
@@ -291,19 +253,12 @@ def _run_executor(
 
             _fill(ex)
 
-    
-    
     if not return_exceptions:
         for r in results:
             if isinstance(r, BaseException):
                 raise r
 
     return results
-
-
-
-
-
 
 
 def _run_joblib(
@@ -314,7 +269,7 @@ def _run_joblib(
 ) -> list[Any]:
     try:
         from joblib import Parallel, delayed
-    except ImportError as exc:  
+    except ImportError as exc:
         raise ImportError("the 'joblib' backend requires joblib — `pip install joblib`") from exc
 
     n_jobs = -1 if workers is None else workers
@@ -325,11 +280,6 @@ def _run_joblib(
             delayed(func)(*(item if isinstance(item, tuple) else (item,))) for item in items_list
         )
     return Parallel(n_jobs=n_jobs)(delayed(func)(item) for item in items_list)
-
-
-
-
-
 
 
 def mpf(
@@ -359,7 +309,6 @@ def mpf(
     if func_args or func_kwargs:
         func = partial(func, *func_args, **(func_kwargs or {}))
 
-    
     if pool_method.is_mp_pool:
         if timeout is not None:
             raise ValueError(
@@ -379,7 +328,6 @@ def mpf(
             context=context,
         )
 
-    
     if pool_method is PoolMethod.JOBLIB:
         if initializer is not None or maxtasksperchild is not None:
             raise ValueError(
@@ -389,7 +337,6 @@ def mpf(
             raise ValueError("the 'joblib' backend does not support timeout")
         return _run_joblib(func, items, workers, unpack)
 
-    
     if pool_method is PoolMethod.PROCESS_POOL:
         return _run_executor(
             ProcessPoolExecutor,

@@ -1,4 +1,3 @@
-
 import os
 import sys
 import site
@@ -9,33 +8,27 @@ from pathlib import Path
 try:
     from importlib.metadata import distributions, metadata
 except ImportError:
-    
     from importlib_metadata import distributions, metadata
 
 
 def get_site_packages_dirs():
     system_dirs = []
 
-    
     for path in sys.path:
         path_obj = Path(path)
         if path_obj.exists() and ("site-packages" in path or "dist-packages" in path):
-            
             if not str(path_obj).startswith(str(Path.home())):
                 system_dirs.append(path_obj)
 
-    
     termux_prefix = Path("/data/data/com.termux/files/usr")
     if termux_prefix.exists():
         for lib_path in termux_prefix.glob("lib/python*/site-packages"):
             if lib_path.exists() and lib_path not in system_dirs:
                 system_dirs.append(lib_path)
 
-    
     try:
         user_dir = Path(site.getusersitepackages())
     except Exception:
-        
         user_dir = (
             Path.home()
             / ".local"
@@ -44,7 +37,6 @@ def get_site_packages_dirs():
             / "site-packages"
         )
 
-    
     system_dirs = list(set(system_dirs))
 
     return system_dirs, user_dir
@@ -56,20 +48,15 @@ def get_package_distributions(directory):
     if not directory or not directory.exists():
         return packages
 
-    
     dir_str = str(directory)
 
     try:
-        
         for dist in distributions():
-            
             dist_location = None
 
-            
             if hasattr(dist, "_path"):
                 dist_location = str(dist._path)
             elif hasattr(dist, "files") and dist.files:
-                
                 for file in dist.files:
                     try:
                         if hasattr(file, "locate"):
@@ -80,13 +67,11 @@ def get_package_distributions(directory):
                     except Exception:
                         continue
 
-            
             if not dist_location:
                 try:
                     if hasattr(dist, "metadata"):
                         meta = dist.metadata
                         if hasattr(meta, "get") and meta.get("Name"):
-                            
                             try:
                                 if hasattr(dist, "files"):
                                     for file in dist.files:
@@ -102,7 +87,6 @@ def get_package_distributions(directory):
                 except Exception:
                     pass
 
-            
             if dist_location and dir_str in dist_location:
                 name = dist.metadata.get("Name", "Unknown")
                 version = dist.metadata.get("Version", "Unknown")
@@ -118,9 +102,6 @@ def get_packages_with_pip(directory):
     packages = {}
 
     try:
-        
-        
-        
         env = os.environ.copy()
         env["PYTHONPATH"] = str(directory)
 
@@ -146,7 +127,6 @@ def check_duplicate_packages():
     print(f"Python version: {sys.version}")
     print(f"Platform: {sys.platform}")
 
-    
     system_dirs, user_dir = get_site_packages_dirs()
 
     print(f"\nSystem site-packages directories:")
@@ -168,7 +148,6 @@ def check_duplicate_packages():
             print("Exiting.")
             return
 
-    
     system_packages = {}
     print(f"\n📦 Scanning system directories...")
 
@@ -178,29 +157,24 @@ def check_duplicate_packages():
         print(f"  Scanning: {sys_dir.name}")
         sys_pkgs = get_package_distributions(sys_dir)
 
-        
         if not sys_pkgs:
             sys_pkgs = get_packages_with_pip(sys_dir)
 
         system_packages.update(sys_pkgs)
         print(f"    Found {len(sys_pkgs)} packages")
 
-    
     print(f"\n📦 Scanning user directory...")
     user_packages = get_package_distributions(user_dir)
 
-    
     if not user_packages:
         user_packages = get_packages_with_pip(user_dir)
 
     print(f"    Found {len(user_packages)} packages")
 
-    
     user_pkg_names = set(user_packages.keys())
     system_pkg_names = set(system_packages.keys())
     duplicate_names = user_pkg_names.intersection(system_pkg_names)
 
-    
     duplicates = []
     for pkg_name in sorted(duplicate_names):
         duplicates.append(
@@ -211,7 +185,6 @@ def check_duplicate_packages():
             }
         )
 
-    
     print("\n" + "=" * 70)
     print("📊 RESULTS")
     print("=" * 70)
@@ -225,7 +198,6 @@ def check_duplicate_packages():
         print("⚠️  DUPLICATE PACKAGES:")
         print("-" * 70)
 
-        
         print(f"{'Package':<35} {'System Version':<18} {'User Version':<18}")
         print("-" * 70)
 
@@ -247,7 +219,6 @@ def check_duplicate_packages():
     else:
         print("\n✅ No duplicate packages found!")
 
-    
     print("\n" + "=" * 70)
     print("📈 PACKAGE LOCATION SUMMARY:")
     print("=" * 70)
@@ -255,7 +226,6 @@ def check_duplicate_packages():
     print(f"Packages only in user: {len(user_pkg_names - system_pkg_names)}")
     print(f"Packages in both: {len(duplicate_names)}")
 
-    
     if len(system_pkg_names - user_pkg_names) > 0:
         examples = list(sorted(system_pkg_names - user_pkg_names))[:5]
         print(f"\n  System-only examples: {', '.join(examples)}")
@@ -264,7 +234,6 @@ def check_duplicate_packages():
         examples = list(sorted(user_pkg_names - system_pkg_names))[:5]
         print(f"  User-only examples: {', '.join(examples)}")
 
-    
     print("\n" + "=" * 70)
     print("🔍 PYTHONPATH ANALYSIS:")
     print("=" * 70)

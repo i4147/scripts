@@ -1,0 +1,674 @@
+# --- File: gdrive_downloader.py ---
+import io
+import os
+import pickle
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import Resource, build
+from googleapiclient.http import MediaIoBaseDownload
+a = ['https://www.googleapis.com/auth/drive.readonly']
+def b():
+    c = None
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as d:
+            c = pickle.load(d)
+    if not c or not c.valid:
+        if c and c.expired and c.refresh_token:
+            c.refresh(Request())
+        else:
+            e = InstalledAppFlow.from_client_secrets_file('credentials.json', a)
+            c = e.run_local_server(port=0)
+        with open('token.pickle', 'wb') as d:
+            pickle.dump(c, d)
+    return build('drive', 'v3', credentials=c)
+def f(g, h):
+    i = f"name='{h}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    j = g.files().list(q=i, fields='files(id, name)').execute()
+    k = j.get('files', [])
+    if not k:
+        raise Exception(f"Folder '{h}' not found in Google Drive")
+    return k[0]['id']
+def l(g, m, n):
+    i = f"'{m}' in parents and trashed=false"
+    j = g.files().list(q=i, fields='files(id, name, mimeType)').execute()
+    k = j.get('files', [])
+    for o in k:
+        p = os.path.join(n, o['name'])
+        if o['mimeType'] == 'application/vnd.google-apps.folder':
+            os.makedirs(p, exist_ok=True)
+            print(f'Creating folder: {p}')
+            l(g, o['id'], p)
+        else:
+            print(f'Downloading: {p}')
+            q = g.files().get_media(fileId=o['id'])
+            fh = io.FileIO(p, 'wb')
+            r = MediaIoBaseDownload(fh, q)
+            s = False
+            while not s:
+                t, s = r.next_chunk()
+                print(f'Download progress: {int(t.progress() * 40)}%')
+            fh.close()
+def u():
+    h = 'notebooks'
+    try:
+        g = b()
+        m = f(g, h)
+        print(f"Found folder '{h}' with ID: {m}")
+        v = os.path.join(os.getcwd(), h)
+        os.makedirs(v, exist_ok=True)
+        l(g, m, v)
+        print(f"\nSuccessfully downloaded '{h}' to {v}")
+    except Exception as e:
+        print(f'Error: {e}')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: gdrive_syncer.py ---
+import os
+import pickle
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import Resource, build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
+a = ['https://www.googleapis.com/auth/drive.readonly']
+class w:
+    def __init__(self, x='credentials.json', y='token.pickle'):
+        self.credentials_file = x
+        self.token_file = y
+        self.service = self.authenticate()
+    def b(self):
+        c = None
+        if os.path.exists(self.token_file):
+            with open(self.token_file, 'rb') as d:
+                c = pickle.load(d)
+        if not c or not c.valid:
+            if c and c.expired and c.refresh_token:
+                c.refresh(Request())
+            else:
+                if not os.path.exists(self.credentials_file):
+                    raise FileNotFoundError(f"Credentials file '{self.credentials_file}' not found. Download it from Google Cloud Console.")
+                e = InstalledAppFlow.from_client_secrets_file(self.credentials_file, a)
+                c = e.run_local_server(port=0)
+            with open(self.token_file, 'wb') as d:
+                pickle.dump(c, d)
+        return build('drive', 'v3', credentials=c)
+    def z(self, m='root'):
+        a1 = []
+        b1 = None
+        while True:
+            try:
+                j = self.service.files().list(q=f"'{m}' in parents and trashed=false", pageSize=1000, fields='nextPageToken, files(id, name, mimeType, size, modifiedTime)', pageToken=b1).execute()
+                k = j.get('files', [])
+                a1.extend(k)
+                b1 = j.get('nextPageToken')
+                if not b1:
+                    break
+            except HttpError as error:
+                print(f'An error occurred: {error}')
+                break
+        return a1
+    def c1(self, d1, e1, f1):
+        try:
+            q = self.service.files().get_media(fileId=d1)
+            os.makedirs(os.path.dirname(f1), exist_ok=True)
+            with open(f1, 'wb') as f:
+                r = MediaIoBaseDownload(f, q)
+                s = False
+                while not s:
+                    t, s = r.next_chunk()
+                    print(f'Downloading {e1}: {int(t.progress() * 40)}%')
+            print(f'✓ Downloaded: {e1}')
+            return True
+        except HttpError as error:
+            print(f'✗ Failed to download {e1}: {error}')
+            return False
+    def g1(self, h1, i1, h='root'):
+        print(f'\n📁 Syncing folder: {h}')
+        os.makedirs(i1, exist_ok=True)
+        k = self.get_all_files(h1)
+        for o in k:
+            j1 = o['name']
+            k1 = o['id']
+            l1 = o.get('mimeType', '')
+            m1 = os.path.join(i1, j1)
+            if l1 == 'application/vnd.google-apps.folder':
+                self.sync_folder(k1, m1, j1)
+            else:
+                n1 = o.get('modifiedTime')
+                o1 = True
+                if os.path.exists(m1):
+                    p1 = os.path.getmtime(m1)
+                    from datetime import datetime
+                    q1 = datetime.fromisoformat(n1).timestamp()
+                    if p1 >= q1:
+                        o1 = False
+                        print(f'⏭ Skipping (up to date): {j1}')
+                if o1:
+                    self.download_file(k1, j1, m1)
+                    if n1:
+                        from datetime import datetime
+                        r1 = datetime.fromisoformat(n1).timestamp()
+                        os.utime(m1, (r1, r1))
+    def s1(self, h, t1):
+        print(f'Searching for folder: {h}')
+        k = self.get_all_files('root')
+        u1 = None
+        for o in k:
+            if o['name'] == h and o['mimeType'] == 'application/vnd.google-apps.folder':
+                u1 = o
+                break
+        if u1:
+            self.sync_folder(u1['id'], t1, h)
+        else:
+            print(f'Folder "{h}" not found in root directory')
+    def v1(self, t1):
+        print('Starting full Google Drive sync...')
+        self.sync_folder('root', t1, 'My Drive')
+        print('\n✅ Sync completed!')
+def u():
+    w1 = './google_drive_backup'
+    x1 = 'credentials.json'
+    try:
+        y1 = w(credentials_file=x1)
+        y1.sync_all(w1)
+    except Exception as e:
+        print(f'Error: {e}')
+        print('\nSetup instructions:')
+        print('1. Go to Google Cloud Console (https://console.cloud.google.com)')
+        print('2. Create a new project or select existing')
+        print('3. Enable Google Drive API')
+        print('4. Create OAuth 2.0 credentials (Desktop application)')
+        print('5. Download credentials as "credentials.json"')
+        print('6. Place credentials.json in the same directory as this script')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: gdrive_syncer2.py ---
+import os
+import pickle
+from pathlib import Path
+from dotenv import load_dotenv
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import Resource, build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
+z1 = Path.home() / '.env'
+load_dotenv(dotenv_path=z1)
+a = ['https://www.googleapis.com/auth/drive.readonly']
+class w:
+    def __init__(self, a2=None, b2=None, y='token.pickle'):
+        self.client_id = a2 or os.getenv('GOOGLE_CLIENT_ID')
+        self.client_secret = b2 or os.getenv('GOOGLE_CLIENT_SECRET')
+        if not self.client_id or not self.client_secret:
+            raise ValueError('Missing credentials. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in ~/.env file')
+        self.token_file = y
+        self.service = self.authenticate()
+    def b(self):
+        c = None
+        if os.path.exists(self.token_file):
+            with open(self.token_file, 'rb') as d:
+                c = pickle.load(d)
+        if not c or not c.valid:
+            if c and c.expired and c.refresh_token:
+                c.refresh(Request())
+            else:
+                e = InstalledAppFlow.from_client_config({'installed': {'client_id': self.client_id, 'client_secret': self.client_secret, 'auth_uri': 'https://accounts.google.com/o/oauth2/auth', 'token_uri': 'https://oauth2.googleapis.com/token', 'redirect_uris': ['http://localhost']}}, a)
+                c = e.run_local_server(port=0)
+            with open(self.token_file, 'wb') as d:
+                pickle.dump(c, d)
+        return build('drive', 'v3', credentials=c)
+    def z(self, m='root'):
+        a1 = []
+        b1 = None
+        while True:
+            try:
+                j = self.service.files().list(q=f"'{m}' in parents and trashed=false", pageSize=1000, fields='nextPageToken, files(id, name, mimeType, size, modifiedTime)', pageToken=b1).execute()
+                k = j.get('files', [])
+                a1.extend(k)
+                b1 = j.get('nextPageToken')
+                if not b1:
+                    break
+            except HttpError as error:
+                print(f'An error occurred: {error}')
+                break
+        return a1
+    def c1(self, d1, e1, f1):
+        try:
+            q = self.service.files().get_media(fileId=d1)
+            os.makedirs(os.path.dirname(f1), exist_ok=True)
+            with open(f1, 'wb') as f:
+                r = MediaIoBaseDownload(f, q)
+                s = False
+                while not s:
+                    t, s = r.next_chunk()
+                    print(f'Downloading {e1}: {int(t.progress() * 40)}%')
+            print(f'✓ Downloaded: {e1}')
+            return True
+        except HttpError as error:
+            print(f'✗ Failed to download {e1}: {error}')
+            return False
+    def g1(self, h1, i1, h='root'):
+        print(f'\n📁 Syncing folder: {h}')
+        os.makedirs(i1, exist_ok=True)
+        k = self.get_all_files(h1)
+        for o in k:
+            j1 = o['name']
+            k1 = o['id']
+            l1 = o.get('mimeType', '')
+            m1 = os.path.join(i1, j1)
+            if l1 == 'application/vnd.google-apps.folder':
+                self.sync_folder(k1, m1, j1)
+            else:
+                n1 = o.get('modifiedTime')
+                o1 = True
+                if os.path.exists(m1):
+                    p1 = os.path.getmtime(m1)
+                    from datetime import datetime
+                    q1 = datetime.fromisoformat(n1).timestamp()
+                    if p1 >= q1:
+                        o1 = False
+                        print(f'⏭ Skipping (up to date): {j1}')
+                if o1:
+                    self.download_file(k1, j1, m1)
+                    if n1:
+                        from datetime import datetime
+                        r1 = datetime.fromisoformat(n1).timestamp()
+                        os.utime(m1, (r1, r1))
+    def v1(self, t1):
+        print('Starting full Google Drive sync...')
+        self.sync_folder('root', t1, 'My Drive')
+        print('\n✅ Sync completed!')
+    def s1(self, h, t1):
+        print(f'Searching for folder: {h}')
+        k = self.get_all_files('root')
+        u1 = None
+        for o in k:
+            if o['name'] == h and o['mimeType'] == 'application/vnd.google-apps.folder':
+                u1 = o
+                break
+        if u1:
+            self.sync_folder(u1['id'], t1, h)
+        else:
+            print(f'Folder "{h}" not found in root directory')
+def u():
+    w1 = './google_drive_backup'
+    try:
+        y1 = w()
+        y1.sync_all(w1)
+    except ValueError as e:
+        print(f'Configuration error: {e}')
+        print('\nPlease create ~/.env file with:')
+        print('GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com')
+        print('GOOGLE_CLIENT_SECRET=your_client_secret')
+    except Exception as e:
+        print(f'Error: {e}')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: gdrive_syncer3.py ---
+import os
+import pickle
+from urllib.parse import urlencode
+import requests
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import Resource, build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
+a = ['https://www.googleapis.com/auth/drive.readonly']
+class w:
+    def __init__(self, a2=None, b2=None, y='token.pickle'):
+        self.client_id = a2 or os.getenv('GOOGLE_CLIENT_ID')
+        self.client_secret = b2 or os.getenv('GOOGLE_CLIENT_SECRET')
+        if not self.client_id or not self.client_secret:
+            raise ValueError('Missing credentials in environment')
+        self.token_file = y
+        self.service = self.authenticate()
+    def b(self):
+        c = None
+        if os.path.exists(self.token_file):
+            with open(self.token_file, 'rb') as d:
+                c = pickle.load(d)
+        if not c or not c.valid:
+            if c and c.expired and c.refresh_token:
+                c2 = {'client_id': self.client_id, 'client_secret': self.client_secret, 'refresh_token': c.refresh_token, 'grant_type': 'refresh_token'}
+                d2 = requests.post('https://oauth2.googleapis.com/token', data=c2)
+                if d2.status_code == 200:
+                    e2 = d2.json()
+                    c = Credentials(token=e2['access_token'], refresh_token=c.refresh_token, token_uri='https://oauth2.googleapis.com/token', client_id=self.client_id, client_secret=self.client_secret)
+                    with open(self.token_file, 'wb') as d:
+                        pickle.dump(c, d)
+            else:
+                c = self.manual_oauth_flow()
+        return build('drive', 'v3', credentials=c)
+    def f2(self):
+        g2 = {'client_id': self.client_id, 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob', 'response_type': 'code', 'scope': ' '.join(a), 'access_type': 'offline'}
+        h2 = f'https://accounts.google.com/o/oauth2/auth?{urlencode(g2)}'
+        print('\n' + '=' * 40)
+        print('MANUAL AUTHENTICATION REQUIRED')
+        print('-' * 40)
+        print(f'1. Open this URL in your browser:\n{h2}')
+        print('\n2. Log in to your Google account')
+        print('3. Grant permissions when prompted')
+        print('4. Copy the authorization code')
+        print('-' * 40)
+        i2 = input('\nEnter authorization code: ').strip()
+        j2 = {'client_id': self.client_id, 'client_secret': self.client_secret, 'code': i2, 'grant_type': 'authorization_code', 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
+        d2 = requests.post('https://oauth2.googleapis.com/token', data=j2)
+        if d2.status_code != 200:
+            raise Exception(f'Token exchange failed: {d2.text}')
+        e2 = d2.json()
+        k2 = Credentials(token=e2['access_token'], refresh_token=e2.get('refresh_token'), token_uri='https://oauth2.googleapis.com/token', client_id=self.client_id, client_secret=self.client_secret)
+        with open(self.token_file, 'wb') as d:
+            pickle.dump(k2, d)
+        return k2
+    def z(self, m='root'):
+        a1 = []
+        b1 = None
+        while True:
+            try:
+                j = self.service.files().list(q=f"'{m}' in parents and trashed=false", pageSize=1000, fields='nextPageToken, files(id, name, mimeType, size, modifiedTime)', pageToken=b1).execute()
+                k = j.get('files', [])
+                a1.extend(k)
+                b1 = j.get('nextPageToken')
+                if not b1:
+                    break
+            except HttpError as error:
+                print(f'An error occurred: {error}')
+                break
+        return a1
+    def c1(self, d1, e1, f1):
+        try:
+            q = self.service.files().get_media(fileId=d1)
+            os.makedirs(os.path.dirname(f1), exist_ok=True)
+            with open(f1, 'wb') as f:
+                r = MediaIoBaseDownload(f, q)
+                s = False
+                while not s:
+                    t, s = r.next_chunk()
+                    print(f'Downloading {e1}: {int(t.progress() * 40)}%')
+            print(f'✓ Downloaded: {e1}')
+            return True
+        except HttpError as error:
+            print(f'✗ Failed to download {e1}: {error}')
+            return False
+    def g1(self, h1, i1, h='root'):
+        print(f'\n📁 Syncing folder: {h}')
+        os.makedirs(i1, exist_ok=True)
+        k = self.get_all_files(h1)
+        for o in k:
+            j1 = o['name']
+            k1 = o['id']
+            l1 = o.get('mimeType', '')
+            m1 = os.path.join(i1, j1)
+            if l1 == 'application/vnd.google-apps.folder':
+                self.sync_folder(k1, m1, j1)
+            else:
+                n1 = o.get('modifiedTime')
+                o1 = True
+                if os.path.exists(m1):
+                    p1 = os.path.getmtime(m1)
+                    from datetime import datetime
+                    q1 = datetime.fromisoformat(n1).timestamp()
+                    if p1 >= q1:
+                        o1 = False
+                        print(f'⏭ Skipping (up to date): {j1}')
+                if o1:
+                    self.download_file(k1, j1, m1)
+                    if n1:
+                        from datetime import datetime
+                        r1 = datetime.fromisoformat(n1).timestamp()
+                        os.utime(m1, (r1, r1))
+    def v1(self, t1):
+        print('Starting full Google Drive sync...')
+        self.sync_folder('root', t1, 'My Drive')
+        print('\n✅ Sync completed!')
+def l2():
+    import subprocess
+    import sys
+    m2 = ['google-api-python-client', 'google-auth-oauthlib', 'requests']
+    for n2 in m2:
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', n2])
+            print(f'✓ Installed {n2}')
+        except:
+            print(f'✗ Failed to install {n2}')
+def u():
+    from pathlib import Path
+    from dotenv import load_dotenv
+    z1 = Path.home() / '.env'
+    if z1.exists():
+        load_dotenv(dotenv_path=z1)
+    w1 = '/sdcard/GoogleDriveBackup'
+    try:
+        y1 = w()
+        y1.sync_all(w1)
+    except Exception as e:
+        print(f'Error: {e}')
+        print('\nTroubleshooting:')
+        print('1. Ensure your ~/.env file has correct credentials')
+        print('2. Check internet connection')
+        print('3. On Android, ensure Termux has storage permission: termux-setup-storage')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: gdrive_syncer4.py ---
+import os
+import pickle
+from datetime import datetime
+from pathlib import Path
+import requests
+from dotenv import load_dotenv
+from requests.models import Response
+z1 = Path.home() / '.env'
+if z1.exists():
+    load_dotenv(dotenv_path=z1)
+class o2:
+    def __init__(self, a2=None, b2=None, y='drive_token.pkl'):
+        self.client_id = a2 or os.getenv('GOOGLE_CLIENT_ID')
+        self.client_secret = b2 or os.getenv('GOOGLE_CLIENT_SECRET')
+        self.token_file = y
+        self.access_token = None
+        self.refresh_token = None
+        if not self.client_id or not self.client_secret:
+            raise ValueError('Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in ~/.env')
+        self.load_or_auth()
+    def p2(self):
+        if os.path.exists(self.token_file):
+            with open(self.token_file, 'rb') as f:
+                q2 = pickle.load(f)
+                self.access_token = q2.get('access_token')
+                self.refresh_token = q2.get('refresh_token')
+                if self.access_token and (not self.is_token_expired()):
+                    return
+        self.authenticate()
+    def r2(self):
+        return False
+    def s2(self):
+        if not self.refresh_token:
+            return False
+        q2 = {'client_id': self.client_id, 'client_secret': self.client_secret, 'refresh_token': self.refresh_token, 'grant_type': 'refresh_token'}
+        d2 = requests.post('https://oauth2.googleapis.com/token', data=q2)
+        if d2.status_code == 200:
+            e2 = d2.json()
+            self.access_token = e2.get('access_token')
+            with open(self.token_file, 'wb') as f:
+                pickle.dump({'access_token': self.access_token, 'refresh_token': self.refresh_token}, f)
+            return True
+        return False
+    def b(self):
+        print('\n' + '=' * 40)
+        print('GOOGLE DRIVE AUTHENTICATION')
+        print('-' * 40)
+        h2 = f'https://accounts.google.com/o/oauth2/auth?client_id={self.client_id}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly&access_type=offline'
+        print('\n1. Open this URL in your browser:')
+        print(f'\n{h2}\n')
+        print('2. Sign in to your Google account')
+        print('3. Grant access to Google Drive')
+        print('4. Copy the authorization code')
+        print('-' * 40)
+        i2 = input('\nEnter authorization code: ').strip()
+        e2 = {'client_id': self.client_id, 'client_secret': self.client_secret, 'code': i2, 'grant_type': 'authorization_code', 'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'}
+        d2 = requests.post('https://oauth2.googleapis.com/token', data=e2)
+        if d2.status_code != 200:
+            raise Exception(f'Authentication failed: {d2.text}')
+        t2 = d2.json()
+        self.access_token = t2.get('access_token')
+        self.refresh_token = t2.get('refresh_token')
+        with open(self.token_file, 'wb') as f:
+            pickle.dump({'access_token': self.access_token, 'refresh_token': self.refresh_token}, f)
+        print('\n✓ Authentication successful!\n')
+    def u2(self, v2, url, **w2):
+        x2 = w2.get('headers', {})
+        x2['Authorization'] = f'Bearer {self.access_token}'
+        w2['headers'] = x2
+        d2 = requests.request(v2, url, **w2)
+        if d2.status_code == 401 and self.refresh_access_token():
+            x2['Authorization'] = f'Bearer {self.access_token}'
+            d2 = requests.request(v2, url, **w2)
+        return d2
+    def y2(self, m='root', b1=None):
+        url = 'https://www.googleapis.com/drive/v3/files'
+        z2 = {'q': f"'{m}' in parents and trashed=false", 'pageSize': 100, 'fields': 'nextPageToken, files(id, name, mimeType, size, modifiedTime)'}
+        if b1:
+            z2['pageToken'] = b1
+        d2 = self.api_request('GET', url, params=z2)
+        if d2.status_code != 200:
+            print(f'Error listing files: {d2.text}')
+            return None
+        return d2.json()
+    def a3(self, m='root'):
+        a1 = []
+        b1 = None
+        while True:
+            b3 = self.list_files(m, b1)
+            if not b3:
+                break
+            k = b3.get('files', [])
+            a1.extend(k)
+            b1 = b3.get('nextPageToken')
+            if not b1:
+                break
+        return a1
+    def c1(self, d1, e1, f1):
+        url = f'https://www.googleapis.com/drive/v3/files/{d1}?alt=media'
+        d2 = self.api_request('GET', url, stream=True)
+        if d2.status_code != 200:
+            print(f'Failed to download {e1}: {d2.text}')
+            return False
+        c3 = int(d2.headers.get('content-length', 0))
+        d3 = 0
+        os.makedirs(os.path.dirname(f1), exist_ok=True)
+        with open(f1, 'wb') as f:
+            for e3 in d2.iter_content(chunk_size=8192):
+                if e3:
+                    f.write(e3)
+                    d3 += len(e3)
+                    if c3 > 0:
+                        f3 = d3 / c3 * 40
+                        print(f'\rDownloading {e1}: {f3:.1f}%', end='', flush=True)
+        print(f'\n✓ Downloaded: {e1}')
+        return True
+    def g3(self, d1):
+        url = f'https://www.googleapis.com/drive/v3/files/{d1}'
+        z2 = {'fields': 'id, name, mimeType, size, modifiedTime'}
+        d2 = self.api_request('GET', url, params=z2)
+        if d2.status_code == 200:
+            return d2.json()
+        return None
+    def g1(self, h1, i1, h='root', h3=0):
+        i3 = '  ' * h3
+        print(f'{i3}📁 Syncing: {h}')
+        os.makedirs(i1, exist_ok=True)
+        k = self.get_all_files_recursive(h1)
+        for o in k:
+            j1 = o['name']
+            k1 = o['id']
+            l1 = o.get('mimeType', '')
+            f1 = os.path.join(i1, self.sanitize_filename(j1))
+            if l1 == 'application/vnd.google-apps.folder':
+                self.sync_folder(k1, f1, j1, h3 + 1)
+            else:
+                n1 = o.get('modifiedTime')
+                o1 = True
+                if os.path.exists(f1):
+                    p1 = os.path.getmtime(f1)
+                    if n1:
+                        q1 = datetime.fromisoformat(n1).timestamp()
+                        if p1 >= q1:
+                            o1 = False
+                            print(f'{i3}  ⏭ Up to date: {j1}')
+                if o1 and self.download_file(k1, j1, f1) and n1:
+                    r1 = datetime.fromisoformat(n1).timestamp()
+                    os.utime(f1, (r1, r1))
+    def j3(self, k3):
+        l3 = '<>:"/\\|?*'
+        for m3 in l3:
+            k3 = k3.replace(m3, '_')
+        return k3
+    def v1(self, t1):
+        print('\n' + '=' * 40)
+        print('STARTING GOOGLE DRIVE SYNC')
+        print('-' * 40)
+        n3 = self.get_file_metadata('root')
+        if n3:
+            print(f"Root folder: {n3.get('name', 'My Drive')}")
+        self.sync_folder('root', t1, 'My Drive')
+        print('\n' + '=' * 40)
+        print('✅ SYNC COMPLETED!')
+        print('-' * 40)
+def u():
+    w1 = '/sdcard/GoogleDriveBackup'
+    try:
+        y1 = o2()
+        y1.sync_all(w1)
+    except KeyboardInterrupt:
+        print('\n\n⚠️ Sync interrupted by user')
+    except Exception as e:
+        print(f'\n❌ Error: {e}')
+        print('\nTroubleshooting:')
+        print('1. Check your internet connection')
+        print('2. Verify credentials in ~/.env')
+        print('3. Run: termux-setup-storage (for Android storage access)')
+        print('4. Check if ~/.env has correct format:')
+        print('   GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com')
+        print('   GOOGLE_CLIENT_SECRET=your_secret')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,310 @@
+# filename: auto_enhance.py
+import cv2;import numpy as np
+def m(w,J=False,G=None):try:if G:H,O=G;print(f'[{H}/{O}] {w.name}')
+        elif J:print(f'[PROCESSING] {w.name}...')
+        W=cv2.imread(str(w))
+        if W is None:print(f'[ERROR] Could not read:{w}');return False
+        E=cv2.fastNlMeansDenoisingColored(W,None,3,3,7,21);del W;X=cv2.cvtColor(E,cv2.COLOR_BGR2LAB);del E;A,y,z=cv2.split(X);M=cv2.createCLAHE(clipLimit=2.0,tileGridSize=(8,8));Z=M.apply(A);p=cv2.merge((Z,y,z));del X,A,y,z,Z;f=cv2.cvtColor(p,cv2.COLOR_LAB2BGR);del p;V=cv2.cvtColor(f,cv2.COLOR_BGR2HSV);del f;h,s,v=cv2.split(V);s=np.clip(s*1.1,0,255).astype(np.uint8);o=cv2.merge((h,s,v));del V,h,s,v;u=cv2.cvtColor(o,cv2.COLOR_HSV2BGR);del o;n=cv2.GaussianBlur(u,(0,0),2.0);k=cv2.addWeighted(u,1.5,n,-0.5,0);del u,n;cv2.imwrite(str(w),k);del k
+        if J and (not G):print(f'[SUCCESS] Enhanced and replaced:{w.name}')
+        return True
+    except Exception as e:print(f'[FAILED] Error processing {w.name}:{e}');return False
+def j(t):d={'.jpg','.jpeg','.png','.webp','.bmp','.tiff'};b=[]
+    if not t:print("[INFO] No inputs provided. Scanning current directory '.' recursively...");t=[P('.')]
+    for F in t:T=P(F)
+        if T.is_file() and T.suffix.lower() in d:b.append(T)
+        elif T.is_dir():for R in T.rglob('*'):if R.is_file() and R.suffix.lower() in d:b.append(R)
+        else:print(f'[WARNING] Skipping invalid path or unsupported format:{F}')
+    return list(set(b))
+def a(N,J):I=[]
+    for i,(W,_) in enumerate(N,1):L=m(W,J,(i,len(N)));I.append(L)
+    return I
+def c(N,B):O=len(N);print(f'[SYSTEM] Utilizing {B} parallel CPU threads.');l=[]
+    for i,(W,C) in enumerate(N,1):print(f'[{i}/{O}] {W.name}');l.append((W,False))
+    with mp.Pool(processes=B) as U:I=U.starmap(m,l)
+    return I
+def S():K=D.ArgumentParser(description='Google Photos Style Auto-Enhancer (In-place replacement)',formatter_class=D.RawDescriptionHelpFormatter);K.add_argument('inputs',nargs='*',help="Files or folders to process. Defaults to recursive '.' if empty.");K.add_argument('-v','--verbose',action='store_true',help='Print details for every image processed.');K.add_argument('--parallel',action='store_true',help='Enable multiprocessing (sequential is default).');K.add_argument('-j','--jobs',type=int,default=None,help='Number of parallel jobs. Default is CPU count.');Q=K.parse_args();x=j(Q.inputs);q=len(x)
+    if q==0:print('[INFO] No supported images found to enhance. Exiting.');Y.exit(0)
+    print(f'\n[START] Found {q} target images.');print('[WARNING] Images will be ENHANCED IN-PLACE (originals will be overwritten)!');N=[(W,Q.verbose) for W in x]
+    if Q.parallel:try:B=Q.jobs if Q.jobs else mp.cpu_count();I=c(N,B)
+        except ImportError:print('[WARNING] multiprocessing not available. Falling back to sequential.');I=a(N,Q.verbose)
+    else:print('[SYSTEM] Processing sequentially (default mode)...');I=a(N,Q.verbose)
+    g=sum((1 for r in I if r));print('[FINISHED] Done')
+if __name__=='__main__':raise SystemExit(S())
+# filename: downimg.py
+import cv2;from tqdm import tqdm
+class a:def __init__(self,u='.',g=0.5):self.root_dir=C(u);self.scale_factor=g;self.supported_formats={'.jpg','.jpeg','.png','.bmp','.tiff','.gif','.webp'};print('-'*40);print('IMAGE DOWNSCALER');print('-'*40);print(f'[INIT] Root directory:{self.root_dir.resolve()}');print(f'[INIT] Scale factor:{g} (new size=original × {g})');print(f'[INIT] CPU cores available:{p()}')
+        if not 0<g<=1.0:raise ValueError('Scale factor must be between 0 (exclusive) and 1.0 (inclusive)')
+        if g==1.0:print('[WARN] Scale factor is 1.0-no downscaling will occur')
+    def c(self):print('\n[SCAN] Scanning for image files...');h=[]
+        for H in self.supported_formats:h.extend(self.root_dir.rglob(f'*{H}'));h.extend(self.root_dir.rglob(f'*{H.upper()}'))
+        h=list(set(h));h=sorted(h);print(f'[SCAN] Found {len(h)} image file(s)')
+        if h:print('[SCAN] Sample paths:')
+            for r in h[:3]:print(f'-{r.relative_to(self.root_dir)}')
+            if len(h)>3:print(f'       ... and {len(h)-3} more')
+        return h
+    @staticmethod
+    def b(E):l,g=E
+        try:I=cv2.imread(str(l))
+            if I is None:return (l,False,'Failed to read image')
+            z,B=I.shape[:2];f=(B,z);q=int(B*g);m=int(z*g);s=(q,m)
+            if q<1 or m<1:return (l,False,f'New size too small ({s})')
+            j=cv2.resize(I,s,interpolation=cv2.INTER_AREA);x=cv2.imwrite(str(l),j)
+            if not x:return (l,False,'Failed to write image')
+            v=f'{f} → {s}';return (l,True,v)
+        except Exception as e:return (l,False,f'Error:{e!s}')
+    def d(self,i):if not i:print('[WARN] No images to process!');return
+        print(f'\n[PROCESS] Downscaling {len(i)} image(s) with {p()} process(es)...');o=[(r,self.scale_factor) for r in i];n=0;y=0
+        with D(processes=p()) as G:w=list(tqdm(G.imap_unordered(self.downscale_image,o),total=len(i),desc='Downscaling',unit='img',ncols=80))
+        print('\n[RESULTS]');print('-'*40)
+        for l,x,v in w:if x:n+=1;A='✓ OK';t=str(l.relative_to(self.root_dir));print(f'{A}  {t:<50} {v}')
+            else:y+=1;A='✗ FAIL';t=l.relative_to(self.root_dir);print(f'{A}  {t:<50} {v}')
+        print('-'*40);print(f'[SUMMARY] Successful:{n}|Failed:{y}|Total:{len(i)}')
+    def J(self):i=self.get_all_images()
+        if not i:print('\n[WARN] No images found in directory!');return
+        self.process_images(i);print('\n'+'='*40);print('PROCESS COMPLETE-Images updated in-place');print('-'*40)
+def F():g=0.5
+    if len(K.argv)>1:try:g=float(K.argv[1])
+        except ValueError:print(f"[ERROR] Invalid scale factor:'{K.argv[1]}'");print('Usage:python script.py [scale_factor]');print('Example:python script.py 0.5');K.exit(1)
+    k=a(u='.',g=g);k.run()
+if __name__=='__main__':raise SystemExit(F())
+# filename: embed_optimizer.py
+from dh import fsz;from joblib import Parallel,delayed;from loguru import logger;h=4;a={'.css','.html','.htm','.js'};t=300;m={'png':lambda p:['pngq',str(p)],'jpg':lambda p:['jpegoptim',str(p)],'webp_to_jpg':lambda i,o:['to_jpg',str(i),str(o)],'svg':lambda p:['svgo','-i',str(p),'-o',str(p)],'js':lambda p:['ter_ser',str(p)],'css':lambda p:['ccss',str(p)]};y={'image/png':'.png','image/jpeg':'.jpg','image/jpg':'.jpg','image/webp':'.webp','image/svg+xml':'.svg','text/css':'.css','application/javascript':'.js','text/javascript':'.js'};x={'.png':'png','.jpg':'jpg','.jpeg':'jpg','.webp':'webp','.svg':'svg','.css':'css','.js':'js'};d={'png':'image/png','jpg':'image/jpeg','svg':'image/svg+xml','css':'text/css','js':'application/javascript'};w=re.compile('data:(?P<mime>image/(?:png|jpe?g|webp|svg\\+xml)|text/css|(?:application|text)/javascript);base64,(?P<data>[A-Za-z0-9+/=]+)')
+def Q(ay,aq):try:ac=F.run(ay,capture_output=True,ax=True,timeout=t)
+        if ac.returncode!=0:logger.error(f'{aq} failed (rc={ac.returncode}):{ac.stderr.strip()[:300]}');return False
+        return True
+    except F.TimeoutExpired:logger.error(f'{aq} timed out after {t}s');return False
+    except FileNotFoundError:logger.error(f"{aq}:'{ay[0]}' not found in PATH");return False
+    except Exception as e:logger.error(f'{aq}:{e}');return False
+def c(at,ap):az=y.get(at)
+    if az is None:logger.warning(f'Unsupported MIME type:{at}');return (None,None)
+    ak=x.get(az)
+    if ak is None:return (None,None)
+    fd,T=R.mkstemp(suffix=az);os.close(fd);S=an(T);S.write_bytes(ap);k=[S];A=S;N=d.get(ak,at)
+    try:if ak=='png':if not Q(m['png'](S),'pngq'):return (None,None)
+        elif ak=='jpg':if not Q(m['jpg'](S),'jpegoptim'):return (None,None)
+        elif ak=='webp':M=S.with_suffix('.jpg')
+            if not Q(m['webp_to_jpg'](S,M),'to_jpg'):return (None,None)
+            if not M.exists():logger.error(f'to_jpg did not produce output:{M}');return (None,None)
+            k.append(M)
+            if not Q(m['jpg'](M),'jpegoptim'):return (None,None)
+            A=M;N='image/jpeg'
+        elif ak=='svg':if not Q(m['svg'](S),'svgo'):return (None,None)
+        elif ak=='css':if not Q(m['css'](S),'ccss'):return (None,None)
+        elif ak=='js' and (not Q(m['js'](S),'ter_ser')):return (None,None)
+        if not A.exists():logger.error(f'Result file missing after optimization:{A}');return (None,None)
+        I=A.read_bytes();return (I,N)
+    finally:for f in k:with D.suppress(Exception):f.unlink(missing_ok=True)
+def u(av):al={'file':str(av),'original_size':0,'new_size':0,'resources_found':0,'resources_optimized':0,'space_freed':0,'error':None}
+    try:l=av.read_bytes();n=len(l);al['original_size']=n;ax=l.decode('utf-8',Z='replace');V=list(w.finditer(ax));al['resources_found']=len(V)
+        if not V:return al
+        ai=[];aa=0;j=0
+        for ah in V:ai.append(ax[aa:ah.start()]);at=ah.group('mime');L=ah.group('data')
+            try:aB=Y.b64decode(L)
+            except Exception as e:logger.warning(f'Base64 decode failed in {av.name}:{e}');ai.append(ah.group(0));aa=ah.end();continue
+            U=y.get(at)=='.webp';I,N=c(at,aB)
+            if I is not None and (U or len(I)<len(aB)):W=Y.b64encode(I).decode('ascii');ai.append(f'data:{N};base64,{W}');j+=1
+            else:ai.append(ah.group(0))
+                if I is not None and (not U):logger.debug(f'No size improvement for {at} in {av.name} ({len(I)}>={len(aB)})')
+            aa=ah.end()
+        ai.append(ax[aa:])
+        if j>0:P=''.join(ai);H=P.encode('utf-8');O=len(H);av.write_bytes(H);al['new_size']=O;al['resources_optimized']=j;al['space_freed']=n-O
+        else:al['new_size']=n
+    except Exception as e:logger.error(f'Error processing {av}:{e}');al['error']=str(e)
+    return al
+def b(aj):ae=[]
+    for p in aj:if p.is_file() and p.suffix.lower() in a:ae.append(p)
+        elif p.is_dir():for az in a:ae.extend(p.rglob(f'*{az}'));ae.extend(p.rglob(f'*{az.upper()}'))
+        else:logger.warning(f'Path not found:{p}')
+    aw=set();ad=[]
+    for f in ae:r=f.resolve()
+        if r not in aw:aw.add(r);ad.append(f)
+    return ad
+def g(al):au=an(al['file']).name
+    if al['error']:print(f"  ✗ {au} — ERROR:{al['error']}");return
+    af=al['resources_found'];aA=al['resources_optimized'];ag=al['space_freed']
+    if af==0:print(f'  · {au} — no embedded resources')
+    elif aA==0:print(f'  · {au} — {af} resource(s),none optimized')
+    else:print(f'  ✓ {au} — {aA}/{af} optimized,freed {fsz(ag)}')
+def q(G):am=len(G);Z=sum((1 for s in G if s['error']));B=sum((s['resources_found'] for s in G));J=sum((s['resources_optimized'] for s in G));C=sum((s['space_freed'] for s in G));print('\n'+'='*40);print('Summary');print('-'*40);print(f'  Files processed      :{am}');print(f'  Errors               :{Z}');print(f'  Resources found      :{B}');print(f'  Resources optimized  :{J}');print(f'  Total space freed    :{fsz(C)}');print('='*40)
+def E():ab=K.ArgumentParser(description='Extract,optimize,and re-embed base64 resources in CSS/HTML/JS files.',formatter_class=K.RawDescriptionHelpFormatter,epilog='Examples:\n%(prog)s                     Process current dir recursively\n%(prog)s ./src/./assets/Process specific directories\n%(prog)s a.css b.html        Process specific files\n%(prog)s-j 8 ./assets/Use 8 parallel workers\n%(prog)s--dry-run           List files without processing\n');ab.add_argument('inputs',nargs='*',type=an,help='Files or directories (default:current directory,recursive)');ab.add_argument('-j','--workers',type=int,default=h,help=f'Parallel workers (default:{h})');ab.add_argument('--dry-run',action='store_true',help='List files that would be processed');ab.add_argument('-v','--verbose',action='store_true',help='Enable verbose (DEBUG) logging');return ab.parse_args()
+def ar():ao=E();logger.remove();logger.add(aC.stderr,level='DEBUG' if ao.verbose else 'WARNING',format='<level>{level:<7}</level>|{message}');z=ao.inputs if ao.inputs else [an.cwd()];v=b(z)
+    if not v:print('No CSS/HTML/JS files found.');return
+    print(f'Found {len(v)} file(s) to process.\n')
+    if ao.dry_run:for f in v:print(f'  {f}')
+        return
+    X=Parallel(n_jobs=ao.workers,prefer='threads')((delayed(u)(f) for f in v))
+    for s in X:g(s)
+    q(X)
+if __name__=='__main__':raise SystemExit(ar())
+# filename: opng.py
+from dh import cprint,get_files,gsz,mpf3,runcmd;c=i.cwd();a=4
+def b(n):n=i(n);d=gsz(n)
+    try:q=['optipng','-o7',str(n)];k,t,j=runcmd(q,show_output=True)
+        if 'skipping' in t.lower():print(f' Skipped:{n.name}');return
+        f=gsz(n);u=d-f
+        if not u:print(f'✅ :{n.name} :(no change)');return
+        h=f/d*40;print(f'✅ :{n.name}',end='|');cprint(f'{h:.1f}%');return
+    except FileNotFoundError:print("❌ Error:'pngquant' command not found. Please ensure the 'pngquant' binary is installed and in your system PATH.")
+    except Exception as e:print(f'❌ Error compressing {n}:{e}')
+    return
+def m():r=i.cwd();l=s.argv[1:];g=[]
+    if l:for o in l:p=i(o)
+            if p.is_file():g.append(p)
+            elif p.is_dir():g.extend(get_files(p,ext=['.png','.PNG']))
+    else:g=get_files(r,ext=['.png','.PNG'])
+    _=mpf3(b,g)
+if __name__=='__main__':raise SystemExit(m())
+# filename: optimpng.py
+from loguru import logger;from tqdm import tqdm;e=8;f='.png'
+def a(h):return [p for p in h.rglob('*') if p.suffix.lower()==f]
+def d(q):try:g.run(['optipng','-o7',str(q)],check=True,capture_output=True,text=True)
+    except g.CalledProcessError as exc:return (False,q,str(u))
+    else:return (True,q,None)
+def o():t=l.cwd();i=a(t)
+    if not i:logger.warning('No PNG files found in the current directory.');return 0
+    print(f'Found {len(i)} PNG files to optimize.');j=[]
+    with m(processes=e) as s:b=[s.apply_async(d,(n,)) for n in i]
+        with tqdm(total=len(i),desc='Optimizing PNGs',unit='file') as r:for c in b:j.append(c.get());r.update(1)
+    k=sum((1 for v,_,_ in j if v));print(f'Optimization complete. Success:{k}/{len(i)} files.');return 0
+if __name__=='__main__':raise SystemExit(o())
+# filename: oxip.py
+from dh import get_files;from rich.progress import Progress
+def d(l):l=i(l)
+    try:c=l.stat().st_size;e.run(['oxipng','-o','max','--quiet','--strip','safe',str(l),'--force'],check=True,stdout=e.DEVNULL,stderr=e.DEVNULL);b=l.stat().st_size;return c-b
+    except e.CalledProcessError:return 0
+def k():o=i.cwd();g=get_files(o,ext=['.png'])
+    if not g:print('No PNG files found in the current directory or subdirectories.');return
+    with Progress() as h:n=h.add_task('[cyan]Optimizing PNGs...',total=len(g));min(f(),8)
+        with j(8) as m:for _ in m.imap_unordered(d,g):h.update(n,advance=1)
+    a=sum((d(l) for l in g))/1048576;print(f'\n[bold green]Total space freed:{a:.2f} MB[/bold green]')
+if __name__=='__main__':raise SystemExit(k())
+# filename: pilenhancer.py
+from dh import get_files,mpf3;from PIL import Image,ImageEnhance
+def a(g):g=c(g)
+    try:with Image.open(g) as k:n=ImageEnhance.Contrast(k);m=ImageEnhance.Brightness(k);o=ImageEnhance.Sharpness(k);i=ImageEnhance.Color(k);k=n.enhance(1.1);k=m.enhance(1.1);k=o.enhance(1.1);k=i.enhance(1.1);k.save(g);print(f'Enhanced:{g.name}')
+    except Exception as e:print(f'Error enhancing {g.name}:{e}')
+def f():j=c.cwd();d=l.argv[1:];b=[]
+    if d:for h in d:p=c(h)
+            if p.is_file():b.append(p)
+            elif p.is_dir():b.extend(get_files(p,ext=['.jpg','.png','.webp']))
+    else:b=get_files(j,ext=['.jpg','.png','.webp'])
+    mpf3(a,b)
+if __name__=='__main__':raise SystemExit(f())
+# filename: resizeimg.py
+from PIL import Image
+def a(h,c=0.75):try:with Image.open(h) as n:k=int(n.width*c);i=int(n.height*c);f=n.resize((k,i),Image.LANCZOS);f.save(h,optimize=True,quality=85);print(f'Reduced:{h} ({n.width}x{n.height}->{k}x{i})')
+    except Exception as e:print(f'Error processing {h}:{e!s}')
+def m():d=[]
+    for j in b:d.extend(l.glob(j));d.extend(l.glob(j.upper()))
+    if not d:print('No image files found in current directory.');return
+    print(f'Found {len(d)} image file(s) to process...')
+    for g in d:a(g)
+    print('All images processed!')
+if __name__=='__main__':raise SystemExit(m())
+# filename: strip_exif.py
+from dh import fsz,gsz;from loguru import logger;from PIL import Image;a=['.jpg','.jpeg','.png','.tiff','.tif','.bmp','.webp'];j=8
+def c(z,P=False,O=False):U={'path':z,'success':False,'original_size':0,'new_size':0,'message':'','backup_created':False}
+    try:n=z.stat().st_size;U['original_size']=n
+        with Image.open(z) as ae:if P:t=z.with_suffix(z.suffix+'.backup');t.write_bytes(z.read_bytes());U['backup_created']=True
+                if O:logger.debug(f'📋 Backup:{t.name}')
+            f=Image.new(ae.mode,ae.size);f.putdata(list(ae.getdata()));Q=io.BytesIO();l={'format':ae.format}
+            if ae.format=='JPEG':l['quality']=95;l['optimize']=True
+            elif ae.format=='PNG':l['optimize']=True
+            if ae.format=='JPEG':f.save(Q,format=ae.format,quality=95,optimize=True,exif=None)
+            else:try:f.save(Q,**l,exif=None)
+                except TypeError:f.save(Q,**l)
+            I=Q.tell();U['new_size']=I;Q.seek(0);z.write_bytes(Q.getvalue());U['success']=True;w=I-n;h=w/n*100
+            if O:print(f'✅ {z.name}');print(f'   {fsz(n)} → {fsz(I)} ({h:+.1f}%)')
+            U['message']=f'Stripped EXIF:{w:+.0f}B ({h:+.1f}%)'
+    except Exception as e:U['success']=False;U['message']=f'Error:{e!s}'
+        if O:logger.error(f'❌ {z.name}:{e!s}')
+    return U
+def b(z,P=False,O=False):return c(z,P,O)
+def d(V,x,E=True):u=[];A=[ad if ad.startswith('.') else f'.{ad}' for ad in x];g=set()
+    for ad in A:g.add(ad.lower());g.add(ad.upper())
+    for J in V:ab=W(J)
+        if not ab.exists():logger.warning(f'⚠️  Path does not exist:{ab}');continue
+        if ab.is_file():if not g or ab.suffix in g:u.append(ab)
+        elif ab.is_dir():if E:for ad in g:u.extend(ab.glob(f'**/*{ad}'))
+            else:for ad in g:u.extend(ab.glob(f'*{ad}'))
+        else:logger.warning(f'⚠️  Unknown path type:{ab}')
+    return sorted(set(u))
+def p():T=G.ArgumentParser(description='Strip EXIF data from image files with parallel processing',formatter_class=G.RawDescriptionHelpFormatter,epilog='\nExamples:\n%(prog)s\n%(prog)s image1.jpg image2.png\n%(prog)s/path/to/images\n%(prog)s file.jpg-b\n%(prog)s .--no-recursive\n        ');T.add_argument('paths',nargs='*',default=['.'],help='Files or directories to process (default:current directory)');T.add_argument('-b','--backup',action='store_true',help='Create backup files (.backup) before stripping EXIF');T.add_argument('--no-recursive',action='store_true',help='Do not process subdirectories recursively');T.add_argument('--extensions',nargs='+',default=a,help='File extensions to process (default:.jpg .jpeg .png .tiff .tif .bmp .webp)');T.add_argument('-v','--verbose',action='store_true',help='Show detailed output for each file');T.add_argument('--no-size-report',action='store_true',help='Skip folder size change report');return T
+def aa():T=p();Y=T.parse_args();v=j;logger.debug(f'Fixed worker count:{v} (CPU count reported:{C()})');E=not Y.no_recursive;u=d(Y.paths,Y.extensions,E)
+    if not u:print('ℹ️  No image files found.');return 0
+    Z=set();m={}
+    if not Y.no_size_report:for ae in u:Z.add(ae.parent)
+        for H in Z:m[H]=gsz(H)
+    print(f'📸 Found {len(u)} image file(s)');print(f'🔧 Using {v} parallel worker(s)');print(f"💾 Backup:{('Yes' if Y.backup else 'No')}");print(f"📁 Recursive:{('Yes' if E else 'No')}");print('-'*40);N=[];D=0
+    with X(processes=v) as ac:k=[(ae,ac.apply_async(b,Y=(ae,Y.backup,Y.verbose))) for ae in u]
+        for ae,o in k:D+=1
+            try:U=o.get();N.append(U)
+                if not Y.verbose and (not U['success']):logger.error(f"❌ {ae.name}:{U['message']}")
+                elif not Y.verbose and U['success']:K=f'[{D}/{len(u)}]';print(f'  {K} ✅ {ae.name}')
+            except Exception as e:logger.error(f'❌ {ae.name}:Unexpected error:{e!s}');N.append({'path':ae,'success':False,'original_size':0,'new_size':0,'message':f'Unexpected error:{e!s}','backup_created':False})
+    print('-'*40);B=sum((1 for r in N if r['success']));S=len(N)-B;i=sum((r['original_size'] for r in N));F=sum((r['new_size'] for r in N));s=F-i;print('📊 Summary:');print(f'   Total files:{len(N)}');print(f'   ✅ Successful:{B}');print(f'   ❌ Failed:{S}');print(f'   📦 Original size:{fsz(i)}');print(f'   📦 New size:{fsz(F)}')
+    if i>0:print(f'   💰 Change:{fsz(s)} ({s/i*100:+.1f}%)')
+    else:print(f'   💰 Change:{fsz(s)} (N/A)')
+    if not Y.no_size_report and len(Z)>0:print('📁 Folder size changes:')
+        for H in sorted(Z):y=gsz(H);q=m.get(H,0);R=y-q
+            if R!=0:M=R/q*100 if q>0 else 0.0;print(f'   {H}:');print(f'      {fsz(q)} → {fsz(y)} ({M:+.1f}%)')
+    L=[r for r in N if r.get('backup_created',False)]
+    if L:print(f'💾 Backups created for {len(L)} file(s)')
+        if Y.verbose:for r in L[:5]:t=r['path'].with_suffix(r['path'].suffix+'.backup');print(f'   📋 {t.name}')
+            if len(L)>5:print(f'   ... and {len(L)-5} more')
+    return 0
+if __name__=='__main__':try:raise SystemExit(aa())
+    except KeyboardInterrupt:logger.warning('⚠️  Interrupted by user');af.exit(1)
+    except Exception as e:logger.error(f'❌ Fatal error:{e}');af.exit(1)
+# filename: upimg.py
+import cv2;from dh import get_files
+def a(l):d=str(l);n=cv2.imread(d)
+    if not n.any():return
+    h,w=n.shape[:2]
+    if 1<w<200:g=8
+    elif 200<=w<=500:g=6
+    elif 500<=w<=1000:g=4
+    elif 1000<=w<=2000:g=2
+    elif w>2000:del w,h,n;return
+    print(f'[✓] {l.name}:{h}X{w}->{h*g}X{w*g}')
+    try:e=cv2.resize(n,(w*g,h*g),interpolation=cv2.INTER_LANCZOS4);del n,h,w;b=cv2.addWeighted(e,1.5,e,-0.5,0);del e;cv2.imwrite(l,b);del b;return
+    except:return
+if __name__=='__main__':m=j.cwd();k=o.argv[1:];i=[j(p) for p in k] if k else get_files(m,ext=['.webp','.jpg','.jpeg','.png'])
+    for c,f in enumerate(i):print(f'{c}/{len(i)}');a(f)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

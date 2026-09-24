@@ -3,11 +3,11 @@
 # Script to build grpcio Python package for 32-bit ARM Termux
 # Run this in Google Cloud Shell (shell.cloud.google.com)
 
-set -e  # Exit on any error
+set -e # Exit on any error
 
 # Configuration
-PYTHON_VERSION="3.12"  # Adjust if needed
-GRPCIO_VERSION="1.60.0"  # Change to desired version
+PYTHON_VERSION="3.12"   # Adjust if needed
+GRPCIO_VERSION="1.60.0" # Change to desired version
 OUTPUT_DIR="$HOME/grpcio-build"
 TARGET_PLATFORM="linux_armv8l"
 
@@ -30,24 +30,24 @@ cd "$OUTPUT_DIR"
 echo -e "${GREEN}[1/6] Installing system dependencies...${NC}"
 sudo apt-get update
 sudo apt-get install -y \
-    build-essential \
-    autoconf \
-    libtool \
-    pkg-config \
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3-setuptools \
-    python3-wheel \
-    git \
-    curl \
-    cmake \
-    ninja-build \
-    libssl-dev \
-    zlib1g-dev \
-    gcc-arm-linux-gnueabihf \
-    g++-arm-linux-gnueabihf \
-    binutils-arm-linux-gnueabihf
+	build-essential \
+	autoconf \
+	libtool \
+	pkg-config \
+	python3 \
+	python3-pip \
+	python3-dev \
+	python3-setuptools \
+	python3-wheel \
+	git \
+	curl \
+	cmake \
+	ninja-build \
+	libssl-dev \
+	zlib1g-dev \
+	gcc-arm-linux-gnueabihf \
+	g++-arm-linux-gnueabihf \
+	binutils-arm-linux-gnueabihf
 
 # Install Python packages
 echo -e "${GREEN}[2/6] Installing Python build dependencies...${NC}"
@@ -56,9 +56,9 @@ pip3 install --user --upgrade pip setuptools wheel cython
 # Download grpcio source
 echo -e "${GREEN}[3/6] Downloading grpcio ${GRPCIO_VERSION} source...${NC}"
 if [ ! -d "grpcio-${GRPCIO_VERSION}" ]; then
-    curl -L "https://github.com/grpc/grpc/archive/refs/tags/v${GRPCIO_VERSION}.tar.gz" -o grpc.tar.gz
-    tar xzf grpc.tar.gz
-    mv "grpc-${GRPCIO_VERSION}" grpcio-src
+	curl -L "https://github.com/grpc/grpc/archive/refs/tags/v${GRPCIO_VERSION}.tar.gz" -o grpc.tar.gz
+	tar xzf grpc.tar.gz
+	mv "grpc-${GRPCIO_VERSION}" grpcio-src
 fi
 
 cd grpcio-src
@@ -90,8 +90,8 @@ rm -rf build/ dist/ *.egg-info/
 
 # Build the wheel
 python3 setup.py bdist_wheel \
-    --dist-dir="$OUTPUT_DIR/dist" \
-    --plat-name="$TARGET_PLATFORM"
+	--dist-dir="$OUTPUT_DIR/dist" \
+	--plat-name="$TARGET_PLATFORM"
 
 # Create a custom setup.py modification for better compatibility
 echo -e "${GREEN}[6/6] Creating compatible wheel...${NC}"
@@ -99,17 +99,17 @@ cd "$OUTPUT_DIR/dist"
 
 # Rename wheel to match Termux platform
 for wheel in grpcio-*.whl; do
-    if [ -f "$wheel" ]; then
-        new_name=$(echo "$wheel" | sed 's/linux_x86_64/linux_armv8l/' | sed 's/cp311/cp312/')
-        if [ "$wheel" != "$new_name" ]; then
-            mv "$wheel" "$new_name"
-            echo -e "${GREEN}Created: $new_name${NC}"
-        fi
-    fi
+	if [ -f "$wheel" ]; then
+		new_name=$(echo "$wheel" | sed 's/linux_x86_64/linux_armv8l/' | sed 's/cp311/cp312/')
+		if [ "$wheel" != "$new_name" ]; then
+			mv "$wheel" "$new_name"
+			echo -e "${GREEN}Created: $new_name${NC}"
+		fi
+	fi
 done
 
 # Create installation script for Termux
-cat > "$OUTPUT_DIR/install_on_termux.sh" << 'EOF'
+cat >"$OUTPUT_DIR/install_on_termux.sh" <<'EOF'
 #!/bin/bash
 # Run this script on your Termux device
 set -e

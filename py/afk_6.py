@@ -1,4 +1,3 @@
-
 import argparse
 import ast
 import multiprocessing
@@ -290,7 +289,6 @@ def collect_tasks(paths: list[Path]) -> tuple[list[tuple[str, str]], list[tuple[
 
     for path in paths:
         if path.is_file():
-            
             suffix = path.suffix.lower()
             name = path.name.lower()
             if suffix == ".py":
@@ -299,9 +297,8 @@ def collect_tasks(paths: list[Path]) -> tuple[list[tuple[str, str]], list[tuple[
                 source_tasks.extend(_extract_py_from_whl(path))
             elif name.endswith(".tar.zst"):
                 source_tasks.extend(_extract_py_from_tar_zst(path))
-            
+
         elif path.is_dir():
-            
             for p in path.rglob("*"):
                 if not p.is_file():
                     continue
@@ -314,7 +311,6 @@ def collect_tasks(paths: list[Path]) -> tuple[list[tuple[str, str]], list[tuple[
                 elif name.endswith(".tar.zst"):
                     source_tasks.extend(_extract_py_from_tar_zst(p))
         else:
-            
             print(f"Warning: '{path}' does not exist, skipping.", file=sys.stderr)
 
     return file_tasks, source_tasks
@@ -418,10 +414,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    
     paths = [Path(p).resolve() for p in args.paths]
 
-    
     valid_paths = []
     for p in paths:
         if p.exists():

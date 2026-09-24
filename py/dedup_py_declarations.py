@@ -21,7 +21,6 @@ class Decl:
 
 
 class Normalizer(ast.NodeTransformer):
-
     def visit_FunctionDef(self, node):
         node = copy.deepcopy(node)
         node.name = "__NAME__"

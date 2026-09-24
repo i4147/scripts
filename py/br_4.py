@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 import time
@@ -14,20 +13,16 @@ def make_compress_input(data_bytes):
 
 def compress_file(input_path: str, output_path: str, quality: int = 6):
     try:
-        
         with open(input_path, "rb") as f:
             data = f.read()
 
-        
         compressor = brotlicffi.Compressor(quality=quality)
         compressed = compressor.process(data)
         compressed += compressor.finish()
 
-        
         with open(output_path, "wb") as f:
             f.write(compressed)
 
-        
         original_size = len(data)
         compressed_size = len(compressed)
         ratio = (compressed_size / original_size) * 100 if original_size > 0 else 0
@@ -46,19 +41,15 @@ def compress_file(input_path: str, output_path: str, quality: int = 6):
 
 def decompress_file(input_path: str, output_path: str):
     try:
-        
         with open(input_path, "rb") as f:
             compressed_data = f.read()
 
-        
         decompressor = brotlicffi.Decompressor()
         decompressed = decompressor.process(compressed_data)
 
         if not decompressor.is_finished():
-            
             decompressed += decompressor.finish()
 
-        
         with open(output_path, "wb") as f:
             f.write(decompressed)
 
@@ -87,11 +78,9 @@ def compress_directory(input_dir: str, output_dir=None, quality: int = 6, max_wo
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    
     files_to_compress = []
     for file_path in input_path.rglob("*"):
         if file_path.is_file():
-            
             rel_path = file_path.relative_to(input_path)
             output_path = output_dir / f"{rel_path}.br"
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,13 +95,11 @@ def compress_directory(input_dir: str, output_dir=None, quality: int = 6, max_wo
 
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        
         future_to_file = {
             executor.submit(compress_file, str(in_path), str(out_path), quality): in_path
             for in_path, out_path in files_to_compress
         }
 
-        
         for future in as_completed(future_to_file):
             result = future.result()
             results.append(result)
@@ -123,7 +110,6 @@ def compress_directory(input_dir: str, output_dir=None, quality: int = 6, max_wo
 
     elapsed_time = time.time() - start_time
 
-    
     successful = sum(1 for r in results if r["success"])
     total_original = sum(r.get("original_size", 0) for r in results if r["success"])
     total_compressed = sum(r.get("compressed_size", 0) for r in results if r["success"])
@@ -149,7 +135,6 @@ def decompress_directory(input_dir: str, output_dir=None, max_workers: int = 4) 
         return False
 
     if output_dir is None:
-        
         base_name = input_path.name
         if base_name.endswith("_compressed"):
             output_dir = input_path.parent / base_name.replace("_compressed", "_decompressed")
@@ -160,10 +145,8 @@ def decompress_directory(input_dir: str, output_dir=None, max_workers: int = 4) 
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    
     files_to_decompress = []
     for file_path in input_path.rglob("*.br"):
-        
         rel_path = file_path.relative_to(input_path)
         output_path = output_dir / rel_path.with_suffix("")
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,13 +161,11 @@ def decompress_directory(input_dir: str, output_dir=None, max_workers: int = 4) 
 
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        
         future_to_file = {
             executor.submit(decompress_file, str(in_path), str(out_path)): in_path
             for in_path, out_path in files_to_decompress
         }
 
-        
         for future in as_completed(future_to_file):
             result = future.result()
             results.append(result)
@@ -195,7 +176,6 @@ def decompress_directory(input_dir: str, output_dir=None, max_workers: int = 4) 
 
     elapsed_time = time.time() - start_time
 
-    
     successful = sum(1 for r in results if r["success"])
     total_original = sum(r.get("original_size", 0) for r in results if r["success"])
     total_decompressed = sum(r.get("decompressed_size", 0) for r in results if r["success"])
@@ -252,14 +232,12 @@ Examples:
 
     args = parser.parse_args()
 
-    
     if not args.compress and not args.decompress:
         parser.error("Either -c/--compress or -d/--decompress is required")
 
     if args.compress and args.decompress:
         parser.error("Cannot use both -c/--compress and -d/--decompress")
 
-    
     if args.compress:
         path = Path(args.compress)
 
@@ -268,7 +246,6 @@ Examples:
             sys.exit(1)
 
         if path.is_file():
-            
             output_file = path.with_suffix(f"{path.suffix}.br")
             if args.output:
                 output_file = Path(args.output) / path.name
@@ -288,12 +265,10 @@ Examples:
                 sys.exit(1)
 
         elif path.is_dir():
-            
             success = compress_directory(str(path), args.output, args.quality, args.threads)
             if not success:
                 sys.exit(1)
 
-    
     elif args.decompress:
         path = Path(args.decompress)
 
@@ -302,14 +277,12 @@ Examples:
             sys.exit(1)
 
         if path.is_file():
-            
             if not path.suffix == ".br":
                 print(f"Warning: File '{path}' doesn't have .br extension")
                 proceed = input("Continue anyway? (y/n): ").lower()
                 if proceed != "y":
                     sys.exit(0)
 
-            
             output_file = path.with_suffix("")
             if args.output:
                 output_file = Path(args.output) / path.name.replace(".br", "")
@@ -327,7 +300,6 @@ Examples:
                 sys.exit(1)
 
         elif path.is_dir():
-            
             success = decompress_directory(str(path), args.output, args.threads)
             if not success:
                 sys.exit(1)

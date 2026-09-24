@@ -1,4 +1,3 @@
-
 from deep_translator import GoogleTranslator, detect_language
 import sys
 import re

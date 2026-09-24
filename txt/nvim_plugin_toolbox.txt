@@ -1,0 +1,220 @@
+# filename: folderize_plugins.py
+c={'lazy.nvim':['lazy\\.setup','lazy\\.nvim','require\\(["\\\']lazy["\\\']','\\blazy\\b'],'packer.nvim':['packer\\.setup','packer\\.nvim','require\\(["\\\']packer["\\\']','\\bpacker\\b'],'vim-plug':['vim-plug','plug#begin','\\bPlug\\s+["\\\']'],'telescope':['telescope','require\\(["\\\']telescope["\\\']','telescope\\.setup'],'fzf-lua':['fzf-lua','fzf_lua','require\\(["\\\']fzf-lua["\\\']'],'treesitter':['treesitter','nvim-treesitter','tree-sitter','require\\(["\\\']nvim-treesitter["\\\']'],'lualine':['lualine','require\\(["\\\']lualine["\\\']','lualine\\.setup'],'bufferline':['bufferline','buffer-line','require\\(["\\\']bufferline["\\\']'],'statuscol':['statuscol','status-column','require\\(["\\\']statuscol["\\\']'],'indent-blankline':['indent-blankline','indent_blankline','ibl\\.setup','require\\(["\\\']ibl["\\\']'],'mini.nvim':['mini\\.','require\\(["\\\']mini\\.'],'noice':['noice','require\\(["\\\']noice["\\\']','noice\\.setup'],'notify':['nvim-notify','notify\\.setup','require\\(["\\\']notify["\\\']'],'dressing':['dressing','dressing\\.setup','require\\(["\\\']dressing["\\\']'],'dashboard':['dashboard-nvim','dashboard\\.setup','require\\(["\\\']dashboard["\\\']'],'alpha':['alpha-nvim','alpha\\.setup','require\\(["\\\']alpha["\\\']'],'which-key':['which-key','which_key','whichkey','require\\(["\\\']which-key["\\\']'],'legendary':['legendary','legendary\\.setup','require\\(["\\\']legendary["\\\']'],'nvim-cmp':['nvim-cmp','nvim_cmp','cmp\\.setup','require\\(["\\\']cmp["\\\']','require\\(["\\\']cmp_nvim'],'lspconfig':['lspconfig','nvim-lspconfig','require\\(["\\\']lspconfig["\\\']'],'mason':['mason','mason-nvim','mason-lspconfig','mason\\.setup','require\\(["\\\']mason["\\\']'],'mason-lspconfig':['mason-lspconfig','mason_lspconfig','require\\(["\\\']mason-lspconfig["\\\']'],'mason-tool-installer':['mason-tool-installer','mason_tool_installer','require\\(["\\\']mason-tool-installer["\\\']'],'null-ls':['null-ls','null_ls','require\\(["\\\']null-ls["\\\']'],'none-ls':['none-ls','none_ls','require\\(["\\\']none-ls["\\\']'],'conform':['conform','conform\\.setup','require\\(["\\\']conform["\\\']'],'efm-langserver':['efm-langserver','efm\\.setup','require\\(["\\\']efm["\\\']'],'fidget':['fidget','fidget\\.setup','require\\(["\\\']fidget["\\\']'],'lsp-status':['lsp-status','lsp_status','require\\(["\\\']lsp-status["\\\']'],'lsp-signature':['lsp-signature','lsp_signature','require\\(["\\\']lsp_signature["\\\']'],'lsp-lines':['lsp-lines','lsp_lines','require\\(["\\\']lsp_lines["\\\']'],'goto-preview':['goto-preview','goto_preview','require\\(["\\\']goto-preview["\\\']'],'lspsaga':['lspsaga','lspsaga\\.setup','require\\(["\\\']lspsaga["\\\']'],'lsp-ui':['lsp-ui','lsp_ui','require\\(["\\\']lspconfig["\\\'].*lsp-ui'],'luasnip':['luasnip','lua-snip','require\\(["\\\']luasnip["\\\']','ls\\.setup'],'snippy':['snippy','snippy\\.setup','require\\(["\\\']snippy["\\\']'],'ultisnips':['ultisnips','UltiSnips','ultisnips#'],'friendly-snippets':['friendly-snippets','friendly_snippets','require\\(["\\\']friendly-snippets["\\\']'],'gitsigns':['gitsigns','gitsigns\\.setup','require\\(["\\\']gitsigns["\\\']'],'neogit':['neogit','neogit\\.setup','require\\(["\\\']neogit["\\\']'],'vim-fugitive':['vim-fugitive','fugitive',':Git\\b'],'git-blame':['git-blame','git_blame','gitblame'],'gitlinker':['gitlinker','git-linker','require\\(["\\\']gitlinker["\\\']'],'diffview':['diffview','diffview\\.setup','require\\(["\\\']diffview["\\\']'],'octo':['octo\\.nvim','octo\\.setup','require\\(["\\\']octo["\\\']'],'git-conflict':['git-conflict','git_conflict','git-conflict\\.setup'],'neo-tree':['neo-tree','neo_tree','neotree','require\\(["\\\']neo-tree["\\\']'],'nvim-tree':['nvim-tree','nvim_tree','require\\(["\\\']nvim-tree["\\\']','nvim-tree\\.setup'],'oil':['oil\\.setup','oil\\.nvim','require\\(["\\\']oil["\\\']','\\boil\\b'],'chad-tree':['chad-tree','chad_tree','require\\(["\\\']nvchad'],'harpoon':['harpoon','harpoon2','require\\(["\\\']harpoon["\\\']','harpoon\\.setup'],'hop':['hop\\.setup','hop\\.nvim','require\\(["\\\']hop["\\\']'],'leap':['leap\\.setup','leap\\.nvim','require\\(["\\\']leap["\\\']'],'flash':['flash\\.setup','flash\\.nvim','require\\(["\\\']flash["\\\']'],'easymotion':['easymotion','easy-motion','vim-easymotion'],'marks':['marks\\.setup','marks\\.nvim','require\\(["\\\']marks["\\\']'],'grapple':['grapple','grapple\\.setup','require\\(["\\\']grapple["\\\']'],'arrow':['arrow\\.setup','arrow\\.nvim','require\\(["\\\']arrow["\\\']'],'surround':['nvim-surround','surround\\.setup','require\\(["\\\']nvim-surround["\\\']'],'autopairs':['nvim-autopairs','autopairs\\.setup','require\\(["\\\']nvim-autopairs["\\\']'],'comment':['comment\\.setup','nvim-comment','Comment\\.setup','require\\(["\\\']Comment["\\\']'],'ts-comments':['ts-comments','ts_comments','require\\(["\\\']ts-comments["\\\']'],'tcomment':['tcomment','t-comment','vim-tcomment'],'vim-commentary':['vim-commentary','commentary'],'dial':['dial\\.setup','dial\\.nvim','require\\(["\\\']dial["\\\']'],'substitute':['substitute\\.setup','substitute\\.nvim','require\\(["\\\']substitute["\\\']'],'ultimate-autopair':['ultimate-autopair','ultimate_autopair'],'vim-visual-multi':['vim-visual-multi','visual-multi','visual_multi'],'vim-illuminate':['illuminate','vim-illuminate','illuminate\\.setup'],'todo-comments':['todo-comments','todo_comments','todocomments','require\\(["\\\']todo-comments["\\\']'],'twilight':['twilight\\.setup','twilight\\.nvim','require\\(["\\\']twilight["\\\']'],'zen-mode':['zen-mode','zen_mode','require\\(["\\\']zen-mode["\\\']','zen-mode\\.setup'],'true-zen':['true-zen','true_zen','require\\(["\\\']true-zen["\\\']'],'colorizer':['colorizer','nvim-colorizer','colorizer\\.setup'],'highlight-colors':['highlight-colors','highlight_colors','highlight-colors\\.setup'],'vim-hexokinase':['hexokinase','vim-hexokinase'],'dap':['nvim-dap','dap\\.setup','require\\(["\\\']dap["\\\']','\\bdap\\b'],'dap-ui':['dap-ui','dapui','dap_ui','require\\(["\\\']dapui["\\\']'],'dap-python':['dap-python','dap_python','require\\(["\\\']dap-python["\\\']'],'dap-go':['dap-go','dap_go','require\\(["\\\']dap-go["\\\']'],'nvim-dap-virtual-text':['dap-virtual-text','dap_virtual_text','nvim-dap-virtual-text'],'neotest':['neotest','neotest\\.setup','require\\(["\\\']neotest["\\\']'],'vim-test':['vim-test','vim_test','vim-test#'],'plenary':['plenary','require\\(["\\\']plenary["\\\']'],'toggleterm':['toggleterm','toggle-term','toggleterm\\.setup','require\\(["\\\']toggleterm["\\\']'],'floaterm':['floaterm','float-term','floaterm#'],'FTerm':['FTerm\\.setup','ft-nvim','require\\(["\\\']FTerm["\\\']'],'auto-session':['auto-session','auto_session','auto-session\\.setup'],'persistence':['persistence\\.setup','persistence\\.nvim','require\\(["\\\']persistence["\\\']'],'project':['project\\.nvim','project\\.setup','require\\(["\\\']project_nvim["\\\']'],'telescope-project':['telescope-project','telescope_project','telescope._extensions.project'],'trouble':['trouble','trouble\\.setup','require\\(["\\\']trouble["\\\']'],'spectre':['spectre','spectre\\.setup','require\\(["\\\']spectre["\\\']'],'nvim-bqf':['bnf','nvim-bqf','bqf\\.setup'],'vim-ripgrep':['vim-ripgrep','Ripgrep','ripgrep#'],'tagbar':['tagbar','tag-bar','tagbar#'],'vista':['vista','vista\\.setup','vista#'],'symbols-outline':['symbols-outline','symbols_outline','symbols-outline\\.setup'],'aerial':['aerial\\.setup','aerial\\.nvim','require\\(["\\\']aerial["\\\']'],'vim-dadbod':['vim-dadbod','dadbod','dadbod#'],'dadbod-ui':['dadbod-ui','dadbod_ui','dadbod-ui\\.setup'],'sqlite':['sqlite\\.lua','sqlite','require\\(["\\\']sqlite["\\\']'],'vim-go':['vim-go','vim_go','\\bgo#'],'rust-tools':['rust-tools','rust_tools','rust-tools\\.setup'],'rustaceanvim':['rustaceanvim','rustacean\\.setup','require\\(["\\\']rustaceanvim["\\\']'],'vim-python':['vim-python','python-mode','python-syntax'],'vim-javascript':['vim-javascript','javascript\\.vim','vim-js'],'typescript-tools':['typescript-tools','typescript\\.tools','typescript-tools\\.setup'],'vim-vue':['vim-vue','vim_vue','vue\\.vim'],'vim-react':['vim-react','vim_react','vim-jsx'],'vim-markdown':['vim-markdown','markdown\\.vim','vim_markdown'],'markdown-preview':['markdown-preview','markdown_preview','markdown-preview\\.setup'],'vim-tex':['vim-tex','vimtex','latex'],'vim-julia':['vim-julia','julia-vim','julia\\.vim'],'vim-r':['vim-r','vim_r','Nvim-R'],'vim-scala':['vim-scala','scala-vim','scala\\.vim'],'undo-tree':['undo-tree','undo_tree','undotree','undo-tree\\.setup'],'whichkey':['whichkey','which-key','which_key'],'vim-repeat':['vim-repeat','vim_repeat','repeat\\.vim'],'vim-surround':['vim-surround','vim_surround','surround\\.vim'],'vim-unimpaired':['vim-unimpaired','unimpaired','unimpaired\\.vim'],'vim-abolish':['vim-abolish','abolish','abolish\\.vim'],'vim-speeddating':['vim-speeddating','speeddating','speeddating\\.vim'],'vim-exchange':['vim-exchange','exchange','exchange\\.vim'],'vim-characterize':['vim-characterize','characterize','characterize\\.vim'],'vim-textobj':['vim-textobj','textobj','textobj-'],'nvim-treesitter-textobjects':['treesitter-textobjects','textobjects\\.setup','require\\(["\\\']nvim-treesitter-textobjects["\\\']'],'splitjoin':['splitjoin','split-join','splitjoin\\.vim'],'vim-sort':['vim-sort','sort\\.vim','\\bsort#'],'vim-easy-align':['vim-easy-align','easy-align','easy_align','easy-align\\.setup'],'tabular':['tabular','tabular#','tabular\\.vim'],'vim-argwrap':['vim-argwrap','argwrap','argwrap\\.vim'],'prettier':['prettier','prettier\\.setup','vim-prettier','prettier-nvim'],'eslint':['eslint','eslint\\.setup','vim-eslint','eslint-nvim'],'stylelint':['stylelint','stylelint\\.setup','vim-stylelint'],'ale':['\\bale\\b','ale\\.vim','ale#','vim-ale'],'vim-lint':['vim-lint','vim_lint','lint\\.vim'],'nvim-web-devicons':['nvim-web-devicons','web-devicons','devicons\\.setup','require\\(["\\\']nvim-web-devicons["\\\']'],'lspkind':['lspkind','lsp-kind','lspkind\\.setup','require\\(["\\\']lspkind["\\\']'],'vim-devicons':['vim-devicons','vim_devicons','devicons'],'nerd-fonts':['nerd-fonts','nerd_fonts','nerdfonts'],'tokyonight':['tokyonight','tokyo-night','tokyonight\\.setup','tokyonight\\.load'],'catppuccin':['catppuccin','catppuccin\\.setup','catppuccin\\.load'],'onedark':['onedark','one-dark','onedark\\.setup','onedark\\.load'],'gruvbox':['gruvbox','gruvbox\\.setup','gruvbox\\.load'],'nord':['nord','nord\\.setup','nord\\.load'],'rose-pine':['rose-pine','rose_pine','rose-pine\\.setup','rose-pine\\.load'],'kanagawa':['kanagawa','kanagawa\\.setup','kanagawa\\.load'],'github-theme':['github-theme','github_theme','github-theme\\.setup'],'dracula':['dracula','dracula\\.setup','dracula\\.load'],'everforest':['everforest','ever-forest','everforest\\.setup'],'material':['material\\.setup','material\\.load','material-theme'],'nightfox':['nightfox','night-fox','nightfox\\.setup'],'ayu':['ayu','ayu-vim','ayu\\.setup'],'solarized':['solarized','solarized\\.setup','solarized\\.load'],'melange':['melange','melange\\.setup','melange\\.load'],'vim-colorschemes':['vim-colorschemes','colorschemes','vim_colorschemes'],'impatient':['impatient','impatient\\.setup','impatient\\.nvim'],'vim-startuptime':['vim-startuptime','startuptime','vim_startuptime'],'profile':['profile\\.nvim','profile\\.setup','require\\(["\\\']profile["\\\']'],'vim-which-key':['vim-which-key','vim_which_key','vim-whichkey'],'keys':['keys\\.setup','keys\\.nvim','require\\(["\\\']keys["\\\']'],'cheatsheet':['cheatsheet','cheat-sheet','cheat\\.setup'],'vim-help':['vim-help','help\\.vim','vim_help'],'vim-tmux':['vim-tmux','tmux\\.vim','vim_tmux','tmux-navigator'],'tmux-navigator':['tmux-navigator','tmux_navigator','tmux-navigator\\.setup'],'vim-tmux-navigator':['vim-tmux-navigator','vim_tmux_navigator'],'window-picker':['window-picker','window_picker','window-picker\\.setup'],'winshift':['winshift','win-shift','winshift\\.setup'],'vim-maximizer':['vim-maximizer','vim_maximizer','maximizer\\.vim'],'zen-mode':['zen-mode','zen_mode','zen-mode\\.setup'],'focus':['focus\\.nvim','focus\\.setup','require\\(["\\\']focus["\\\']'],'scrollbar':['scrollbar','scroll-bar','scrollbar\\.setup'],'nvim-scrollview':['nvim-scrollview','scrollview','scrollview\\.setup'],'smoothscroll':['smoothscroll','smooth-scroll','smooth-scroll\\.setup'],'neoscroll':['neoscroll','neo-scroll','neoscroll\\.setup'],'vim-smoothie':['vim-smoothie','smoothie','smoothie\\.vim'],'vim-remote':['vim-remote','remote\\.vim','vim_remote'],'netrw':['netrw','netrw\\.vim','netrw#'],'vim-ssh':['vim-ssh','ssh\\.vim','vim_ssh'],'vim-scp':['vim-scp','scp\\.vim','vim_scp'],'vim-obsession':['vim-obsession','obsession','obsession\\.vim'],'vim-startify':['vim-startify','startify','startify#'],'vim-devicons':['vim-devicons','vim_devicons','devicons\\.vim'],'vim-projectionist':['vim-projectionist','projectionist','projectionist#'],'vim-dispatch':['vim-dispatch','dispatch\\.vim','dispatch#'],'vim-eunuch':['vim-eunuch','eunuch','eunuch\\.vim'],'vim-rails':['vim-rails','rails\\.vim','vim_rails'],'vim-ruby':['vim-ruby','ruby\\.vim','vim_ruby'],'vim-elixir':['vim-elixir','elixir\\.vim','vim_elixir'],'vim-clojure':['vim-clojure','clojure\\.vim','vim_clojure'],'vim-haskell':['vim-haskell','haskell\\.vim','vim_haskell'],'vim-lua':['vim-lua','lua\\.vim','vim_lua'],'vim-rust':['vim-rust','rust\\.vim','vim_rust'],'vim-crystal':['vim-crystal','crystal\\.vim','vim_crystal'],'vim-nim':['vim-nim','nim\\.vim','vim_nim'],'vim-zig':['vim-zig','zig\\.vim','vim_zig'],'vim-dart':['vim-dart','dart\\.vim','vim_dart'],'vim-flutter':['vim-flutter','flutter\\.vim','vim_flutter'],'vim-kotlin':['vim-kotlin','kotlin\\.vim','vim_kotlin'],'vim-swift':['vim-swift','swift\\.vim','vim_swift'],'vim-solidity':['vim-solidity','solidity\\.vim','vim_solidity'],'vim-php':['vim-php','php\\.vim','vim_php'],'vim-perl':['vim-perl','perl\\.vim','vim_perl'],'vim-ruby':['vim-ruby','ruby\\.vim','vim_ruby'],'vim-raku':['vim-raku','raku\\.vim','vim_raku']}
+def d(K):q=set()
+    try:with open(K,'r',encoding='utf-8') as f:w=f.read()
+        r=K.name.lower()
+        for n,u in c.items():for z in u:if M.search(z,w,M.IGNORECASE):q.add(n);break
+            for z in u:if M.search(z,r,M.IGNORECASE):q.add(n);break
+    except Exception as e:print(f'Error reading {K}:{e}')
+    return q
+def g(y=False):j=G.cwd();o=list(j.rglob('*.lua'))
+    if not o:print('No .lua files found in the current directory tree.');return
+    print(f'Found {len(o)} .lua files');print('Scanning for plugin references...\n');i=k(list);b=[]
+    for s in o:A=d(s)
+        if A:for C in A:i[C].append(s)
+            print(f"  {s.relative_to(j)}:{','.join(sorted(A))}")
+        else:b.append(s);print(f'  {s.relative_to(j)}:No plugins detected')
+    print('\n'+'='*40);print('Organization Plan:');print('='*40)
+    for C in sorted(i.keys()):F=i[C];print(f'\n📁 {C}/({len(F)} files)')
+        for I in F:print(f'  → {I.relative_to(j)}')
+    if b:print(f'\n📁 unclassified/({len(b)} files)')
+        for I in b:print(f'  → {I.relative_to(j)}')
+    if y:print('\n[DRY RUN] No files were moved. Run without--dry-run to organize files.');return
+    v=input('\nProceed with moving files? (y/N):').strip().lower()
+    if v not in ['y','yes']:print('Operation cancelled.');return
+    print('\nMoving files...');m=0
+    for C,F in i.items():h=j/C;h.mkdir(exist_ok=True)
+        for I in F:try:l=h/I.name
+                if l.exists() and l!=I:L=I.stem;E=I.suffix;x=1
+                    while l.exists():t=f'{L}_{x}{E}';l=h/t;x+=1
+                    print(f'  ⚠️  Name conflict:{I.name} → {l.name}')
+                D.move(str(I),str(l));m+=1;print(f'  ✓ {I.relative_to(j)} → {l.relative_to(j)}')
+            except Exception as e:print(f'  ✗ Failed to move {I}:{e}')
+    if b:a=j/'unclassified';a.mkdir(exist_ok=True)
+        for I in b:try:l=a/I.name
+                if l.exists() and l!=I:L=I.stem;E=I.suffix;x=1
+                    while l.exists():t=f'{L}_{x}{E}';l=a/t;x+=1
+                D.move(str(I),str(l));m+=1;print(f'  ✓ {I.relative_to(j)} → {l.relative_to(j)}')
+            except Exception as e:print(f'  ✗ Failed to move {I}:{e}')
+    print(f'\n✅ Completed! Moved {m} files.')
+def J():B=p.ArgumentParser(description='Organize Neovim plugin files into folders by plugin name');B.add_argument('--dry-run',action='store_true',help='Show what would be done without actually moving files');H=B.parse_args();g(y=H.dry_run)
+if __name__=='__main__':J()
+# filename: generate_lazy_lock.py
+def b(j):try:o=h.check_output(['git','rev-parse','HEAD'],cwd=j,stderr=h.DEVNULL,text=True).strip();n=h.check_output(['git','rev-parse','--abbrev-ref','HEAD'],cwd=j,stderr=h.DEVNULL,text=True).strip();return (o,n)
+    except h.CalledProcessError:return (None,None)
+def a():k=p.home()/'.local'/'share'/'nvim'/'lazy';i=p.home()/'.config'/'nvim'/'lazy-lock.json'
+    if not k.exists():print(f'Error:Lazy directory not found at {k}');return False
+    i.parent.mkdir(parents=True,exist_ok=True);c={}
+    for g in sorted(k.iterdir()):if not g.is_dir():continue
+        d=g.name;l=g/'.git'
+        if not l.exists():print(f'Skipping {d}:Not a git repository');continue
+        o,n=b(g)
+        if o and n:c[d]={'branch':n,'commit':o};print(f'✓ {d}:{o[:8]} ({n})')
+        else:print(f'✗ {d}:Failed to get git information')
+    try:with open(i,'w') as f:q.dump(c,f,indent=2);f.write('\n')
+        print(f'\n✓ Successfully wrote lock file to {i}');print(f'  Total plugins:{len(c)}');return True
+    except OSError as e:print(f'Error writing lock file:{e}');return False
+def r():print('Generating lazy-lock.json for Neovim plugins...');print(f"Scanning:{p.home()/'.local'/'share'/'nvim'/'lazy'}");print(f"Output:{p.home()/'.config'/'nvim'/'lazy-lock.json'}");print('-'*40);m=a()
+    if m:print('\nDone! You can now use this lock file with lazy.nvim.')
+    else:print('\nFailed to generate lock file.');s.exit(1)
+if __name__=='__main__':raise SystemExit(r())
+# filename: split_lua_plugins.py
+def e(ae):try:S=x.run(['luac','-p','-'],input=ae.encode(),capture_output=True,timeout=5);return S.returncode==0
+    except (FileNotFoundError,x.TimeoutExpired):pass
+    try:D=f'return (function() {ae} end)()';S=x.run(['lua','-e',D],capture_output=True,timeout=5);return S.returncode==0
+    except (FileNotFoundError,x.TimeoutExpired):pass
+    return b(ae)
+def b(ae):Z={'(':')','[':']','{':'}'};aa=[];z=False;u=None;Q=False
+    for _i,ad in enumerate(ae):if Q:Q=False;continue
+        if ad=='\\':Q=True;continue
+        if ad in ('"',"'"):if not z:z=True;u=ad
+            elif ad==u:z=False;u=None
+            continue
+        if z:continue
+        if ad in Z:aa.append(ad)
+        elif ad in Z.values():if not aa:return False
+            af=aa.pop()
+            if Z[af]!=ad:return False
+    return len(aa)==0 and (not z)
+def k(ak):if not ak.exists():return ak
+    al=ak.stem;T=ak.suffix;R=ak.parent;K=1
+    while 1:F=R/f'{al}_{K}{T}'
+        if not F.exists():return F
+        K+=1
+def a(am,ab):if ab>=len(am) or am[ab]!='{':return None
+    W=0;z=False;u=None;Q=False
+    for i in range(ab,len(am)):ad=am[i]
+        if Q:Q=False;continue
+        if ad=='\\':Q=True;continue
+        if ad in ('"',"'"):if not z:z=True;u=ad
+            elif ad==u:z=False;u=None
+            continue
+        if z:continue
+        if ad=='{':W+=1
+        elif ad=='}':W-=1
+            if W==0:return (ab,i+1)
+    return None
+def f(V):G=['"([^"]+/[^"]+)"',"'([^']+/[^']+)'",'\\[\\s*"([^"]+/[^"]+)"\\s*\\]',"\\[\\s*'([^']+/[^']+)'\\s*\\]"]
+    for M in G:Y=re.search(M,V)
+        if Y:return Y.group(1)
+    Y=re.search('["\\\']([a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+)["\\\']',V)
+    if Y:return Y.group(1)
+    return None
+def h(aj):if '/' in aj:aj=aj.split('/')[-1]
+    aj=aj.removesuffix('.nvim');n={'nvim-lspconfig':'lsp','nvim-treesitter':'treesitter','nvim-cmp':'cmp','nvim-lint':'lint','nvim-dap':'dap','nvim-dap-ui':'dap-ui','nvim-dap-virtual-text':'dap-virtual-text','nvim-dap-python':'dap-python','nvim-surround':'surround','nvim-autopairs':'autopairs','nvim-colorizer':'colorizer','nvim-notify':'notify','nvim-bqf':'bqf','nvim-illuminate':'illuminate'};return n.get(aj,aj)
+def d(V,t):X=V.strip().split('\n');I=[]
+    for ag in X:H=ag.strip();I.append(ag)
+    J='\n'.join(I).strip()
+    if not J.startswith('return'):if J.startswith('{'):J=f'return {J}'
+        else:J=f'return {{\n  {J}\n}}'
+    return J
+def g(w,ai=False):v=ac(w)
+    if not v.exists():print(f'Error:File not found:{w}',file=ap.stderr);ap.exit(1)
+    J=v.read_text();C=J.find('return')
+    if C==-1:C=0
+    q=J.find('{',C)
+    if q==-1:print('Error:No table found in file',file=ap.stderr);ap.exit(1)
+    P=a(J,q)
+    if not P:print('Error:Unbalanced braces in file',file=ap.stderr);ap.exit(1)
+    _,B=P;r=q+1;A=B-1;m=J[r:A];O=[];i=0
+    while i<len(m):ad=m[i]
+        if ad in ' \t\n\r,':i+=1;continue
+        if ad=='{':P=a(m,i)
+            if P:ab,ao=P;V=m[ab:ao].strip();O.append(V);i=ao;continue
+        W=0;j=i;z=False;u=None;Q=False
+        while j<len(m):c=m[j]
+            if Q:Q=False;j+=1;continue
+            if c=='\\':Q=True;j+=1;continue
+            if c in ('"',"'"):if not z:z=True;u=c
+                elif c==u:z=False;u=None
+                j+=1;continue
+            if z:j+=1;continue
+            if c in '({[':W+=1
+            elif c in ')}]':W-=1
+            elif c==',' and W==0:break
+            j+=1
+        i=j+1 if j<len(m) else len(m)
+    l=[];p=[]
+    for V in O:if not V.strip() or V.strip()=='{}':continue
+        s=f(V)
+        if not s:print(f'Warning:Could not parse plugin name from block,skipping:\n{V[:100]}...',file=ap.stderr);continue
+        E=h(s);U=ac(f'{E}.lua');y=d(V,s)
+        if not e(y):print(f'Error:Invalid Lua syntax for {s},skipping',file=ap.stderr);print(f'Content:\n{y[:200]}...',file=ap.stderr);continue
+        o=k(U);o.write_text(y,encoding='utf-8');l.append(o);p.append(V);print(f'Created:{o}<-{s}')
+    if ai and p:N=k(v.with_suffix(v.suffix+'.bak'));v.rename(N);v.write_text('return {\n}\n',encoding='utf-8');print(f'Replaced {v} with empty table (backup:{N})')
+    return l
+def ah():ai=False;w=None
+    for an in ap.argv[1:]:if an=='-m':ai=True
+        elif an.startswith('-'):print(f'Unknown option:{an}',file=ap.stderr);ap.exit(1)
+        else:w=an
+    if not w:print('Usage:python split_plugins.py [-m]<input.lua>',file=ap.stderr);print('-m    Move/replace input file with empty table after extraction',file=ap.stderr);ap.exit(1)
+    L=g(w,ai);print(f'\nTotal files created:{len(L)}')
+if __name__=='__main__':ah()
+# filename: split_plugins.py
+def a(h):u=B.search('"([^"]+)"',h)
+    if u:p=u.group(1);k=p.split('/')[-1];k=B.sub('[^a-zA-Z0-9\\-_.]','_',k);return k
+    return None
+def d(s):s=s.strip()
+    if s.startswith('return'):s=s[6:].strip()
+    s=s.removeprefix('{');s=s.removesuffix('}');t=[];c=[];j=0;q=False;m=None
+    for i,w in enumerate(s):if w in ('"',"'") and (i==0 or s[i-1]!='\\'):if not q:q=True;m=w
+            elif w==m:q=False
+        if not q:if w=='{':j+=1
+            elif w=='}':j-=1
+                if j==0:c.append(w);l=''.join(c).strip()
+                    if l:l=l.removesuffix(',');t.append(l)
+                    c=[];continue
+        if j>0:c.append(w)
+    return t
+def b(k,e,o):r=f'{k}.lua';y=A.path.join(o,r);g=f'return {e}\n'
+    with open(y,'w',encoding='utf-8') as f:f.write(g)
+    return y
+def x():if len(z.argv)<2:print('Usage:python split_plugins.py<input_file.lua>[output_directory]');print('       or:cat plugins.lua|python split_plugins.py-[output_directory]');z.exit(1)
+    n=z.argv[1];o=z.argv[2] if len(z.argv)>2 else 'plugins'
+    if n=='-':s=z.stdin.read()
+    else:with open(n,'r',encoding='utf-8') as f:s=f.read()
+    v(o).mkdir(parents=True,exist_ok=True);t=d(s)
+    if not t:print('No plugins found in the input file.');z.exit(1)
+    print(f'Found {len(t)} plugin specifications.')
+    for i,e in enumerate(t,1):k=a(e)
+        if k:y=b(k,e,o);print(f'[{i}/{len(t)}] Created:{y}')
+        else:print(f'[{i}/{len(t)}] Warning:Could not extract plugin name,skipping...')
+    v(n).unlink();print(f"\n********************\n {n} removed. look in '{o}' ")
+if __name__=='__main__':x()
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

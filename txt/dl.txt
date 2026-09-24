@@ -1,0 +1,1025 @@
+# --- File: cget.py ---
+import contextlib
+from io import BytesIO
+from pathlib import Path
+import pycurl
+def a(b='urls.txt', c='downloads'):
+    d = Path(c)
+    d.mkdir(exist_ok=True, parents=True)
+    e = []
+    try:
+        with Path(b).open('r', encoding='utf-8') as f:
+            e = [f.strip() for f in f if f.strip() and (not f.startswith('#'))]
+    except FileNotFoundError:
+        print(f'❌ Error: {b} not found.')
+        return
+    print(f'📦 Downloading {len(e)} URLs using pycurl...\n')
+    for i, url in enumerate(e, 1):
+        print(f'🌐 [{i}/{len(e)}] Downloading: {url}')
+        g = BytesIO()
+        c = pycurl.Curl()
+        try:
+            c.setopt(c.URL, url)
+            c.setopt(c.WRITEDATA, g)
+            c.setopt(c.FOLLOWLOCATION, 1)
+            c.setopt(c.TIMEOUT, 30)
+            c.setopt(c.USERAGENT, 'pycurl/7.83.0')
+            c.perform()
+            h = c.getinfo(pycurl.RESPONSE_CODE)
+            if h == 200:
+                i = url.split('/')[-1] or 'index.html'
+                with contextlib.suppress(BaseException):
+                    _ = g.getvalue()
+                j = ''.join((c for c in i if c.isalnum() or c in '._- '))[:200].strip()
+                if not j:
+                    j = 'index.html'
+                k = d / j
+                k.write_bytes(g.getvalue())
+                print(f'✅ Saved to: {k.name}\n')
+            else:
+                print(f'⚠️  Failed (HTTP {h})\n')
+        except pycurl.error as e:
+            print(f'❌ pycurl error: {e}\n')
+        finally:
+            c.close()
+if __name__ == '__main__':
+    a()
+
+# --- File: download_checker.py ---
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+import pycurl
+from dh import fsz
+def l(url):
+    c = pycurl.Curl()
+    c.setopt(c.URL, url)
+    c.setopt(c.NOBODY, True)
+    c.setopt(c.FOLLOWLOCATION, True)
+    c.setopt(c.TIMEOUT, 15)
+    c.setopt(c.USERAGENT, 'Mozilla/5.0')
+    try:
+        c.perform()
+        m = c.getinfo(c.CONTENT_LENGTH_DOWNLOAD)
+        return int(m) if m > 0 else None
+    except pycurl.error:
+        return None
+    finally:
+        c.close()
+def n():
+    if len(sys.argv) < 2:
+        print('Usage: python download_checker.py <url> [-d]')
+        print('  <url>  : The remote file URL (must be sys.argv[1])')
+        print('  -d     : Download the file to the current directory')
+        sys.exit(1)
+    url = sys.argv[1]
+    o = '-d' in sys.argv
+    print(f'Checking remote link: {url}')
+    p = l(url)
+    if p:
+        print(f'Remote file size: {fsz(p)}')
+    else:
+        print("Remote file size: Unknown (Server didn't provide Content-Length)")
+    if not o:
+        print('\nUse the -d flag to download the file.')
+        return
+    print('Starting chunked download...\n')
+    q = urlparse(url)
+    i = Path(q.path).name
+    if not i or i == '/':
+        i = 'downloaded_file'
+    b = Path.cwd() / i
+    if b.exists():
+        print(f'{b} exists.')
+        sys.exit(0)
+    r = 0
+    s = time.time()
+    def t(u):
+        nonlocal downloaded
+        with open(b, 'ab') as f:
+            f.write(u)
+        r += len(u)
+        v = time.time() - s
+        w = r / v if v > 0 else 0
+        if p and p > 0:
+            x = r / p * 40
+            y = p - r
+            eta = y / w if w > 0 else 0
+            z = time.strftime('%H:%M:%S', time.gmtime(eta))
+            a1 = f'{fsz(r)}/{fsz(p)}'
+        else:
+            x = 0.0
+            z = 'Unknown'
+            a1 = f'{fsz(r)}/Unknown'
+        sys.stdout.write(f'\r[{x:5.1f}%] {a1} | Speed: {fsz(w)}/s | ETA: {z}   ')
+        sys.stdout.flush()
+    c = pycurl.Curl()
+    c.setopt(c.URL, url)
+    c.setopt(c.FOLLOWLOCATION, True)
+    c.setopt(c.USERAGENT, 'Mozilla/5.0')
+    c.setopt(c.WRITEFUNCTION, t)
+    try:
+        c.perform()
+        b1 = c.getinfo(c.HTTP_CODE)
+        if b1 >= 400:
+            print(f'\n\nError: Server returned HTTP {b1}')
+            if b.exists():
+                print(f'{b} exists')
+                sys.exit(0)
+            sys.exit(1)
+    except pycurl.error as e:
+        print(f'\n\nDownload error: {e}')
+        if b.exists():
+            print('file exists.')
+        sys.exit(1)
+    finally:
+        c.close()
+    print(f'\n\nDownload complete! Saved to: {b}')
+if __name__ == '__main__':
+    n()
+
+# --- File: dsize.py ---
+import argparse
+import urllib.error
+import urllib.request
+from pathlib import Path
+from dh import fsz
+def c1(url):
+    d1 = urllib.request.Request(url, method='HEAD')
+    try:
+        with urllib.request.urlopen(d1, timeout=10) as e1:
+            f1 = e1.headers.get('Content-Length')
+            if f1:
+                return int(f1)
+    except urllib.error.HTTPError as e:
+        if e.code not in {405, 403}:
+            raise
+    d1 = urllib.request.Request(url, method='GET')
+    d1.add_header('Range', 'bytes=0-0')
+    with urllib.request.urlopen(d1, timeout=10) as e1:
+        f1 = e1.headers.get('Content-Length')
+        return int(f1) if f1 else None
+def g1(url):
+    try:
+        m = c1(url)
+        print(f'{url[:25]}:{m / (1024 * 1024)} mb')
+        if m is None:
+            return f'{url}\tUnknown'
+        return f'{url}\t{fsz(m)}'
+    except Exception as exc:
+        return f'{url}\tError: {exc}'
+def n():
+    h1 = argparse.ArgumentParser(description='Show download size of a URL or URLs from a file')
+    h1.add_argument('input', help='Download URL or file containing URLs')
+    i1 = h1.parse_args()
+    j1 = Path(i1.input)
+    if j1.is_file():
+        k1 = j1.read_text(encoding='utf-8').splitlines()
+        l1 = [g1(f.strip()) for f in k1 if f.strip()]
+        j1.write_text('\n'.join(l1), encoding='utf-8')
+        print(f'Updated file: {j1} ({len(l1)} URLs processed)')
+    else:
+        print(g1(i1.input))
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: dsized.py ---
+import argparse
+import urllib.error
+import urllib.request
+from pathlib import Path
+from dh import fsz
+m1 = 1 * 1024 * 1024
+def c1(url):
+    d1 = urllib.request.Request(url, method='HEAD')
+    try:
+        with urllib.request.urlopen(d1, timeout=10) as e1:
+            f1 = e1.headers.get('Content-Length')
+            if f1:
+                return int(f1)
+    except urllib.error.HTTPError as e:
+        if e.code not in {405, 403}:
+            raise
+    d1 = urllib.request.Request(url, method='GET')
+    d1.add_header('Range', 'bytes=0-0')
+    with urllib.request.urlopen(d1, timeout=10) as e1:
+        f1 = e1.headers.get('Content-Length')
+        return int(f1) if f1 else None
+def n1(url, o1):
+    i = Path(urllib.request.urlparse(url).path).name or 'downloaded_file'
+    p1 = o1 / i
+    try:
+        urllib.request.urlretrieve(url, p1)
+        print(f'Downloaded: {p1}')
+    except Exception as e:
+        print(f'Failed to download {url}: {e}')
+def g1(url, q1=None):
+    try:
+        m = c1(url)
+        if m is None:
+            return f'{url}\tUnknown'
+        a1 = fsz(m)
+        print(f'URL: {url}, Size: {a1}')
+        if q1 and m <= m1:
+            r1 = input(f'Do you want to download this file (size: {a1})? (y/n): ').strip().lower()
+            if r1 == 'y':
+                n1(url, q1)
+            else:
+                print('Download skipped.')
+        else:
+            print('File is too large to download or no download directory specified.')
+        return f'{url}\t{a1}'
+    except Exception as exc:
+        return f'{url}\tError: {exc}'
+def n():
+    h1 = argparse.ArgumentParser(description='Show download size of a URL or URLs from a file')
+    h1.add_argument('input', help='Download URL or file containing URLs')
+    h1.add_argument('-d', '--download', help='Directory to download files smaller than 1MB')
+    i1 = h1.parse_args()
+    q1 = Path(i1.download) if i1.download else Path(Path('~/Downloads').expanduser())
+    q1.mkdir(parents=True, exist_ok=True)
+    j1 = Path(i1.input)
+    if j1.is_file():
+        k1 = j1.read_text(encoding='utf-8').splitlines()
+        l1 = [g1(f.strip(), q1) for f in k1 if f.strip()]
+        j1.write_text('\n'.join(l1), encoding='utf-8')
+        print(f'Updated file: {j1} ({len(l1)} URLs processed)')
+    else:
+        print(g1(i1.input, q1))
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: gget.py ---
+import hashlib
+import json
+import multiprocessing
+import signal
+import sys
+import threading
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Any, Optional
+from urllib.parse import unquote
+import requests
+from loguru import logger
+from rich.console import Console
+from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TimeRemainingColumn, TransferSpeedColumn
+s1 = 1024 * 1024 * 5
+t1 = 32768
+u1 = 8
+v1 = '.progress'
+w1 = 15
+x1 = Console()
+class y1:
+    def __init__(self, url, z1=None, a2=None):
+        self.url = url
+        self.stop_event = threading.Event()
+        self.file_size = 0
+        self.filename = z1
+        self.expected_hash = a2
+        self.state_file = None
+        self.progress_data = {'downloaded_chunks': [], 'total_chunks': 0}
+        self.lock = threading.Lock()
+    def b2(self):
+        c2 = requests.head(self.url, allow_redirects=True, timeout=w1)
+        c2.raise_for_status()
+        self.file_size = int(c2.headers.get('content-length', 0))
+        if not self.filename:
+            cd = c2.headers.get('Content-Disposition')
+            if cd and 'filename=' in cd:
+                self.filename = cd.split('filename=')[1].strip(' "')
+            else:
+                self.filename = unquote(self.url.split('/')[-1]) or 'downloaded_file'
+        assert self.filename is not None
+        self.state_file = Path(f'{self.filename}{v1}')
+    def d2(self):
+        assert self.filename is not None
+        e2 = hashlib.sha256()
+        print('Verifying file integrity...')
+        with Path(self.filename).open('rb') as f:
+            for f2 in iter(lambda: f.read(s1), b''):
+                e2.update(f2)
+        g2 = e2.hexdigest()
+        if self.expected_hash:
+            if g2.lower() == self.expected_hash.lower():
+                logger.success('Integrity verified: hashes match!')
+            else:
+                logger.error('Integrity check failed!')
+                logger.error(f'Expected: {self.expected_hash}')
+                logger.error(f'Got:      {g2}')
+        else:
+            logger.warning(f'SHA-256 checksum: {g2}')
+            print('Provide this hash next time to verify automatically.')
+    def h2(self):
+        if self.state_file is not None and self.state_file.exists():
+            try:
+                with self.state_file.open(encoding='utf-8') as f:
+                    i2 = json.load(f)
+                self.progress_data = i2
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(f'Could not load state file: {exc}')
+    def j2(self):
+        if self.state_file is None:
+            return
+        with self.lock, self.state_file.open('w', encoding='utf-8') as f:
+            json.dump(self.progress_data, f)
+    def k2(self, l2, m2, end, x, n2):
+        if self.stop_event.is_set():
+            return
+        o2 = {'Range': f'bytes={m2}-{end}'}
+        try:
+            with requests.get(self.url, headers=o2, stream=True, timeout=w1) as r:
+                r.raise_for_status()
+                assert self.filename is not None
+                with Path(self.filename).open('r+b') as f:
+                    f.seek(m2)
+                    for u in r.iter_content(chunk_size=1024 * 64):
+                        if self.stop_event.is_set():
+                            return
+                        f.write(u)
+                        try:
+                            x.update(n2, advance=len(u))
+                        except Exception:
+                            pass
+            with self.lock:
+                self.progress_data['downloaded_chunks'].append(l2)
+            self._save_state()
+        except Exception as exc:
+            logger.debug(f'Chunk {l2} failed: {exc}')
+    def m2(self):
+        self._get_info()
+        self._load_state()
+        assert self.filename is not None
+        if not Path(self.filename).exists():
+            with Path(self.filename).open('wb') as f:
+                f.truncate(self.file_size)
+        p2 = [(i, min(i + t1 - 1, self.file_size - 1)) for i in range(0, self.file_size, t1)]
+        self.progress_data['total_chunks'] = len(p2)
+        r = list(self.progress_data.get('downloaded_chunks', []))
+        q2 = [(idx, s, e) for idx, (s, e) in enumerate(p2) if idx not in r]
+        if not q2:
+            logger.success(f'{self.filename} is already finished!')
+            self._verify_integrity()
+            return
+        def r2(s2, t2):
+            self.stop_event.set()
+        signal.signal(signal.SIGINT, r2)
+        with Progress(TextColumn('[bold blue]{task.fields[filename]}'), BarColumn(), '[progress.percentage]{task.percentage:>3.0f}%', DownloadColumn(), TransferSpeedColumn(), TimeRemainingColumn(), console=x1) as x:
+            u2 = x.add_task('download', filename=self.filename, total=self.file_size, completed=len(r) * t1)
+            v2 = multiprocessing.Pool(processes=u1)
+            w2 = []
+            try:
+                for cid, s, e in q2:
+                    ar = v2.apply_async(self._download_chunk, args=(cid, s, e, x, u2))
+                    w2.append(ar)
+                for ar in w2:
+                    if self.stop_event.is_set():
+                        break
+                    try:
+                        ar.get()
+                    except Exception as exc:
+                        logger.debug(f'Worker raised: {exc}')
+            finally:
+                v2.close()
+                v2.join()
+        if not self.stop_event.is_set():
+            if self.state_file is not None:
+                self.state_file.unlink(missing_ok=True)
+            logger.success(f'Download complete: {self.filename}')
+            self._verify_integrity()
+        else:
+            logger.warning('Download paused. Run again to resume.')
+            sys.exit(0)
+def n():
+    if len(sys.argv) < 2:
+        logger.error('Usage: python downloader.py <URL> [output_name] [expected_sha256]')
+        sys.exit(1)
+    x2 = sys.argv[1]
+    y2 = sys.argv[2] if len(sys.argv) > 2 else None
+    z2 = sys.argv[3] if len(sys.argv) > 3 else None
+    dl = y1(x2, y2, z2)
+    dl.start()
+if __name__ == '__main__':
+    n()
+
+# --- File: ghost_downloader.py ---
+import argparse
+from multiprocessing.pool import ApplyResult, Pool
+from pathlib import Path
+import requests
+from loguru import logger
+from tqdm import tqdm
+a3 = 8
+b3 = 8
+c3 = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+d3 = 1024 * 64
+e3 = 15
+f3 = 30
+def g3():
+    h1 = argparse.ArgumentParser(description='Ghost-CLI: A lightweight multi-threaded concurrent download manager.')
+    h1.add_argument('url', help='The direct file HTTP/HTTPS URL to download')
+    h1.add_argument('-o', '--output', help='Output file path or filename')
+    h1.add_argument('-c', '--chunks', type=int, default=a3, help=f'Number of parallel chunk threads (default: {a3})')
+    h1.add_argument('-ua', '--user-agent', default=c3, help='Custom User-Agent to emulate browser fingerprints and bypass restrictions')
+    return h1.parse_args()
+def h3(url, i3, j3, l2, o2, i):
+    k3 = o2.copy()
+    k3['Range'] = f'bytes={i3}-{j3}'
+    l3 = f'{i}.part{l2}'
+    m3 = Path(l3)
+    with requests.get(url, headers=k3, stream=True, timeout=f3) as r:
+        r.raise_for_status()
+        with m3.open('wb') as f:
+            for u in r.iter_content(chunk_size=d3):
+                if u:
+                    f.write(u)
+    return (l3, i3)
+def n3(url, o3):
+    if o3:
+        return o3
+    p3 = url.split('/')[-1].split('?')[0]
+    return p3 or 'downloaded_file'
+def q3(url, o2, i, p):
+    with requests.get(url, headers=o2, stream=True, timeout=f3) as r, Path(i).open('wb') as f, tqdm(total=p, unit='B', unit_scale=True, desc=i) as r3:
+        r.raise_for_status()
+        for u in r.iter_content(chunk_size=d3):
+            if u:
+                f.write(u)
+                r3.update(len(u))
+    logger.success(f'Download complete: {i}')
+def n():
+    i1 = g3()
+    url = i1.url
+    s3 = i1.chunks
+    o2 = {'User-Agent': i1.user_agent, 'Accept': '*/*', 'Connection': 'keep-alive'}
+    try:
+        t3 = requests.head(url, headers=o2, allow_redirects=True, timeout=e3)
+        t3.raise_for_status()
+    except requests.RequestException as e:
+        logger.error(f'Error reaching target URL: {e}')
+        return 1
+    p = int(t3.headers.get('content-length', 0))
+    u3 = t3.headers.get('accept-ranges', 'bytes')
+    i = n3(url, i1.output)
+    if p == 0:
+        logger.warning('Web Server did not return a content length. Falling back to single-stream download.')
+        s3 = 1
+    if u3 != 'bytes' and s3 > 1:
+        logger.warning('Target server does not support byte-range slicing. Falling back to single-stream download.')
+        s3 = 1
+    print(f'Target File: {i}')
+    if p:
+        print(f'File Size: {p / (1024 * 1024):.2f} MB')
+    else:
+        print('File Size: Unknown')
+    print(f'Thread Slices: {s3}')
+    if s3 == 1:
+        q3(url, o2, i, p)
+        return 0
+    v3 = p // s3
+    w3 = [None] * s3
+    print('Slicing chunks and initializing network connections...')
+    v2 = Pool(processes=b3)
+    try:
+        with tqdm(total=p, unit='B', unit_scale=True, desc='Downloading') as r3:
+            w2 = []
+            for i in range(s3):
+                i3 = i * v3
+                j3 = p - 1 if i == s3 - 1 else i3 + v3 - 1
+                w2.append(v2.apply_async(h3, args=(url, i3, j3, i, o2, i)))
+            for x3 in w2:
+                try:
+                    y3, z3 = x3.get()
+                    idx = int(y3.split('.part')[-1])
+                    w3[idx] = y3
+                    a4 = Path(y3).stat().st_size
+                    r3.update(a4)
+                except Exception as e:
+                    logger.error(f'Critical worker exception: {e}')
+                    for pf in w3:
+                        if pf:
+                            p = Path(pf)
+                            if p.exists():
+                                p.unlink()
+                    return 1
+    finally:
+        v2.close()
+        v2.join()
+    print('Assembling downloaded slices into final file...')
+    b4 = Path(i)
+    with b4.open('wb') as c4:
+        for y3 in w3:
+            if y3 is None:
+                continue
+            m3 = Path(y3)
+            if m3.exists():
+                with m3.open('rb') as pf:
+                    c4.write(pf.read())
+                m3.unlink()
+    logger.success(f'Download complete and assembled successfully: {i}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: pycurl_downloader.py ---
+import multiprocessing as mp
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+import pycurl
+d4 = 8
+e4 = Path('downloads')
+f4 = 30
+g4 = 5
+h4 = 'Mozilla/5.0 (compatible; PyCurlDownloader/1.0)'
+def i4(url):
+    q = urlparse(url)
+    b = unquote(q.path)
+    j4 = Path(b).name or 'index'
+    if q.query:
+        k4 = ''.join((c if c.isalnum() or c in '-_.' else '_' for c in q.query))
+        j4 = f'{j4}_{k4}'
+    j4 = ''.join((c if c.isalnum() or c in '-_.' else '_' for c in j4))
+    return j4 or 'index'
+def l4(m4, j4):
+    p3 = m4 / j4
+    if not p3.exists():
+        return p3
+    n4, o4 = (p3.stem, p3.suffix)
+    i = 1
+    while True:
+        p3 = m4 / f'{n4}_{i}{o4}'
+        if not p3.exists():
+            return p3
+        i += 1
+def p4(url):
+    url = url.strip()
+    if not url:
+        return (url, False, 'empty url')
+    e4.mkdir(parents=True, exist_ok=True)
+    j4 = i4(url)
+    q4 = l4(e4, j4)
+    r4 = q4.with_suffix(q4.suffix + '.part')
+    try:
+        with r4.open('wb') as fp:
+            c = pycurl.Curl()
+            c.setopt(pycurl.URL, url)
+            c.setopt(pycurl.WRITEDATA, fp)
+            c.setopt(pycurl.FOLLOWLOCATION, True)
+            c.setopt(pycurl.MAXREDIRS, 10)
+            c.setopt(pycurl.TIMEOUT, f4)
+            c.setopt(pycurl.CONNECTTIMEOUT, g4)
+            c.setopt(pycurl.USERAGENT, h4)
+            c.setopt(pycurl.NOSIGNAL, 1)
+            c.setopt(pycurl.FAILONERROR, False)
+            c.setopt(pycurl.SSL_VERIFYPEER, False)
+            c.setopt(pycurl.SSL_VERIFYHOST, False)
+            try:
+                c.perform()
+                s4 = c.getinfo(pycurl.RESPONSE_CODE)
+                c.close()
+            except pycurl.error as e:
+                c.close()
+                r4.unlink(missing_ok=True)
+                return (url, False, f'curl error: {e}')
+        if s4 >= 400:
+            r4.unlink(missing_ok=True)
+            return (url, False, f'HTTP {s4}')
+        r4.replace(q4)
+        m = q4.stat().st_size
+        return (url, True, f'{q4.name} ({m} bytes)')
+    except Exception as e:
+        r4.unlink(missing_ok=True)
+        return (url, False, f'exception: {e}')
+def t4():
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+def u4(b):
+    return [f.strip() for f in b.read_text(encoding='utf-8', errors='ignore').splitlines() if f.strip() and (not f.strip().startswith('#'))]
+def v4(b, w4):
+    if w4:
+        b.write_text('\n'.join(w4) + '\n', encoding='utf-8')
+    else:
+        b.write_text('', encoding='utf-8')
+def n():
+    if len(sys.argv) < 2:
+        print(f'Usage: {sys.argv[0]} <urls_file>')
+        sys.exit(1)
+    j1 = Path(sys.argv[1])
+    if not j1.exists():
+        print(f'Input file not found: {j1}')
+        sys.exit(1)
+    e = u4(j1)
+    if not e:
+        print('No URLs found in input file.')
+        sys.exit(0)
+    print(f'Downloading {len(e)} URLs with {d4} workers (timeout {f4}s each)...')
+    e4.mkdir(parents=True, exist_ok=True)
+    x4 = {}
+    for i, u in enumerate(e):
+        x4.setdefault(u, i)
+    w4 = set()
+    y4 = set()
+    try:
+        with mp.Pool(processes=d4, initializer=t4) as v2:
+            w2 = [(url, v2.apply_async(p4, (url,))) for url in e]
+            z4 = len(w2)
+            a5 = 0
+            for url, ar in w2:
+                try:
+                    x3 = ar.get(timeout=f4 + 5)
+                except mp.TimeoutError:
+                    x3 = (url, False, 'timeout waiting for worker')
+                except Exception as e:
+                    x3 = (url, False, f'pool error: {e}')
+                a5 += 1
+                u, ok, msg = x3
+                if ok:
+                    y4.add(u)
+                else:
+                    w4.add(u)
+                s4 = 'OK ' if ok else 'ERR'
+                print(f'[{a5}/{z4}] {s4} {u} -> {msg}')
+    except KeyboardInterrupt:
+        print('\nInterrupted by user. Any unprocessed URLs remain in the file.')
+        for u in e:
+            if u not in y4:
+                w4.add(u)
+    b5 = sorted(w4, key=lambda u: x4.get(u, 1 << 30))
+    v4(j1, b5)
+    c5 = len(y4)
+    d5 = len(b5)
+    print(f'\nDone. Success: {c5}, Failed: {d5}')
+    print(f'Remaining URLs saved back to: {j1}')
+    print(f'Files saved in: {e4.resolve()}')
+if __name__ == '__main__':
+    n()
+
+# --- File: pywget.py ---
+import argparse
+import re
+import sys
+import urllib
+from pathlib import Path
+from shutil import get_terminal_size
+from tqdm import tqdm
+def e5():
+    try:
+        return get_terminal_size().columns
+    except (OSError, AttributeError):
+        return 80
+def f5(j4):
+    j4 = urllib.parse.unquote(j4)
+    j4 = re.sub('[<>:"|?*]', '_', j4)
+    return j4[:255].strip() or 'downloaded_file'
+def g5(url, o2=None):
+    if o2:
+        cd = o2.get('Content-Disposition', '')
+        if cd:
+            h5 = re.search('filename\\*?=(?:UTF-8)?"?([^";]+)"?', cd, re.IGNORECASE)
+            if h5:
+                return f5(h5.group(1))
+    q = urllib.parse.urlparse(url)
+    b = q.path
+    i = Path(b).name
+    i = i.split('?')[0].split('#')[0]
+    return f5(i) or 'downloaded_file'
+def i5(b):
+    if not b.exists():
+        return b
+    n4 = b.stem
+    o4 = b.suffix
+    j5 = b.parent or Path()
+    k5 = 1
+    while True:
+        l5 = f'{n4} ({k5}){o4}'
+        m5 = j5 / l5
+        if not m5.exists():
+            return m5
+        k5 += 1
+def n5(url, o3=None, o5=30.0, p5=False, q5=False):
+    z1 = Path(o3) if o3 else None
+    if z1 and z1.is_dir():
+        z1 /= g5(url)
+    r5 = None
+    try:
+        with urllib.request.urlopen(url, timeout=o5) as c2:
+            r5 = int(c2.headers.get('Content-Length', 0))
+    except Exception:
+        pass
+    if not z1:
+        z1 = Path(g5(url))
+    z1 = i5(z1)
+    s5 = 0
+    if p5 and z1.exists():
+        s5 = z1.stat().st_size
+        if r5 and s5 >= r5:
+            if not q5:
+                print(f'✅ Already complete: {z1} ({s5} bytes)')
+            return str(z1)
+    o2 = {}
+    if s5 > 0:
+        o2['Range'] = f'bytes={s5}-'
+    with tqdm(total=r5 or 0, unit='B', unit_scale=True, unit_divisor=1024, desc='Downloading', leave=False, disable=q5) as r3:
+        try:
+            req = urllib.request.Request(url, headers=o2)
+            with urllib.request.urlopen(req, timeout=o5) as e1:
+                t5 = 'ab' if s5 else 'wb'
+                with Path(z1).open(t5) as f:
+                    while True:
+                        u5 = e1.read(65536)
+                        if not u5:
+                            break
+                        f.write(u5)
+                        r3.update(len(u5))
+            if not q5:
+                print(f'\n✅ Saved to: {z1}')
+            return str(z1)
+        except urllib.error.HTTPError as e:
+            msg = f'HTTP error {e.code}: {e.reason}'
+            raise RuntimeError(msg)
+        except urllib.error.URLError as e:
+            msg = f'URL error: {e.reason}'
+            raise RuntimeError(msg)
+        except Exception as e:
+            msg = f'Download failed: {e}'
+            raise RuntimeError(msg)
+def n():
+    h1 = argparse.ArgumentParser(description='Modern wget', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  python pywget.py https://example.com/file.zip\n  python pywget.py https://example.com/file.zip -o mydir/\n  python pywget.py https://example.com/file.zip --resume\n  python pywget.py https://example.com/file.zip -q\n        ')
+    h1.add_argument('url', help='URL to download')
+    h1.add_argument('-o', '--output', help='Output file or directory')
+    h1.add_argument('--timeout', type=float, default=30.0, help='Timeout in seconds (default: 30)')
+    h1.add_argument('--resume', action='store_true', help='Resume partial downloads')
+    h1.add_argument('-q', '--quiet', action='store_true', help='Suppress progress bar')
+    h1.add_argument('--version', action='version', version='%(prog)s 1.0.0')
+    i1 = h1.parse_args()
+    try:
+        n5(i1.url, output=i1.output, timeout=i1.timeout, resume=i1.resume, quiet=i1.quiet)
+    except RuntimeError as e:
+        print(f'❌ {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: rget.py ---
+import re
+import sys
+from collections.abc import Iterable
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+import requests
+from loguru import logger
+from tqdm import tqdm
+u1 = 8
+v5 = 3
+f4 = 60
+e4 = 'downloads'
+w5 = 'urls.txt'
+x5 = ['\\.ttf$', '\\.woff$', '\\.woff2$', '\\.eot$', '\\.otf$', '\\.min\\.css$', '\\.min\\.js$', '\\.css$', '\\.js$', '\\.pdf$', '\\.html?$', '\\.whl$', '\\.tar\\.(gz|xz|zst|bz2|lzma|7z)$', '\\.zip$']
+y5 = re.compile('|'.join(x5), re.IGNORECASE)
+def f5(j4):
+    j4 = unquote(j4)
+    j4 = re.sub('[<>:"|?*]', '_', j4)
+    return j4[:255].strip() or 'downloaded_file'
+def g5(url):
+    q = urlparse(url)
+    b = q.path
+    i = b.split('/')[-1] or 'index.html'
+    i = i.split('#')[0]
+    i = i.split('?')[0]
+    i = f5(i)
+    if not re.search('\\.[a-zA-Z0-9]+$', i):
+        i += '.dat'
+    return i
+def z5(url):
+    q = urlparse(url)
+    b = q.path
+    i = b.split('/')[-1]
+    a6 = i.split('?')[0].split('#')[0]
+    return bool(y5.search(a6))
+def b6(url, c6):
+    try:
+        r = c6.head(url, timeout=f4, allow_redirects=True)
+        r.raise_for_status()
+        m = r.headers.get('Content-Length')
+        return int(m) if m else None
+    except Exception:
+        return None
+def p4(url, c6, d, d6=None):
+    i = g5(url)
+    b = Path(d) / i
+    s5 = 0
+    if d6 and b.exists():
+        s5 = b.stat().st_size
+        r5 = b6(url, c6)
+        if r5 is not None and s5 >= r5:
+            return (url, True, f'Already complete ({s5} bytes)')
+    o2 = {}
+    if s5 > 0:
+        o2['Range'] = f'bytes={s5}-'
+    try:
+        with c6.get(url, timeout=f4, headers=o2, stream=True) as r:
+            r.raise_for_status()
+            t5 = 'ab' if s5 else 'wb'
+            with b.open(t5) as f:
+                for u5 in r.iter_content(chunk_size=65536):
+                    if u5:
+                        f.write(u5)
+        return (url, True, str(b))
+    except requests.exceptions.RequestException as e:
+        if v5 > 0:
+            return (url, False, f'Retry needed: {e}')
+        return (url, False, str(e))
+def e6():
+    c6 = requests.Session()
+    c6.headers.update({'User-Agent': 'Mozilla/5.0 (compatible; ResumableDownloader/1.0)'})
+    return c6
+def f6(e, d=e4):
+    Path(d).mkdir(exist_ok=True, parents=True)
+    g6 = [url for url in e if z5(url)]
+    h6 = len(e) - len(g6)
+    if h6 > 0:
+        logger.warning(f'Skipped {h6} URLs (not matching safe extensions).')
+    if not g6:
+        logger.error('No valid URLs to download.')
+        return
+    print(f'Starting download of {len(g6)} URLs...')
+    with Pool(processes=u1) as v2:
+        w2 = [v2.apply_async(p4, (url, e6(), d)) for url in g6]
+        with tqdm(total=len(g6), desc='Downloading', unit='file') as r3:
+            for url, ar in zip(g6, w2):
+                try:
+                    _, i6, x3 = ar.get()
+                    if i6:
+                        r3.write(f"✅ {url.split('?')[0]} → {x3}")
+                    else:
+                        r3.write(f"❌ {url.split('?')[0]} failed: {x3}")
+                except Exception as e:
+                    r3.write(f'⚠️  Unexpected error for {url}: {e}')
+                r3.update(1)
+def j6(b):
+    with Path(b).open('r', encoding='utf-8') as f:
+        return [f.strip() for f in f if f.strip() and (not f.startswith('#'))]
+def n(k6=None):
+    i1 = list(sys.argv[1:] if k6 is None else k6)
+    l6 = i1[0] if i1 else w5
+    if l6 != w5:
+        print(f'Using input file: {l6}')
+    try:
+        e = j6(l6)
+    except FileNotFoundError:
+        logger.error(f'{l6} not found.')
+        return 1
+    if not e:
+        logger.warning(f'No URLs found in {l6}.')
+        return 0
+    f6(e)
+    print('All downloads completed.')
+    return 0
+if __name__ == '__main__':
+    sys.exit(n())
+
+# --- File: url_downloader.py ---
+import sys
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Set
+from loguru import logger
+try:
+    import pycurl
+    m6 = True
+    print('Using pycurl backend')
+except ImportError:
+    m6 = False
+    try:
+        import requests
+        print('pycurl not available → falling back to requests')
+    except ImportError:
+        logger.error('Neither pycurl nor requests is installed!')
+        logger.error('Run: pip install pycurl requests')
+        sys.exit(1)
+u1 = 8
+n6 = 120
+w5 = Path('urls.txt')
+o6 = Path('downloads')
+def n1(url, b, o5=n6):
+    b.parent.mkdir(parents=True, exist_ok=True)
+    if m6:
+        try:
+            with open(b, 'wb') as f:
+                c = pycurl.Curl()
+                c.setopt(c.URL, url)
+                c.setopt(c.WRITEDATA, f)
+                c.setopt(c.TIMEOUT, o5)
+                c.setopt(c.FOLLOWLOCATION, True)
+                c.setopt(c.MAXREDIRS, 5)
+                c.setopt(c.USERAGENT, 'Mozilla/5.0')
+                c.perform()
+                c.close()
+            logger.success(f'Downloaded (pycurl): {b.name}')
+            return True
+        except Exception as e:
+            logger.warning(f'pycurl failed for {b.name}: {e}. Trying requests...')
+    try:
+        with requests.Session() as c6:
+            e1 = c6.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=o5, stream=True, allow_redirects=True)
+            e1.raise_for_status()
+            with open(b, 'wb') as f:
+                f.writelines(e1.iter_content(chunk_size=8192))
+        logger.success(f'Downloaded (requests): {b.name}')
+        return True
+    except Exception as e:
+        logger.error(f'Failed {b.name}: {e}')
+        return False
+def p6(l6):
+    q6 = l6.read_text(encoding='utf-8').splitlines()
+    r6 = []
+    for f in q6:
+        s6 = f.strip()
+        if s6 and (not s6.startswith('#')):
+            url = s6.split()[0]
+            i = url.split('/')[-1].split('?')[0] or f'download_{len(r6) + 1}'
+            b = o6 / i
+            r6.append((url, b))
+    return (q6, r6)
+def t6(l6, q6, u6):
+    v6 = []
+    w6 = 0
+    for f in q6:
+        s6 = f.strip()
+        if s6 and (not s6.startswith('#')):
+            url = s6.split()[0]
+            if url in u6:
+                w6 += 1
+                continue
+        v6.append(f)
+    l6.write_text('\n'.join(v6) + '\n', encoding='utf-8')
+    return w6
+def n():
+    if not w5.exists():
+        logger.error(f'{w5} not found!')
+        return 1
+    q6, r6 = p6(w5)
+    if not r6:
+        print('No valid URLs found in urls.txt')
+        return 0
+    print(f'Found {len(r6)} files to download.\n')
+    u6 = set()
+    x6 = []
+    with Pool(processes=u1) as v2:
+        for url, b in r6:
+            y6 = v2.apply_async(n1, (url, b))
+            x6.append((url, y6))
+        for url, y6 in x6:
+            try:
+                if y6.get():
+                    u6.add(url)
+            except Exception as exc:
+                logger.error(f'Unexpected error with {url}: {exc}')
+    w6 = t6(w5, q6, u6)
+    print('=' * 40)
+    print('Download session completed!')
+    print(f'✅ Successfully downloaded : {w6} files')
+    print(f'❌ Remaining in urls.txt   : {len(r6) - w6} files')
+    print('-' * 40)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

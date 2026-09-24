@@ -320,13 +320,10 @@ def load_packages_from_file(file_path: str) -> list[str]:
     try:
         with open(path, "r", encoding="utf-8") as f:
             for raw_line in f:
-                
                 line = raw_line.split("#", 1)[0].strip()
                 if not line:
                     continue
-                
-                
-                
+
                 m = re.match(r"^([A-Za-z0-9_.\-]+)", line)
                 if m:
                     packages.append(m.group(1))
@@ -364,7 +361,6 @@ def main():
     )
     args = parser.parse_args()
 
-    
     global DOWNLOAD_DIR
     if args.directory:
         DOWNLOAD_DIR = Path(args.directory).expanduser().resolve()
@@ -375,7 +371,6 @@ def main():
             )
             sys.exit(1)
 
-    
     packages = list(args.packages)
     if args.file:
         file_pkgs = load_packages_from_file(args.file)
@@ -386,7 +381,6 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    
     seen = set()
     unique_packages = []
     for p in packages:

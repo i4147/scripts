@@ -1,0 +1,457 @@
+# --- File: check_wheels.py ---
+import shutil
+import zipfile
+from pathlib import Path
+def a(b='.'):
+    c = Path(b).resolve()
+    d = c / 'suspicious'
+    print(f'Scanning for .whl files recursively in: {c}\n')
+    e = list(c.rglob('*.whl'))
+    if not e:
+        print('No .whl files found.')
+        return
+    f = 0
+    for g in e:
+        if d in g.parents:
+            continue
+        try:
+            with zipfile.ZipFile(g, 'r') as h:
+                i = h.namelist()
+                j = []
+                for k in i:
+                    if k.endswith('/'):
+                        continue
+                    if '/' not in k and k.endswith(('.py', '.pyc', '.pyd', '.so', '.dll')):
+                        j.append(k)
+                if j:
+                    f += 1
+                    l = g.relative_to(c)
+                    print(f'❌ MISCONFIGURED WHEEL: {l}')
+                    print(f'   Dumps into site-packages root: {j}')
+                    d.mkdir(exist_ok=True)
+                    m = d / g.name
+                    if m.exists():
+                        m = d / f'{g.stem}_duplicate_{f}{g.suffix}'
+                    shutil.move(str(g), str(m))
+                    print(f'   ➡️ Moved to: {m.relative_to(c)}')
+                    print('-' * 40)
+        except zipfile.BadZipFile:
+            print(f'⚠️  Error: {g.name} is a corrupt or invalid zip/wheel file.')
+        except Exception as e:
+            print(f'⚠️  Error processing {g.name}: {e}')
+    print(f"\nScan complete. Moved {f} misconfigured wheel(s) to './suspicious/' out of {len(e)} total checked.")
+if __name__ == '__main__':
+    a()
+
+# --- File: have_script.py ---
+import argparse
+import os
+import sys
+import zipfile
+def n(o):
+    p = []
+    for q, r, s in os.walk(o):
+        for t in s:
+            if t.endswith('.whl'):
+                p.append(os.path.join(q, t))
+    return p
+def u(g):
+    try:
+        with zipfile.ZipFile(g, 'r') as whl:
+            for v in whl.filelist:
+                if v.filename.endswith('entry_points.txt'):
+                    w = os.path.dirname(v.filename)
+                    return (True, w)
+            return (False, None)
+    except zipfile.BadZipFile:
+        return (False, None)
+    except Exception as e:
+        print(f'Error reading {g}: {e}', file=sys.stderr)
+        return (False, None)
+def x(g):
+    y = os.path.basename(g)
+    z = y.split('-')
+    if len(z) >= 3:
+        k = z[0]
+        a1 = z[1]
+        return (k, a1)
+    return (y, 'unknown')
+def b1():
+    c1 = argparse.ArgumentParser(description='Find .whl files that contain entry_points.txt')
+    c1.add_argument('directory', nargs='?', default='.', help='Directory to search for .whl files (default: current directory)')
+    c1.add_argument('-v', '--verbose', action='store_true', help='Show verbose output with all files checked')
+    c1.add_argument('-q', '--quiet', action='store_true', help='Only show files with entry_points.txt')
+    d1 = c1.parse_args()
+    o = d1.directory
+    if not os.path.exists(o):
+        print(f"Error: Directory '{o}' not found", file=sys.stderr)
+        sys.exit(1)
+    if not os.path.isdir(o):
+        print(f"Error: '{o}' is not a directory", file=sys.stderr)
+        sys.exit(1)
+    p = n(o)
+    if not p:
+        print(f"No .whl files found in '{o}'")
+        return
+    print(f"Checking {len(p)} .whl file(s) in '{o}'...\n")
+    e1 = []
+    f1 = []
+    g1 = []
+    for g in p:
+        k, a1 = x(g)
+        has, h1 = u(g)
+        if has:
+            e1.append((g, k, a1, h1))
+        elif has is False and h1 is None:
+            f1.append((g, k, a1))
+        else:
+            g1.append(g)
+    if e1:
+        print('-' * 40)
+        print(f'✅ Found {len(e1)} wheel(s) with entry_points.txt:')
+        print('-' * 40)
+        for g, k, a1, h1 in e1:
+            print(f'\n📦 {k} ({a1})')
+            print(f'   File: {g}')
+            print(f'   Dist-info: {h1}')
+    else:
+        print('❌ No wheels found with entry_points.txt')
+    if not d1.quiet and f1:
+        print('\n' + '=' * 40)
+        print(f'📋 {len(f1)} wheel(s) WITHOUT entry_points.txt:')
+        print('-' * 40)
+        if d1.verbose:
+            for g, k, a1 in f1:
+                print(f'   {k} ({a1}): {g}')
+        else:
+            print('   (Use -v to see full list)')
+    if g1:
+        print('\n' + '=' * 40)
+        print(f'⚠️  {len(g1)} wheel(s) could not be read:')
+        print('-' * 40)
+        for g in g1:
+            print(f'   {g}')
+    print('\n' + '=' * 40)
+    print('SUMMARY')
+    print('-' * 40)
+    print(f'Total wheels checked:  {len(p)}')
+    print(f'With entry_points.txt: {len(e1)}')
+    print(f'Without:               {len(f1)}')
+    if g1:
+        print(f'Errors:                {len(g1)}')
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: ispure.py ---
+import sys
+import requests
+def i1(j1):
+    url = f'https://pypi.org/pypi/{j1}/json'
+    k1 = requests.get(url)
+    if k1.status_code == 200:
+        l1 = k1.json()
+        m1 = l1['info']['version']
+        for n1 in l1['releases'][m1]:
+            if 'pure' in n1:
+                print(f"{j1}: pure={n1['pure']}")
+                print(f"  Has wheels: {'wheel' in n1.get('packagetype', '')}")
+                return
+    print(f'{j1}: Not found or no pure info')
+if __name__ == '__main__':
+    o1 = sys.argv[1:]
+    for pkg in o1:
+        i1(pkg)
+
+# --- File: mip.py ---
+import importlib.metadata
+import sys
+import zipfile
+from pathlib import Path
+from dh import get_files
+def p1(q1):
+    try:
+        return tuple((int(x) for x in q1.split('.') if x.isdigit()))
+    except Exception:
+        return (q1,)
+def r1(o, ext):
+    return [p for p in o.iterdir() if p.is_file() and p.suffix.lower() in ext]
+def s1():
+    return {t1.metadata['Name'].lower(): t1.version for t1 in importlib.metadata.distributions()}
+def u1(v1):
+    try:
+        with zipfile.ZipFile(v1, 'r') as w1:
+            x1 = next((f for f in w1.namelist() if f.endswith('METADATA')), None)
+            if x1:
+                j1, y1 = (None, None)
+                with w1.open(x1) as f:
+                    for z1 in f:
+                        a2 = z1.decode('utf-8', errors='ignore')
+                        if a2.startswith('Name:'):
+                            j1 = a2.split(':', 1)[1].strip()
+                        elif a2.startswith('Version:'):
+                            y1 = a2.split(':', 1)[1].strip()
+                        if j1 and y1:
+                            return (j1, y1)
+    except Exception as e:
+        print(f'Error reading {v1.name}: {e}')
+    return (None, None)
+def b1():
+    cwd = Path.cwd()
+    s = r1(cwd, ext=['.whl'])
+    if not s:
+        print('Run this script in a directory containing .whl files.')
+        sys.exit(1)
+    b2 = s1()
+    for v1 in s:
+        j1, y1 = u1(v1)
+        if j1 and y1:
+            c2 = b2.get(j1.lower())
+            if c2:
+                d2 = p1(c2)
+                e2 = p1(y1)
+                if d2 == e2:
+                    print(f'🗑️  {j1} == {y1} already installed, deleting {v1.name}')
+                    v1.unlink()
+                elif d2 > e2:
+                    print(f'🗑️  Installed version ({c2}) is newer than wheel ({y1}), deleting {v1.name}')
+                    v1.unlink()
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: strep.py ---
+import re
+import sys
+import tempfile
+from pathlib import Path
+from zipfile import ZipFile
+from dh import fsz, runcmd
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+f2 = re.compile('\\.so(\\.\\d+)*$')
+g2 = Console()
+def h2(v1):
+    i2, _, _ = runcmd(['strip', str(v1)], show_output=True)
+def j2(g):
+    with tempfile.TemporaryDirectory() as k2:
+        k2 = Path(k2)
+        with ZipFile(g, 'r') as zf:
+            zf.extractall(k2)
+        l2 = [p for p in k2.rglob('*') if f2.search(p.name)]
+        for m2 in l2:
+            h2(m2)
+        with ZipFile(g, 'w') as zf:
+            for v1 in k2.rglob('*'):
+                if v1.is_file():
+                    zf.write(v1, v1.relative_to(k2))
+def n2(cwd, d1):
+    if d1:
+        return [Path(p) for p in d1]
+    l2 = [p for p in cwd.rglob('*') if f2.search(p.name) and p.is_file()]
+    return l2
+def o2(s):
+    p2 = sum((f.stat().st_size for f in s if f.is_file()))
+    g2.print(f'[bold cyan]Total number of .so files:[/] [bold yellow]{len(s)}[/]')
+    g2.print(f'[bold cyan]Total size of .so files:[/] [bold yellow]{fsz(p2)}[/]')
+if __name__ == '__main__':
+    cwd = Path.cwd()
+    d1 = sys.argv[1:]
+    s = n2(cwd, d1)
+    l2 = [f for f in s if f.suffix in ('.so',) or f2.search(f.name)]
+    g2.print('[bold green]Starting .so stripping process...[/]')
+    o2(l2)
+    with Progress(TextColumn('[bold blue]{task.description}[/]'), BarColumn(), TaskProgressColumn(), TextColumn('[bold]{task.completed}/{task.total}[/]'), console=g2) as q2:
+        r2 = q2.add_task('[cyan]Stripping .so files...[/]', total=len(l2))
+        for m2 in l2:
+            h2(m2)
+            q2.update(r2, advance=1)
+    g2.print(f'[bold green]Done![/] Processed [bold yellow]{len(l2)}[/] .so files.')
+    o2(l2)
+
+# --- File: valwheel.py ---
+import re
+import shutil
+import sys
+from pathlib import Path
+from packaging.tags import parse_tag
+from packaging.utils import canonicalize_name
+from packaging.version import Version
+s2 = '-m' in sys.argv
+t2 = re.compile('^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])-([^-]+)-(\\d[^-]*)-([^-]+)-([^-]+)-([^-]+)\\.whl$', re.IGNORECASE)
+def u2(v1):
+    v2 = v1.name
+    return t2.match(v2) is not None
+def w2(v1):
+    v2 = v1.name
+    try:
+        y = v2[:-4]
+        z = y.split('-')
+        if len(z) != 5:
+            return False
+        x2, a1, y2, z2, a3 = z
+        if canonicalize_name(x2) != x2.lower():
+            return False
+        try:
+            Version(a1)
+        except Exception:
+            return False
+        if not y2[0].isdigit():
+            return False
+        try:
+            parse_tag(z2 + '-' + a3 + '-' + a3.split('-')[-1])
+        except Exception:
+            return False
+        return True
+    except Exception:
+        return False
+def b1():
+    print('to move wheels with invalid name rerun with -m')
+    b3 = Path('invalid_wheels')
+    cwd = Path.cwd()
+    for v1 in cwd.glob('*.whl'):
+        if not w2(v1) or not u2(v1):
+            print(f'Invalid wheel name: {v1}')
+            if s2:
+                b3.mkdir(exist_ok=True)
+                c3 = b3 / v1.name
+                shutil.move(str(v1), str(c3))
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: whl_unpacked_size.py ---
+import argparse
+import json
+import sys
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from zipfile import ZipFile
+from dh import fsz
+def d3(e3):
+    try:
+        if not e3.exists():
+            return (e3, 0, f'File not found: {e3}')
+        if not e3.is_file():
+            return (e3, 0, f'Not a file: {e3}')
+        p2 = 0
+        try:
+            with ZipFile(e3, 'r') as whl:
+                for f3 in whl.filelist:
+                    p2 += f3.file_size
+        except Exception as e:
+            return (e3, 0, f'Failed to read wheel: {e!s}')
+        return (e3, p2, None)
+    except Exception as e:
+        return (e3, 0, f'Unexpected error: {e!s}')
+def g3(o, h3=False):
+    if h3:
+        return list(o.rglob('*.whl'))
+    else:
+        return list(o.glob('*.whl'))
+def b1():
+    c1 = argparse.ArgumentParser(description='Report the overall unpacked size of .whl files')
+    c1.add_argument('-d', '--directory', type=Path, default=Path.cwd(), help='Directory to scan (default: current directory)')
+    c1.add_argument('-r', '--recursive', action='store_true', help='Scan subdirectories recursively')
+    c1.add_argument('-j', '--jobs', type=int, default=cpu_count(), help=f'Number of parallel jobs (default: {cpu_count()})')
+    c1.add_argument('-v', '--verbose', action='store_true', help='Show detailed information for each wheel')
+    c1.add_argument('--json', action='store_true', help='Output results in JSON format')
+    c1.add_argument('-s', '--sort', choices=['name', 'size'], default='name', help='Sort output by name or size (default: name)')
+    d1 = c1.parse_args()
+    if not d1.directory.exists():
+        print(f'❌ Error: Directory not found: {d1.directory}', file=sys.stderr)
+        sys.exit(1)
+    if not d1.directory.is_dir():
+        print(f'❌ Error: Not a directory: {d1.directory}', file=sys.stderr)
+        sys.exit(1)
+    print(f'🔍 Scanning directory: {d1.directory}')
+    if d1.recursive:
+        print('   (recursive mode)')
+    i3 = g3(d1.directory, d1.recursive)
+    if not i3:
+        print('⚠️  No .whl files found!')
+        sys.exit(0)
+    print(f'✓ Found {len(i3)} .whl file(s)\n')
+    print(f'⚙️  Processing wheels ({d1.jobs} workers)...\n')
+    j3 = []
+    g1 = []
+    with Pool(d1.jobs) as k3:
+        for e3, l3, m3 in k3.imap_unordered(d3, i3):
+            if m3:
+                g1.append((e3, m3))
+            else:
+                j3.append((e3, l3))
+    if d1.sort == 'size':
+        j3.sort(key=lambda x: x[1], reverse=True)
+    else:
+        j3.sort(key=lambda x: x[0].name)
+    n3 = sum((l3 for _, l3 in j3))
+    if d1.json:
+        o3 = {'directory': str(d1.directory), 'recursive': d1.recursive, 'summary': {'total_wheels': len(i3), 'processed': len(j3), 'errors': len(g1), 'total_unpacked_size_bytes': n3, 'total_unpacked_size_formatted': fsz(n3)}, 'wheels': []}
+        for e3, l3 in j3:
+            o3['wheels'].append({'name': e3.name, 'path': str(e3), 'size_bytes': l3, 'size_formatted': fsz(l3)})
+        if g1:
+            o3['errors'] = []
+            for e3, m3 in g1:
+                o3['errors'].append({'path': str(e3), 'error': m3})
+        print(json.dumps(o3, indent=2))
+    else:
+        print('-' * 40)
+        print(f"{'Wheel File':<50} {'Unpacked Size':>20}")
+        print('-' * 40)
+        for e3, l3 in j3:
+            k = e3.name
+            if len(k) > 45:
+                k = '...' + k[-42:]
+            print(f'{k:<50} {fsz(l3):>20}')
+        print('-' * 40)
+        print(f"{'TOTAL':<50} {fsz(n3):>20}")
+        print('-' * 40)
+        if d1.verbose:
+            print('\n📊 Summary:')
+            print(f'   Total wheels found:      {len(i3)}')
+            print(f'   Successfully processed:  {len(j3)}')
+            print(f'   Errors:                  {len(g1)}')
+            print(f"   Average size per wheel:  {(fsz(n3 // len(j3)) if j3 else 'N/A')}")
+        if g1:
+            print(f'\n⚠️  Errors ({len(g1)}):')
+            for e3, m3 in g1:
+                print(f'   • {e3.name}: {m3}')
+    print()
+if __name__ == '__main__':
+    raise SystemExit(b1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

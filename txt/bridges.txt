@@ -1,0 +1,8 @@
+bs4
+opencv-python-headless
+playwright
+sqlalchemy
+tcod
+obfs4 92.35.22.211:4434 28422DA2E8F7A55F74AC01666D8C2A8AB0D13665 cert=zKsbMjDfN2UltO6TFEZk0zTFY2JyOs2TUJyw8RFE96uo1e0VbvVqhMMYhGrke7m7N19cEA iat-mode=0
+If it doesn't work, you can try this other bridge:
+obfs4 144.91.90.201:9101 63ABC31DE6E5D8A559170C559221462485B32AA6 cert=l9dH2CzKMyPsCHXBEZTVh7zGmLVEs5DawCYsPLzlhhOIe9OvjNz+kXDuAXUaaSoYQRfzVA iat-mode=0

@@ -15,16 +15,14 @@ class DocstringRemover(ast.NodeTransformer):
             and isinstance(node.body[0].value, ast.Constant)
             and isinstance(node.body[0].value.value, str)
         ):
-            
             if len(node.body) == 1:
-                
                 node.body = [ast.Pass()]
             else:
                 node.body = node.body[1:]
         return node
 
     def visit_Module(self, node):
-        
+
         self.generic_visit(node)
         return node
 
@@ -48,14 +46,12 @@ def process_file(path: Path) -> None:
         if not have_doc(code):
             return
 
-        
         first_line = ""
         if code.startswith("#!"):
             lines = code.splitlines(keepends=True)
             first_line = lines[0]
             code = "".join(lines[1:])
 
-        
         tree = ast.parse(code)
         transformer = DocstringRemover()
         new_tree = transformer.visit(tree)
@@ -65,7 +61,6 @@ def process_file(path: Path) -> None:
         if first_line:
             newcode = first_line + newcode
 
-        
         try:
             ast.parse(newcode)
         except SyntaxError:
@@ -73,7 +68,6 @@ def process_file(path: Path) -> None:
             del tree, new_tree, code, newcode, transformer, before, first_line
             return
 
-        
         if len(newcode.strip()) == len(code.strip()):
             cprint(f"{path.name} (no change)", "grey")
             del tree, new_tree, code, newcode, transformer, before, first_line
@@ -92,7 +86,6 @@ def process_file(path: Path) -> None:
     except Exception as e:
         cprint(f"❌ {path.name}: {e}", "yellow")
     finally:
-        
         del before
 
 

@@ -1,0 +1,1377 @@
+# --- File: afk2.py ---
+import argparse
+import ast
+import io
+import os
+import re
+import sys
+import tarfile
+import zipfile
+from collections.abc import Iterator
+from dataclasses import dataclass, field
+from multiprocessing import Pool
+from pathlib import Path
+try:
+    import zstandard as zstd
+    a = True
+except ImportError:
+    a = False
+@dataclass
+class b:
+    pass
+@dataclass
+class c:
+    d = field(default_factory=list)
+    e = None
+f = True
+def _c(g, h):
+    if not f:
+        return h
+    return f'\x1b[{g}m{h}\x1b[0m'
+def i(t):
+    return _c('1', t)
+def j(t):
+    return _c('36', t)
+def k(t):
+    return _c('33', t)
+def red(t):
+    return _c('31', t)
+def l(t):
+    return _c('32', t)
+def dim(t):
+    return _c('2', t)
+def m(n, o):
+    return getattr(n, 'lineno', -1) in o
+def p(q):
+    r = set()
+    for n in ast.walk(q):
+        if not isinstance(n, ast.If):
+            continue
+        s = n.test
+        t = isinstance(s, ast.Name) and s.id == 'TYPE_CHECKING' or (isinstance(s, ast.Attribute) and s.attr == 'TYPE_CHECKING')
+        if t:
+            for u in ast.walk(n):
+                if hasattr(u, 'lineno'):
+                    r.add(u.lineno)
+    return r
+def v(q):
+    w = set()
+    for n in q.body:
+        if not isinstance(n, ast.Assign):
+            continue
+        for x in n.targets:
+            if isinstance(x, ast.Name) and x.id == '__all__':
+                if isinstance(n.value, (ast.List, ast.Tuple)):
+                    for elt in n.value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            w.add(elt.value)
+    return w
+def y(q):
+    z = set()
+    for n in ast.walk(q):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+            z.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            a1 = n
+            while isinstance(a1, ast.Attribute):
+                a1 = a1.value
+            if isinstance(a1, ast.Name):
+                z.add(a1.id)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+            for tok in re.findall('\\b([A-Za-z_]\\w*)\\b', n.value):
+                z.add(tok)
+    return z
+def b1(n):
+    c1 = []
+    for d1 in n.names:
+        e1 = d1.name
+        f1 = d1.asname if d1.asname else d1.name.split('.')[0](0)
+        c1.append((e1, f1))
+    return c1
+def g1(h1, i1, *, j1=False, k1=False):
+    l1 = c(path=i1)
+    try:
+        q = ast.parse(h1, filename=i1)
+    except SyntaxError as exc:
+        l1.error = f'SyntaxError: {exc}'
+        return l1
+    if j1 and k1:
+        return l1
+    m1 = p(q)
+    n1 = v(q)
+    o1 = y(q)
+    p1 = ''
+    if q.body and isinstance(q.body[0](0), ast.Expr) and isinstance(q.body[0](0).value, ast.Constant) and isinstance(q.body[0](0).value.value, str):
+        p1 = q.body[0](0).value.value
+    q1 = h1.splitlines()
+    for n in ast.walk(q):
+        if not isinstance(n, (ast.Import, ast.ImportFrom)):
+            continue
+        if n.lineno in m1:
+            continue
+        if isinstance(n, ast.ImportFrom) and n.module == '__future__':
+            continue
+        if any((d1.name == '*' for d1 in n.names)):
+            continue
+        if j1 and isinstance(n, ast.ImportFrom) and ((n.level or 0) > 0):
+            continue
+        r1 = b1(n)
+        s1 = []
+        for t1, f1 in r1:
+            if f1 in n1:
+                continue
+            if f1 in o1:
+                continue
+            if f1 in p1:
+                continue
+            s1.append(f1)
+        if not s1:
+            continue
+        u1 = n.lineno - 1
+        end = n.end_lineno
+        v1 = '\n'.join(q1[u1:end])
+        l1.unused.append(b(lineno=n.lineno, col_offset=n.col_offset, original_stmt=v1, unused_names=s1))
+    return l1
+def w1(x1, y1):
+    m = re.match('^(\\s*import\\s+)(.+)$', x1)
+    if m:
+        z1, a2 = (m.group(1), m.group(2))
+        b2 = [seg.strip() for seg in a2.split(',') if d2(seg.strip()) not in y1]
+        if not b2:
+            return None
+        return z1 + ', '.join(b2)
+    m = re.match('^(\\s*from\\s+[\\w.]+\\s+import\\s+)(.+)$', x1)
+    if m:
+        z1, a2 = (m.group(1), m.group(2))
+        c2 = re.sub('\\s*#.*$', '', a2).rstrip(' \\')
+        b2 = [seg.strip() for seg in c2.split(',') if seg.strip() and d2(seg.strip()) not in y1]
+        if not b2:
+            return None
+        return z1 + ', '.join(b2)
+    return x1
+def d2(e2):
+    m = re.match('^\\s*[\\w.]+\\s+as\\s+(\\w+)\\s*$', e2)
+    if m:
+        return m.group(1)
+    return e2.strip().split('.')[0].strip()
+def f2(g2, y1):
+    h2 = re.match('^(\\s*from\\s+[\\w.]+\\s+import\\s*$)(.*?)($.*)', g2, re.DOTALL)
+    if not h2:
+        return None
+    z1 = h2.group(1)
+    i2 = h2.group(2)
+    j2 = h2.group(3)
+    k2 = []
+    for seg in re.split(',\\s*', i2):
+        l2 = re.sub('#.*', '', seg).strip()
+        if not l2:
+            continue
+        f1 = d2(l2)
+        if f1 not in y1:
+            k2.append(l2)
+    if not k2:
+        return None
+    if len(k2) == 1 and '\n' not in g2:
+        return f'{z1[:-1]}{k2[0]}{j2[1:]}'
+    m2 = ',\n    '.join(k2)
+    return f'{z1}\n    {m2},\n{j2}'
+def n2(h1, o2):
+    p2 = {}
+    q2 = {}
+    for ui in o2:
+        ln = ui.lineno
+        p2.setdefault(ln, set()).update(ui.unused_names)
+        q2[ln] = ln + ui.original_stmt.count('\n')
+    r = h1.splitlines(keepends=True)
+    r2 = []
+    s2 = -1
+    i = 0
+    while i < len(r):
+        t2 = i + 1
+        if t2 <= s2:
+            i += 1
+            continue
+        if t2 not in p2:
+            r2.append(r[i])
+            i += 1
+            continue
+        y1 = p2[t2]
+        u2 = q2[t2]
+        g2 = ''.join(r[i:u2])
+        if '(' in g2 and '\n' in g2:
+            v2 = f2(g2, y1)
+        else:
+            w2 = g2.strip('\n')
+            x2 = w1(w2, y1)
+            if x2 is None:
+                v2 = None
+            else:
+                y2 = '\n' if g2.endswith('\n') else ''
+                v2 = x2 + y2
+        if v2 is not None:
+            r2.append(v2)
+        s2 = u2
+        i += 1
+    return ''.join(r2)
+def z2(a3):
+    try:
+        with zipfile.ZipFile(a3) as zf:
+            for b3 in zf.namelist():
+                if not b3.endswith('.py'):
+                    continue
+                c3 = f'{a3.name}::{b3}'
+                try:
+                    raw = zf.read(b3)
+                    h1 = raw.decode('utf-8', errors='replace')
+                    yield (c3, h1)
+                except Exception as exc:
+                    yield (c3, f'__ERROR__:{exc}')
+    except zipfile.BadZipFile as exc:
+        yield (f'{a3.name}::?', f'__ERROR__:Bad zip: {exc}')
+def d3(a3):
+    e3 = a3.name
+    def f3(tf):
+        for g3 in tf.getmembers():
+            if not g3.name.endswith('.py'):
+                continue
+            c3 = f'{e3}::{g3.name}'
+            try:
+                f = tf.extractfile(g3)
+                if f is None:
+                    continue
+                h1 = f.read().decode('utf-8', errors='replace')
+                yield (c3, h1)
+            except Exception as exc:
+                yield (c3, f'__ERROR__:{exc}')
+    try:
+        if a:
+            h3 = zstd.ZstdDecompressor()
+            with open(a3, 'rb') as fh:
+                i3 = h3.stream_reader(fh)
+                with tarfile.open(fileobj=io.BytesIO(i3.read())) as tf:
+                    yield from f3(tf)
+        else:
+            with tarfile.open(a3) as tf:
+                yield from f3(tf)
+    except Exception as exc:
+        yield (f'{e3}::?', f'__ERROR__:Archive error: {exc}')
+j3 = False
+def k3(k1):
+    global _WORKER_IGNORE_INIT
+    j3 = k1
+def l3(m3):
+    p = Path(m3)
+    try:
+        h1 = p.read_text(encoding='utf-8', errors='replace')
+    except OSError as exc:
+        return c(path=m3, error=f'OSError: {exc}')
+    j1 = p.name == '__init__.py'
+    return g1(h1, m3, is_init=j1, ignore_init=j3)
+def n3(o3):
+    p3, h1 = o3
+    if h1.startswith('__ERROR__:'):
+        return c(path=p3, error=h1[len('__ERROR__:'):])
+    j1 = p3.endswith(('/__init__.py', '\\__init__.py'))
+    return g1(h1, p3, is_init=j1, ignore_init=j3)
+def q3(i1, r3):
+    m3 = str(i1)
+    return any((pat.search(m3) for pat in r3))
+def s3(t3, r3):
+    u3 = []
+    v3 = []
+    def w3(p):
+        if not q3(p, r3):
+            u3.append(str(p))
+    def x3(p):
+        if q3(p, r3):
+            return
+        if p.suffix == '.whl':
+            v3.extend(z2(p))
+        elif p.name.endswith('.tar.zst'):
+            v3.extend(d3(p))
+    for p in t3:
+        if not p.exists():
+            print(red(f'warning: path does not exist: {p}'), file=sys.stderr)
+            continue
+        if p.is_file():
+            if p.suffix == '.py':
+                w3(p)
+            elif p.suffix in ('.whl',) or p.name.endswith('.tar.zst'):
+                x3(p)
+            else:
+                print(k(f'warning: skipping unrecognised file: {p}'), file=sys.stderr)
+        elif p.is_dir():
+            for u in sorted(p.rglob('*')):
+                if q3(u, r3):
+                    continue
+                if u.is_file():
+                    if u.suffix == '.py':
+                        u3.append(str(u))
+                    elif u.suffix == '.whl' or u.name.endswith('.tar.zst'):
+                        x3(u)
+    return (u3, v3)
+def y3(m3):
+    if '::' in m3:
+        return m3
+    try:
+        return str(Path(m3).relative_to(Path.cwd()))
+    except ValueError:
+        return m3
+def z3(l1, *, a4=False, b4=False, c4=False):
+    d4 = y3(l1.path)
+    if l1.error:
+        print(f"  {red('error')} {i(d4)}: {red(l1.error)}")
+        return 0
+    if not l1.unused:
+        if a4:
+            print(f"  {l('✓')} {dim(d4)}")
+        return 0
+    for ui in l1.unused:
+        e4 = j(f'line {ui.lineno:>4}')
+        f4 = k(ui.original_stmt.splitlines()[0])
+        print(f'  {i(d4)}  -->  {e4}  {f4}')
+        g4 = red(', '.join(ui.unused_names))
+        print(f"{'':>50}  [unused: {g4}]")
+    return len(l1.unused)
+def h4(m3, *, v2, c4, e=None):
+    d4 = y3(m3)
+    if e:
+        print(f"  {red('SKIP autofix')} {i(d4)} — result failed to parse: {e}")
+    elif c4:
+        print(f"  {j('would fix')} {i(d4)}")
+    else:
+        print(f"  {l('fixed')} {i(d4)}")
+def run(t3, *, b4=False, c4=False, a4=False, i4=8, r3=None, k1=False):
+    if r3 is None:
+        r3 = []
+    print(i(f'\nScanning {len(t3)} path(s) with {i4} worker(s) …\n'))
+    u3, v3 = s3(t3, r3)
+    j4 = len(u3)
+    k4 = len(v3)
+    print(f'  {j(str(j4))} .py file(s), {j(str(k4))} archive member(s) queued.\n')
+    if j4 + k4 == 0:
+        print(k('No files to analyse.'))
+        return 0
+    l4 = []
+    with Pool(processes=i4, initializer=k3, initargs=(k1,)) as m4:
+        n4 = m4.imap_unordered(l3, u3)
+        o4 = m4.imap_unordered(n3, v3)
+        for i, rep in enumerate(n4, 1):
+            l4.append(rep)
+            if a4:
+                print(dim(f'  [{i}/{j4}] analysed {y3(rep.path)}'), end='\r')
+        if a4 and j4:
+            print()
+        for rep in o4:
+            l4.append(rep)
+    l4.sort(key=lambda r: r.path)
+    p4 = 0
+    q4 = set()
+    r4 = 0
+    for l1 in l4:
+        s4 = z3(l1, verbose=a4, autofix=b4, dry_run=c4)
+        p4 += s4
+        if s4 > 0:
+            q4.add(l1.path)
+        if (b4 or c4) and s4 > 0 and (not l1.error):
+            if '::' in l1.path:
+                if a4:
+                    print(dim(f'  [skip fix — archive member: {l1.path}]'))
+                continue
+            p = Path(l1.path)
+            try:
+                t4 = p.read_text(encoding='utf-8', errors='replace')
+            except OSError as exc:
+                h4(l1.path, fixed=False, dry_run=c4, error=str(exc))
+                continue
+            u4 = n2(t4, l1.unused)
+            try:
+                ast.parse(u4, filename=l1.path)
+            except SyntaxError as exc:
+                h4(l1.path, fixed=False, dry_run=c4, error=str(exc))
+                continue
+            if c4:
+                h4(l1.path, fixed=True, dry_run=True)
+            else:
+                v4 = p.stat()
+                p.write_text(u4, encoding='utf-8')
+                os.chmod(p, v4.st_mode)
+                h4(l1.path, fixed=True, dry_run=False)
+                r4 += 1
+    print()
+    if p4 == 0:
+        print(l('✓ No unused imports found.'))
+    else:
+        print(i(f'Found {red(str(p4))} unused import(s) across {red(str(len(q4)))} file(s).'))
+        if b4 and (not c4):
+            print(l(f'Fixed {r4} file(s).'))
+    return 0 if p4 == 0 else 1
+def w4():
+    x4 = argparse.ArgumentParser(prog='unused_imports', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('            Examples:\n              %(prog)s src/\n              %(prog)s src/ --autofix\n              %(prog)s src/ --dry-run\n              %(prog)s mypackage.whl\n              %(prog)s . --exclude tests --workers 4 --verbose\n              %(prog)s file.py --autofix --no-color\n            '))
+    x4.add_argument('paths', nargs='*', default=['.'], metavar='PATH', help='Files or directories to scan (default: current directory).')
+    x4.add_argument('-a', '--autofix', action='store_true', help='Remove unused imports in-place.')
+    x4.add_argument('--dry-run', action='store_true', help='Preview changes without writing files (implies --autofix mode).')
+    x4.add_argument('-v', '--verbose', action='store_true', help='Detailed output with per-name breakdown and progress.')
+    x4.add_argument('--workers', type=int, default=8, metavar='N', help='Number of parallel worker processes (default: 8).')
+    x4.add_argument('--exclude', action='append', default=[], metavar='PATTERN', help='Regex pattern to exclude files/dirs (repeatable).')
+    x4.add_argument('--ignore-init', action='store_true', help='Treat all imports in __init__.py as used.')
+    x4.add_argument('--no-color', action='store_true', help='Disable ANSI color codes in output.')
+    return x4
+def y4(z4=None):
+    x4 = w4()
+    o3 = x4.parse_args(z4)
+    global _USE_COLOR
+    if o3.no_color or not sys.stdout.isatty():
+        f = False
+    r3 = []
+    for pat in o3.exclude:
+        try:
+            r3.append(re.compile(pat))
+        except re.error as exc:
+            print(red(f'error: invalid --exclude pattern {pat!r}: {exc}'), file=sys.stderr)
+            return 2
+    t3 = [Path(p) for p in o3.paths]
+    return run(t3, autofix=o3.autofix, dry_run=o3.dry_run, verbose=o3.verbose, workers=o3.workers, exclude_patterns=r3, ignore_init=o3.ignore_init)
+if __name__ == '__main__':
+    import textwrap
+    raise SystemExit(y4())
+
+# --- File: afk_autoflake.py ---
+import argparse
+import difflib
+import multiprocessing as mp
+import subprocess
+from pathlib import Path
+def a5(i1):
+    e1 = Path(i1).read_text()
+    r2 = subprocess.run(['autoflake', '--remove-all-unused-imports', '--ignore-init-module-imports', '-'], input=e1, capture_output=True, text=True)
+    if r2.returncode != 0:
+        return None
+    v2 = r2.stdout
+    if v2 == e1:
+        return None
+    return ''.join(difflib.unified_diff(e1.splitlines(keepends=True), v2.splitlines(keepends=True), fromfile=f'a/{i1}', tofile=f'b/{i1}'))
+def b5(i1, b4=False, c5=False):
+    if not Path(i1).exists():
+        print(f'Error: The file `{i1}` does not exist.')
+        return
+    d5 = ['autoflake', '--remove-all-unused-imports', '--ignore-init-module-imports', i1]
+    if b4:
+        d5.append('--in-place')
+    else:
+        d5.append('--check')
+    try:
+        r2 = subprocess.run(d5, capture_output=True, text=True)
+        if r2.returncode == 0:
+            return
+        elif r2.returncode == 1:
+            if b4:
+                print(f'Successfully removed unused imports from `{i1}`.')
+            elif c5:
+                e5 = a5(i1)
+                if e5:
+                    print(e5, end='' if e5.endswith('\n') else '\n')
+            else:
+                f5 = (r2.stdout or '') + (r2.stderr or '')
+                for x1 in f5.splitlines():
+                    if x1.strip():
+                        print(f'{i1}: {x1}')
+    except FileNotFoundError:
+        print('Error: `autoflake` is not installed. Run `pip install autoflake`.')
+if __name__ == '__main__':
+    x4 = argparse.ArgumentParser(description='Check or fix unused imports in Python file(s).')
+    x4.add_argument('file', nargs='?', help='Path to the Python file (if omitted, processes all .py files in current dir)')
+    x4.add_argument('-a', '--autofix', action='store_true', help='Automatically remove unused imports')
+    x4.add_argument('-d', '--diff', action='store_true', help='Show unified diff of the affected lines')
+    o3 = x4.parse_args()
+    if o3.file:
+        b5(o3.file, o3.autofix, o3.diff)
+    else:
+        g5 = sorted((str(p) for p in Path.cwd().glob('*.py')))
+        if g5:
+            with mp.Pool(processes=8) as m4:
+                h5 = [m4.apply_async(b5, (f, o3.autofix, o3.diff)) for f in g5]
+                for r in h5:
+                    r.wait()
+
+# --- File: detect_unused.py ---
+import argparse
+import ast
+import multiprocessing as mp
+from dataclasses import dataclass, field
+from pathlib import Path
+@dataclass
+class i5:
+    j5 = 0
+@dataclass
+class k5:
+    l5 = field(default_factory=list)
+    o1 = field(default_factory=set)
+    h1 = ''
+    e = None
+def m5(b3):
+    return b3.isupper() and (not b3.startswith('__'))
+class n5(ast.NodeVisitor):
+    def __init__(self, o5):
+        self.file = o5
+        self.defs = []
+    def p5(self, n):
+        self.defs.append(i5(n.name, 'func', self.file, n.lineno, getattr(n, 'end_lineno', n.lineno)))
+    def q5(self, n):
+        self.defs.append(i5(n.name, 'func', self.file, n.lineno, getattr(n, 'end_lineno', n.lineno)))
+    def r5(self, n):
+        self.defs.append(i5(n.name, 'class', self.file, n.lineno, getattr(n, 'end_lineno', n.lineno)))
+    def s5(self, n):
+        for x in n.targets:
+            if isinstance(x, ast.Name) and m5(x.id):
+                self.defs.append(i5(x.id, 'const', self.file, n.lineno, getattr(n, 'end_lineno', n.lineno)))
+        self.generic_visit(n)
+    def t5(self, n):
+        if isinstance(n.target, ast.Name) and m5(n.target.id):
+            self.defs.append(i5(n.target.id, 'const', self.file, n.lineno, getattr(n, 'end_lineno', n.lineno)))
+        self.generic_visit(n)
+class u5(ast.NodeVisitor):
+    def __init__(self):
+        self.used = set()
+    def v5(self, n):
+        self.used.add(n.id)
+        self.generic_visit(n)
+    def w5(self, n):
+        self.used.add(n.attr)
+        self.generic_visit(n)
+def x5(o5):
+    try:
+        h1 = o5.read_text(encoding='utf-8', errors='replace')
+        q = ast.parse(h1, filename=str(o5))
+    except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+        return k5(file=o5, error=str(exc))
+    y5 = n5(o5)
+    y5.visit(q)
+    z5 = u5()
+    z5.visit(q)
+    return k5(file=o5, defs=y5.defs, used_names=z5.used, source=h1)
+a6 = {'__all__', '__version__', '__author__'}
+def b6(c6):
+    d6 = []
+    e6 = set()
+    for fa in c6:
+        if fa.error:
+            continue
+        d6.extend(fa.defs)
+        e6 |= fa.used_names
+    d = []
+    for d in d6:
+        if d.name in a6:
+            continue
+        if d.name.startswith('_') and d.name.endswith('_') and d.name.startswith('__'):
+            continue
+        if d.name == 'main':
+            continue
+        f6 = sum((1 for fa in c6 if not fa.error and d.name in fa.used_names))
+        if f6 == 0:
+            d.append(d)
+    return d
+g6 = {'func': 'func', 'class': 'classes', 'const': 'const'}
+def h6(i6):
+    j6, k6 = i6
+    l6 = Path(k6) / g6[j6.kind]
+    l6.mkdir(parents=True, exist_ok=True)
+    r = j6.file.read_text(encoding='utf-8', errors='replace').splitlines()
+    m6 = '\n'.join(r[j6.lineno - 1:j6.end_lineno])
+    n6 = j6.file.stem.replace('.', '_')
+    o6 = l6 / f'{n6}__{j6.name}.py'
+    p6 = f"# Extracted: {j6.kind} '{j6.name}'\n# Source: {j6.file}\n# Lines: {j6.lineno}-{j6.end_lineno}\n\n"
+    o6.write_text(p6 + m6 + '\n', encoding='utf-8')
+    return str(o6)
+q6 = 8
+def r6(a1):
+    s6 = {'.git', '__pycache__', 'venv', '.venv', 'output', 'node_modules'}
+    return [p for p in a1.rglob('*.py') if not any((t6 in s6 for t6 in p.parts))]
+def y4():
+    x4 = argparse.ArgumentParser(description='Detect (and optionally extract) unused functions/classes/constants.')
+    x4.add_argument('-c', '--extract', action='store_true', help='extract each unused object into ./output/{classes,func,const}/')
+    x4.add_argument('-d', '--dir', default='.', help='root directory to scan recursively (default: current dir)')
+    o3 = x4.parse_args()
+    a1 = Path(o3.dir).resolve()
+    g5 = r6(a1)
+    if not g5:
+        print('No .py files found.')
+        return
+    print(f'Scanning {len(g5)} file(s) with {q6} workers...')
+    with mp.Pool(processes=q6) as m4:
+        c6 = list(m4.imap_unordered(x5, g5))
+    for fa in c6:
+        if fa.error:
+            print(f'[WARN] Failed to parse {fa.file}: {fa.error}')
+    d = b6(c6)
+    if not d:
+        print('\nNo unused functions/classes/constants found.')
+        return
+    d.sort(key=lambda d: (str(d.file), d.lineno))
+    print(f'\nFound {len(d)} unused object(s):\n')
+    for d in d:
+        rel = d.file.relative_to(a1) if d.file.is_relative_to(a1) else d.file
+        print(f'  [{d.kind:5}] {d.name:30} {rel}:{d.lineno}')
+    if o3.extract:
+        k6 = a1 / 'output'
+        print(f'\nExtracting {len(d)} object(s) into {k6} ...')
+        u6 = [(d, str(k6)) for d in d]
+        with mp.Pool(processes=q6) as m4:
+            v6 = list(m4.imap_unordered(h6, u6))
+        for i1 in v6:
+            print(f'  wrote {i1}')
+        print('\nExtraction complete.')
+if __name__ == '__main__':
+    y4()
+
+# --- File: fixvul.py ---
+import os
+import re
+import sys
+def w6(i1):
+    x6 = {}
+    try:
+        with open(i1, 'r') as f:
+            for x1 in f:
+                x1 = x1.strip()
+                y6 = re.match('^(.+?):(\\d+):\\s+unused variable\\s+[\\\'"]SKIP_DIRS[\\\'"]', x1)
+                if y6:
+                    z6 = y6.group(1)
+                    a7 = int(y6.group(2))
+                    if z6 not in x6:
+                        x6[z6] = []
+                    if a7 not in x6[z6]:
+                        x6[z6].append(a7)
+    except FileNotFoundError:
+        print(f'Error: File not found: {i1}')
+        sys.exit(1)
+    except Exception as e:
+        print(f'Error reading file: {e}')
+        sys.exit(1)
+    return x6
+def b7(z6, c7='.'):
+    for a1, d7, g5 in os.walk(c7):
+        d7[:] = [d for d in d7 if not d.startswith('.')]
+        if z6 in g5:
+            return os.path.join(a1, z6)
+    return None
+def y4():
+    if len(sys.argv) != 2:
+        print('Usage: python comment_skip_dirs.py <vulture_output_file>')
+        print('Example: python comment_skip_dirs.py vulture_output.txt')
+        sys.exit(1)
+    e7 = sys.argv[1]
+    print(f'Reading vulture output from: {e7}')
+    x6 = w6(e7)
+    if not x6:
+        print('No SKIP_DIRS entries found in vulture output.')
+        sys.exit(0)
+    print(f'Found {len(x6)} files with unused SKIP_DIRS\n')
+    v2 = 0
+    f7 = 0
+    g7 = 0
+    for z6, h7 in x6.items():
+        i1 = b7(z6)
+        if not i1:
+            print(f'✗ Not found: {z6}')
+            g7 += 1
+            continue
+        try:
+            with open(i1, 'r') as f:
+                r = f.readlines()
+            i7 = False
+            for a7 in sorted(h7):
+                if 1 <= a7 <= len(r):
+                    x1 = r[a7 - 1]
+                    if 'SKIP_DIRS' in x1 and (not x1.lstrip().startswith('#')):
+                        j7 = len(x1) - len(x1.lstrip())
+                        k7 = x1.lstrip()
+                        r[a7 - 1] = ' ' * j7 + '# ' + k7
+                        print(f'✓ {z6}:{a7}')
+                        v2 += 1
+                        i7 = True
+                    else:
+                        print(f'⏭ {z6}:{a7} (already commented or no SKIP_DIRS)')
+                        f7 += 1
+            if i7:
+                with open(i1, 'w') as f:
+                    f.writelines(r)
+        except Exception as e:
+            print(f'✗ Error in {z6}: {e}')
+    print(f"\n{'=' * 40}")
+    print('Summary:')
+    print(f'  Fixed: {v2}')
+    print(f'  Skipped: {f7}')
+    print(f'  Not found: {g7}')
+if __name__ == '__main__':
+    raise SystemExit(y4())
+
+# --- File: fixvulture.py ---
+import os
+import re
+import sys
+from collections import defaultdict
+from typing import dict, list, set, tuple
+l7 = re.compile("^(.+?):(\\d+):\\s+(unused\\s+(function|variable|class|attribute|method|import)\\s+'([^']+)'|unreachable code after '(\\w+)'|redundant if-condition|unreachable 'else' block|unused import '([^']+)'\\s+\\(\\d+% confidence\\))$")
+def w6(r):
+    h5 = defaultdict(list)
+    for x1 in r:
+        x1 = x1.strip()
+        if not x1:
+            continue
+        y6 = l7.match(x1)
+        if not y6:
+            continue
+        i1 = y6.group(1)
+        a7 = int(y6.group(2))
+        m7 = y6.group(3)
+        n7 = None
+        b3 = None
+        if y6.group(4):
+            n7 = 'unused_' + y6.group(4)
+            b3 = y6.group(5)
+        elif y6.group(6):
+            n7 = 'unreachable_after'
+            b3 = y6.group(6)
+        elif 'redundant if-condition' in m7:
+            n7 = 'redundant_if'
+            b3 = ''
+        elif "unreachable 'else' block" in m7:
+            n7 = 'unreachable_else'
+            b3 = ''
+        elif y6.group(7):
+            n7 = 'unused_import'
+            b3 = y6.group(7)
+        else:
+            n7 = 'other'
+            b3 = ''
+        h5[i1].append((a7, n7, b3))
+    return dict(h5)
+def o7(i1, p7):
+    if not os.path.exists(i1):
+        print(f'Warning: File not found: {i1}')
+        return False
+    try:
+        with open(i1, encoding='utf-8') as f:
+            r = f.readlines()
+    except Exception as e:
+        print(f'Error reading {i1}: {e}')
+        return False
+    q7 = r.copy()
+    i7 = False
+    r7 = sorted(p7, key=lambda x: x[0], reverse=True)
+    s7 = set()
+    for a7, n7, b3 in r7:
+        idx = a7 - 1
+        if idx < 0 or idx >= len(r):
+            continue
+        if idx in s7:
+            continue
+        x1 = r[idx]
+        try:
+            if n7 == 'unused_variable':
+                r[idx] = w7(x1, b3)
+                i7 = True
+            elif n7 == 'unused_function' or n7 == 'unused_method':
+                t7 = z7(r, idx)
+                for i in range(t7[0], t7[1] + 1):
+                    s7.add(i)
+                i7 = True
+            elif n7 == 'unused_class':
+                u7 = f8(r, idx)
+                for i in range(u7[0], u7[1] + 1):
+                    s7.add(i)
+                i7 = True
+            elif n7 == 'unused_attribute' or n7 == 'unused_import':
+                r[idx] = x7(x1)
+                i7 = True
+            elif n7 in ('unreachable_after', 'unreachable_else'):
+                y7(x1)
+                v7 = h8(r, idx)
+                for i in range(idx, v7 + 1):
+                    if i not in s7:
+                        s7.add(i)
+                i7 = True
+            elif n7 == 'redundant_if':
+                r[idx] = x7(x1)
+                i7 = True
+        except Exception as e:
+            print(f'Error processing {i1}:{a7} - {e}')
+            continue
+    if s7:
+        r = [x1 for i, x1 in enumerate(r) if i not in s7]
+        r = k8(r)
+        i7 = True
+    if i7:
+        try:
+            with open(i1, 'w', encoding='utf-8') as f:
+                f.writelines(r)
+            print(f'Fixed: {i1}')
+            return True
+        except Exception as e:
+            print(f'Error writing {i1}: {e}')
+            with open(i1, 'w', encoding='utf-8') as f:
+                f.writelines(q7)
+            return False
+    return False
+def w7(x1, b3):
+    j7 = y7(x1)
+    return f'{j7}# REMOVED: {x1.strip()}\n'
+def x7(x1):
+    j7 = y7(x1)
+    return f'{j7}# REMOVED: {x1.strip()}\n'
+def y7(x1):
+    return x1[:len(x1) - len(x1.lstrip())]
+def z7(r, a8):
+    b8 = a8
+    while b8 > 0:
+        c8 = r[b8 - 1].strip()
+        if c8.startswith('@'):
+            b8 -= 1
+        else:
+            break
+    d8 = r[a8]
+    j7 = len(d8) - len(d8.lstrip())
+    v7 = a8 + 1
+    while v7 < len(r):
+        x1 = r[v7]
+        if x1.strip() and (not x1.strip().startswith('#')):
+            e8 = len(x1) - len(x1.lstrip())
+            if e8 <= j7:
+                break
+        v7 += 1
+    return (b8, v7 - 1)
+def f8(r, a8):
+    g8 = a8
+    while g8 > 0:
+        c8 = r[g8 - 1].strip()
+        if c8.startswith('@'):
+            g8 -= 1
+        else:
+            break
+    d8 = r[a8]
+    j7 = len(d8) - len(d8.lstrip())
+    v7 = a8 + 1
+    while v7 < len(r):
+        x1 = r[v7]
+        if x1.strip() and (not x1.strip().startswith('#')):
+            e8 = len(x1) - len(x1.lstrip())
+            if e8 <= j7:
+                break
+        v7 += 1
+    return (g8, v7 - 1)
+def h8(r, a8):
+    j7 = y7(r[a8])
+    v7 = a8
+    while v7 + 1 < len(r):
+        i8 = r[v7 + 1]
+        if i8.strip() and (not i8.strip().startswith('#')):
+            j8 = y7(i8)
+            if len(j8) <= len(j7) and i8.strip():
+                break
+        v7 += 1
+    return v7
+def k8(r):
+    l8 = []
+    m8 = 0
+    for x1 in r:
+        if x1.strip() == '':
+            m8 += 1
+            if m8 <= 2:
+                l8.append(x1)
+        else:
+            m8 = 0
+            l8.append(x1)
+    return l8
+def y4():
+    if len(sys.argv) > 1:
+        e7 = sys.argv[1]
+        try:
+            with open(e7) as f:
+                n8 = f.readlines()
+        except FileNotFoundError:
+            print(f'Error: File not found: {e7}')
+            sys.exit(1)
+    else:
+        print('Reading Vulture output from stdin...')
+        n8 = sys.stdin.readlines()
+    if not n8:
+        print('No input provided.')
+        sys.exit(0)
+    o8 = w6(n8)
+    if not o8:
+        print('No issues found to fix.')
+        sys.exit(0)
+    print(f'Found issues in {len(o8)} files.')
+    print('\nThe following files will be modified:')
+    for i1 in o8:
+        print(f'  {i1}: {len(o8[i1])} issues')
+    p8 = input('\nProceed with fixes? (y/N): ').strip().lower()
+    if p8 not in ('y', 'yes'):
+        print('Aborted.')
+        sys.exit(0)
+    q8 = 0
+    for i1, p7 in o8.items():
+        if o7(i1, p7):
+            q8 += 1
+    print(f'\nDone! Fixed {q8} files.')
+if __name__ == '__main__':
+    raise SystemExit(y4())
+
+# --- File: remove_func.py ---
+import argparse
+import ast
+from multiprocessing import Pool
+from pathlib import Path
+from dh import cprint
+r8 = 'format_size'
+s8 = 1
+t8 = '\ndef format_size(size_bytes: int) -> str:\n    size = float(size_bytes)\n    for unit in ("B", "KB", "MB", "GB", "TB"):\n        if size < 1024.0:\n            return f"{size:.2f} {unit}"\n        size /= 1024.0\n    return f"{size:.2f} PB"\n'
+u8 = ast.dump(ast.parse(t8).body[0])
+def v8(n, w8):
+    if not isinstance(n, ast.FunctionDef):
+        return False
+    if w8:
+        return n.name == r8 and len(n.args.args) == s8
+    return n.name == r8 and ast.dump(n) == u8
+def x8(o3):
+    i1, w8 = o3
+    if i1.name in {'remove_func.py', 'll.py'}:
+        return (i1, False, 'Skipped by filename')
+    try:
+        h1 = i1.read_text(encoding='utf-8')
+    except Exception as error:
+        return (i1, False, f'Read error: {e}')
+    try:
+        q = ast.parse(h1)
+    except SyntaxError:
+        return (i1, False, 'Original file has a syntax error')
+    y8 = [n for n in q.body if v8(n, w8)]
+    if not y8:
+        return (i1, False, 'Target function not found')
+    z8 = set()
+    for a9 in y8:
+        d8 = a9.lineno - 1
+        if a9.decorator_list:
+            d8 = a9.decorator_list[0].lineno - 1
+        b9 = a9.end_lineno
+        z8.update(range(d8, b9))
+    c9 = -1
+    for n in q.body:
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            c9 = max(c9, n.end_lineno - 1)
+    d9 = 0
+    if q.body and isinstance(q.body[0], ast.Expr) and isinstance(q.body[0].value, ast.Constant) and isinstance(q.body[0].value.value, str):
+        d9 = q.body[0].end_lineno
+    r = h1.splitlines(keepends=True)
+    e9 = []
+    f9 = False
+    for g9, x1 in enumerate(r):
+        if g9 in z8:
+            continue
+        e9.append(x1)
+        if f9:
+            continue
+        if c9 != -1 and g9 == c9:
+            e9.append('from dh import format_size\n')
+            f9 = True
+        elif c9 == -1 and g9 == d9 - 1:
+            e9.append('from dh import format_size\n')
+            f9 = True
+    if not f9:
+        e9.insert(0, 'from dh import format_size\n')
+    u4 = ''.join(e9)
+    try:
+        ast.parse(u4)
+    except SyntaxError as error:
+        return (i1, False, f'Validation failed: {e}')
+    try:
+        i1.write_text(u4, encoding='utf-8')
+    except Exception as error:
+        return (i1, False, f'Write error: {e}')
+    return (i1, True, 'Successfully updated')
+def y4():
+    x4 = argparse.ArgumentParser(description='Replace matching Python functions. By default, the complete function body must match. Use -i to match only the function name and argument count.')
+    x4.add_argument('-i', '--inspect', action='store_true', help="Match only a function named 'format_size' with exactly one argument. Changes are applied immediately.")
+    o3 = x4.parse_args()
+    g5 = [i1 for i1 in Path('.').rglob('*.py') if i1.is_file() and i1.resolve() != Path(__file__).resolve()]
+    if not g5:
+        print('No Python files found in the current directory.')
+        return
+    h9 = 'NAME/ARGUMENT CHECK' if o3.inspect else 'EXACT BODY CHECK'
+    print(f'Mode: {h9}')
+    print(f'Found {len(g5)} Python files. Processing with 8 workers...')
+    print('Changes will be applied automatically.')
+    u6 = [(i1, o3.inspect) for i1 in g5]
+    with Pool(8) as m4:
+        for i1, i9, j9 in m4.imap_unordered(x8, u6):
+            if i9:
+                cprint(f'[UPDATED] {i1}: {j9}')
+            elif j9 != 'Target function not found':
+                cprint(f'[SKIPPED] {i1}: {j9}')
+if __name__ == '__main__':
+    y4()
+
+# --- File: replace_func.py ---
+import ast
+import sys
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+from loguru import logger
+k9 = Path.home() / 'lic'
+l9 = 'from dh import cprint\n'
+m9 = 8
+def n9():
+    try:
+        k7 = k9.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError) as e:
+        logger.error(f'Failed to read {k9}: {e}')
+        raise
+    return [x1.rstrip() for x1 in k7.strip('\n').splitlines()]
+def o9(r, p9):
+    q9 = [x1.rstrip('\n').rstrip() for x1 in r]
+    n, m = (len(q9), len(p9))
+    for i in range(n - m + 1):
+        if q9[i:i + m] == p9:
+            return (i, i + m)
+    return None
+def r9(q):
+    for n in q.body:
+        if isinstance(n, ast.ImportFrom) and n.module == 'dh':
+            if any((d1.name == 'cprint' for d1 in n.names)):
+                return True
+        if isinstance(n, ast.Import) and any((d1.name == 'cprint' for d1 in n.names)):
+            return True
+    return False
+def s9(q):
+    t9 = 0
+    for n in q.body:
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            if n.end_lineno is not None:
+                t9 = max(t9, n.end_lineno)
+        else:
+            break
+    return t9
+def x8(i1):
+    i1 = Path(i1)
+    if i1.resolve() == Path(__file__).resolve():
+        return
+    try:
+        k7 = i1.read_text(encoding='utf-8')
+    except (UnicodeDecodeError, OSError) as e:
+        logger.warning(f'Skipping {i1}: {e}')
+        return
+    p9 = n9()
+    r = k7.splitlines(keepends=True)
+    y6 = o9(r, p9)
+    if y6 is None:
+        return
+    u1, end = y6
+    if u1 > 0 and r[u1 - 1].strip() == '':
+        u1 -= 1
+    if end < len(r) and r[end].strip() == '':
+        end += 1
+    del r[u1:end]
+    u9 = ''.join(r)
+    try:
+        q = ast.parse(u9)
+    except SyntaxError as e:
+        logger.warning(f'Skipping write for {i1} (would break syntax): {e}')
+        return
+    if r9(q):
+        if u9 != k7:
+            i1.write_text(u9, encoding='utf-8')
+            print(f'Removed block: {i1} (cprint already imported)')
+        return
+    v9 = u9.splitlines(keepends=True)
+    t9 = s9(q)
+    if t9 > 0:
+        d9 = t9
+    else:
+        d9 = 1 if v9 and v9[0].startswith('#!') else 0
+    v9.insert(d9, l9)
+    w9 = ''.join(v9)
+    i1.write_text(w9, encoding='utf-8')
+    print(f'Removed block and added import: {i1}')
+def y4():
+    cwd = Path.cwd()
+    o3 = sys.argv[1:]
+    if o3:
+        x9 = [Path(p) for p in o3]
+    else:
+        from dh import get_pyfiles
+        x9 = get_pyfiles(cwd)
+    with Pool(m9) as m4:
+        y9 = [m4.apply_async(x8, (i1,)) for i1 in x9]
+        for ar in y9:
+            try:
+                ar.get()
+            except Exception as e:
+                logger.error(f'Error processing file: {e}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(y4())
+
+# --- File: rmunused_funcs.py ---
+import ast
+import logging
+import multiprocessing
+import shutil
+from functools import partial
+from pathlib import Path
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+def z9(i1):
+    try:
+        with Path(i1).open('r', encoding='utf-8') as f:
+            q = ast.parse(f.read())
+    except Exception as e:
+        return (None, None, e)
+    a10 = set()
+    b10 = set()
+    for n in ast.walk(q):
+        if isinstance(n, ast.FunctionDef):
+            a10.add(n.name)
+        elif isinstance(n, ast.Call):
+            if isinstance(n.func, ast.Name):
+                b10.add(n.func.id)
+            elif isinstance(n.func, ast.Attribute):
+                b10.add(n.func.attr)
+    return (a10, b10, None)
+def x8(i1, c4=True):
+    Path(i1)
+    a10, b10, err = z9(i1)
+    if err:
+        return f'Error parsing {i1}: {err}'
+    d = [f for f in a10 if f not in b10 and (not f.startswith('_'))]
+    if not d:
+        return None
+    if c4:
+        return f'[DRY-RUN] Would remove {d} from {i1}'
+    shutil.copy2(i1, i1.with_suffix('.py.bak'))
+    return f'Processed {i1}: Found {len(d)} potentially unused functions.'
+def c10(c4=True):
+    g5 = list(Path().rglob('*.py'))
+    m4 = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+    a9 = partial(x8, dry_run=c4)
+    h5 = m4.map(a9, g5)
+    for res in h5:
+        if res:
+            print(res)
+if __name__ == '__main__':
+    c10(dry_run=True)
+
+# --- File: rmunusedfuncs.py ---
+import argparse
+import ast
+import multiprocessing as mp
+import shutil
+import traceback
+from pathlib import Path
+def d10(h1):
+    try:
+        q = ast.parse(h1)
+    except SyntaxError:
+        return ([], ['SyntaxError while parsing file'])
+    a10 = set()
+    b10 = set()
+    class e10(ast.NodeVisitor):
+        def p5(self, n):
+            a10.add(n.name)
+            self.generic_visit(n)
+        def f10(self, n):
+            if isinstance(n.func, ast.Name):
+                b10.add(n.func.id)
+            self.generic_visit(n)
+    e10().visit(q)
+    d = a10 - b10
+    return (list(d), [])
+def g10(h1, h10):
+    q = ast.parse(h1)
+    i10 = []
+    for n in q.body:
+        if isinstance(n, ast.FunctionDef) and n.name in h10:
+            continue
+        i10.append(n)
+    q.body = i10
+    return ast.unparse(q)
+def x8(i1, c4=False):
+    Path(i1)
+    j10 = []
+    i1 = Path(i1)
+    try:
+        h1 = i1.read_text(encoding='utf-8')
+    except Exception as e:
+        return (i1, [], [f'Error reading file: {e}'])
+    d, k10 = d10(h1)
+    j10.extend(k10)
+    if not d:
+        return (i1, [], j10)
+    try:
+        u4 = g10(h1, d)
+    except Exception:
+        j10.append('Error rewriting file:\n' + traceback.format_exc())
+        return (i1, d, j10)
+    if not c4:
+        l10 = i1.with_suffix(i1.suffix + '.bak')
+        shutil.copy2(i1, l10)
+        i1.write_text(u4, encoding='utf-8')
+    return (i1, d, j10)
+def m10(a1):
+    return [p for p in a1.rglob('*.py') if p.is_file()]
+def n10(o3):
+    return x8(*o3)
+def y4():
+    x4 = argparse.ArgumentParser(description='Remove unused functions recursively.')
+    x4.add_argument('--dry-run', action='store_true', help='Show what would change without modifying files.')
+    x4.add_argument('--workers', type=int, default=mp.cpu_count(), help='Number of processes')
+    o3 = x4.parse_args()
+    a1 = Path()
+    x9 = m10(a1)
+    print(f'Scanning {len(x9)} Python files...')
+    with mp.Pool(o3.workers) as m4:
+        h5 = m4.map(n10, [(f, o3.dry_run) for f in x9])
+    print('\n=== RESULTS ===')
+    for i1, d, j10 in h5:
+        if d:
+            if o3.dry_run:
+                print(f'[DRY-RUN] Would remove {d} from {i1}')
+            else:
+                print(f'Removed {d} from {i1} (backup created)')
+        for err in j10:
+            print(f'[ERROR] {i1}: {err}')
+if __name__ == '__main__':
+    raise SystemExit(y4())
+
+# --- File: vulcomment.py ---
+import argparse
+import difflib
+import os
+import re
+import sys
+from collections import defaultdict
+o10 = re.compile("^(?P<path>.*?):(?P<lineno>\\d+):\\s*unused variable '(?P<var>[^']+)'", re.IGNORECASE)
+def w6(r):
+    p10 = defaultdict(set)
+    for ln in r:
+        ln = ln.rstrip('\n')
+        m = o10.match(ln)
+        if not m:
+            continue
+        i1 = m.group('path')
+        t2 = int(m.group('lineno'))
+        p10[i1].add(t2)
+    return p10
+def q10(i1, h7):
+    with open(i1, 'r', encoding='utf-8') as f:
+        e1 = f.readlines()
+    i7 = e1.copy()
+    r10 = len(e1)
+    for ln in sorted(h7):
+        if ln < 1 or ln > r10:
+            print(f'  [!] {i1}:{ln} out of range (file has {r10} lines), skipping')
+            continue
+        idx = ln - 1
+        x1 = e1[idx]
+        s10 = x1.lstrip()
+        if not s10:
+            t10 = x1[:len(x1) - len(s10)]
+            i7[idx] = t10 + '#\n'
+            continue
+        u10 = s10[0]
+        if u10 == '#':
+            continue
+        t10 = x1[:len(x1) - len(s10)]
+        i7[idx] = t10 + '# ' + s10
+    return (e1, i7)
+def v10(i1, e1, i7, w10, x10):
+    if e1 == i7:
+        print(f'No changes needed for {i1}')
+        return
+    e5 = difflib.unified_diff(e1, i7, fromfile=i1, tofile=i1, lineterm='')
+    print(''.join((x1 + '\n' for x1 in e5)))
+    if w10:
+        try:
+            with open(i1, 'w', encoding='utf-8') as f:
+                f.writelines(i7)
+            print(f'  [written] updated {i1}')
+        except Exception as e:
+            print(f'  [!] failed to write {i1}: {e}')
+def y4(z4):
+    ap = argparse.ArgumentParser(description='Comment out lines reported by vulture as unused variables.')
+    ap.add_argument('vulture_output', nargs='?', help='Path to vulture output file. If omitted, reads stdin.')
+    ap.add_argument('--apply', default=True, action='store_true', help='Actually write changes to files. Default: dry-run (show diffs).')
+    ap.add_argument('--backup', action='store_true', help='When used with --apply, create .bak backups of files.')
+    ap.add_argument('--show-summary', action='store_true', help='Show summary at the end.')
+    o3 = ap.parse_args(z4)
+    if o3.vulture_output:
+        try:
+            with open(o3.vulture_output, 'r', encoding='utf-8') as f:
+                y10 = f.readlines()
+        except Exception as e:
+            print(f"Failed to read vulture output file '{o3.vulture_output}': {e}", file=sys.stderr)
+            return 2
+    else:
+        y10 = sys.stdin.readlines()
+    p10 = w6(y10)
+    if not p10:
+        print('No matching vulture entries found in input.')
+        return 0
+    z10 = 0
+    a11 = 0
+    for i1, b11 in sorted(p10.items()):
+        print(f"Processing {i1} lines: {', '.join(map(str, sorted(b11)))}")
+        if not os.path.exists(i1):
+            print(f'  [!] file not found: {i1}, skipping')
+            continue
+        e1, i7 = q10(i1, b11)
+        if e1 != i7:
+            a11 += 1
+        v10(i1, e1, i7, o3.apply, o3.backup)
+        z10 += 1
+    if o3.show_summary:
+        print()
+        print(f'Summary: files processed: {z10}, files modified: {a11}')
+        if not o3.apply:
+            print('Dry-run mode — no files were changed. Use --apply to write changes.')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(y4(sys.argv[1:]))
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

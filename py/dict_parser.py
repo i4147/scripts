@@ -8,7 +8,6 @@ PAGE_MARKER = re.compile(r"<!\s*p\.\s*(\d+)\s*!>")
 
 
 class WebsterParser(HTMLParser):
-
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.reset_entry()
@@ -21,8 +20,8 @@ class WebsterParser(HTMLParser):
             "pronunciation": "",
             "part_of_speech": "",
             "etymology": "",
-            "senses": [],  
-            "collocations": [],  
+            "senses": [],
+            "collocations": [],
             "synonyms": "",
             "notes": [],
             "quotes": [],
@@ -41,7 +40,6 @@ class WebsterParser(HTMLParser):
         self.in_grk = False
         self.buf = []
 
-    
     def _flush_buffer(self):
         text = "".join(self.buf)
         self.buf = []
@@ -51,17 +49,14 @@ class WebsterParser(HTMLParser):
         if not text:
             return
 
-        
         if self.current_collocation is not None:
             self.current_collocation["definition"] += text
             return
 
-        
         if self.current_sense is not None:
             self.current_sense["text"] += text
             return
 
-        
         if self.in_hw:
             self.entry["word"] += text
         elif self.in_pos:
@@ -71,7 +66,6 @@ class WebsterParser(HTMLParser):
         elif self.in_def:
             self.entry["definition_raw"] = self.entry.get("definition_raw", "") + text
         elif self.in_sn:
-            
             if self.current_sense is None:
                 num = text.strip().rstrip(".")
                 self.current_sense = {"number": num, "text": "", "quotes": []}
@@ -80,10 +74,8 @@ class WebsterParser(HTMLParser):
         elif self.current_quote is not None:
             self.current_quote["text"] += text
         else:
-            
             pass
 
-    
     def handle_starttag(self, tag, attrs):
         self.tag_stack.append(tag)
 
@@ -104,13 +96,10 @@ class WebsterParser(HTMLParser):
         elif tag == "blockquote":
             self.current_quote = {"text": "", "source": ""}
         elif tag == "col":
-            
             self.current_collocation = {"phrase": "", "definition": ""}
         elif tag == "cd":
-            
             pass
         elif tag == "i":
-            
             if self.in_etymology:
                 pass
         elif tag == "br":
@@ -128,7 +117,7 @@ class WebsterParser(HTMLParser):
             self.in_def = False
         elif tag == "sn":
             self.in_sn = False
-            
+
         elif tag == "plw":
             self.in_plw = False
         elif tag == "u":
@@ -149,30 +138,25 @@ class WebsterParser(HTMLParser):
                 self.entry["collocations"].append(self.current_collocation)
             self.current_collocation = None
         elif tag == "cd":
-            
             pass
 
     def handle_data(self, data):
-        text = data  
+        text = data
 
-        
-        
         if "i" in self.tag_stack and not self.current_sense and self.current_collocation is None:
-            
             if self.current_quote is not None:
                 self.current_quote["source"] += text
                 return
-            
+
             if self.in_def:
                 self._append(text)
                 return
-            
+
             if not self.in_hw and not self.in_pos and not self.in_def:
                 self.in_etymology = True
                 self.entry["etymology"] += text
                 return
 
-        
         if self.current_collocation is not None and "col" in self.tag_stack:
             self.current_collocation["phrase"] += text
             return
@@ -181,19 +165,15 @@ class WebsterParser(HTMLParser):
             self.current_quote["text"] += text
             return
 
-        
         if self.in_sn:
             self._append(text)
             return
 
-        
         self._append(text)
 
-    
     def finish(self):
         entry = self.entry
 
-        
         if not entry["senses"] and entry.get("definition_raw"):
             entry["senses"].append(
                 {
@@ -212,19 +192,16 @@ class WebsterParser(HTMLParser):
             )
         entry.pop("definition_raw", None)
 
-        
         if self.current_sense is not None:
             self.current_sense["text"] = " ".join(self.current_sense["text"].split())
             if self.current_sense["text"] or self.current_sense["quotes"]:
                 entry["senses"].append(self.current_sense)
             self.current_sense = None
 
-        
         for key in ("word", "pronunciation", "part_of_speech", "etymology", "synonyms"):
             if key in entry and isinstance(entry[key], str):
                 entry[key] = " ".join(entry[key].split())
 
-        
         for s in entry["senses"]:
             s["text"] = " ".join(s["text"].split())
             for q in s.get("quotes", []):
@@ -241,7 +218,6 @@ def parse_file(path):
     with open(path, encoding="utf-8") as f:
         raw = f.read()
 
-    
     parts = []
     last = 0
     current_page = None
@@ -253,10 +229,9 @@ def parse_file(path):
 
     entries = []
     for page, chunk in parts:
-        
         for p_match in re.finditer(r"<p>(.*?)</p>", chunk, re.DOTALL):
             body = p_match.group(1).strip()
-            
+
             if not body or re.fullmatch(r"<!\s*.*?\s*!>", body):
                 continue
 
@@ -282,7 +257,6 @@ def main():
 
     print(f"Wrote {len(entries)} entries to {out}")
     if entries:
-        
         for e in entries:
             if e["word"]:
                 print("\nSample:")

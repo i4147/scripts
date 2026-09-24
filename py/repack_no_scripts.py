@@ -115,7 +115,6 @@ def get_user_site_packages():
         )
         return Path(result.stdout.strip())
     except subprocess.CalledProcessError:
-        
         for path in sys.path:
             if "site-packages" in path and "user" in path:
                 return Path(path)
@@ -127,22 +126,17 @@ def get_installed_packages():
     packages = {}
 
     for dist in distributions():
-        
         pkg_name = dist.metadata.get("Name", "").lower()
         if not pkg_name:
             continue
 
-        
         try:
-            
             location = dist._path.parent if hasattr(dist, "_path") else None
             if location:
                 user_site = get_user_site_packages()
                 if user_site not in location.parents and user_site != location:
-                    
                     continue
         except:
-            
             pass
 
         packages[pkg_name] = {
@@ -170,7 +164,7 @@ def get_installed_user_packages():
             packages[pkg["name"].lower()] = {"name": pkg["name"], "version": pkg["version"]}
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"Error getting package list via pip: {e}")
-        
+
         packages = get_installed_packages()
 
     return packages
@@ -182,7 +176,6 @@ def repack_as_wheel(pkg_name, output_dir):
 
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
-            
             print(f"  Downloading {pkg_name}...")
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "download", "--no-deps", pkg_name, "--dest", temp_dir],
@@ -194,7 +187,6 @@ def repack_as_wheel(pkg_name, output_dir):
                 print(f"  Error downloading {pkg_name}: {result.stderr}")
                 return False
 
-            
             temp_path = Path(temp_dir)
             downloaded_files = (
                 list(temp_path.glob(f"{pkg_name}*.tar.gz"))
@@ -202,7 +194,6 @@ def repack_as_wheel(pkg_name, output_dir):
                 + list(temp_path.glob(f"{pkg_name}*.whl"))
             )
 
-            
             if not downloaded_files:
                 for file in temp_path.iterdir():
                     if file.name.lower().startswith(pkg_name.lower()):
@@ -214,13 +205,11 @@ def repack_as_wheel(pkg_name, output_dir):
 
             source_file = downloaded_files[0]
 
-            
             if source_file.suffix == ".whl":
                 shutil.copy2(source_file, output_dir / source_file.name)
                 print(f"  Copied existing wheel: {source_file.name}")
                 return True
 
-            
             print(f"  Building wheel for {pkg_name}...")
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "wheel", "--no-deps", str(source_file), "--wheel-dir", str(output_dir)],
@@ -245,7 +234,7 @@ def normalize_package_name(name):
 
 
 def main():
-    
+
     output_dir = Path.home() / "tmp" / "wheels"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -253,27 +242,22 @@ def main():
     print(f"Python version: {sys.version}")
     print(f"Checking user site-packages...")
 
-    
     installed = get_installed_user_packages()
     print(f"Found {len(installed)} installed packages in user site-packages")
 
-    
     exclude_set = {normalize_package_name(pkg) for pkg in pkg_with_script}
 
-    
     to_process = []
     for pkg_name, info in installed.items():
         normalized = normalize_package_name(pkg_name)
 
-        
         if normalized in exclude_set:
             continue
 
-        
         is_variant = False
         for listed in exclude_set:
             listed_normalized = normalize_package_name(listed)
-            
+
             if listed_normalized in normalized or normalized in listed_normalized:
                 is_variant = True
                 break
@@ -283,12 +267,11 @@ def main():
 
     print(f"\nFound {len(to_process)} packages not in the list to repack:")
     if to_process:
-        for pkg in to_process[:10]:  
+        for pkg in to_process[:10]:
             print(f"  - {pkg}")
         if len(to_process) > 10:
             print(f"  ... and {len(to_process) - 10} more")
 
-    
     success_count = 0
     failed_packages = []
 
@@ -312,12 +295,11 @@ def main():
 
     print(f"\nWheels saved to: {output_dir}")
 
-    
     wheels = list(output_dir.glob("*.whl"))
     if wheels:
         print(f"\nCreated {len(wheels)} wheel files:")
         for wheel in sorted(wheels):
-            size = wheel.stat().st_size / (1024 * 1024)  
+            size = wheel.stat().st_size / (1024 * 1024)
             print(f"  - {wheel.name} ({size:.2f} MB)")
 
 

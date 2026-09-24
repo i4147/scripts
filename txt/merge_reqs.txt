@@ -1,0 +1,1909 @@
+# --- File: imports2.py ---
+import ast
+import logging
+import sys
+import tarfile
+import zipfile
+from collections import defaultdict
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+a = logging.getLogger(__name__)
+class b:
+    def __init__(self, c='/sdcard/data/pip.txt'):
+        self.pip_packages = self._load_pip_packages(c)
+        self.stdlib_modules = self._get_stdlib_modules()
+        self.local_modules = set()
+    @staticmethod
+    def d():
+        e = set(sys.builtin_module_names)
+        e.update({'abc', 'aifc', 'argparse', 'array', 'ast', 'asynchat', 'asyncio', 'asyncore', 'atexit', 'audioop', 'base64', 'bdb', 'binascii', 'binhex', 'bisect', 'builtins', 'bz2', 'calendar', 'cgi', 'cgitb', 'chunk', 'cmath', 'cmd', 'code', 'codecs', 'codeop', 'collections', 'colorsys', 'compileall', 'concurrent', 'configparser', 'contextlib', 'contextvars', 'copy', 'copyreg', 'cProfile', 'crypt', 'csv', 'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm', 'decimal', 'difflib', 'dis', 'distutils', 'doctest', 'dummy_thread', 'dummy_threading', 'email', 'encodings', 'ensurepip', 'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput', 'fnmatch', 'formatter', 'fractions', 'ftplib', 'functools', 'gc', 'getopt', 'getpass', 'gettext', 'glob', 'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html', 'http', 'idlelib', 'imaplib', 'imghdr', 'imp', 'importlib', 'inspect', 'io', 'ipaddress', 'itertools', 'json', 'keyword', 'lib2to3', 'linecache', 'locale', 'logging', 'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes', 'mmap', 'modulefinder', 'msilib', 'msvcrt', 'multiprocessing', 'netrc', 'nis', 'nntplib', 'numbers', 'operator', 'optparse', 'os', 'ossaudiodev', 'parser', 'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil', 'platform', 'plistlib', 'poplib', 'posix', 'posixpath', 'pprint', 'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr', 'pydoc', 'queue', 'quopri', 'random', 'readline', 'reprlib', 're', 'resource', 'rlcompleter', 'runpy', 'sched', 'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil', 'signal', 'site', 'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'spwd', 'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep', 'struct', 'subprocess', 'sunau', 'symbol', 'symtable', 'sys', 'sysconfig', 'syslog', 'tabnanny', 'tarfile', 'telnetlib', 'tempfile', 'termios', 'test', 'textwrap', 'threading', 'time', 'timeit', 'tkinter', 'token', 'tokenize', 'trace', 'traceback', 'tracemalloc', 'tty', 'turtle', 'turtledemo', 'types', 'typing', 'typing_extensions', 'unicodedata', 'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave', 'weakref', 'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zlib', '__future__', '__main__', 'graphlib', 'tomllib', 'zoneinfo'})
+        return e
+    @staticmethod
+    def f(g):
+        try:
+            h = Path(g)
+            if not h.exists():
+                a.warning(f'pip packages file not found: {g}')
+                return set()
+            i = set()
+            with h.open('r', encoding='utf-8', errors='ignore') as f:
+                for j in f:
+                    j = j.strip().lower()
+                    if j:
+                        k = j.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].split(';')[0].strip()
+                        i.add(k.replace('-', '_'))
+                        i.add(k.replace('_', '-'))
+            print(f'Loaded {len(i)} pip packages')
+            return i
+        except Exception as e:
+            a.error(f'Error loading pip packages: {e}')
+            return set()
+    @staticmethod
+    def l(m, n='<string>'):
+        o = set()
+        try:
+            p = ast.parse(m)
+            for q in ast.walk(p):
+                if isinstance(q, ast.Import):
+                    for r in q.names:
+                        s = r.name.split('.')[0]
+                        o.add(s)
+                elif isinstance(q, ast.ImportFrom) and q.module:
+                    s = q.module.split('.')[0]
+                    o.add(s)
+        except SyntaxError as e:
+            a.debug(f'Syntax error in {n}: {e}')
+        except Exception as e:
+            a.debug(f'Error parsing {n}: {e}')
+        return o
+    def t(self, u='.'):
+        v = {'.git', '__pycache__', '.pytest_cache', 'dist', 'build'}
+        w = Path(u)
+        for x in [w] + list(w.rglob('*')):
+            if not x.is_dir() or x.is_symlink():
+                continue
+            if x.name in v:
+                continue
+            for y in x.iterdir():
+                if y.is_symlink():
+                    continue
+                if y.suffix in {'.py', '.pyw'}:
+                    s = y.stem
+                    if s != '__init__':
+                        self.local_modules.add(s)
+                elif y.is_file() and y.suffix == '':
+                    try:
+                        with y.open('r', encoding='utf-8', errors='ignore') as f:
+                            z = f.readline()
+                            if z.startswith('#!') and 'python' in z:
+                                self.local_modules.add(y.name)
+                    except:
+                        pass
+    def a1(self, b1):
+        try:
+            m = b1.read_text(encoding='utf-8', errors='ignore')
+            return self._extract_imports_from_ast(m, str(b1))
+        except Exception as e:
+            a.debug(f'Error reading {b1}: {e}')
+            return set()
+    def c1(self, d1):
+        o = set()
+        try:
+            with zipfile.ZipFile(d1, 'r') as zf:
+                for e1 in zf.filelist:
+                    if e1.filename.endswith(('.py', '.pyw')):
+                        try:
+                            m = zf.read(e1.filename).decode('utf-8', errors='ignore')
+                            o.update(self._extract_imports_from_ast(m, e1.filename))
+                        except Exception as e:
+                            a.debug(f'Error reading {e1.filename} from {d1}: {e}')
+        except Exception as e:
+            a.debug(f'Error processing zip {d1}: {e}')
+        return o
+    def f1(self, g1):
+        o = set()
+        try:
+            with tarfile.open(g1, 'r:*') as tf:
+                for h1 in tf.getmembers():
+                    if h1.name.endswith(('.py', '.pyw')) and h1.isfile():
+                        try:
+                            f = tf.extractfile(h1)
+                            m = f.read().decode('utf-8', errors='ignore')
+                            o.update(self._extract_imports_from_ast(m, h1.name))
+                        except Exception as e:
+                            a.debug(f'Error reading {h1.name} from {g1}: {e}')
+        except Exception as e:
+            a.debug(f'Error processing tar {g1}: {e}')
+        return o
+    def i1(self, j1):
+        return self.extract_from_zip(j1)
+    def k1(self, b1):
+        if b1.suffix == '.zip' or b1.suffix == '.whl':
+            return self.extract_from_zip(b1)
+        elif b1.suffixes[-2:] == ['.tar', '.gz'] or b1.name.endswith(('.tar.xz', '.tar.zst')):
+            return self.extract_from_tar(b1)
+        elif b1.suffix in {'.py', '.pyw'} or (b1.is_file() and b1.suffix == ''):
+            return self.extract_from_file(b1)
+        return set()
+    def l1(self, o):
+        m1 = set()
+        for imp in o:
+            n1 = imp.lower()
+            if imp in self.stdlib_modules or n1 in self.stdlib_modules:
+                continue
+            if imp in self.local_modules or n1 in self.local_modules:
+                continue
+            if n1 in self.pip_packages or imp.replace('_', '-') in self.pip_packages:
+                m1.add(n1)
+        return m1
+def o1(u='.'):
+    v = {'.git', '__pycache__', '.pytest_cache', 'dist', 'build', '.mypy_cache', '.ruff_cache'}
+    p1 = []
+    w = Path(u)
+    for y in w.rglob('*'):
+        if y.is_symlink():
+            continue
+        if y.is_dir() and y.name in v:
+            continue
+        if y.is_file():
+            if y.suffix in {'.py', '.pyw'}:
+                p1.append(y)
+            elif y.suffix == '':
+                try:
+                    with y.open('r', encoding='utf-8', errors='ignore') as f:
+                        z = f.readline()
+                        if z.startswith('#!') and 'python' in z:
+                            p1.append(y)
+                except:
+                    pass
+            elif y.name.endswith(('.zip', '.whl')) or y.name.endswith(('.tar.gz', '.tar.xz', '.tar.zst')):
+                p1.append(y)
+    return p1
+def q1(r1):
+    b1, s1 = r1
+    o = s1.process_file(b1)
+    t1 = s1.filter_packages(o)
+    return (b1, t1)
+def u1():
+    import argparse
+    v1 = argparse.ArgumentParser(description='Create requirements.txt by inspecting Python files')
+    v1.add_argument('-d', '--directory', default='.', help='Directory to scan (default: current directory)')
+    v1.add_argument('-o', '--output', default='requirements.txt', help='Output file name (default: requirements.txt)')
+    v1.add_argument('-p', '--pip-file', default='/sdcard/data/pip.txt', help='Path to pip packages file (default: /sdcard/data/pip.txt)')
+    v1.add_argument('--workers', type=int, default=cpu_count(), help=f'Number of worker processes (default: {cpu_count()})')
+    v1.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    r1 = v1.parse_args()
+    if r1.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    print(f'Scanning directory: {r1.directory}')
+    s1 = b(r1.pip_file)
+    print('Identifying local modules...')
+    s1._identify_local_modules(r1.directory)
+    print(f'Found {len(s1.local_modules)} local modules')
+    print('Finding Python files...')
+    p1 = o1(r1.directory)
+    print(f'Found {len(p1)} Python files/archives')
+    if not p1:
+        a.warning('No Python files found')
+        return
+    print(f'Processing files with {r1.workers} workers...')
+    w1 = defaultdict(set)
+    with Pool(r1.workers) as x1:
+        y1 = x1.map(q1, [(f, s1) for f in p1])
+    for b1, i in y1:
+        for z1 in i:
+            w1[z1].add(str(b1))
+    a2 = sorted(w1.keys())
+    print(f'Found {len(a2)} unique packages')
+    b2 = Path(r1.output)
+    with b2.open('w') as f:
+        for z1 in a2:
+            print(f' -  {z1}')
+            f.write(f'{z1}\n')
+    print(f'Requirements written to {r1.output}')
+    if r1.verbose:
+        print('\nPackages found:')
+        for z1 in a2:
+            c2 = w1[z1]
+            print(f'  {z1} (found in {len(c2)} file(s))')
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: imports3.py ---
+import argparse
+import os
+import re
+import tarfile
+import zipfile
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+class d2:
+    def __init__(self, e2='/sdcard/data/pip.txt'):
+        self.packages = set()
+        self.package_lower_map = {}
+        self._load_pip_packages(e2)
+    def f(self, e2):
+        if not os.path.exists(e2):
+            print(f'⚠️  Warning: pip.txt not found at {e2}')
+            print('   Script will still work but may include stdlib packages.')
+            return
+        try:
+            with open(e2, encoding='utf-8', errors='ignore') as f:
+                for j in f:
+                    j = j.strip()
+                    if j and (not j.startswith('#')):
+                        f2 = re.split('[=!<>;\\[]', j)[0].strip()
+                        if f2:
+                            self.packages.add(f2.lower())
+                            self.package_lower_map[f2.lower()] = f2
+            print(f'✓ Loaded {len(self.packages)} packages from pip.txt')
+        except Exception as e:
+            print(f'⚠️  Error reading pip.txt: {e}')
+    def g2(self, k):
+        return k.lower() in self.packages
+def h2():
+    import sys
+    e = set(sys.builtin_module_names)
+    i2 = {'abc', 'aifc', 'argparse', 'array', 'ast', 'asyncio', 'atexit', 'audioop', 'base64', 'bdb', 'binascii', 'binhex', 'bisect', 'builtins', 'bz2', 'calendar', 'cgi', 'cgitb', 'chunk', 'cmath', 'cmd', 'code', 'codecs', 'codeop', 'collections', 'colorsys', 'compileall', 'concurrent', 'configparser', 'contextlib', 'contextvars', 'copy', 'copyreg', 'cProfile', 'crypt', 'csv', 'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm', 'decimal', 'difflib', 'dis', 'distutils', 'doctest', 'dummy_thread', 'dummy_threading', 'email', 'encodings', 'ensurepip', 'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput', 'fnmatch', 'fractions', 'ftplib', 'functools', 'gc', 'getopt', 'getpass', 'gettext', 'glob', 'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html', 'http', 'imaplib', 'imghdr', 'imp', 'importlib', 'inspect', 'io', 'ipaddress', 'itertools', 'json', 'keyword', 'lib2to3', 'linecache', 'locale', 'logging', 'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes', 'mmap', 'modulefinder', 'msilib', 'msvcrt', 'multiprocessing', 'netrc', 'nis', 'nntplib', 'numbers', 'operator', 'optparse', 'os', 'ossaudiodev', 'parser', 'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil', 'platform', 'plistlib', 'poplib', 'posix', 'posixpath', 'pprint', 'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr', 'pydoc', 'pyexpat', 'queue', 'quopri', 'random', 're', 'readline', 'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched', 'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil', 'signal', 'site', 'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'spwd', 'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep', 'struct', 'subprocess', 'sunau', 'symbol', 'symtable', 'sys', 'sysconfig', 'syslog', 'tabnanny', 'tarfile', 'telnetlib', 'tempfile', 'termios', 'test', 'textwrap', 'threading', 'time', 'timeit', 'token', 'tokenize', 'trace', 'traceback', 'tracemalloc', 'types', 'typing', 'typing_extensions', 'unicodedata', 'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave', 'weakref', 'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zlib', '__future__', '__main__'}
+    return e | i2
+def j2(m, b1=''):
+    o = set()
+    k2 = '^\\s*import\\s+([a-zA-Z0-9_\\.\\*\\s,]+)'
+    l2 = '^\\s*from\\s+([a-zA-Z0-9_\\.]+)\\s+import'
+    for j in m.split('\n'):
+        j = j.split('#')[0].strip()
+        m2 = re.match(k2, j)
+        if m2:
+            n2 = m2.group(1).split(',')
+            for o2 in n2:
+                o2 = o2.strip().split()[0]
+                if o2 and o2 != '*':
+                    p2 = o2.split('.')[0]
+                    if p2:
+                        o.add(p2)
+        q2 = re.match(l2, j)
+        if q2:
+            o2 = q2.group(1).strip()
+            if o2 != '__future__':
+                p2 = o2.split('.')[0]
+                if p2:
+                    o.add(p2)
+    return o
+def r2(b1):
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            return f.read()
+    except Exception as e:
+        print(f'⚠️  Error reading {b1}: {e}')
+        return ''
+def s2(b1):
+    if b1.endswith('.py'):
+        return True
+    if '.' not in Path(b1).name:
+        try:
+            with open(b1, 'rb') as f:
+                z = f.readline()
+                return z.startswith(b'#!') and b'python' in z
+        except:
+            return False
+    return False
+def c1(t2):
+    o = set()
+    try:
+        with zipfile.ZipFile(t2, 'r') as zf:
+            for u2 in zf.filelist:
+                if u2.filename.endswith('.py'):
+                    try:
+                        v2 = zf.read(u2.filename).decode('utf-8', errors='ignore')
+                        o.update(j2(v2, u2.filename))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return o
+def f1(w2, x2=None):
+    o = set()
+    try:
+        y2 = f'r:{x2}' if x2 else 'r:*'
+        with tarfile.open(w2, y2) as tf:
+            for h1 in tf.getmembers():
+                if h1.name.endswith('.py') and h1.isfile():
+                    try:
+                        f = tf.extractfile(h1)
+                        if f:
+                            v2 = f.read().decode('utf-8', errors='ignore')
+                            o.update(j2(v2, h1.name))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return o
+def k1(b1):
+    o = set()
+    try:
+        if b1.endswith(('.zip', '.whl')):
+            o.update(c1(b1))
+        elif b1.endswith('.tar.gz'):
+            o.update(f1(b1, 'gz'))
+        elif b1.endswith('.tar.xz'):
+            o.update(f1(b1, 'xz'))
+        elif b1.endswith('.tar.zst'):
+            o.update(f1(b1, 'zst'))
+        elif b1.endswith('.tar'):
+            o.update(f1(b1))
+        elif s2(b1):
+            v2 = r2(b1)
+            o.update(j2(v2, b1))
+    except Exception:
+        pass
+    return o
+def z2(x, v=None):
+    if v is None:
+        v = {'.venv', 'venv', '.env', '__pycache__', '.git', 'node_modules', '.egg-info'}
+    a3 = []
+    for p2, b3, c3 in os.walk(x):
+        b3[:] = [d for d in b3 if d not in v]
+        for n in c3:
+            b1 = os.path.join(p2, n)
+            if s2(b1) or n.endswith(('.zip', '.whl', '.tar.gz', '.tar.xz', '.tar.zst', '.tar')):
+                a3.append(b1)
+    return a3
+def l1(o, e, d3, e3):
+    t1 = set()
+    for z1 in o:
+        f3 = z1.lower()
+        if f3 in e:
+            continue
+        if z1 in e3:
+            continue
+        if d3.is_available_on_pip(z1):
+            g3 = d3.package_lower_map.get(f3, z1)
+            t1.add(g3)
+    return t1
+def u1():
+    v1 = argparse.ArgumentParser(description='Generate requirements.txt by inspecting Python files recursively')
+    v1.add_argument('-d', '--directory', default='.', help='Root directory to scan (default: current directory)')
+    v1.add_argument('-o', '--output', default='requirements.txt', help='Output file path (default: requirements.txt)')
+    v1.add_argument('-p', '--pip-list', default='/sdcard/data/pip.txt', help='Path to pip packages list (default: /sdcard/data/pip.txt)')
+    v1.add_argument('-e', '--exclude', nargs='+', default=['.venv', 'venv', '.env', '__pycache__', '.git', 'node_modules', '.egg-info'], help='Directories to exclude from scan')
+    v1.add_argument('-j', '--jobs', type=int, default=cpu_count(), help=f'Number of parallel jobs (default: {cpu_count()})')
+    v1.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    r1 = v1.parse_args()
+    print('-' * 40)
+    print('📦 Requirements.txt Generator')
+    print('-' * 40)
+    print('\n📋 Loading pip packages database...')
+    d3 = d2(r1.pip_list)
+    print('📚 Loading stdlib modules...')
+    e = h2()
+    print(f'✓ Loaded {len(e)} stdlib modules')
+    print(f'\n🔍 Scanning directory: {r1.directory}')
+    a3 = z2(r1.directory, r1.exclude)
+    print(f'✓ Found {len(a3)} Python files/archives')
+    if not a3:
+        print('⚠️  No Python files found!')
+        return
+    if r1.verbose:
+        print('\nFiles found:')
+        for f in a3[:10]:
+            print(f'  - {f}')
+        if len(a3) > 10:
+            print(f'  ... and {len(a3) - 10} more')
+    print(f'\n⚙️  Processing files ({r1.jobs} workers)...')
+    with Pool(r1.jobs) as x1:
+        y1 = x1.map(k1, a3)
+    h3 = set()
+    for o in y1:
+        h3.update(o)
+    print(f'✓ Found {len(h3)} unique imports')
+    e3 = {Path(f).stem for f in a3 if s2(f)}
+    print('\n🔽 Filtering packages...')
+    i3 = l1(h3, e, d3, e3)
+    print(f'✓ {len(i3)} external packages required')
+    print(f'\n💾 Writing to {r1.output}...')
+    a2 = sorted(i3, key=str.lower)
+    with open(r1.output, 'w') as f:
+        f.write('\n'.join(a2) + '\n')
+    print(f'✓ Successfully wrote {len(a2)} packages to {r1.output}')
+    print('\n' + '=' * 40)
+    print('📋 Top packages found:')
+    print('-' * 40)
+    for pkg in a2[:20]:
+        print(f'  • {pkg}')
+    if len(a2) > 20:
+        print(f'  ... and {len(a2) - 20} more')
+    print('\n✅ Done!')
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: imports4.py ---
+import argparse
+import ast
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from dh import PKG_MAPPING, STDLIB
+j3 = {'__pycache__', 'venv', '.venv', 'env', '.env', '.git', '.hg', '.svn', 'node_modules', 'build', 'dist', '.eggs', '.tox', '.mypy_cache', '.pytest_cache', '.ruff_cache', 'site-packages'}
+k3 = {'setup.py', 'conftest.py', '__init__.py'}
+l3 = {'pip', 'setuptools', 'wheel', 'distribute', 'easy_install', 'apt', 'apt_pkg', 'gi', 'dbus', '__future__', '__main__', '__init__', 'a', 'an', 'the', 'each', 'every', 'known', 'various', 'statements', 'in', 'of', 'and', 'or', 'is', 'it', 'that', 'are'}
+m3 = re.compile('^[A-Za-z_][A-Za-z0-9_]*$')
+def n3(o3):
+    return o3.lower().replace('_', '-')
+def p3(o3):
+    if not o3 or not m3.match(o3):
+        return False
+    return not (o3.startswith('__') and o3.endswith('__'))
+q3 = {n3(k): v for k, v in PKG_MAPPING.items()}
+r3 = {n3(m) for m in STDLIB} | {'__future__'}
+s3 = {n3(m) for m in l3}
+def t3(b1='/sdcard/data/pip.txt'):
+    u3 = set()
+    with open(b1, 'r', encoding='utf-8') as f:
+        for j in f:
+            o3 = j.strip()
+            if not o3 or o3.startswith('#'):
+                continue
+            u3.add(n3(o3))
+    return u3
+def v3(w3='pip'):
+    x3 = []
+    y3 = set()
+    try:
+        z3, _ = subprocess.Popen([w3, 'freeze'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT).communicate()
+    except FileNotFoundError:
+        print(f"[!] '{w3}' not found, skipping installed-package check")
+        return (x3, y3)
+    for raw in z3.splitlines():
+        j = raw.decode('utf-8').strip()
+        if not j or j.startswith(('#', '-e')):
+            continue
+        x3.append(j)
+        o3 = j.split('==')[0].split('@')[0].strip()
+        y3.add(n3(o3))
+    return (x3, y3)
+def a4(u):
+    b4 = set()
+    p2 = Path(u).resolve()
+    for c4, d4, c3 in os.walk(p2):
+        c4 = Path(c4)
+        d4[:] = [d for d in d4 if d not in j3 and (not d.endswith('.egg-info')) and (not d.startswith('.'))]
+        if '__init__.py' in c3:
+            b4.add(n3(c4.name))
+        for fn in c3:
+            if fn.endswith('.py') and fn not in k3:
+                b4.add(n3(fn[:-3]))
+    if p2.name and p2.name not in {'.', '/', ''}:
+        b4.add(n3(p2.name))
+    return b4
+def e4(f4):
+    try:
+        p = ast.parse(f4)
+    except (SyntaxError, ValueError):
+        return
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for r in q.names:
+                yield r.name.split('.')[0]
+        elif isinstance(q, ast.ImportFrom):
+            if q.level and q.level > 0:
+                continue
+            if q.module:
+                yield q.module.split('.')[0]
+def g4(u=os.curdir):
+    n2 = []
+    h4 = set()
+    for p2, d4, a3 in os.walk(u):
+        d4[:] = [d for d in d4 if d not in j3 and (not d.endswith('.egg-info'))]
+        for o3 in a3:
+            i4 = os.path.join(p2, o3)
+            if o3.endswith('.py'):
+                try:
+                    f4 = Path(i4).read_text(encoding='utf-8', errors='ignore')
+                except OSError:
+                    continue
+                for mod in e4(f4):
+                    if mod not in h4:
+                        h4.add(mod)
+                        n2.append(mod)
+                        print(f'found {mod} in {o3}')
+            elif o3.endswith('.ipynb'):
+                try:
+                    j4 = json.loads(Path(i4).absolute().read_text(encoding='utf-8'))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                for k4 in j4.get('cells', []):
+                    if k4.get('cell_type') != 'code':
+                        continue
+                    src = ''.join(k4.get('source', []))
+                    for mod in e4(src):
+                        if mod not in h4:
+                            h4.add(mod)
+                            n2.append(mod)
+                            print(f'found {mod} in {o3}')
+    return n2
+def l4(m4):
+    n4 = n3(m4)
+    o4 = q3.get(n4)
+    if o4 and n3(o4) != n4:
+        return (o4, True)
+    return (m4, False)
+def p4(r1):
+    q4 = t3(r1['pypi_list'])
+    print('[i] Loaded {} packages from {}'.format(len(q4), r1['pypi_list']))
+    print(f'[i] Loaded {len(q3)} import->package mappings')
+    r4 = r1['path'] if r1['path'] else os.curdir
+    s4 = a4(r4)
+    print(f'[i] Detected {len(s4)} local modules/packages')
+    n2 = g4(r4)
+    print(f'[i] Found {len(n2)} unique imports in source')
+    t4 = r1['version'] if r1['version'] else 'pip3'
+    _, y3 = v3(t4)
+    print(f'[i] {len(y3)} packages installed locally')
+    u4 = []
+    v4 = []
+    w4 = []
+    x4 = []
+    y4 = []
+    z4 = []
+    a5 = 0
+    for mod in n2:
+        n4 = n3(mod)
+        if not p3(mod):
+            y4.append(mod)
+            continue
+        if n4 in s3:
+            y4.append(mod)
+            continue
+        if n4 in r3:
+            v4.append(mod)
+            continue
+        if n4 in s4:
+            x4.append(mod)
+            continue
+        f2, b5 = l4(mod)
+        c5 = n3(f2)
+        if c5 in y3 or n4 in y3:
+            w4.append(mod)
+            continue
+        if c5 in q4:
+            if b5:
+                a5 += 1
+                print(f'[→] {mod} -> {f2}')
+                u4.append(f2)
+            else:
+                u4.append(mod)
+        elif n4 in q4:
+            u4.append(mod)
+        else:
+            z4.append(mod)
+    print(f'\n[i] Skipped {len(v4)} stdlib modules')
+    print(f'[i] Skipped {len(x4)} local modules')
+    print(f'[i] Skipped {len(w4)} already-installed modules')
+    print(f'[i] Skipped {len(y4)} invalid/blocklisted names')
+    if y4:
+        d5 = ', '.join(sorted(set(y4))[:15])
+        if len(set(y4)) > 15:
+            d5 += ' ...'
+        print(f'    {d5}')
+    print(f'[i] Resolved {a5} renamed packages')
+    if z4:
+        print('[i] Skipped {} unknown modules: {}'.format(len(z4), ', '.join(sorted(z4))))
+    e5 = sorted(set(u4))
+    if r1.get('dry_run'):
+        print(f'\n[dry-run] Would write {len(e5)} packages to requirements.txt:')
+        for pkg in e5:
+            print('  ' + pkg)
+        return
+    f5 = r1['path'] if r1['path'] else os.curdir
+    g5 = os.path.join(f5, 'requirements.txt')
+    with open(g5, 'w', encoding='utf-8') as f:
+        if e5:
+            f.write('\n'.join(e5) + '\n')
+    print(f'\n[✓] Wrote {len(e5)} packages to {g5}')
+def u1():
+    ap = argparse.ArgumentParser(description='Offline requirements.txt generator')
+    ap.add_argument('-v', '--version', type=str, help='Pip command to use (default: pip3)')
+    ap.add_argument('-p', '--path', type=str, help='Path to target project directory')
+    ap.add_argument('-l', '--pypi-list', type=str, default='/sdcard/data/pip.txt', help='Path to offline PyPI package list (default: /sdcard/data/pip.txt)')
+    ap.add_argument('--dry-run', action='store_true', help='Print result without writing requirements.txt')
+    r1 = vars(ap.parse_args())
+    try:
+        p4(r1)
+    except KeyboardInterrupt:
+        sys.exit(0)
+if __name__ == '__main__':
+    u1()
+
+# --- File: imz.py ---
+import argparse
+import ast
+import contextlib
+import json
+import multiprocessing as mp
+import re
+import sys
+import tarfile
+import zipfile
+from pathlib import Path
+import xxhash
+from dh import PKG_MAPPING, STDLIB
+from tqdm import tqdm
+h5 = '.reqcache.json'
+def i5(b1):
+    try:
+        h = xxhash.xxh64()
+        j5 = b1.stat()
+        h.update(str(j5.st_size).encode())
+        h.update(str(int(j5.st_mtime)).encode())
+        with b1.open('rb') as f:
+            h.update(f.read())
+        return h.hexdigest()
+    except Exception:
+        return '0'
+def k5(b1):
+    try:
+        with b1.open(encoding='utf-8', errors='ignore') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+def l5(b1, obj):
+    with b1.open('w', encoding='utf-8') as f:
+        json.dump(obj, f, indent=2, sort_keys=True)
+def m5(b1):
+    out = set()
+    try:
+        with Path(b1).open(encoding='utf-8', errors='ignore') as f:
+            for j in f:
+                v = j.strip()
+                if v:
+                    out.add(v)
+    except Exception:
+        pass
+    return out
+def n5(b1):
+    out = {}
+    try:
+        with Path(b1).open(encoding='utf-8', errors='ignore') as f:
+            for j in f:
+                j = j.strip()
+                if not j or j.startswith('#'):
+                    continue
+                if '=' in j:
+                    k, v = j.split('=', 1)
+                    out[k.strip()] = v.strip()
+    except Exception:
+        pass
+    return out
+def o5(m, p5=None):
+    q5 = {'imports': set(), 'star_modules': set(), 'dynamic': set(), 'relative': set()}
+    try:
+        p = ast.parse(m)
+    except Exception:
+        for m in re.finditer('(?:import_module|__import__)\\(\\s*[\'\\"]([\\w\\.]+)[\'\\"]\\s*\\)', m):
+            q5['dynamic'].add(m.group(1).split('.', 1)[0])
+        return q5
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for a in q.names:
+                r5 = a.name.split('.', 1)[0]
+                q5['imports'].add(r5)
+        elif isinstance(q, ast.ImportFrom):
+            if q.level and q.level > 0:
+                if q.module:
+                    q5['relative'].add(q.module.split('.', 1)[0])
+                else:
+                    q5['relative'].add('.')
+                continue
+            if q.module:
+                s5 = q.module.split('.', 1)[0]
+                if any((o3.name == '*' for o3 in q.names)):
+                    q5['star_modules'].add(q.module)
+                else:
+                    q5['imports'].add(s5)
+        elif isinstance(q, ast.Call):
+            if isinstance(q.func, ast.Name) and q.func.id == '__import__':
+                if q.args and isinstance(q.args[0], ast.Constant) and isinstance(q.args[0].value, str):
+                    q5['dynamic'].add(q.args[0].value.split('.', 1)[0])
+            elif isinstance(q.func, ast.Attribute):
+                val = q.func
+                if (isinstance(val.value, ast.Name) and val.value.id == 'importlib' and (val.attr == 'import_module')) and (q.args and isinstance(q.args[0], ast.Constant) and isinstance(q.args[0].value, str)):
+                    q5['dynamic'].add(q.args[0].value.split('.', 1)[0])
+    return q5
+def t5(m, p5=None):
+    d = o5(m, p5)
+    return {k: sorted(v) for k, v in d.items()}
+def u5(b1):
+    try:
+        v5 = b1.read_text(encoding='utf-8', errors='ignore')
+    except Exception:
+        return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    return t5(v5, str(b1))
+def w5(b1):
+    try:
+        with b1.open(encoding='utf-8', errors='ignore') as f:
+            r5 = f.readline()
+            if '#!' not in r5 or 'python' not in r5.lower():
+                return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+            m = f.read()
+    except Exception:
+        return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    return t5(m, str(b1))
+def x5(b1):
+    out = {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    try:
+        with b1.open(encoding='utf-8', errors='ignore') as f:
+            nb = json.load(f)
+    except Exception:
+        return out
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    for k4 in nb.get('cells', []):
+        if k4.get('cell_type') == 'code':
+            src = ''.join(k4.get('source', []))
+            d = o5(src, str(b1))
+            o |= d['imports']
+            y5 |= d['star_modules']
+            dyn |= d['dynamic']
+            rel |= d['relative']
+    out['imports'] = sorted(o)
+    out['star_modules'] = sorted(y5)
+    out['dynamic'] = sorted(dyn)
+    out['relative'] = sorted(rel)
+    return out
+def z5(b1):
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    try:
+        with zipfile.ZipFile(b1, 'r') as z:
+            for o3 in z.namelist():
+                if o3.endswith('.py'):
+                    try:
+                        m = z.read(o3).decode('utf-8', errors='ignore')
+                        d = o5(m, f'{b1}:{o3}')
+                        o |= d['imports']
+                        y5 |= d['star_modules']
+                        dyn |= d['dynamic']
+                        rel |= d['relative']
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return {'imports': sorted(o), 'star_modules': sorted(y5), 'dynamic': sorted(dyn), 'relative': sorted(rel)}
+def a6(b1):
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    y2 = 'r:xz' if b1.suffix == '.xz' else 'r:gz'
+    try:
+        with tarfile.open(b1, y2) as t:
+            for m in t.getmembers():
+                if m.isfile() and m.name.endswith('.py'):
+                    try:
+                        f = t.extractfile(m)
+                        if not f:
+                            continue
+                        m = f.read().decode('utf-8', errors='ignore')
+                        d = o5(m, f'{b1}:{m.name}')
+                        o |= d['imports']
+                        y5 |= d['star_modules']
+                        dyn |= d['dynamic']
+                        rel |= d['relative']
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return {'imports': sorted(o), 'star_modules': sorted(y5), 'dynamic': sorted(dyn), 'relative': sorted(rel)}
+def b6(b1):
+    p = Path(b1)
+    o3 = str(p).lower()
+    if p.suffix == '.py':
+        return u5(p)
+    if p.suffix == '.ipynb':
+        return x5(p)
+    if p.suffix == '' and p.is_file():
+        return w5(p)
+    if o3.endswith(('.zip', '.whl')):
+        return z5(p)
+    if o3.endswith(('.tar.gz', '.tgz', '.tar.xz')):
+        return a6(p)
+    return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+def c6(c2):
+    d6 = {}
+    for b1 in c2:
+        p = Path(b1)
+        if not p.exists():
+            continue
+        if p.suffix != '.py':
+            continue
+        rel = p.resolve().relative_to(Path.cwd().resolve())
+        e6 = rel.parts
+        if e6[-1] == '__init__.py':
+            mod = '.'.join(e6[:-1]) if e6[:-1] else e6[-2] if len(e6) > 1 else ''
+        else:
+            mod = '.'.join(e6)[:-3] if rel.name.endswith('.py') else '.'.join(e6)
+        if not mod:
+            continue
+        top = mod.split('.', 1)[0]
+        d6.setdefault(mod, []).append(str(p))
+        d6.setdefault(top, [*d6.get(top, []), str(p)])
+    return d6
+def f6(o2, g6):
+    h6 = set()
+    i6 = []
+    if o2 in g6:
+        i6 += g6[o2]
+    top = o2.split('.', 1)[0]
+    if top in g6:
+        i6 += g6[top]
+    i6 = list(dict.fromkeys(i6))
+    for b1 in i6:
+        try:
+            v5 = Path(b1).read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            continue
+        d = o5(v5, b1)
+        h6 |= d['imports']
+        h6 |= {m.split('.', 1)[0] for m in d['dynamic']}
+        try:
+            p = ast.parse(v5)
+            for q in ast.walk(p):
+                if isinstance(q, ast.Assign):
+                    for r4 in q.targets:
+                        if isinstance(r4, ast.Name) and r4.id == '__all__':
+                            val = q.value
+                            j6 = []
+                            if isinstance(val, (ast.List, ast.Tuple)):
+                                j6.extend((elt.value for elt in val.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str)))
+                            for nm in j6:
+                                if '.' in nm:
+                                    h6.add(nm.split('.', 1)[0])
+        except Exception:
+            pass
+    return h6
+def k6(o, e, d6, l6, m6):
+    out = set()
+    for imp in o:
+        if not imp:
+            continue
+        if imp in e:
+            continue
+        if imp in m6:
+            continue
+        if imp in d6:
+            n6 = d6[imp]
+        else:
+            e6 = imp.split('.')
+            o4 = None
+            for i in range(len(e6), 0, -1):
+                key = '.'.join(e6[:i])
+                if key in d6:
+                    o4 = d6[key]
+                    break
+            n6 = o4 or e6[0]
+        if l6:
+            low = {p.lower(): p for p in l6}
+            o6 = n6.lower()
+            if o6 in low:
+                out.add(low[o6])
+                continue
+        out.add(n6)
+    return out
+def p6(q6):
+    out = []
+    cwd = Path.cwd()
+    for b1 in cwd.rglob('*'):
+        if any((r6 in q6 for r6 in b1.relative_to(cwd).parts)):
+            continue
+        if b1.is_file():
+            s6 = b1.name.lower()
+            if s6.endswith(('.py', '.ipynb', '.whl', '.zip', '.tar.gz', '.tgz', '.tar.xz')) or b1.suffix == '':
+                out.append(str(b1))
+    return out
+def u1():
+    p = argparse.ArgumentParser(description='Offline requirements.txt generator (static + heuristics).')
+    p.add_argument('--ignore', nargs='*', default=['.venv', '.git', '.ipynb_checkpoints'], help='Directories to ignore during scan')
+    p.add_argument('--no-cache', action='store_true', default=True, help='Disable cache usage')
+    p.add_argument('--clear-cache', action='store_true', help='Clear cache and exit')
+    p.add_argument('--pipfile', default='/sdcard/pip.txt', help='Offline pip package list (one per line)')
+    p.add_argument('--cache-file', default=h5, help='Cache file path')
+    p.add_argument('--out', default='requirements.txt', help='Output requirements file')
+    p.add_argument('--include-unknown', action='store_true', default=True, help='Include packages not present in offline pip list (default: only include those in piplist)')
+    r1 = p.parse_args()
+    q6 = set(r1.ignore)
+    e = STDLIB
+    d6 = PKG_MAPPING
+    t6 = m5(r1.pipfile)
+    c2 = p6(q6)
+    c2 = sorted(set(c2))
+    g6 = c6(c2)
+    set(g6.keys())
+    u6 = {k.split('.', 1)[0] for k in g6}
+    v6 = Path(r1.cache_file)
+    w6 = {} if r1.no_cache else k5(v6) if v6.exists() else {}
+    if r1.clear_cache:
+        try:
+            if v6.exists():
+                v6.unlink()
+            print('Cache cleared.')
+        except Exception as e:
+            print('Failed clearing cache:', e)
+        return
+    x6 = []
+    y6 = []
+    for b1 in c2:
+        pth = Path(b1)
+        key = str(pth.resolve())
+        z6 = True
+        if not r1.no_cache and key in w6:
+            a7 = w6[key]
+            try:
+                b7 = pth.stat().st_mtime
+            except Exception:
+                b7 = None
+            h = i5(pth) if b7 is not None else '0'
+            if a7.get('mtime') == b7 and a7.get('hash') == h:
+                y6.append(a7.get('result', {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}))
+                z6 = False
+        if z6:
+            x6.append(b1)
+    c7 = []
+    if x6:
+        with mp.Pool(mp.cpu_count()) as x1:
+            for res in tqdm(x1.imap_unordered(b6, x6), total=len(x6), desc='Processing'):
+                c7.append(res)
+    if not r1.no_cache:
+        for b1, res in zip(x6, c7, strict=False):
+            key = str(Path(b1).resolve())
+            try:
+                b7 = Path(b1).stat().st_mtime
+            except Exception:
+                b7 = None
+            h = i5(Path(b1)) if b7 is not None else '0'
+            w6[key] = {'mtime': b7, 'hash': h, 'result': res}
+        with contextlib.suppress(Exception):
+            l5(v6, w6)
+    h3 = set()
+    d7 = set()
+    e7 = set()
+    f7 = set()
+    for r in y6 + c7:
+        h3 |= set(r.get('imports', []))
+        d7 |= set(r.get('star_modules', []))
+        e7 |= set(r.get('dynamic', []))
+        f7 |= set(r.get('relative', []))
+    g7 = set()
+    if d7:
+        for mod in tqdm(sorted(d7), desc='Tracing star imports'):
+            g7 |= f6(mod, g6)
+    h7 = {d.split('.', 1)[0] for d in e7}
+    i7 = set(h3) | g7 | h7
+    j7 = set()
+    for imp in i7:
+        if not imp:
+            continue
+        if imp in e:
+            continue
+        if imp in u6:
+            continue
+        if imp in f7:
+            continue
+        j7.add(imp)
+    k7 = k6(j7, e, d6, t6, u6)
+    if not r1.include_unknown and t6:
+        l7 = {p.lower() for p in t6}
+        k7 = {p for p in k7 if p.lower() in l7}
+    g5 = Path(r1.out)
+    try:
+        with g5.open('w', encoding='utf-8') as f:
+            for pkg in sorted(k7, key=lambda s: s.lower()):
+                f.write(pkg + '\n')
+    except Exception as e:
+        print('Failed writing requirements file:', e)
+        sys.exit(2)
+    print('\nGenerated', g5.name)
+    print('────────────────────────────')
+    if k7:
+        for pkg in sorted(k7, key=lambda s: s.lower()):
+            print(pkg)
+    else:
+        print('(empty)')
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: imz2.py ---
+import argparse
+import ast
+import hashlib
+import json
+import multiprocessing as mp
+import os
+import re
+import sys
+import tarfile
+import zipfile
+from pathlib import Path
+from tqdm import tqdm
+h5 = '.reqcache.json'
+def i5(b1):
+    try:
+        h = hashlib.sha256()
+        j5 = b1.stat()
+        h.update(str(j5.st_size).encode())
+        h.update(str(int(j5.st_mtime)).encode())
+        with open(b1, 'rb') as f:
+            h.update(f.read(4096))
+        return h.hexdigest()
+    except Exception:
+        return '0'
+def k5(b1):
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+def l5(b1, obj):
+    with open(b1, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, indent=2, sort_keys=True)
+def m5(b1):
+    out = set()
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            for j in f:
+                v = j.strip()
+                if v:
+                    out.add(v)
+    except Exception:
+        pass
+    return out
+def n5(b1):
+    out = {}
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            for j in f:
+                j = j.strip()
+                if not j or j.startswith('#'):
+                    continue
+                if '=' in j:
+                    k, v = j.split('=', 1)
+                    out[k.strip()] = v.strip()
+    except Exception:
+        pass
+    return out
+def o5(m, p5=None):
+    q5 = {'imports': set(), 'star_modules': set(), 'dynamic': set(), 'relative': set()}
+    try:
+        p = ast.parse(m)
+    except Exception:
+        for m in re.finditer('(?:import_module|__import__)\\(\\s*[\'\\"]([\\w\\.]+)[\'\\"]\\s*\\)', m):
+            q5['dynamic'].add(m.group(1).split('.', 1)[0])
+        return q5
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for a in q.names:
+                r5 = a.name.split('.', 1)[0]
+                q5['imports'].add(r5)
+        elif isinstance(q, ast.ImportFrom):
+            if q.level and q.level > 0:
+                if q.module:
+                    q5['relative'].add(q.module.split('.', 1)[0])
+                else:
+                    q5['relative'].add('.')
+                continue
+            if q.module:
+                s5 = q.module.split('.', 1)[0]
+                if any((o3.name == '*' for o3 in q.names)):
+                    q5['star_modules'].add(q.module)
+                else:
+                    q5['imports'].add(s5)
+        elif isinstance(q, ast.Call):
+            if isinstance(q.func, ast.Name) and q.func.id == '__import__':
+                if q.args and isinstance(q.args[0], ast.Constant) and isinstance(q.args[0].value, str):
+                    q5['dynamic'].add(q.args[0].value.split('.', 1)[0])
+            elif isinstance(q.func, ast.Attribute):
+                val = q.func
+                if (isinstance(val.value, ast.Name) and val.value.id == 'importlib' and (val.attr == 'import_module')) and (q.args and isinstance(q.args[0], ast.Constant) and isinstance(q.args[0].value, str)):
+                    q5['dynamic'].add(q.args[0].value.split('.', 1)[0])
+    return q5
+def t5(m, p5=None):
+    d = o5(m, p5)
+    return {k: sorted(v) for k, v in d.items()}
+def u5(b1):
+    try:
+        v5 = b1.read_text(encoding='utf-8', errors='ignore')
+    except Exception:
+        return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    return t5(v5, str(b1))
+def w5(b1):
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            r5 = f.readline()
+            if '#!' not in r5 or 'python' not in r5.lower():
+                return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+            m = f.read()
+    except Exception:
+        return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    return t5(m, str(b1))
+def x5(b1):
+    out = {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+    try:
+        with open(b1, encoding='utf-8', errors='ignore') as f:
+            nb = json.load(f)
+    except Exception:
+        return out
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    for k4 in nb.get('cells', []):
+        if k4.get('cell_type') == 'code':
+            src = ''.join(k4.get('source', []))
+            d = o5(src, str(b1))
+            o |= d['imports']
+            y5 |= d['star_modules']
+            dyn |= d['dynamic']
+            rel |= d['relative']
+    out['imports'] = sorted(o)
+    out['star_modules'] = sorted(y5)
+    out['dynamic'] = sorted(dyn)
+    out['relative'] = sorted(rel)
+    return out
+def z5(b1):
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    try:
+        with zipfile.ZipFile(b1, 'r') as z:
+            for o3 in z.namelist():
+                if o3.endswith('.py'):
+                    try:
+                        m = z.read(o3).decode('utf-8', errors='ignore')
+                        d = o5(m, f'{b1}:{o3}')
+                        o |= d['imports']
+                        y5 |= d['star_modules']
+                        dyn |= d['dynamic']
+                        rel |= d['relative']
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return {'imports': sorted(o), 'star_modules': sorted(y5), 'dynamic': sorted(dyn), 'relative': sorted(rel)}
+def a6(b1):
+    o = set()
+    y5 = set()
+    dyn = set()
+    rel = set()
+    y2 = 'r:xz' if str(b1).endswith('.xz') else 'r:gz'
+    try:
+        with tarfile.open(b1, y2) as t:
+            for m in t.getmembers():
+                if m.isfile() and m.name.endswith('.py'):
+                    try:
+                        f = t.extractfile(m)
+                        if not f:
+                            continue
+                        m = f.read().decode('utf-8', errors='ignore')
+                        d = o5(m, f'{b1}:{m.name}')
+                        o |= d['imports']
+                        y5 |= d['star_modules']
+                        dyn |= d['dynamic']
+                        rel |= d['relative']
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return {'imports': sorted(o), 'star_modules': sorted(y5), 'dynamic': sorted(dyn), 'relative': sorted(rel)}
+def b6(b1):
+    p = Path(b1)
+    o3 = str(p).lower()
+    if p.suffix == '.py':
+        return u5(p)
+    if p.suffix == '.ipynb':
+        return x5(p)
+    if p.suffix == '' and p.is_file():
+        return w5(p)
+    if o3.endswith(('.zip', '.whl')):
+        return z5(p)
+    if o3.endswith(('.tar.gz', '.tgz', '.tar.xz')):
+        return a6(p)
+    return {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}
+def c6(c2):
+    d6 = {}
+    for fp in c2:
+        p = Path(fp)
+        if not p.exists():
+            continue
+        if p.suffix != '.py':
+            continue
+        rel = os.path.normpath(fp).lstrip('./')
+        e6 = rel.split(os.sep)
+        if e6[-1] == '__init__.py':
+            mod = '.'.join(e6[:-1]) if e6[:-1] else e6[-2] if len(e6) > 1 else ''
+        else:
+            mod = '.'.join(e6)[:-3] if rel.endswith('.py') else '.'.join(e6)
+        if not mod:
+            continue
+        top = mod.split('.', 1)[0]
+        d6.setdefault(mod, []).append(fp)
+        d6.setdefault(top, d6.get(top, []) + [fp])
+    return d6
+def f6(o2, g6):
+    h6 = set()
+    i6 = []
+    if o2 in g6:
+        i6 += g6[o2]
+    top = o2.split('.', 1)[0]
+    if top in g6:
+        i6 += g6[top]
+    i6 = list(dict.fromkeys(i6))
+    for fp in i6:
+        try:
+            v5 = Path(fp).read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            continue
+        d = o5(v5, fp)
+        h6 |= d['imports']
+        h6 |= {m.split('.', 1)[0] for m in d['dynamic']}
+        try:
+            p = ast.parse(v5)
+            for q in ast.walk(p):
+                if isinstance(q, ast.Assign):
+                    for r4 in q.targets:
+                        if isinstance(r4, ast.Name) and r4.id == '__all__':
+                            val = q.value
+                            j6 = []
+                            if isinstance(val, (ast.List, ast.Tuple)):
+                                for elt in val.elts:
+                                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                        j6.append(elt.value)
+                            for nm in j6:
+                                if '.' in nm:
+                                    h6.add(nm.split('.', 1)[0])
+        except Exception:
+            pass
+    return h6
+def k6(o, e, d6, l6, m6):
+    out = set()
+    for imp in o:
+        if not imp:
+            continue
+        if imp in e:
+            continue
+        if imp in m6:
+            continue
+        if imp in d6:
+            n6 = d6[imp]
+        else:
+            e6 = imp.split('.')
+            o4 = None
+            for i in range(len(e6), 0, -1):
+                key = '.'.join(e6[:i])
+                if key in d6:
+                    o4 = d6[key]
+                    break
+            if o4:
+                n6 = o4
+            else:
+                n6 = e6[0]
+        if l6:
+            low = {p.lower(): p for p in l6}
+            o6 = n6.lower()
+            if o6 in low:
+                out.add(low[o6])
+                continue
+        out.add(n6)
+    return out
+def p6(q6):
+    out = []
+    for p2, b3, a3 in os.walk('.'):
+        b3[:] = [d for d in b3 if d not in q6]
+        for f in a3:
+            fp = os.path.join(p2, f)
+            s6 = f.lower()
+            if s6.endswith(('.py', '.ipynb', '.whl', '.zip', '.tar.gz', '.tgz', '.tar.xz')) or Path(fp).suffix == '':
+                out.append(fp)
+    return out
+def u1():
+    p = argparse.ArgumentParser(description='Offline requirements.txt generator (static + heuristics).')
+    p.add_argument('--ignore', nargs='*', default=['venv', '.venv', '.git', '.ipynb_checkpoints'], help='Directories to ignore during scan')
+    p.add_argument('--no-cache', action='store_true', help='Disable cache usage')
+    p.add_argument('--clear-cache', action='store_true', help='Clear cache and exit')
+    p.add_argument('--stdlib', default='/sdcard/data/stdlib', help='File containing stdlib module names (one per line)')
+    p.add_argument('--mapping', default='/sdcard/data/mapping', help='Mapping file module->pip-package')
+    p.add_argument('--pipfile', default='/sdcard/data/pip.txt', help='Offline pip package list (one per line)')
+    p.add_argument('--cache-file', default=h5, help='Cache file path')
+    p.add_argument('--out', default='requirements.txt', help='Output requirements file')
+    p.add_argument('--include-unknown', action='store_true', help='Include packages not present in offline pip list (default: only include those in piplist)')
+    r1 = p.parse_args()
+    q6 = set(r1.ignore)
+    e = m5(r1.stdlib)
+    d6 = n5(r1.mapping)
+    t6 = m5(r1.pipfile)
+    c2 = p6(q6)
+    c2 = sorted(set(c2))
+    g6 = c6(c2)
+    set(g6.keys())
+    u6 = {k.split('.', 1)[0] for k in g6}
+    v6 = Path(r1.cache_file)
+    w6 = {} if r1.no_cache else k5(v6) if v6.exists() else {}
+    if r1.clear_cache:
+        try:
+            if v6.exists():
+                v6.unlink()
+            print('Cache cleared.')
+        except Exception as e:
+            print('Failed clearing cache:', e)
+        return
+    x6 = []
+    y6 = []
+    for b1 in c2:
+        pth = Path(b1)
+        key = os.path.normpath(b1)
+        z6 = True
+        if not r1.no_cache and key in w6:
+            a7 = w6[key]
+            try:
+                b7 = pth.stat().st_mtime
+            except Exception:
+                b7 = None
+            h = i5(pth) if b7 is not None else '0'
+            if a7.get('mtime') == b7 and a7.get('hash') == h:
+                y6.append(a7.get('result', {'imports': [], 'star_modules': [], 'dynamic': [], 'relative': []}))
+                z6 = False
+        if z6:
+            x6.append(b1)
+    c7 = []
+    if x6:
+        with mp.Pool(mp.cpu_count()) as x1:
+            for res in tqdm(x1.imap_unordered(b6, x6), total=len(x6), desc='Processing'):
+                c7.append(res)
+    if not r1.no_cache:
+        for b1, res in zip(x6, c7, strict=False):
+            key = os.path.normpath(b1)
+            try:
+                b7 = Path(b1).stat().st_mtime
+            except Exception:
+                b7 = None
+            h = i5(Path(b1)) if b7 is not None else '0'
+            w6[key] = {'mtime': b7, 'hash': h, 'result': res}
+        try:
+            l5(v6, w6)
+        except Exception:
+            pass
+    h3 = set()
+    d7 = set()
+    e7 = set()
+    f7 = set()
+    for r in y6 + c7:
+        h3 |= set(r.get('imports', []))
+        d7 |= set(r.get('star_modules', []))
+        e7 |= set(r.get('dynamic', []))
+        f7 |= set(r.get('relative', []))
+    g7 = set()
+    if d7:
+        for mod in tqdm(sorted(d7), desc='Tracing star imports'):
+            g7 |= f6(mod, g6)
+    h7 = {d.split('.', 1)[0] for d in e7}
+    i7 = set(h3) | g7 | h7
+    j7 = set()
+    for imp in i7:
+        if not imp:
+            continue
+        if imp in e:
+            continue
+        if imp in u6:
+            continue
+        if imp in f7:
+            continue
+        j7.add(imp)
+    k7 = k6(j7, e, d6, t6, u6)
+    if not r1.include_unknown and t6:
+        l7 = {p.lower() for p in t6}
+        k7 = {p for p in k7 if p.lower() in l7}
+    g5 = Path(r1.out)
+    try:
+        with g5.open('w', encoding='utf-8') as f:
+            for pkg in sorted(k7, key=lambda s: s.lower()):
+                f.write(pkg + '\n')
+    except Exception as e:
+        print('Failed writing requirements file:', e)
+        sys.exit(2)
+    print('\nGenerated', g5.name)
+    print('────────────────────────────')
+    if k7:
+        for pkg in sorted(k7, key=lambda s: s.lower()):
+            print(pkg)
+    else:
+        print('(empty)')
+if __name__ == '__main__':
+    u1()
+
+# --- File: imz3.py ---
+import ast
+from pathlib import Path
+from dh import get_files
+def m7(m, n7=None):
+    y1 = set()
+    try:
+        p = ast.parse(m)
+    except Exception:
+        return y1
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for a in q.names:
+                mod = a.name.split('.', 1)[0]
+                if mod not in STDLIB:
+                    y1.add(mod)
+        elif isinstance(q, ast.ImportFrom):
+            if q.level > 0:
+                if n7 is not None:
+                    o7 = '.' * q.level
+                    if q.module:
+                        o7 += q.module
+                    if p7(n7, o7):
+                        continue
+                if q.module:
+                    continue
+                continue
+            if q.module:
+                mod = q.module.split('.', 1)[0]
+                if mod not in STDLIB:
+                    y1.add(mod)
+    return y1
+def p7(n7, o2):
+    q7 = len(o2) - len(o2.lstrip('.'))
+    mod = o2.lstrip('.')
+    r7 = n7.parent
+    for _ in range(q7 - 1):
+        r7 = r7.parent
+    s7 = r7 / mod.replace('.', '/')
+    if (s7 / '__init__.py').exists():
+        return True
+    t7 = s7.with_suffix('.py')
+    return bool(t7.exists())
+def u1():
+    cwd = Path.cwd()
+    u7 = []
+    for v7 in get_files(cwd, ext=['.py']):
+        with Path(v7).open(encoding='utf-8') as f:
+            j4 = f.read()
+            u7.append(m7(j4))
+    with Path('importz.txt').open('w', encoding='utf-8') as fo:
+        for im in u7:
+            fo.writelines((str(k) + '\n' for k in im))
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: imz_plex.py ---
+import ast
+import operator
+import re
+import tarfile
+import zipfile
+from collections import defaultdict
+from pathlib import Path
+from dh import STDLIB
+w7 = ['#!/data/data/com.termux/files/usr/bin/python', '#!/usr/bin/env python', '#! */python']
+x7 = {'.tar.gz', '.tgz', '.tar.xz', '.tar.bz2', '.tar.zst', '.zip', '.whl', '.7z'}
+y7 = Path('/sdcard/pip.txt')
+z7 = set()
+a8 = STDLIB
+def b8():
+    global KNOWN_PACKAGES
+    if y7.exists():
+        try:
+            with Path(y7).open(encoding='utf-8') as f:
+                z7 = {j.strip().split('==')[0].split('>')[0].split('<')[0].lower() for j in f if j.strip()}
+        except Exception:
+            pass
+def s2(b1):
+    b1 = Path(b1)
+    if not b1.suffix or b1.suffix == '.py':
+        try:
+            with Path(b1).open(encoding='utf-8', errors='ignore') as f:
+                z = f.readline()
+                for c8 in w7:
+                    if re.match(c8, z):
+                        return True
+                v2 = f.read(1024)
+                if re.search('\\bimport\\b|\\bfrom\\b\\s+\\w', v2, re.IGNORECASE):
+                    return True
+        except:
+            pass
+        return False
+    return b1.suffix == '.py'
+def d8(m):
+    o = set()
+    try:
+        p = ast.parse(m)
+        for q in ast.walk(p):
+            if isinstance(q, ast.Import):
+                o.update((r.name.split('.')[0].lower() for r in q.names))
+            elif isinstance(q, ast.ImportFrom) and q.module:
+                o.add(q.module.split('.')[0].lower())
+    except:
+        pass
+    return o
+def e8(v2):
+    o = set()
+    f8 = ['^\\s*import\\s+(\\w+)', '^\\s*from\\s+(\\w+)\\s+import', '^\\s*import\\s+\\w+\\s+as\\s+\\w+']
+    for j in v2.splitlines():
+        for c8 in f8:
+            g8 = re.search(c8, j, re.IGNORECASE)
+            if g8:
+                pkg = g8.group(1).split('.')[0].lower()
+                o.add(pkg)
+    return o
+def h8(b1):
+    try:
+        v2 = Path(b1).read_text(encoding='utf-8', errors='ignore')
+        o = d8(v2)
+        if not o:
+            o = e8(v2)
+        return {imp for imp in o if imp and imp != 'from'}
+    except:
+        return set()
+def i8(j8):
+    h3 = defaultdict(int)
+    b1 = Path(j8)
+    try:
+        if b1.suffix in {'.zip', '.whl'}:
+            with zipfile.ZipFile(b1, 'r') as zf:
+                for o3 in zf.namelist():
+                    if s2(o3):
+                        v2 = zf.read(o3).decode('utf-8', errors='ignore')
+                        o = d8(v2) or e8(v2)
+                        for imp in o:
+                            h3[imp] += 1
+        elif b1.suffix in {'.tar.gz', '.tgz'}:
+            with tarfile.open(b1, 'r:gz') as tf:
+                for h1 in tf.getmembers():
+                    if s2(h1.name) and (not h1.isdir()):
+                        f = tf.extractfile(h1)
+                        if f:
+                            v2 = f.read().decode('utf-8', errors='ignore')
+                            o = d8(v2) or e8(v2)
+                            for imp in o:
+                                h3[imp] += 1
+        elif b1.suffix == '.tar.xz':
+            with tarfile.open(b1, 'r:xz') as tf:
+                for h1 in tf.getmembers():
+                    if s2(h1.name) and (not h1.isdir()):
+                        f = tf.extractfile(h1)
+                        if f:
+                            v2 = f.read().decode('utf-8', errors='ignore')
+                            o = d8(v2) or e8(v2)
+                            for imp in o:
+                                h3[imp] += 1
+        elif b1.suffix == '.tar.bz2':
+            with tarfile.open(b1, 'r:bz2') as tf:
+                for h1 in tf.getmembers():
+                    if s2(h1.name) and (not h1.isdir()):
+                        f = tf.extractfile(h1)
+                        if f:
+                            v2 = f.read().decode('utf-8', errors='ignore')
+                            o = d8(v2) or e8(v2)
+                            for imp in o:
+                                h3[imp] += 1
+        elif b1.suffix == '.tar.zst':
+            try:
+                import zstandard as zstd
+                k8 = zstd.ZstdDecompressor()
+                with Path(b1).open('rb') as f, k8.stream_reader(f) as l8, tarfile.open(fileobj=l8, mode='r') as tf:
+                    for h1 in tf.getmembers():
+                        if s2(h1.name) and (not h1.isdir()):
+                            f = tf.extractfile(h1)
+                            if f:
+                                v2 = f.read().decode('utf-8', errors='ignore')
+                                o = d8(v2) or e8(v2)
+                                for imp in o:
+                                    h3[imp] += 1
+            except ImportError:
+                pass
+        elif b1.suffix == '.7z':
+            try:
+                import subprocess
+                q5 = subprocess.run(['7z', 'l', str(b1)], check=False, capture_output=True, text=True)
+                for j in q5.stdout.splitlines():
+                    '.py' in j or ('python' in j.lower() and 'bin' not in j.lower())
+            except:
+                pass
+    except Exception:
+        pass
+    return dict(h3)
+def m8(n8):
+    h3 = defaultdict(int)
+    p2 = Path(n8)
+    for b1 in p2.rglob('*'):
+        try:
+            if b1.is_file() and s2(b1):
+                o = h8(b1)
+                for imp in o:
+                    h3[imp] += 1
+            elif b1.is_file() and b1.suffix.lower() in x7:
+                o8 = i8(b1)
+                for imp, p8 in o8.items():
+                    h3[imp] += p8
+        except Exception:
+            continue
+    return dict(h3)
+def q8(r8):
+    t1 = {pkg: p8 for pkg, p8 in r8.items() if pkg in z7 and pkg not in a8}
+    s8 = sorted(t1.items(), key=operator.itemgetter(1), reverse=True)
+    with Path('requirements.txt').open('w', encoding='utf-8') as f:
+        for pkg, p8 in s8:
+            t8 = pkg.replace('_', '-')
+            if t8 in {'numpy', 'pandas', 'matplotlib'}:
+                f.write(f'{t8}\n')
+            else:
+                f.write(f'{t8}\n')
+    print(f'Generated requirements.txt with {len(s8)} packages (stdlib excluded)')
+    print('Top 10 most used packages:')
+    for pkg, p8 in s8[:10]:
+        print(f'  {pkg}: {p8} files')
+def u1():
+    b8()
+    print(f'Loaded {len(z7)} packages from pip.txt')
+    print('Scanning current directory...')
+    r8 = m8('.')
+    print(f'Found {sum(r8.values())} total imports across {len(r8)} packages')
+    q8(r8)
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: imzzz.py ---
+import ast
+import multiprocessing as mp
+import os
+import tarfile
+import zipfile
+from pathlib import Path
+from dh import PKG_MAPPING, STDLIB
+u8 = STDLIB
+v8 = PKG_MAPPING
+try:
+    with Path('/sdcard/pip.txt').open('r', encoding='utf-8') as f:
+        w8 = {j.strip().split('==')[0].split('[')[0] for j in f if j.strip()}
+except FileNotFoundError:
+    w8 = set()
+def s2(b1):
+    return b1.suffix == '.py' or (not b1.suffix and any((j.startswith(('import ', 'from ', '#!/usr/bin/env python')) for j in Path(b1).open(encoding='utf-8', errors='ignore'))))
+def x8(b1, y8):
+    if b1.suffix == '.zip':
+        with zipfile.ZipFile(b1, 'r') as z:
+            z.extractall(y8)
+    elif b1.suffix in {'.tar.gz', '.tar.xz', '.tar.zst'}:
+        with tarfile.open(b1, 'r:*') as tar:
+            tar.extractall(y8)
+    elif b1.suffix == '.whl':
+        with zipfile.ZipFile(b1, 'r') as z:
+            z.extractall(y8)
+def z8(b1):
+    o = set()
+    try:
+        with Path(b1).open(encoding='utf-8') as f:
+            p = ast.parse(f.read(), filename=str(b1))
+    except (SyntaxError, UnicodeDecodeError):
+        return o
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for r in q.names:
+                o2 = r.name.split('.')[0]
+                if o2 not in u8 and (not o2.startswith('.')) and (not b1.parent.match(f'*{o2}*')):
+                    o.add(v8.get(o2, o2))
+        elif isinstance(q, ast.ImportFrom):
+            o2 = q.module.split('.')[0] if q.module else ''
+            if o2 and o2 not in u8 and (not o2.startswith('.')) and (not b1.parent.match(f'*{o2}*')):
+                o.add(v8.get(o2, o2))
+    return o
+def k1(b1):
+    Path(b1)
+    if b1.is_dir():
+        return set()
+    if b1.suffix in {'.zip', '.whl', '.tar.gz', '.tar.xz', '.tar.zst'}:
+        a9 = b1.parent / f'extracted_{b1.stem}'
+        x8(b1, a9)
+        o = set()
+        for p2, _, a3 in os.walk(a9):
+            for f in a3:
+                b9 = Path(p2) / f
+                if s2(b9):
+                    o.update(z8(b9))
+        return o
+    if s2(b1):
+        return z8(b1)
+    return set()
+def u1():
+    p2 = Path()
+    p1 = []
+    for ext in ('*.py', '*'):
+        p1.extend(p2.rglob(ext))
+    with mp.Pool() as x1:
+        y1 = x1.map(k1, p1)
+    h3 = set().union(*y1)
+    c9 = sorted(h3 & w8)
+    with Path('requirements.txt').open('w', encoding='utf-8') as f:
+        f.writelines((f'{req}\n' for req in c9))
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: mkreq.py ---
+import ast
+import importlib.util
+import sys
+from collections import defaultdict
+from pathlib import Path
+def d9(b1):
+    try:
+        with open(b1, encoding='utf-8') as f:
+            p = ast.parse(f.read(), filename=str(b1))
+    except Exception as e:
+        print(f'  ✗ Error parsing {b1}: {e}')
+        return set()
+    o = set()
+    for q in ast.walk(p):
+        if isinstance(q, ast.Import):
+            for r in q.names:
+                s = r.name.split('.')[0]
+                o.add(s)
+        elif isinstance(q, ast.ImportFrom) and q.level == 0 and q.module:
+            s = q.module.split('.')[0]
+            o.add(s)
+    return o
+def e9(s):
+    if hasattr(sys, 'stdlib_module_names'):
+        return s in sys.stdlib_module_names
+    try:
+        f9 = importlib.util.find_spec(s)
+        if f9 is None:
+            return False
+        if f9.origin is None:
+            return True
+        g9 = Path(f9.origin)
+        return 'site-packages' not in str(g9)
+    except (ImportError, ValueError, AttributeError):
+        return False
+def a4(cwd='.'):
+    p2 = Path(cwd)
+    s4 = set()
+    for t7 in p2.glob('**/*.py'):
+        s = t7.stem
+        s4.add(s)
+    return s4
+def h9(cwd='.', v=None, i9=False):
+    if v is None:
+        v = {'.venv', 'venv', '__pycache__', '.git', '.pytest_cache', 'env', '.env', 'node_modules', '.idea', 'build', 'dist'}
+    p2 = Path(cwd)
+    h3 = set()
+    s4 = a4(cwd)
+    j9 = defaultdict(list)
+    print(f'Scanning {p2}...\n')
+    for t7 in sorted(p2.glob('**/*.py')):
+        if any((r6 in v for r6 in t7.parts)):
+            continue
+        o = d9(t7)
+        if o:
+            if i9:
+                print(f'  {t7}: {o}')
+            for imp in o:
+                j9[imp].append(str(t7))
+            h3.update(o)
+    print(f'\nFound {len(h3)} unique imports')
+    print(f'Local modules: {s4}\n')
+    k9 = []
+    v4 = []
+    x4 = []
+    for o2 in sorted(h3):
+        if o2 == '__main__':
+            continue
+        if o2 in s4:
+            x4.append(o2)
+            continue
+        if e9(o2):
+            v4.append(o2)
+            continue
+        k9.append(o2)
+    if i9:
+        if v4:
+            print(f'Skipped stdlib ({len(v4)}): {v4}')
+        if x4:
+            print(f'Skipped local ({len(x4)}): {x4}')
+    return k9
+def l9(i, m9='requirements.txt'):
+    b2 = Path(m9)
+    with open(b2, 'w', encoding='utf-8') as f:
+        f.writelines((f'{z1}\n' for z1 in i))
+    print(f'\n✓ Written {len(i)} packages to {b2}\n')
+    if i:
+        print('Contents of requirements.txt:')
+        print('-' * 40)
+        for pkg in i:
+            print(f'  {pkg}')
+        print('-' * 40)
+    else:
+        print('(No third-party packages found)')
+    return b2
+def u1():
+    import argparse
+    v1 = argparse.ArgumentParser(description='Generate requirements.txt by scanning Python files')
+    v1.add_argument('-d', '--dir', default='.', help='Root directory to scan (default: current directory)')
+    v1.add_argument('-o', '--output', default='requirements.txt', help='Output file (default: requirements.txt)')
+    v1.add_argument('-v', '--verbose', action='store_true', help='Show debug info')
+    r1 = v1.parse_args()
+    i = h9(r1.dir, verbose=r1.verbose)
+    l9(i, r1.output)
+if __name__ == '__main__':
+    raise SystemExit(u1())
+
+# --- File: reqr.py ---
+import re
+from pathlib import Path
+from fastwalk import walk_files
+def n9(o9):
+    with Path(o9).open(encoding='utf-8') as f:
+        p9 = f.readlines()
+    c9 = []
+    for j in p9:
+        if j.startswith('Requires-Dist:'):
+            g8 = re.match('Requires-Dist:\\s*([^\\s;]+)', j)
+            if g8:
+                c9.append(g8.group(1))
+    if not c9:
+        print('No dependencies found in METADATA.')
+        return
+    print(f'{len(c9)} reqs found')
+    with Path('/sdcard/requirements.txt').open('a', encoding='utf-8') as f:
+        f.write('\n'.join(c9))
+if __name__ == '__main__':
+    cwd = Path.cwd()
+    for pth in walk_files(cwd):
+        b1 = Path(pth)
+        if b1.is_file() and b1.name == 'METADATA':
+            n9(b1)
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

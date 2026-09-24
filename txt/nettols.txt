@@ -1,0 +1,166 @@
+# filename: proxy_tester.py
+import requests;from colorama import Fore,Style,init;init(autoreset=True)
+def e(t):p,s,q=t;q=q.strip();n={'http':f'http://{q}','https':f'https://{q}'}
+    try:m=requests.get('http://httpbin.org/ip',n=n,timeout=5)
+        if m.status_code==200:o=f'{Fore.GREEN}[{p}/{s}] ✅ {q}{Style.RESET_ALL}';l=True
+        else:o=f'{Fore.RED}[{p}/{s}] ❌ {q}{Style.RESET_ALL}';l=False
+    except requests.exceptions.RequestException:o=f'{Fore.RED}[{p}/{s}] ❌ {q}{Style.RESET_ALL}';l=False
+    r(0.5);return (o,q if l else None)
+if __name__=='__main__':with open('proxies.txt','r') as u:d=[v.strip() for v in u if v.strip()]
+    b=len(d);c=[];j=[(w,b,q) for w,q in enumerate(d,start=1)]
+    with a(max_workers=5) as k:for o,i in k.map(e,j):print(o)
+            if i:c.append(i)
+    if c:h=input('Do you want to save the valid proxies to a file? (y/n):')
+        if h.lower()=='y':g=input('Enter the filename to save valid proxies (default:valid_proxies.txt):').strip()
+            if not g:g='valid_proxies.txt'
+            with open(g,'w') as f:f.writelines((f'{q}\n' for q in c))
+            print(f'Valid proxies saved to {g}')
+    else:print('No valid proxies found.')
+# filename: pynet.py
+def b():u=[('https://api.ipify.org?format=json','ip'),('https://ipinfo.io/json','ip'),('https://httpbin.org/ip','origin'),('http://ip-api.com/json','query')]
+    for T,R in u:try:with F.request.urlopen(T,timeout=5) as N:J=K.loads(N.read().decode());U=J.get(R)
+                if U:return U
+        except Exception:continue
+    return None
+def d():try:s=C.socket(C.AF_INET,C.SOCK_DGRAM);s.settimeout(2);s.connect(('8.8.8.8',80));U=s.getsockname()[0];s.close();return U
+    except Exception:return C.gethostbyname(C.gethostname())
+def a():q=[];E=t.system()
+    try:if E:with open('/data/data/com.termux/files/usr/etc/resolv.conf') as f:for L in f:if L.startswith('nameserver'):G=L.split()
+                        if len(G)>=2:q.append(G[1])
+    except Exception as e:return [f'Error retrieving DNS:{e}']
+    O=set();k=[]
+    for U in q:if U not in O:O.add(U);k.append(U)
+    return k
+def j():c='http://speedtest.tele2.net/5MB.zip';l='http://httpbin.org/post';w=None;y=None;p=None;v=None;print('    Testing download speed...')
+    try:H=P.time()
+        with F.request.urlopen(c,timeout=20) as N:J=N.read()
+        x=P.time()-H;n=len(J)*8;w=n/x/1000000.0
+    except Exception as e:p=str(e)
+    print('    Testing upload speed...')
+    try:g=1048576;m=''.join(A.choices(D.ascii_letters+D.digits,k=g)).encode();o='----------ThIs_Is_tHe_bouNdaRY_$';I=f'--{o}\r\nContent-Disposition:form-data; name="file"; filename="test.bin"\r\nContent-Type:application/octet-stream\r\n\r\n'.encode()+m+f'\r\n--{o}--\r\n'.encode();S=F.request.Request(l,J=I);S.add_header('Content-Type',f'multipart/form-data; boundary={o}');H=P.time()
+        with F.request.urlopen(S,timeout=20) as N:N.read()
+        x=P.time()-H;h=g*8;y=h/x/1000000.0
+    except Exception as e:v=str(e)
+    return (w,y,p,v)
+def M():print('-'*40);print(' NETWORK STATES ');print('-'*40);print('\n[*] Public IP:');z=b()
+    if z:print(f'    {z}')
+    else:print('    Could not determine public IP.')
+    print('\n[*] Local IP (primary interface):');r=d();print(f'    {r}');print('\n[*] DNS Servers:');Q=a()
+    if Q:for i,B in enumerate(Q,1):if i<=2:print(f'    DNS {i}:{B}')
+        if len(Q)>2:print(f'    (plus {len(Q)-2} more)')
+    else:print('    No DNS servers found.')
+if __name__=='__main__':raise SystemExit(M())
+# filename: pyng.py
+class d:def __init__(self):self.host='';self.ip='';self.packets_sent=0;self.packets_received=0;self.packets_lost=0;self.min_time=None;self.avg_time=None;self.max_time=None;self.stddev_time=None;self.packet_loss_percent=0.0;self.responses=[]
+    def __str__(self):o=f'\n---{self.host} ping statistics---\n';o+=f'{self.packets_sent} packets transmitted,{self.packets_received} packets received,';o+=f'{self.packet_loss_percent:.1f}%packet loss\n'
+        if self.packets_received>0:o+=f'round-trip min/avg/max/stddev=';o+=f'{self.min_time:.3f}/{self.avg_time:.3f}/{self.max_time:.3f}'
+            if self.stddev_time:o+=f'/{self.stddev_time:.3f}'
+            o+=' ms\n'
+        return o
+def a(m):o=d();q=m.split('\n')
+    if q:f=q[0];r=z.match('PING\\s+(\\S+)\\s+\\(([^)]+)\\)',f)
+        if r:o.host=r.group(1);o.ip=r.group(2)
+    for u in q:r=z.search('bytes from.*icmp_seq=(\\d+).*time=([0-9.]+)\\s*ms',u)
+        if r:o.responses.append({'seq':int(r.group(1)),'time':float(r.group(2))})
+    c=z.search('(\\d+)\\s+packets transmitted,\\s+(\\d+)(?:\\s+packets)?\\s+received,\\s+([0-9.]+)%\\s+packet loss',m)
+    if c:o.packets_sent=int(c.group(1));o.packets_received=int(c.group(2));o.packets_lost=o.packets_sent-o.packets_received;o.packet_loss_percent=float(c.group(3))
+    h=z.search('min/avg/max(?:/stddev)?\\s*=\\s*([0-9.]+)/([0-9.]+)/([0-9.]+)(?:/([0-9.]+))?',m)
+    if h:o.min_time=float(h.group(1));o.avg_time=float(h.group(2));o.max_time=float(h.group(3))
+        if h.group(4):o.stddev_time=float(h.group(4))
+    return o
+def w(t,p=4,k=4,b=56,l=True):try:x=['ping','-c',str(p),'-W',str(k*400),'-s',str(b),t];j=g.Popen(x,stdout=g.PIPE,stderr=g.PIPE,text=True,bufsize=1);m=''
+        if l:for u in j.stdout:print(u.rstrip());m+=u
+        else:m,_=j.communicate()
+        j.wait();o=a(m);return o
+    except FileNotFoundError:print("Error:'ping' command not found. Make sure you're on a Unix-like system.");return None
+    except Exception as e:print(f'Error:{e}');return None
+def v():n=i.ArgumentParser(description='Ping a host using ICMP echo requests',formatter_class=i.RawDescriptionHelpFormatter,epilog='\nExamples:\n  python3 ping.py google.com\n  python3 ping.py-c 10 8.8.8.8\n  python3 ping.py-c 5-t 2 example.com\n  python3 ping.py-s 128 github.com\n        ');n.add_argument('host',help='Hostname or IP address to ping');n.add_argument('-c','--count',type=int,default=4,help='Number of ping requests (default:4)');n.add_argument('-t','--timeout',type=int,default=4,help='Timeout per request in seconds (default:4)');n.add_argument('-s','--size',type=int,default=56,help='ICMP payload size in bytes (default:56)');n.add_argument('-q','--quiet',action='store_true',help='Quiet mode-no output until statistics');s=n.parse_args();o=w(s.host,p=s.count,k=s.timeout,b=s.size,l=not s.quiet)
+    if o:print(o);y.exit(0 if o.packet_loss_percent<100 else 1)
+    else:y.exit(1)
+if __name__=='__main__':raise SystemExit(v())
+# filename: set_dns.py
+a={'DNS.Watch':['84.200.69.80','84.200.70.40'],'Comodo Secure DNS':['8.26.56.26','8.20.247.20'],'Level3 DNS':['209.244.0.3','209.244.0.4'],'Yandex DNS':['77.88.8.8','77.88.8.1'],'Cloudflare DNS':['1.1.1.1','1.0.0.1'],'Open DNS':['208.67.222.222','208.67.220.220'],'Google DNS':['8.8.8.8','8.8.4.4']}
+def d():i,c=g.choice(list(a.items()));f=h.home()/'.resolv.conf';b=f'# Generated by DNS Switcher\n# Selected:{i}\n'
+    for j in c:b+=f'nameserver {j}\n'
+    try:f.write_text(b,encoding='utf-8');print(f'Successfully switched DNS to:{i}');print(f"Nameservers:{','.join(c)}")
+    except Exception as e:print(f'Error updating DNS:{e}')
+if __name__=='__main__':d()
+# filename: show_ip.py
+import pycurl
+def b():try:s=h.socket(h.AF_INET,h.SOCK_DGRAM);s.connect(('8.8.8.8',80));d=s.getsockname()[0];s.close();return d
+    except Exception:return 'Unable to get local IP'
+def a():g=f();c=pycurl.Curl()
+    try:c.setopt(c.URL,'https://ipify.org');c.setopt(c.WRITEDATA,g);c.setopt(c.TIMEOUT,15);c.setopt(c.FOLLOWLOCATION,True);c.perform();c.close();return g.getvalue().decode('utf-8').strip()
+    except pycurl.error as e:return f'Curl error:{e}'
+if __name__=='__main__':print(f'Local IP:{b()}');print(f'Public IP:{a()}')
+# filename: signal_meter.py
+from rich.align import Align;from rich.console import Console;from rich.panel import Panel;p=Console()
+class e:def __init__(self):self.wifi_strength=None;self.cellular_strength=None;self.wifi_ssid=None;self.cellular_status=None;self.is_airplane_mode=False
+    def d(self):try:w=l.run(['dumpsys','wifi'],capture_output=True,text=True,timeout=2);j=E.search('mRssi[=:]?\\s*(-?\\d+)',w.stdout);k=E.search('ssid[=:]?\\s*([\\"\\\']?)([^\\"\\\']*?)\\1',w.stdout)
+            if j:self.wifi_strength=int(j.group(1))
+            if k:self.wifi_ssid=k.group(2) or 'Hidden'
+            return self.wifi_strength
+        except Exception:self.wifi_strength=None;return None
+    def a(self):try:w=l.run(['dumpsys','telephony.registry'],capture_output=True,text=True,timeout=2);f=E.search('mSignalStrength[=:]?\\s*(\\d+)',w.stdout);g=E.search('mDataConnectionState[=:]?\\s*(\\d+)',w.stdout)
+            if f:C=int(f.group(1))
+                if 0<=C<=31:self.cellular_strength=2*C-113
+                else:self.cellular_strength=None
+            if g:m=int(g.group(1));x={0:'Disconnected',1:'Connecting',2:'Connected',3:'Suspended'};self.cellular_status=x.get(m,'Unknown')
+            return self.cellular_strength
+        except Exception:self.cellular_strength=None;return None
+    def c(self,h,t=-30,u=-120):if h is None:return ('N/A',0)
+        o=max(u,min(t,h));i=(o-u)/(t-u)*40;z=int(i/100*5);z=max(0,min(5,z));return (f"{'█'*z}{'░'*(5-z)}",int(i))
+    def b(self):try:w=l.run(['settings','get','global','airplane_mode_on'],capture_output=True,text=True,timeout=1);self.is_airplane_mode=w.stdout.strip()=='1';return self.is_airplane_mode
+        except:return False
+    def y(self):self.get_wifi_signal();self.get_cellular_signal();self.get_airplane_mode()
+    def v(self):D.system('clear');s=Panel(Align.center('[bold cyan]📡 SIGNAL STRENGTH MONITOR[/bold cyan]'),border_style='cyan');p.print(s)
+        if self.is_airplane_mode:p.print('[bold red]✈️  AIRPLANE MODE ENABLED[/bold red]\n')
+        p.print('[bold yellow]📶 WiFi Signal[/bold yellow]')
+        if self.wifi_strength is not None:z,r=self.strength_to_bars(self.wifi_strength);p.print(f"  SSID:{self.wifi_ssid or 'Not Connected'}");p.print(f'  Signal:{z} {r}%');p.print(f'  Strength:{self.wifi_strength} dBm\n')
+        else:p.print('  [dim]No WiFi data available[/dim]\n')
+        p.print('[bold green]📱 Cellular Signal[/bold green]')
+        if self.cellular_strength is not None:z,r=self.strength_to_bars(self.cellular_strength,t=-25,u=-120);p.print(f'  Status:{self.cellular_status}');p.print(f'  Signal:{z} {r}%');p.print(f'  Strength:{self.cellular_strength} dBm\n')
+        else:p.print('  [dim]No cellular data available[/dim]\n')
+        p.print(f"[dim]Updated:{n.now().strftime('%H:%M:%S')}[/dim]");p.print('[dim]Press Ctrl+C to exit[/dim]')
+def A():q=e()
+    try:while 1:q.update();q.render();B.sleep(1.5)
+    except KeyboardInterrupt:p.print('\n[bold yellow]Exiting...[/bold yellow]');D.system('clear')
+if __name__=='__main__':raise SystemExit(A())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

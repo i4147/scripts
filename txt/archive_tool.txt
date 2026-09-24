@@ -1,0 +1,1428 @@
+# --- File: ar_extract.py ---
+import shutil
+import subprocess
+import time
+from dataclasses import dataclass
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+from loguru import logger
+@dataclass
+class a:
+    b = None
+    c = 0
+    d = None
+    e = 0
+    def __str__(self):
+        f = self.original_size / (1024 * 1024)
+        g = '✓' if self.status == 'success' else '✗' if self.status == 'failed' else '○'
+        h = f'{g} {self.archive_path.name} [{f:.1f}MB] - {self.status}'
+        if self.status == 'success':
+            h += f' ({self.extracted_files} files, {self.extraction_time:.1f}s)'
+            if self.output_dir:
+                h += f' → {self.output_dir.name}'
+        elif self.status == 'failed':
+            h += f' - {self.error_message}'
+        return h
+class i:
+    j = {'.7z': ['7z', 'x', '-y', '-o'], '.zip': ['unzip', '-o'], '.rar': ['unrar', 'x', '-y'], '.tar': ['tar', '-xf'], '.tar.gz': ['tar', '-xzf'], '.tgz': ['tar', '-xzf'], '.tar.bz2': ['tar', '-xjf'], '.tbz2': ['tar', '-xjf'], '.tar.xz': ['tar', '-xJf'], '.txz': ['tar', '-xJf'], '.gz': ['gunzip', '-f'], '.bz2': ['bunzip2', '-f'], '.xz': ['unxz', '-f'], '.lz4': ['lz4', '-d', '-f'], '.lzma': ['unlzma', '-f'], '.zst': ['unzstd', '-f'], '.cab': ['cabextract'], '.arj': ['arj', 'x', '-y'], '.ace': ['unace', 'x']}
+    k = {'.gz', '.bz2', '.xz', '.lz4', '.lzma', '.zst'}
+    def __init__(self, l):
+        self.current_dir = l
+        self._check_available_tools()
+    def m(self):
+        n = {}
+        for ext, cmd in self.EXTRACTION_COMMANDS.items():
+            o = cmd[0]
+            if shutil.which(o):
+                n[ext] = True
+            else:
+                n[ext] = False
+        return n
+    def p(self, q):
+        if q.suffix.lower() in self.SINGLE_FILE_EXTENSIONS:
+            return True
+        try:
+            r = q.suffix.lower()
+            if r == '.zip':
+                h = subprocess.run(['unzip', '-l', str(q)], capture_output=True, text=True, timeout=30)
+                if h.returncode == 0:
+                    s = h.stdout.strip().split('\n')
+                    t = []
+                    for u in s[3:-2]:
+                        v = u.strip().split()
+                        if len(v) >= 4:
+                            t.append(' '.join(v[3:]))
+                    if t:
+                        w = set()
+                        for x in t:
+                            v = Path(x).parts
+                            if v:
+                                w.add(v[0])
+                        return len(w) == 1 and (not all(('/' not in e for e in t)))
+            elif r in ['.tar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tgz', '.tbz2', '.txz']:
+                h = subprocess.run(['tar', '-tf', str(q)], capture_output=True, text=True, timeout=30)
+                if h.returncode == 0:
+                    t = [u.strip() for u in h.stdout.split('\n') if u.strip()]
+                    if t:
+                        w = set()
+                        for x in t:
+                            v = Path(x).parts
+                            if v:
+                                w.add(v[0])
+                        return len(w) == 1 and (not all(('/' not in e for e in t)))
+        except (subprocess.TimeoutExpired, Exception):
+            pass
+        return False
+    def y(self, q):
+        z = q.name
+        for ext in ['.tar.gz', '.tar.bz2', '.tar.xz', '.tar.lz4']:
+            if z.endswith(ext):
+                z = z[:-len(ext)]
+                break
+        else:
+            z = q.stem
+        return self.current_dir / z
+    def a1(self, b1):
+        try:
+            return sum((1 for _ in b1.rglob('*') if _.is_file()))
+        except Exception:
+            return 0
+    def c1(self, q):
+        d1 = time.time()
+        e = q.stat().st_size if q.exists() else 0
+        e1 = a(archive_path=q, status='failed', extraction_time=0, original_size=e)
+        f1 = q.name.lower()
+        ext = None
+        for g1 in sorted(self.EXTRACTION_COMMANDS.keys(), key=len, reverse=True):
+            if f1.endswith(g1):
+                ext = g1
+                break
+        if not ext:
+            e1.status = 'skipped'
+            e1.error_message = f'Unsupported format: {q.suffix}'
+            e1.extraction_time = time.time() - d1
+            return e1
+        o = self.EXTRACTION_COMMANDS[ext][0]
+        if not shutil.which(o):
+            e1.status = 'failed'
+            e1.error_message = f"Tool '{o}' not found"
+            e1.extraction_time = time.time() - d1
+            return e1
+        try:
+            h1 = self._check_if_single_file_archive(q)
+            b = self._get_output_directory(q) if h1 else self.current_dir
+            if h1:
+                b.mkdir(exist_ok=True)
+            cmd = list(self.EXTRACTION_COMMANDS[ext])
+            if ext == '.7z':
+                cmd.append(str(q))
+                cmd[-2] = f'-o{b}'
+            elif ext == '.zip':
+                cmd.extend([str(q), '-d', str(b)])
+            elif ext in ['.tar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tgz', '.tbz2', '.txz']:
+                cmd.extend(['-C', str(b), str(q)])
+            elif ext == '.rar':
+                cmd.extend([str(q), str(b)])
+            elif ext == '.lz4':
+                i1 = b / q.stem
+                cmd.extend([str(q), str(i1)])
+            elif ext in ['.gz', '.bz2', '.xz', '.lzma', '.zst']:
+                j1 = b / q.name
+                shutil.copy2(q, j1)
+                cmd.append(str(j1))
+                cwd = b
+                h = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=300)
+                if h.returncode == 0:
+                    j1.unlink(missing_ok=True)
+                    e1.status = 'success'
+                    e1.output_dir = b
+                    e1.extracted_files = self._count_files(b)
+                    e1.extraction_time = time.time() - d1
+                    q.unlink()
+                    return e1
+                else:
+                    raise subprocess.CalledProcessError(h.returncode, cmd, output=h.stdout, stderr=h.stderr)
+            else:
+                cmd.append(str(q))
+                if b != self.current_dir:
+                    cmd.append(str(b))
+            if ext not in ['.gz', '.bz2', '.xz', '.lzma', '.zst']:
+                h = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=self.current_dir)
+                if h.returncode != 0:
+                    raise subprocess.CalledProcessError(h.returncode, cmd, output=h.stdout, stderr=h.stderr)
+            if h1:
+                k1 = self._count_files(b)
+            else:
+                k1 = self._count_files(self.current_dir)
+            e1.status = 'success'
+            e1.output_dir = b if h1 else None
+            e1.extracted_files = k1
+            e1.extraction_time = time.time() - d1
+            try:
+                q.unlink()
+            except Exception as e:
+                e1.error_message = f"Extracted but couldn't remove original: {e}"
+        except subprocess.CalledProcessError as e:
+            e1.error_message = e.stderr.strip() if e.stderr else str(e)
+            e1.extraction_time = time.time() - d1
+        except subprocess.TimeoutExpired:
+            e1.error_message = 'Extraction timed out (300s)'
+            e1.extraction_time = time.time() - d1
+        except Exception as e:
+            e1.error_message = str(e)
+            e1.extraction_time = time.time() - d1
+        return e1
+def l1(b1):
+    m1 = {'.7z', '.zip', '.rar', '.tar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tgz', '.tbz2', '.txz', '.gz', '.bz2', '.xz', '.lz4', '.lzma', '.zst', '.cab', '.arj', '.ace'}
+    n1 = []
+    for o1 in b1.iterdir():
+        if o1.is_file():
+            p1 = o1.name.lower()
+            for ext in m1:
+                if p1.endswith(ext):
+                    n1.append(o1)
+                    break
+    return n1
+def q1():
+    l = Path.cwd()
+    print(f'Scanning for archivesin: {l}')
+    n1 = l1(l)
+    if not n1:
+        print('No archive files found.')
+        return 0
+    print(f'Found {len(n1)} archive(s):')
+    for r1 in n1:
+        f = r1.stat().st_size / (1024 * 1024)
+        print(f'  • {r1.name} ({f:.1f} MB)')
+    s1 = 8
+    print(f'Processing with {s1} parallel worker(s)...')
+    t1 = i(l)
+    u1 = []
+    d1 = time.time()
+    with Pool(processes=s1) as v1:
+        w1 = []
+        for r1 in n1:
+            x1 = v1.apply_async(t1.extract_archive, (r1,))
+            w1.append((x1, r1))
+        for x1, r1 in w1:
+            try:
+                h = x1.get()
+                u1.append(h)
+                print(str(h))
+            except Exception as e:
+                logger.error(f'✗ {r1.name} - Worker error: {e}')
+    y1 = time.time() - d1
+    z1 = sum((1 for r in u1 if r.status == 'success'))
+    a2 = sum((1 for r in u1 if r.status == 'failed'))
+    b2 = sum((1 for r in u1 if r.status == 'skipped'))
+    print(f"\n{'=' * 40}")
+    print('SUMMARY')
+    print(f"{'=' * 40}")
+    print(f'Total archives: {len(n1)}')
+    print(f'✓ Successfully extracted: {z1}')
+    print(f'✗ Failed: {a2}')
+    print(f'○ Skipped: {b2}')
+    print(f'Total time: {y1:.1f}s')
+    if u1:
+        print('\nDetailed results:')
+        for h in u1:
+            print(f'  {h}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: auto_extract.py ---
+import bz2
+import gzip
+import lzma
+import multiprocessing as mp
+import pathlib
+import tarfile
+import zipfile
+import brotli
+import lz4.frame
+import py7zr
+import zstandard as zstd
+c2 = {'gz': gzip.open, 'xz': lzma.open, 'bz2': bz2.open, '7z': py7zr.SevenZipFile, 'lz4': lz4.frame.open, 'br': brotli.decompress, 'zst': k5.ZstdDecompressor, 'zip': zipfile.ZipFile, 'whl': zipfile.ZipFile}
+d2 = ['tar.gz', 'tar.xz', 'tar.bz2', 'tar.7z', 'tar.zst', 'tar.br', 'tar.lz4', 'tar']
+def e2(f2):
+    print(f'Extracting: {f2}')
+    try:
+        if f2.suffix in c2:
+            if f2.suffix == '.gz':
+                with gzip.open(f2, 'rb') as g2, open(f2.with_suffix(''), 'wb') as h2:
+                    h2.write(g2.read())
+            elif f2.suffix == '.xz':
+                with lzma.open(f2, 'rb') as g2, open(f2.with_suffix(''), 'wb') as h2:
+                    h2.write(g2.read())
+            elif f2.suffix == '.bz2':
+                with bz2.open(f2, 'rb') as g2, open(f2.with_suffix(''), 'wb') as h2:
+                    h2.write(g2.read())
+            elif f2.suffix == '.7z':
+                with py7zr.SevenZipFile(f2, mode='r') as r1:
+                    r1.extractall(path=f2.parent)
+            elif f2.suffix == '.lz4':
+                with lz4.frame.open(f2, mode='rb') as g2, open(f2.with_suffix(''), 'wb') as h2:
+                    h2.write(g2.read())
+            elif f2.suffix == '.br':
+                with open(f2, 'rb') as g2:
+                    i2 = g2.read()
+                    j2 = brotli.decompress(i2)
+                    with open(f2.with_suffix(''), 'wb') as h2:
+                        h2.write(j2)
+            elif f2.suffix == '.zst':
+                with open(f2, 'rb') as g2:
+                    k2 = k5.ZstdDecompressor()
+                    with open(f2.with_suffix(''), 'wb') as h2:
+                        k2.copy_stream(g2, h2)
+            elif f2.suffix == '.zip' or f2.suffix == '.whl':
+                with zipfile.ZipFile(f2, 'r') as l2:
+                    l2.extractall(f2.parent)
+        elif f2.suffix in d2:
+            with tarfile.open(f2, 'r:*') as m2:
+                m2.extractall(path=f2.parent)
+    except Exception as e:
+        print(f'Failed to extract {f2}: {e}')
+def q1():
+    l = pathlib.Path('.')
+    n2 = list(l.rglob('*.*'))
+    n2 = [f for f in n2 if f.suffix[1:] in c2 or f.suffix in d2]
+    with mp.Pool(processes=mp.cpu_count()) as v1:
+        v1.map(e2, n2)
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: ex_tar.py ---
+import argparse
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+import zstandard as zstd
+def o2(f2):
+    return sum((f.stat().st_size for f in f2.rglob('*') if f.is_file()))
+def p2(q, q2):
+    r2 = q2 / q.stem
+    with Path(q).open('rb') as s2:
+        k2 = k5.ZstdDecompressor()
+        with Path(r2).open('wb') as i1:
+            k2.copy_stream(s2, i1)
+    return r2
+def t2(q, q2):
+    with Path(q).open('rb') as s2:
+        k2 = k5.ZstdDecompressor()
+        with tempfile.NamedTemporaryFile(suffix='.tar', delete=False) as u2:
+            k2.copy_stream(s2, u2)
+            v2 = u2.name
+    try:
+        with tarfile.open(v2, 'r') as tar:
+            tar.extractall(path=q2, filter='data')
+    finally:
+        Path(v2).unlink()
+def w2(q, q2):
+    with tarfile.open(q, 'r:xz') as tar:
+        tar.extractall(path=q2, filter='data')
+def x2(q, y2=False, z2=False, a3=False):
+    if not q.exists():
+        if not a3:
+            print(f'Error: File {q} does not exist')
+        return (False, 0, 0)
+    b3 = q.stat().st_size
+    q2 = q.parent
+    f1 = q.name
+    c = []
+    c3 = f1.endswith('.tar.zst')
+    d3 = f1.endswith('.tar.xz')
+    e3 = f1.endswith('.zst') and (not c3)
+    if not (c3 or d3 or e3):
+        if not a3:
+            print(f'Skipping unsupported file: {q} (not .zst, .tar.zst, or .tar.xz)')
+        return (False, 0, 0)
+    try:
+        if y2:
+            if not a3:
+                print(f'[DRY RUN] Would extract: {q}')
+            return (True, b3, 0)
+        if not a3:
+            print(f'Extracting: {q}')
+        if e3:
+            i1 = p2(q, q2)
+            c = [i1]
+        elif c3:
+            t2(q, q2)
+            c = ['multiple files (tar contents)']
+        elif d3:
+            w2(q, q2)
+            c = ['multiple files (tar contents)']
+        f3 = 0
+        if c and c[0] != 'multiple files (tar contents)':
+            for f2 in c:
+                if f2.exists():
+                    f3 += f2.stat().st_size
+        else:
+            g3 = time.time()
+            for o1 in q2.rglob('*'):
+                if o1.is_file() and o1 != q and (g3 - o1.stat().st_ctime < 60):
+                    f3 += o1.stat().st_size
+        if not z2:
+            q.unlink()
+            if not a3:
+                print(f'  ✓ Extracted and removed original: {f1}')
+        elif not a3:
+            print(f'  ✓ Extracted (kept original): {f1}')
+        return (True, b3, f3)
+    except Exception as e:
+        if not a3:
+            print(f'  ✗ Error processing {q}: {e}')
+        return (False, 0, 0)
+def l1(b1):
+    b1 = Path(b1).resolve()
+    n1 = [h3 for h3 in b1.rglob('*.zst') if not h3.name.endswith('.tar.zst')]
+    n1.extend(b1.rglob('*.tar.zst'))
+    n1.extend(b1.rglob('*.tar.xz'))
+    return sorted(set(n1))
+def q1():
+    i3 = argparse.ArgumentParser(description='Extract .zst, .tar.zst, and .tar.xz archives.\nIf a filename is provided, process only that file.\nIf no argument, recursively search current directory.', formatter_class=argparse.RawDescriptionHelpFormatter)
+    i3.add_argument('target', nargs='?', default=None, help='File to extract or directory to search (default: current directory)')
+    i3.add_argument('--dry-run', '-n', action='store_true', help='Show what would be done without actually extracting')
+    i3.add_argument('--keep-original', '-k', action='store_true', help='Keep original archive files after extraction')
+    i3.add_argument('--quiet', '-q', action='store_true', help='Suppress progress output')
+    j3 = i3.parse_args()
+    if j3.target:
+        k3 = Path(j3.target).resolve()
+        if not k3.exists():
+            print(f'Error: {k3} does not exist')
+            return 1
+        l3 = k3.is_file()
+    else:
+        k3 = Path.cwd().resolve()
+        l3 = False
+    if l3:
+        if not j3.quiet:
+            print(f'Processing single file: {k3}')
+        m3 = k3.parent
+        n3 = o2(m3)
+        o3, p3, q3 = x2(k3, j3.dry_run, j3.keep_original, j3.quiet)
+        if not j3.dry_run and o3:
+            r3 = o2(m3)
+            s3 = r3 - n3
+            t3 = s3 / (1024 * 1024)
+            print(f"\n{'=' * 40}")
+            print(f'Summary for {k3.name}:')
+            print(f'  Archive size: {p3 / (1024 * 1024):.2f} MB')
+            print(f'  Extracted size: {q3 / (1024 * 1024):.2f} MB')
+            if p3 > 0:
+                print(f'  Compression ratio: {q3 / p3:.2f}:1')
+            print(f'  Directory size change: {t3:+.2f} MB')
+        elif j3.dry_run:
+            print(f"\n{'=' * 40}")
+            print(f'DRY RUN: Would extract {k3.name}')
+        return 0 if o3 else 1
+    if not j3.quiet:
+        print(f'Recursively scanning {k3} for archives...')
+    n1 = l1(k3)
+    if not n1:
+        print('No supported archives found.')
+        return 0
+    if not j3.quiet:
+        print(f'Found {len(n1)} archives to process')
+        u3 = sum((1 for a in n1 if a.suffix == '.zst' and (not a.name.endswith('.tar.zst'))))
+        v3 = sum((1 for a in n1 if a.name.endswith('.tar.zst')))
+        w3 = sum((1 for a in n1 if a.name.endswith('.tar.xz')))
+        if u3:
+            print(f'  - Standalone .zst: {u3}')
+        if v3:
+            print(f'  - .tar.zst: {v3}')
+        if w3:
+            print(f'  - .tar.xz: {w3}')
+    n3 = o2(k3)
+    x3 = 0
+    y3 = 0
+    z3 = 0
+    a4 = 0
+    for r1 in n1:
+        o3, p3, q3 = x2(r1, j3.dry_run, j3.keep_original, j3.quiet)
+        if o3:
+            x3 += 1
+            z3 += p3
+            a4 += q3
+        else:
+            y3 += 1
+    if not j3.dry_run:
+        r3 = o2(k3)
+        s3 = r3 - n3
+        t3 = s3 / (1024 * 1024)
+        print(f"\n{'=' * 40}")
+        print('Summary:')
+        print(f'  Processed: {x3} archives')
+        if y3 > 0:
+            print(f'  Failed: {y3} archives')
+        print(f'  Initial directory size: {n3 / (1024 * 1024):.2f} MB')
+        print(f'  Final directory size:   {r3 / (1024 * 1024):.2f} MB')
+        print(f'  Size change:            {t3:+.2f} MB')
+        if z3 > 0:
+            b4 = a4 / z3
+            print(f'  Average compression ratio: {b4:.2f}:1')
+            print(f'  Space saved by compression: {z3 / (1024 * 1024):.2f} MB')
+    else:
+        print(f"\n{'=' * 40}")
+        print('DRY RUN SUMMARY:')
+        print(f'  Would process: {len(n1)} archives')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: extar.py ---
+import argparse
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+import zstd
+def o2(f2):
+    return sum((f.stat().st_size for f in f2.rglob('*') if f.is_file()))
+def p2(q, q2):
+    r2 = q2 / q.stem
+    with Path(q).open('rb') as s2:
+        k2 = k5.ZstdDecompressor()
+        with Path(r2).open('wb') as i1:
+            k2.copy_stream(s2, i1)
+    return r2
+def t2(q, q2):
+    with Path(q).open('rb') as s2:
+        k2 = k5.ZstdDecompressor()
+        with tempfile.NamedTemporaryFile(suffix='.tar', delete=False) as u2:
+            k2.copy_stream(s2, u2)
+            v2 = u2.name
+    try:
+        with tarfile.open(v2, 'r') as tar:
+            tar.extractall(path=q2, filter='fully_trusted')
+    finally:
+        Path(v2).unlink()
+def w2(q, q2):
+    with tarfile.open(q, 'r:xz') as tar:
+        tar.extractall(path=q2, filter='data')
+def x2(q, y2=False, a3=False):
+    if not q.exists():
+        if not a3:
+            print(f'Error: File {q} does not exist')
+        return (False, 0, 0)
+    b3 = q.stat().st_size
+    q2 = q.parent
+    f1 = q.name
+    c3 = f1.endswith('.tar.zst')
+    d3 = f1.endswith('.tar.xz')
+    e3 = f1.endswith('.zst') and (not c3)
+    if not (c3 or d3 or e3):
+        if not a3:
+            print(f'Skipping unsupported file: {q}')
+        return (False, 0, 0)
+    try:
+        if y2:
+            if not a3:
+                print(f'[DRY RUN] Would extract: {f1}')
+            return (True, b3, 0)
+        if e3:
+            i1 = p2(q, q2)
+            c = [i1]
+        elif c3:
+            t2(q, q2)
+            c = ['multiple files (tar contents)']
+        elif d3:
+            w2(q, q2)
+            c = ['multiple files (tar contents)']
+        f3 = 0
+        if c and c[0] != 'multiple files (tar contents)':
+            for f2 in c:
+                if f2.exists():
+                    f3 += f2.stat().st_size
+        else:
+            g3 = time.time()
+            for o1 in q2.rglob('*'):
+                if o1.is_file() and o1 != q and (g3 - o1.stat().st_ctime < 60):
+                    f3 += o1.stat().st_size
+        q.unlink()
+        if not a3:
+            print(f'Extracted: {f1} -> original removed')
+        return (True, b3, f3)
+    except Exception as e:
+        if not a3:
+            print(f'Error processing {f1}: {e}')
+        return (False, 0, 0)
+def l1(b1):
+    b1 = Path(b1).resolve()
+    n1 = [h3 for h3 in b1.rglob('*.zst') if not h3.name.endswith('.tar.zst')]
+    n1.extend(b1.rglob('*.tar.zst'))
+    n1.extend(b1.rglob('*.tar.xz'))
+    return sorted(set(n1))
+def q1():
+    i3 = argparse.ArgumentParser(description='Extract .zst, .tar.zst, and .tar.xz archives.\nIf a filename is provided, process only that file.\nIf no argument, recursively search current directory.\nOriginal archives are automatically removed after successful extraction.', formatter_class=argparse.RawDescriptionHelpFormatter)
+    i3.add_argument('target', nargs='?', default=None, help='File to extract or directory to search (default: current directory)')
+    i3.add_argument('--dry-run', '-n', action='store_true', help='Show what would be done without actually extracting')
+    i3.add_argument('--quiet', '-q', action='store_true', help='Suppress all output except errors and final summary')
+    j3 = i3.parse_args()
+    if j3.target:
+        k3 = Path(j3.target).resolve()
+        if not k3.exists():
+            print(f'Error: {k3} does not exist')
+            return 1
+        l3 = k3.is_file()
+    else:
+        k3 = Path.cwd().resolve()
+        l3 = False
+    if l3:
+        if not j3.quiet:
+            print(f'Processing: {k3.name}')
+        m3 = k3.parent
+        n3 = o2(m3)
+        o3, p3, q3 = x2(k3, j3.dry_run, j3.quiet)
+        if o3 and (not j3.dry_run):
+            r3 = o2(m3)
+            s3 = r3 - n3
+            t3 = s3 / (1024 * 1024)
+            print('\nSummary:')
+            print(f'  Archive size: {p3 / (1024 * 1024):.2f} MB')
+            print(f'  Extracted size: {q3 / (1024 * 1024):.2f} MB')
+            if p3 > 0:
+                print(f'  Compression ratio: {q3 / p3:.2f}:1')
+            print(f'  Directory size change: {t3:+.2f} MB')
+        return 0 if o3 else 1
+    if not j3.quiet:
+        print(f'Scanning {k3} for archives...')
+    n1 = l1(k3)
+    if not n1:
+        print('No supported archives found.')
+        return 0
+    if not j3.quiet:
+        print(f'Found {len(n1)} archives')
+    n3 = o2(k3)
+    x3 = 0
+    y3 = 0
+    z3 = 0
+    a4 = 0
+    for r1 in n1:
+        o3, p3, q3 = x2(r1, j3.dry_run, j3.quiet)
+        if o3:
+            x3 += 1
+            z3 += p3
+            a4 += q3
+        else:
+            y3 += 1
+    if not j3.dry_run:
+        r3 = o2(k3)
+        s3 = r3 - n3
+        t3 = s3 / (1024 * 1024)
+        print(f"\n{'=' * 40}")
+        print('Summary:')
+        print(f'  Processed: {x3} archives')
+        if y3 > 0:
+            print(f'  Failed: {y3} archives')
+        print(f'  Initial size: {n3 / (1024 * 1024):.2f} MB')
+        print(f'  Final size:   {r3 / (1024 * 1024):.2f} MB')
+        print(f'  Size change:  {t3:+.2f} MB')
+        if z3 > 0:
+            b4 = a4 / z3
+            print(f'  Compression ratio: {b4:.2f}:1')
+    else:
+        print(f"\n{'=' * 40}")
+        print(f'DRY RUN: Would process {len(n1)} archives')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: fixextract.py ---
+import shutil
+import sys
+from pathlib import Path
+def c4(d4, y2=True, e4=True):
+    f4 = 0
+    for g4 in sorted(d4.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+        if not g4.is_dir():
+            continue
+        h4 = list(g4.iterdir())
+        if len(h4) != 1:
+            continue
+        i4 = h4[0]
+        if not i4.is_file():
+            continue
+        if i4.name != g4.name:
+            continue
+        j4 = g4.parent
+        k4 = j4 / g4.name
+        if e4:
+            print(f'\n📂 Found: {g4}/')
+            print(f'   File: {i4}')
+            print(f'   Target: {k4}')
+        if k4.exists():
+            if k4.is_dir():
+                if not y2:
+                    l4 = j4 / (g4.name + '.old')
+                    shutil.move(str(g4), str(l4))
+                    shutil.move(str(l4 / g4.name), str(k4))
+                    l4.rmdir()
+                    if e4:
+                        print(f'   ✅ Replaced directory with file: {k4}')
+                    f4 += 1
+                else:
+                    print(f'   🔄 Would replace directory {g4}/ with file')
+            elif not y2:
+                k4.unlink()
+                shutil.move(str(i4), str(k4))
+                g4.rmdir()
+                if e4:
+                    print(f'   ✅ Replaced file: {k4}')
+                f4 += 1
+            else:
+                print(f'   🔄 Would replace existing file: {k4}')
+        elif not y2:
+            shutil.move(str(i4), str(k4))
+            g4.rmdir()
+            if e4:
+                print(f'   ✅ Moved: {i4} -> {k4}')
+            f4 += 1
+        else:
+            print(f'   🔄 Would move: {i4} -> {k4}')
+    return f4
+def q1():
+    import argparse
+    i3 = argparse.ArgumentParser(description='Fix directories containing a file with the same name (mis-extracted .zst files)')
+    i3.add_argument('-d', '--dir', default='.', help='Root directory to scan')
+    i3.add_argument('--fix', action='store_true', help='Apply fixes (default: dry-run)')
+    i3.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    j3 = i3.parse_args()
+    m4 = Path(j3.dir).resolve()
+    if not m4.exists():
+        print(f'❌ Error: {m4} does not exist')
+        sys.exit(1)
+    print(f'🔍 Scanning: {m4}')
+    if not j3.fix:
+        print('🔍 DRY RUN – no changes will be made\n')
+    else:
+        print('🔧 Fixing mis-extracted files...\n')
+    f4 = c4(m4, dry_run=not j3.fix, verbose=j3.verbose)
+    print(f'\n📊 Summary: {f4} issue(s) processed.')
+    if not j3.fix:
+        print('💡 Run with --fix to apply changes.')
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: subdir.py ---
+import shutil
+import tarfile
+import zipfile
+from pathlib import Path
+import py7zr
+def n4(o4):
+    if not o4.exists():
+        o4.mkdir()
+        return o4
+    i = 1
+    while True:
+        p4 = o4.with_name(f'{o4.name}_{i}')
+        if not p4.exists():
+            p4.mkdir()
+            return p4
+        i += 1
+def q4(r1, r4):
+    s4 = r1.name.lower()
+    try:
+        if s4.endswith(('.tar.gz', '.tgz')):
+            with tarfile.open(r1, 'r:gz') as tar:
+                tar.extractall(r4, filter='data')
+            return True
+        if s4.endswith(('.tar.bz2', '.tbz2')):
+            with tarfile.open(r1, 'r:bz2') as tar:
+                tar.extractall(r4)
+            return True
+        if s4.endswith(('.tar.xz', '.txz')):
+            with tarfile.open(r1, 'r:xz') as tar:
+                tar.extractall(r4)
+            return True
+        if s4.endswith('.tar'):
+            with tarfile.open(r1, 'r:') as tar:
+                tar.extractall(r4)
+            return True
+        if r1.suffix == '.whl' or s4.endswith('.zip'):
+            with zipfile.ZipFile(r1, 'r') as l2:
+                l2.extractall(r4)
+            return True
+    except (tarfile.TarError, zipfile.BadZipFile, py7zr.exceptions.Bad7zFile, OSError, EOFError, FileNotFoundError):
+        return False
+def q1():
+    cwd = Path.cwd()
+    for o1 in cwd.iterdir():
+        if not o1.is_file():
+            continue
+        if '_' in o1.stem:
+            t4 = o1.stem.index('_')
+        else:
+            t4 = 8
+        u4 = cwd / o1.stem[:t4].replace('.', '').replace('-', '').replace('_', '')
+        r4 = n4(u4)
+        v4 = r4 / o1.name
+        shutil.move(str(o1), v4)
+        ok = q4(v4, r4)
+        if ok:
+            v4.unlink()
+            print(f'[OK] Unzipped and removed: {o1.name}')
+        else:
+            print(f'[SKIP] Not a zip or unzip failed: {o1.name}')
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: subdir2.py ---
+import shutil
+import subprocess
+from pathlib import Path
+def n4(o4):
+    if not o4.exists():
+        o4.mkdir()
+        return o4
+    i = 1
+    while True:
+        p4 = o4.with_name(f'{o4.name}_{i}')
+        if not p4.exists():
+            p4.mkdir()
+            return p4
+        i += 1
+def q4(r1, r4):
+    try:
+        h = subprocess.run(['unzip', '-o', r1.name], cwd=r4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        return h.returncode == 0
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+def q1():
+    cwd = Path.cwd()
+    for o1 in cwd.iterdir():
+        if not o1.is_file():
+            continue
+        u4 = cwd / o1.stem
+        r4 = n4(u4)
+        v4 = r4 / o1.name
+        shutil.move(str(o1), v4)
+        ok = q4(v4, r4)
+        if ok:
+            v4.unlink()
+            print(f'[OK] Unzipped and removed: {o1.name}')
+        else:
+            print(f'[SKIP] Not a zip or unzip failed: {o1.name}')
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: u7z.py ---
+import logging
+import multiprocessing as mp
+import tarfile
+from pathlib import Path
+import py7zr
+w4 = Path.cwd()
+x4 = w4 / 'decompress.log'
+y4 = max(1, mp.cpu_count() - 1)
+def z4():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(processName)s %(message)s', handlers=[logging.FileHandler(x4, encoding='utf-8'), logging.StreamHandler()])
+def a5(u4):
+    for p in u4.iterdir():
+        if p.is_file() and p.suffix in {'.tar', '.7z'}:
+            yield p
+def b5(q):
+    return q.parent / q.stem
+def c5(q):
+    return q.parent / q.stem
+def d5(q, r4):
+    logging.info('Extracting TAR: %s -> %s', q, r4)
+    r4.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(q, 'r') as tar:
+        tar.extractall(path=r4)
+def e5(q, r4):
+    logging.info('Extracting 7Z: %s -> %s', q, r4)
+    r4.mkdir(parents=True, exist_ok=True)
+    with py7zr.SevenZipFile(q, mode='r') as r1:
+        r1.extractall(path=r4)
+def f5(f2):
+    if f2.is_file() or f2.is_symlink():
+        f2.unlink(missing_ok=True)
+        return
+    if f2.is_dir():
+        for g5 in f2.iterdir():
+            f5(g5)
+        f2.rmdir()
+class h5:
+    def __init__(self, src, dst, ok, i5=None):
+        self.src = src
+        self.dst = dst
+        self.ok = ok
+        self.error = i5
+def x2(q):
+    try:
+        if q.suffix == '.tar':
+            r4 = b5(q)
+            if r4.exists():
+                msg = 'error: target dir exists'
+                raise FileExistsError(msg)
+            d5(q, r4)
+        elif q.suffix == '.7z':
+            r4 = c5(q)
+            if r4.exists():
+                msg = 'error: target exists'
+                raise FileExistsError(msg)
+            e5(q, r4)
+        else:
+            msg = 'error .'
+            raise ValueError(msg)
+        f5(q)
+        return h5(str(q), str(r4), True)
+    except Exception as e:
+        logging.exception('Failed to decompress %s', q)
+        return h5(str(q), '', False, str(e))
+def q1():
+    z4()
+    logging.info('Starting decompression in %s', w4)
+    logging.info('Workers: %d', y4)
+    n1 = list(a5(w4))
+    logging.info('Found %d archives', len(n1))
+    u1 = []
+    if n1:
+        with mp.Pool(processes=min(y4, len(n1))) as v1:
+            u1.extend(v1.map(x2, n1))
+    o3 = sum((1 for r in u1 if r.ok))
+    j5 = len(u1) - o3
+    logging.info('Completed. success=%d fail=%d', o3, j5)
+    for r in u1:
+        if not r.ok:
+            logging.error('FAILED: %s | %s', r.src, r.error)
+if __name__ == '__main__':
+    mp.freeze_support()
+    raise SystemExit(q1())
+
+# --- File: uxr.py ---
+import sys
+from pathlib import Path
+import py7zr
+from joblib import Parallel, delayed
+from tqdm import tqdm
+try:
+    import zstandard as zstd
+except ImportError:
+    k5 = None
+try:
+    from brotli import decompress as brotli_decompress
+except ImportError:
+    l5 = None
+def m5(src, dst, n5=1024 * 1024):
+    while True:
+        o5 = src.read(n5)
+        if not o5:
+            break
+        dst.write(o5)
+class i:
+    c2 = {'.gz': 'gzip', '.xz': 'xz', '.zip': 'zip', '.whl': 'zip', '.br': 'brotli', '.zst': 'zstandard', '.7z': 'sevenz', '.tar': 'tar', '.tar.gz': 'tar_gz', '.tar.xz': 'tar_xz', '.tar.bz2': 'tar_bz2', '.tgz': 'tar_gz', '.txz': 'tar_xz'}
+    def __init__(self, p5=True, e4=True):
+        self.remove_after = p5
+        self.verbose = e4
+        self.stats = {'processed': 0, 'success': 0, 'failed': 0, 'skipped': 0}
+    def q5(self, r5, s5='=', t5=80):
+        print(f'\n{s5 * t5}')
+        print(f' {r5} '.center(t5, s5))
+        print(f'{s5 * t5}\n')
+    def u5(self, r1, v5, w5=''):
+        x5 = {'SUCCESS': '\x1b[92m', 'FAILED': '\x1b[91m', 'SKIPPED': '\x1b[93m', 'PROCESSING': '\x1b[94m', 'RESET': '\x1b[0m'}
+        y5 = x5.get(v5.upper(), x5['RESET'])
+        z5 = {'SUCCESS': '✅', 'FAILED': '❌', 'SKIPPED': '⏭️', 'PROCESSING': '🔄'}.get(v5.upper(), '➡️')
+        msg = f'{z5} {r1.name:<40} [{v5:<8}]'
+        if w5:
+            msg += f' {w5}'
+        print(f"{y5}{msg}{x5['RESET']}")
+    def a6(self, r1):
+        for ext in ['.tar.gz', '.tar.xz', '.tar.bz2', '.tgz', '.txz']:
+            if str(r1).endswith(ext):
+                return self.SUPPORTED_EXTENSIONS.get(ext)
+        if r1.suffix:
+            if r1.suffix == '.zst':
+                return 'zstandard'
+            return self.SUPPORTED_EXTENSIONS.get(r1.suffix)
+        return None
+    def b6(self, r1, b):
+        import tarfile
+        try:
+            with tarfile.open(r1, 'r:*') as tar:
+                tar.extractall(path=b)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'Tar extraction error: {e}')
+            return False
+    def c6(self, r1, b):
+        try:
+            import gzip
+            i1 = b / r1.stem
+            with gzip.open(r1, 'rb') as g2, open(i1, 'wb') as h2:
+                m5(g2, h2)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'Gzip error: {e}')
+            return False
+    def d6(self, r1, b):
+        try:
+            import lzma
+            i1 = b / r1.stem
+            with lzma.open(r1, 'rb') as g2, open(i1, 'wb') as h2:
+                m5(g2, h2)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'XZ error: {e}')
+            return False
+    def e6(self, r1, b):
+        try:
+            import zipfile
+            with zipfile.ZipFile(r1, 'r') as l2:
+                l2.extractall(path=b)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'ZIP error: {e}')
+            return False
+    def f6(self, r1, b):
+        if l5 is None:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', 'brotli library not installed')
+            return False
+        try:
+            i1 = b / r1.stem
+            with open(r1, 'rb') as g2:
+                j2 = l5(g2.read())
+            with open(i1, 'wb') as h2:
+                h2.write(j2)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'Brotli error: {e}')
+            return False
+    def g6(self, r1, b):
+        if k5 is None:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', 'zstandard library not installed')
+            return False
+        try:
+            h6 = r1.stem
+            if h6.endswith('.tar'):
+                h6 = h6[:-4]
+                i1 = b / h6
+                import tarfile
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.tar') as tmp:
+                    i6 = Path(tmp.name)
+                    with open(r1, 'rb') as g2:
+                        k2 = k5.ZstdDecompressor()
+                        with k2.stream_reader(g2) as j6:
+                            m5(j6, tmp)
+                        tmp.flush()
+                    try:
+                        with tarfile.open(i6, 'r') as tar:
+                            tar.extractall(path=b)
+                        i6.unlink()
+                        return True
+                    except Exception as e:
+                        i6.unlink()
+                        if self.verbose:
+                            self._print_status(r1, 'FAILED', f'Tar extraction from .zst failed: {e}')
+                        return False
+            else:
+                i1 = b / h6
+                with open(r1, 'rb') as g2:
+                    k2 = k5.ZstdDecompressor()
+                    with k2.stream_reader(g2) as j6, open(i1, 'wb') as h2:
+                        m5(j6, h2)
+                return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'Zstandard error: {e}')
+            return False
+    def k6(self, r1, b):
+        try:
+            with py7zr.SevenZipFile(r1, mode='r') as sz:
+                sz.extractall(path=b)
+            return True
+        except Exception as e:
+            if self.verbose:
+                self._print_status(r1, 'FAILED', f'7z error: {e}')
+            return False
+    def l6(self, q):
+        r1 = Path(q)
+        if not r1.exists() or not r1.is_file():
+            return (r1, False, 'File not found')
+        m6 = self._detect_format(r1)
+        if not m6:
+            return (r1, False, f'Unsupported format: {r1.suffix}')
+        z = r1.stem
+        if str(r1).endswith('.tar.zst'):
+            z = r1.stem.removesuffix('.tar')
+        elif m6.startswith('tar_') and z.endswith('.tar'):
+            z = z[:-4]
+        b = r1.parent / z
+        b.mkdir(exist_ok=True)
+        if m6 == 'zstandard' and str(r1).endswith('.zst'):
+            pass
+        n6 = {'tar': self._extract_tar, 'tar_gz': self._extract_tar, 'tar_xz': self._extract_tar, 'tar_bz2': self._extract_tar, 'gzip': self._extract_gz, 'xz': self._extract_xz, 'zip': self._extract_zip, 'brotli': self._extract_brotli, 'zstandard': self._extract_zstandard, 'sevenz': self._extract_7z}
+        try:
+            t1 = n6.get(m6)
+            if not t1:
+                return (r1, False, f'No extractor for {m6}')
+            if self.verbose:
+                self._print_status(r1, 'PROCESSING', f'-> {b}/')
+            o3 = t1(r1, b)
+            if o3 and self.remove_after:
+                r1.unlink()
+                if self.verbose:
+                    self._print_status(r1, 'SUCCESS', f'Removed: {r1.name}')
+            elif o3 and self.verbose:
+                self._print_status(r1, 'SUCCESS', f'Extracted to: {b}')
+            return (r1, o3, None if o3 else 'Extraction failed')
+        except Exception as e:
+            return (r1, False, str(e))
+    def o6(self, d4=Path.cwd(), p6=-1):
+        self._print_header(f'ARCHIVE EXTRACTOR - {d4}', '=')
+        n1 = []
+        for ext in self.SUPPORTED_EXTENSIONS:
+            if ext.startswith('.tar.'):
+                n1.extend(d4.rglob(f'*{ext}'))
+            elif ext == '.tar':
+                continue
+            else:
+                n1.extend(d4.rglob(f'*{ext}'))
+        n1.extend(d4.rglob('*.zst'))
+        n1.extend(d4.rglob('*.whl'))
+        n1 = sorted(set(n1))
+        self.stats['total'] = len(n1)
+        if not n1:
+            print('📭 No archive files found to extract.')
+            return self.stats
+        print(f'📦 Found {len(n1)} archive(s) to process')
+        print(f"⚡ Using {(p6 if p6 > 0 else 'all')} CPU core(s)\n")
+        if any((str(a).endswith('.zst') for a in n1)) and k5 is None:
+            print('⚠️  Warning: zstandard library not installed. Install with: pip install zstandard')
+        if any((str(a).endswith('.br') for a in n1)) and l5 is None:
+            print('⚠️  Warning: brotli library not installed. Install with: pip install brotli')
+        u1 = Parallel(n_jobs=p6, prefer='threads')((delayed(self.extract_single)(r1) for r1 in tqdm(n1, desc='Extracting')))
+        for r1, o3, i5 in u1:
+            self.stats['processed'] += 1
+            if o3:
+                self.stats['success'] += 1
+            elif i5 and 'Unsupported' in str(i5):
+                self.stats['skipped'] += 1
+            else:
+                self.stats['failed'] += 1
+                if i5 and self.verbose:
+                    self._print_status(r1, 'FAILED', f'Error: {i5}')
+        self._print_summary()
+        return self.stats
+    def q6(self):
+        self._print_header('EXTRACTION SUMMARY', '-')
+        r6 = self.stats['total']
+        if r6 == 0:
+            print('No archives processed.')
+            return
+        o3 = self.stats['success']
+        a2 = self.stats['failed']
+        b2 = self.stats['skipped']
+        print(f'📊 Total processed:  {r6}')
+        print(f'✅ Successful:       {o3} ({o3 / r6 * 40:.1f}%)')
+        print(f'❌ Failed:           {a2} ({a2 / r6 * 40:.1f}%)')
+        print(f'⏭️  Skipped:          {b2} ({b2 / r6 * 40:.1f}%)')
+        print(f"🗑️  Remove original:  {('Enabled' if self.remove_after else 'Disabled')}")
+        if a2 > 0:
+            print('\n⚠️  Some archives failed to extract. Check errors above.')
+        self._print_header('FINISHED', '-')
+def q1():
+    import argparse
+    i3 = argparse.ArgumentParser(description='Extract archive files recursively with parallel processing')
+    i3.add_argument('-d', '--dir', default='.', help='Root directory to search (default: current)')
+    i3.add_argument('-k', '--keep', action='store_true', help='Keep original archive files after extraction')
+    i3.add_argument('-q', '--quiet', action='store_true', help='Reduce verbosity (only show summary)')
+    i3.add_argument('-j', '--jobs', type=int, default=-1, help='Number of parallel jobs (-1 for all cores)')
+    j3 = i3.parse_args()
+    d4 = Path(j3.dir).resolve()
+    if not d4.exists():
+        print(f"❌ Error: Directory '{d4}' does not exist")
+        sys.exit(1)
+    t1 = i(remove_after=not j3.keep, verbose=not j3.quiet)
+    try:
+        t1.extract_recursive(d4, n_jobs=j3.jobs)
+    except KeyboardInterrupt:
+        print('\n\n⚠️  Interrupted by user')
+        sys.exit(1)
+    except Exception as e:
+        print(f'\n❌ Fatal error: {e}')
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: uzz.py ---
+from multiprocessing import Pool
+from pathlib import Path
+from zipfile import ZipFile
+from loguru import logger
+y4 = 8
+def s6(t6):
+    v = t6.replace('.whl', '').split('-')
+    for i, u6 in enumerate(v):
+        if u6 and u6[0].isdigit():
+            return '-'.join(v[:i])
+    return v[0]
+def v6(w6):
+    x6 = s6(w6.name)
+    b = w6.parent / x6
+    b.mkdir(exist_ok=True)
+    try:
+        with ZipFile(w6) as whl:
+            whl.extractall(b)
+        w6.unlink()
+        return (w6.name, True)
+    except Exception as e:
+        return (f'{w6.name}: {e}', False)
+def q1():
+    y6 = list(Path.cwd().glob('*.whl'))
+    if not y6:
+        print('No .whl files found')
+        return 0
+    u1 = []
+    with Pool(processes=y4) as v1:
+        w1 = [v1.apply_async(v6, (w,)) for w in y6]
+        for ar in w1:
+            try:
+                u1.append(ar.get())
+            except Exception as e:
+                u1.append(e)
+    for h in u1:
+        if isinstance(h, BaseException):
+            logger.error(f'✗ {h}')
+            continue
+        z6, o3 = h
+        v5 = '✓' if o3 else '✗'
+        if o3:
+            print(f'{v5} {z6}')
+        else:
+            logger.error(f'{v5} {z6}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+# --- File: xtar.py ---
+import gzip
+import lzma
+import subprocess
+import sys
+import tarfile
+from multiprocessing import Pool
+from pathlib import Path
+y4 = 8
+c2 = {'.tar.gz', '.tar.xz', '.tar.zst', '.tar.br', '.tgz'}
+def a7(f2):
+    z6 = f2.name.lower()
+    if z6.endswith(('.tar.gz', '.tgz')):
+        return 'gz'
+    elif z6.endswith('.tar.xz'):
+        return 'xz'
+    elif z6.endswith('.tar.zst'):
+        return 'zst'
+    elif z6.endswith('.tar.br'):
+        return 'br'
+    return None
+def b7(q):
+    c7 = a7(q)
+    try:
+        if c7 == 'gz':
+            with gzip.open(q, 'rb') as f:
+                while f.read(1024 * 1024):
+                    pass
+        elif c7 == 'xz':
+            with lzma.open(q, 'rb') as f:
+                while f.read(1024 * 1024):
+                    pass
+        elif c7 == 'zst':
+            h = subprocess.run(['zstd', '-t', str(q)], capture_output=True, text=True)
+            if h.returncode != 0:
+                return False
+        elif c7 == 'br':
+            h = subprocess.run(['brotli', '-t', str(q)], capture_output=True, text=True)
+            if h.returncode != 0:
+                return False
+        with tarfile.open(q, f'r:{c7}') as tar:
+            tar.getmembers()
+        return True
+    except (tarfile.TarError, lzma.LZMAError, gzip.BadGzipFile, OSError, subprocess.SubprocessError) as e:
+        print(f'Integrity check failed for {q.name}: {e}')
+        return False
+def c1(q):
+    q = Path(q)
+    print(f'Processing: {q.name}')
+    if not b7(q):
+        print(f'Skipping {q.name} (integrity check failed)')
+        return False
+    try:
+        c7 = a7(q)
+        with tarfile.open(q, f'r:{c7}') as tar:
+            tar.extractall(path=q.parent, filter='data')
+        q.unlink()
+        print(f'Successfully extracted and removed: {q.name}')
+        return True
+    except (tarfile.TarError, OSError, EOFError) as e:
+        print(f'Extraction failed for {q.name}: {e}')
+        return False
+def l1(b1='.'):
+    n1 = []
+    for d7 in c2:
+        n1.extend(Path(b1).glob(f'*{d7}'))
+    return sorted(n1)
+def q1():
+    if len(sys.argv) > 1:
+        n1 = [Path(arg) for arg in sys.argv[1:] if Path(arg).exists()]
+    else:
+        n1 = l1()
+    if not n1:
+        print('No archive files found or specified.')
+        print('Supported formats: .tar.gz, .tgz, .tar.xz, .tar.zst, .tar.br')
+        print('Usage: python extractor.py [archive1.tar.gz archive2.tar.xz ...]')
+        sys.exit(1)
+    print(f'Found {len(n1)} archive(s) to process')
+    print(f'Using {y4} workers')
+    print('-' * 40)
+    with Pool(processes=y4) as v1:
+        u1 = v1.map(c1, n1)
+    z1 = sum((1 for r in u1 if r))
+    a2 = sum((1 for r in u1 if not r))
+    print('-' * 40)
+    print(f'Summary: {z1} successful, {a2} failed/skipped')
+if __name__ == '__main__':
+    q1()
+
+# --- File: xxx.py ---
+import tarfile
+import zipfile
+from multiprocessing.pool import ApplyResult, Pool
+from pathlib import Path
+from loguru import logger
+d2 = ('.tar.gz', '.tar.xz', '.tar.zst')
+e7 = ('.zip', '.whl')
+y4 = 8
+def f7(q):
+    try:
+        if not tarfile.is_tarfile(q):
+            return (False, f'Invalid tar format: {q.name}')
+        with tarfile.open(q, 'r:*') as tar:
+            tar.getmembers()
+        return (True, f'Valid: {q.name}')
+    except (tarfile.TarError, EOFError) as e:
+        return (False, f'Corrupted: {q.name} - {type(e).__name__}')
+    except Exception as e:
+        return (False, f'Check failed: {q.name} - {e}')
+def g7(q):
+    try:
+        if not zipfile.is_zipfile(q):
+            return (False, f'Invalid zip format: {q.name}')
+        with zipfile.ZipFile(q, 'r') as zf:
+            h7 = zf.testzip()
+            if h7 is not None:
+                return (False, f'Corrupted: {q.name} - bad member: {h7}')
+        return (True, f'Valid: {q.name}')
+    except (zipfile.BadZipFile, EOFError) as e:
+        return (False, f'Corrupted: {q.name} - {type(e).__name__}')
+    except Exception as e:
+        return (False, f'Check failed: {q.name} - {e}')
+def b7(q):
+    if q.suffix.lower() == '.zip' or q.name.lower().endswith('.whl'):
+        return g7(q)
+    return f7(q)
+def c1(q):
+    try:
+        if q.suffix.lower() == '.zip' or q.name.lower().endswith('.whl'):
+            with zipfile.ZipFile(q, 'r') as zf:
+                zf.extractall(path=q.parent)
+        else:
+            with tarfile.open(q, 'r:*') as tar:
+                tar.extractall(path=q.parent, filter='data')
+        q.unlink()
+        return (q, True, f'Extracted: {q.name}')
+    except Exception as e:
+        return (q, False, f'Extract failed: {q.name} - {e}')
+def l1(cwd):
+    n1 = []
+    for ext in d2:
+        n1.extend(cwd.glob(f'*{ext}'))
+    for ext in e7:
+        n1.extend(cwd.glob(f'*{ext}'))
+    return sorted(set(n1))
+def i7(u1):
+    return [r.get() for r in u1]
+def j7(u1):
+    return [r.get() for r in u1]
+def q1():
+    cwd = Path.cwd()
+    n1 = l1(cwd)
+    if not n1:
+        print('No archives found in current directory')
+        return 0
+    print(f'Found {len(n1)} archive(s)\n--- Checking integrity ---')
+    k7 = []
+    with Pool(processes=y4) as v1:
+        l7 = [v1.apply_async(b7, (r1,)) for r1 in n1]
+        for r1, (m7, r5) in zip(n1, i7(l7)):
+            print(r5)
+            if m7:
+                k7.append(r1)
+    if not k7:
+        logger.warning('No valid archives to extract')
+        return 0
+    print(f'\n--- Extracting {len(k7)} valid archive(s) ---')
+    a2 = []
+    with Pool(processes=y4) as v1:
+        n7 = [v1.apply_async(c1, (r1,)) for r1 in k7]
+        for f2, o3, r5 in j7(n7):
+            print(r5)
+            if not o3:
+                a2.append(f2)
+    if a2:
+        logger.error(f'{len(a2)} extraction(s) failed')
+        return 1
+    logger.success(f'Successfully extracted {len(k7)} archive(s)')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

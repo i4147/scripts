@@ -1,4 +1,3 @@
-
 import stat
 import sys
 import time
@@ -6,9 +5,9 @@ from multiprocessing import Pool, cpu_count, Lock
 from pathlib import Path
 
 
-DIR_PERM = 0o755  
-FILE_PERM = 0o664  
-EXEC_PERM = 0o755  
+DIR_PERM = 0o755
+FILE_PERM = 0o664
+EXEC_PERM = 0o755
 
 
 SKIP_NAMES = {".git", "__pycache__"}
@@ -60,23 +59,19 @@ def is_in_executable_dir(path: Path) -> bool:
 
 
 def get_target_permission(path: Path, current_mode: int) -> tuple[int, str]:
-    
+
     if path.is_dir():
         return DIR_PERM, "directory"
 
-    
     if is_executable(current_mode):
-        
         if is_binary(path) or has_shebang(path):
             return None, "executable binary/script"
-        
+
         return FILE_PERM, "executable (normalize)"
 
-    
     if is_in_executable_dir(path):
         return EXEC_PERM, "file in bin/sbin/.bin/libexec"
 
-    
     return FILE_PERM, "regular file"
 
 
@@ -91,31 +86,25 @@ def process_path(path: Path) -> dict:
     }
 
     try:
-        
         if should_skip_path(path):
             result["skipped"] += 1
             return result
 
-        
         try:
             current_mode = stat.S_IMODE(path.stat().st_mode)
         except FileNotFoundError:
             return result
 
-        
         target_perm, reason = get_target_permission(path, current_mode)
 
         if target_perm is None:
-            
             return result
 
-        
         if current_mode == target_perm:
             return result
 
         path.chmod(target_perm)
 
-        
         if path.is_dir():
             result["dirs_changed"] += 1
             result["messages"].append(f"[DIR]  {path:<60} {oct(current_mode)} -> {oct(target_perm)}")
@@ -198,7 +187,7 @@ def print_details(results: dict, verbose: bool = False) -> None:
 
     print("\n📝 DETAILED CHANGES:")
     print("-" * 80)
-    for msg in results["messages"][:100]:  
+    for msg in results["messages"][:100]:
         print(msg)
 
     if len(results["messages"]) > 100:
@@ -223,15 +212,12 @@ def normalize_permissions(cwd: str = ".", verbose: bool = False) -> None:
 
     try:
         with Pool(processes=workers) as pool:
-            
             results_list = pool.imap_unordered(process_path, all_paths, chunksize=max(100, total // (workers * 4)))
 
-            
             all_results = []
             for i, result in enumerate(results_list, 1):
                 all_results.append(result)
 
-                
                 if i % 1000 == 0:
                     print(f"  Progress: {i:,}/{total:,} ({100 * i / total:.1f}%)")
 
@@ -239,7 +225,6 @@ def normalize_permissions(cwd: str = ".", verbose: bool = False) -> None:
         print("\n⚠️  Interrupted by user!")
         sys.exit(1)
 
-    
     final_results = merge_results(all_results)
     elapsed = time.time() - start_time
 

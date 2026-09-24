@@ -35,8 +35,7 @@ def fix_wheel_file(wheel_path: Path) -> tuple[Path, bool, Optional[str]]:
                     else:
                         dest.unlink()
                 item.rename(dest)
-            
-            
+
             with zipfile.ZipFile(wheel_path, "w", zipfile.ZIP_DEFLATED) as whl:
                 for file_path in temp_path.rglob("*"):
                     if file_path.is_file():

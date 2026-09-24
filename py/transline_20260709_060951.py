@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from deep_translator import GoogleTranslator
 from tenacity import (
@@ -18,16 +17,14 @@ from datetime import datetime
 from dh import mpf_async, get_nobinary
 
 
-DELAY_BETWEEN_SEGMENTS = 0.01  
-DELAY_BETWEEN_FILES = 1.0  
-MAX_RETRIES = 5  
+DELAY_BETWEEN_SEGMENTS = 0.01
+DELAY_BETWEEN_FILES = 1.0
+MAX_RETRIES = 5
 PROGRESS_SAVE_EVERY = 10
-
 
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger(__name__)
-
 
 
 _interrupted = False
@@ -42,16 +39,15 @@ def _sigint_handler(sig, frame):
 signal.signal(signal.SIGINT, _sigint_handler)
 
 
-
 _CHINESE_RANGES = (
-    (0x3400, 0x4DBF),  
-    (0x4E00, 0x9FFF),  
-    (0xF900, 0xFAFF),  
-    (0x20000, 0x2A6DF),  
-    (0x2A700, 0x2B73F),  
-    (0x2B740, 0x2B81F),  
-    (0x2B820, 0x2CEAF),  
-    (0x2CEB0, 0x2EBEF),  
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0x20000, 0x2A6DF),
+    (0x2A700, 0x2B73F),
+    (0x2B740, 0x2B81F),
+    (0x2B820, 0x2CEAF),
+    (0x2CEB0, 0x2EBEF),
 )
 
 _CHINESE_PUNCTUATION = set('，。！？；：、""（）【】《》…—～·　　')
@@ -84,19 +80,15 @@ def find_chinese_segments(text: str) -> list[tuple[int, int, str]]:
 def reassemble_line(original: str, translations: dict[tuple[int, int], str]) -> str:
     result = []
     last_end = 0
-    
+
     for (start, end), translated in sorted(translations.items()):
-        
         result.append(original[last_end:start])
-        
+
         result.append(translated)
         last_end = end
-    
+
     result.append(original[last_end:])
     return "".join(result)
-
-
-
 
 
 def read_text(path: Path) -> tuple[str, str]:
@@ -106,9 +98,6 @@ def read_text(path: Path) -> tuple[str, str]:
         except (UnicodeDecodeError, LookupError):
             continue
     return path.read_bytes().decode("utf-8", errors="replace"), "utf-8"
-
-
-
 
 
 class RateLimitError(Exception):
@@ -154,16 +143,12 @@ def translate_safe(text: str) -> tuple[str, bool]:
         return text, False
 
 
-
-
-
 def _progress_path(file_path: Path) -> Path:
     return file_path.with_suffix(file_path.suffix + ".xlprogress")
 
 
 def save_progress(file_path: Path, done: dict, total: int) -> None:
     try:
-        
         serializable_done = {}
         for line_num, segments in done.items():
             if isinstance(segments, dict):
@@ -223,9 +208,6 @@ def drop_progress(file_path: Path) -> None:
             pass
 
 
-
-
-
 def process_file(path: Path) -> bool:
     global _interrupted
 
@@ -238,7 +220,6 @@ def process_file(path: Path) -> bool:
 
     lines = text.splitlines(keepends=True)
 
-    
     line_segments = {}
     for i, ln in enumerate(lines):
         stripped = ln.rstrip("\r\n")
@@ -254,15 +235,12 @@ def process_file(path: Path) -> bool:
     total_segments = sum(len(segs) for segs in line_segments.values())
     print(f"   🔍 {len(line_segments)} line(s) with {total_segments} Chinese segment(s) to translate")
 
-    
     done: dict = load_progress(path)
 
-    
     for line_idx in line_segments:
         if line_idx not in done:
             done[line_idx] = {}
 
-    
     completed_segments = sum(len(v) if isinstance(v, dict) else 1 for v in done.values())
     segment_count = completed_segments
 
@@ -280,47 +258,40 @@ def process_file(path: Path) -> bool:
                 print("   💾 Progress saved. Stopping.")
                 return False
 
-            
             if (start, end) in done[line_idx]:
                 continue
 
-            
             translated, ok = translate_safe(chinese_text)
 
             if ok:
                 done[line_idx][(start, end)] = translated
                 status = "✓"
             else:
-                done[line_idx][(start, end)] = chinese_text  
+                done[line_idx][(start, end)] = chinese_text
                 status = "✗"
 
             segment_count += 1
 
-            
             print(
                 f"   [{segment_count:>4}/{total_segments}] {status} line {line_idx + 1}: "
                 f"{chinese_text[:20].strip()!r} → {translated[:20].strip()!r}"
             )
 
-            
             if segment_count % PROGRESS_SAVE_EVERY == 0:
                 save_progress(path, done, len(lines))
 
-            
             time.sleep(DELAY_BETWEEN_SEGMENTS)
 
-    
     out_lines = []
     for i, line in enumerate(lines):
         if i in done and done[i]:
-            eol = line[len(line.rstrip("\r\n")) :]  
+            eol = line[len(line.rstrip("\r\n")) :]
             stripped = line.rstrip("\r\n")
             reassembled = reassemble_line(stripped, done[i])
             out_lines.append(reassembled + eol)
         else:
             out_lines.append(line)
 
-    
     tmp = path.with_suffix(path.suffix + ".xltmp")
     try:
         tmp.write_text("".join(out_lines), encoding=enc, errors="replace")
@@ -335,7 +306,6 @@ def process_file(path: Path) -> bool:
 
     drop_progress(path)
 
-    
     failed_segments = 0
     for line_idx, segments in line_segments.items():
         if line_idx in done:
@@ -346,9 +316,6 @@ def process_file(path: Path) -> bool:
     success_segments = total_segments - failed_segments
     print(f"   ✅ Done — {success_segments}/{total_segments} segments translated successfully")
     return True
-
-
-
 
 
 def main():

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -21,7 +20,7 @@ def _build_parser() -> Parser:
     try:
         parser.language = lang
     except (AttributeError, TypeError):
-        parser.set_language(lang)  
+        parser.set_language(lang)
     return parser
 
 

@@ -262,7 +262,6 @@ def download_file(url: str, filename: str) -> bool:
     if output_path.exists() and output_path.stat().st_size > 0:
         return True
 
-    
     remote_size = get_remote_size(url)
     if remote_size > 0:
         print(f"  Size: {human_size(remote_size)} ({remote_size:,} bytes)")

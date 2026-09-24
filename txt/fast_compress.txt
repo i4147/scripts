@@ -1,0 +1,1083 @@
+# --- File: fast_compress.py ---
+from __future__ import annotations
+import argparse
+import fnmatch
+import json
+import sys
+from collections.abc import Iterator
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+import zstandard as zstd
+from dh import fsz
+from loguru import logger
+a = frozenset({'.xz', '.gz', '.7z', '.zip', '.whl', '.lz4', '.zst', '.br', '.bz2', '.lzma', '.z', '.rar', '.tar', '.tgz', '.tbz2', '.bz3', '.jpg', '.dat', '.npz', '.onnx', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3', '.exe', '.dll', '.dylib', '.bin', '.iso', '.img', '.deb', '.rpm', '.pkg', '.msi'})
+b = frozenset({'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3'})
+c = frozenset({'.zst'})
+d = frozenset({'.git', '__pycache__', '.pytest_cache', '.mypy_cache', '.bin', 'bin', 'dh', 'print_persian', '.dist-info', '.egg-info', 'zstandard'})
+e = ['*.egg-info', '*.dist-info']
+f = 8
+g = 131072
+class h:
+    def __init__(self):
+        self.original_size = 0
+        self.compressed_size = 0
+    def add(self, i, j):
+        self.original_size += i
+        self.compressed_size += j
+    def k(self):
+        if self.original_size == 0:
+            return (0, 0.0, 0.0)
+        l = self.original_size - self.compressed_size
+        m = self.compressed_size / self.original_size * 100.0
+        n = l / self.original_size * 100.0
+        return (l, m, n)
+def o(p):
+    if p in d:
+        return True
+    return any((fnmatch.fnmatch(p, q) for q in e))
+def r(s):
+    try:
+        for t in s.iterdir():
+            if t.is_dir() and t.name.endswith('.egg-info'):
+                u = t / 'SOURCES.txt'
+                if u.exists():
+                    return True
+                v = t / 'direct_url.json'
+                if v.exists():
+                    try:
+                        with v.open() as f:
+                            w = json.load(f)
+                        x = w.get('dir_info', {})
+                        if isinstance(x, dict) and x.get('editable', False):
+                            return True
+                    except (json.JSONDecodeError, OSError):
+                        pass
+        return False
+    except (PermissionError, OSError):
+        return False
+def y(z, a1):
+    b1 = 0
+    c1 = 0
+    d1 = 0
+    e1 = 0
+    f1 = 0
+    def g1(h1):
+        nonlocal skipped_extensions, skipped_media
+        i1 = str(h1)
+        if '.egg-info' in i1 or '.dist-info' in i1:
+            c1 += 1
+            return False
+        if a1:
+            suf = h1.suffix.lower()
+            if suf in a:
+                c1 += 1
+                if suf in b:
+                    f1 += 1
+                return False
+            return True
+        if h1.name.endswith('.tar.zst'):
+            c1 += 1
+            return False
+        if h1.suffix not in c:
+            c1 += 1
+            return False
+        return True
+    for j1, k1, l1 in z.walk():
+        s = Path(j1)
+        if '.git' in s.parts:
+            continue
+        m1 = []
+        for p in k1:
+            if o(p):
+                m1.append(p)
+                e1 += 1
+        for p in m1:
+            k1.remove(p)
+        if r(s):
+            k1.clear()
+            d1 += 1
+            continue
+        for n1 in l1:
+            h1 = s / n1
+            if h1.is_symlink():
+                b1 += 1
+                continue
+            if g1(h1):
+                yield h1
+    if b1 > 0:
+        logger.warning('Skipped {} symlinks', b1)
+    if f1 > 0:
+        print('Skipped {} media/binary files (already compressed)', f1)
+    if c1 > 0:
+        print('Skipped {} files with unwanted extensions', c1)
+    if d1 > 0:
+        print('Skipped {} editable package directories', d1)
+    if e1 > 0:
+        print('Skipped {} excluded directories', e1)
+def o1(p1, q1, r1, s1):
+    try:
+        t1 = p1.stat().st_size
+        u1 = zstd.ZstdCompressor(level=r1, threads=1)
+        with p1.open('rb') as v1, q1.open('wb') as w1:
+            x1 = u1.stream_reader(v1)
+            while True:
+                y1 = x1.read(g)
+                if not y1:
+                    break
+                w1.write(y1)
+        z1 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, q1, t1, z1)
+    except Exception as e:
+        try:
+            if q1.exists():
+                q1.unlink()
+        except OSError:
+            pass
+        return (False, p1, str(e), 0, 0)
+def a2(p1, q1, s1):
+    try:
+        z1 = p1.stat().st_size
+        b2 = zstd.ZstdDecompressor()
+        with p1.open('rb') as v1, q1.open('wb') as w1:
+            x1 = b2.stream_reader(v1)
+            while True:
+                y1 = x1.read(g)
+                if not y1:
+                    break
+                w1.write(y1)
+        c2 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, q1, c2, z1)
+    except Exception as e:
+        try:
+            if q1.exists():
+                q1.unlink()
+        except OSError:
+            pass
+        return (False, p1, str(e), 0, 0)
+def d2(p, a1):
+    if a1:
+        return p.with_suffix(p.suffix + '.zst')
+    return p.with_suffix('')
+def e2(z, a1, r1, s1):
+    print('{} files (streaming)...', 'Compressing' if a1 else 'Decompressing')
+    print('Remove original files: {}', 'Yes' if s1 else 'No')
+    f2 = h()
+    g2 = 0
+    h2 = 0
+    i2 = 0
+    j2 = []
+    k2 = []
+    for h1 in y(z, a1):
+        l2 = d2(h1, a1)
+        if l2.exists():
+            i2 += 1
+            h2 += 1
+            continue
+        k2.append((h1, l2))
+    g2 = len(k2)
+    m2 = g2 + i2
+    def n2():
+        o2 = int(h2 / max(1, m2) * 40)
+        bar = '█' * o2 + '░' * (50 - o2)
+        logger.opt(colors=False).info('\rProgress: [{}] {}/{} files', bar, h2, m2)
+    if g2 == 0:
+        logger.warning('No files were processed.')
+        return
+    with Pool(processes=f) as p2:
+        q2 = []
+        for h1, l2 in k2:
+            if a1:
+                ar = p2.apply_async(o1, (h1, l2, r1, s1))
+            else:
+                ar = p2.apply_async(a2, (h1, l2, s1))
+            q2.append(ar)
+        for ar in q2:
+            r2 = ar.get()
+            h2 += 1
+            n2()
+            ok, h1, s2, t2, u2 = r2
+            if ok:
+                f2.add(t2, u2)
+            else:
+                j2.append((h1, str(s2)))
+        print()
+    if a1 and (f2.original_size > 0 or f2.compressed_size > 0):
+        l, m, n = f2.get_savings()
+        print('📊 Compression Statistics:')
+        print('   Original size:  {}', fsz(f2.original_size))
+        print('   Compressed size: {}', fsz(f2.compressed_size))
+        print('   Space saved:    {} ({:.1f}%)', fsz(l), n)
+        print('   Compression ratio: {:.1f}%', m)
+    if i2 > 0:
+        logger.warning('Skipped {} files (already exist or invalid format)', i2)
+    if j2:
+        logger.error('❌ Failed to process {} files:', len(j2))
+        for h1, v2 in j2[:200]:
+            logger.error('  - {}: {}', h1, v2)
+        if len(j2) > 200:
+            logger.error('  ... and {} more', len(j2) - 200)
+    else:
+        w2 = g2
+        if w2 > 0:
+            logger.success('✅ Successfully {} {} files!', 'compressed' if a1 else 'decompressed', w2)
+            if s1:
+                print('   Original files have been removed.')
+        else:
+            logger.warning('No files were processed.')
+def x2():
+    y2 = argparse.ArgumentParser(description='Recursively compress or decompress files using Zstandard')
+    z2 = y2.add_mutually_exclusive_group(required=False)
+    z2.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no action specified)')
+    z2.add_argument('-d', '--decompress', action='store_true', help='Decompress files')
+    y2.add_argument('--level', type=int, default=3, choices=range(1, 23), help='Compression level (1-22, default: 3)')
+    y2.add_argument('--dir', type=str, default='.', help='Directory to process (default: current directory)')
+    y2.add_argument('--keep', default=False, action='store_true', help='Keep original files (default: remove on success)')
+    a3 = y2.parse_args()
+    if not a3.compress and (not a3.decompress):
+        a3.compress = True
+        print('No action specified, defaulting to compression mode')
+    z = Path(a3.dir).resolve()
+    if not z.exists():
+        logger.error("Directory '{}' does not exist", z)
+        return 1
+    if not z.is_dir():
+        logger.error("'{}' is not a directory", z)
+        return 1
+    s1 = not a3.keep
+    print('Working directory: {}', z)
+    print('Mode: {}', 'Compression' if a3.compress else 'Decompression')
+    print('Pool workers: {}', f)
+    if a3.compress:
+        print('Compression level: {}', a3.level)
+    print('Keep original files: {}', 'Yes' if a3.keep else 'No')
+    print('Scanning directory tree...')
+    e2(z, a3.compress, a3.level, s1)
+    return 0
+if __name__ == '__main__':
+    sys.exit(x2())
+
+# --- File: fast_compress2.py ---
+from __future__ import annotations
+import argparse
+import contextlib
+import fnmatch
+import heapq
+import json
+import sys
+import threading
+from collections.abc import Generator, Iterator
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+import zstandard as zstd
+from dh import fsz
+from loguru import logger
+a = {'.xz', '.gz', '.7z', '.zip', '.whl', '.lz4', '.zst', '.br', '.bz2', '.lzma', '.z', '.rar', '.tar', '.tgz', '.tbz2', '.bz3', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3', '.exe', '.dll', '.so', '.dylib', '.bin', '.iso', '.img', '.deb', '.rpm', '.pkg', '.msi'}
+c = {'.zst'}
+d = {'.git', '__pycache__', '.pytest_cache', '.mypy_cache', '.bin', 'bin', 'dh', 'print_persian', '.dist-info', '.egg-info', 'zstandard'}
+e = ['*.egg-info', '*.dist-info']
+b = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3'}
+b3 = 8
+c3 = 10000
+d3 = 8192
+class h:
+    def __init__(self):
+        self.original_size = 0
+        self.compressed_size = 0
+        self.lock = threading.Lock()
+    def add(self, i, j):
+        with self.lock:
+            self.original_size += i
+            self.compressed_size += j
+    def k(self):
+        if self.original_size == 0:
+            return (0, 0.0, 0.0)
+        l = self.original_size - self.compressed_size
+        m = self.compressed_size / self.original_size * 40
+        n = l / self.original_size * 40
+        return (l, m, n)
+def o(p):
+    if p in d:
+        return True
+    return any((fnmatch.fnmatch(p, q) for q in e))
+def r(s):
+    try:
+        for t in s.iterdir():
+            if t.is_dir() and t.name.endswith('.egg-info'):
+                if (t / 'SOURCES.txt').exists():
+                    return True
+                v = t / 'direct_url.json'
+                if v.exists():
+                    try:
+                        with open(v) as f:
+                            w = json.load(f)
+                            x = w.get('dir_info')
+                            if isinstance(x, dict):
+                                if x.get('editable', False):
+                                    return True
+                    except (OSError, json.JSONDecodeError):
+                        pass
+        return False
+    except (PermissionError, OSError):
+        return False
+def e3(f3, a1):
+    g3 = 0
+    h3 = 0
+    b1 = 0
+    c1 = 0
+    d1 = 0
+    e1 = 0
+    f1 = 0
+    i3 = []
+    for j1, k1, l1 in f3.walk():
+        s = Path(j1)
+        if '.git' in s.parts:
+            continue
+        m1 = []
+        for p in k1:
+            if o(p):
+                m1.append(p)
+                e1 += 1
+        for p in m1:
+            k1.remove(p)
+        if r(s):
+            k1.clear()
+            d1 += 1
+            continue
+        g3 += 1
+        for n1 in l1:
+            h1 = s / n1
+            if h1.is_symlink():
+                b1 += 1
+                continue
+            i1 = str(h1)
+            if '.egg-info' in i1 or '.dist-info' in i1:
+                c1 += 1
+                continue
+            j3 = h1.suffix.lower()
+            if a1:
+                if j3 in a:
+                    c1 += 1
+                    if j3 in b:
+                        f1 += 1
+                    continue
+            elif h1.suffix not in c:
+                c1 += 1
+                continue
+            try:
+                k3 = h1.stat().st_size
+            except (OSError, PermissionError):
+                c1 += 1
+                continue
+            heapq.heappush(i3, (-k3, h1))
+            h3 += 1
+            if len(i3) >= c3:
+                while i3:
+                    l3, fp = heapq.heappop(i3)
+                    yield fp
+    if b1 > 0:
+        logger.warning(f'Skipped {b1} symlinks')
+    if f1 > 0:
+        print(f'Skipped {f1} media/binary files (already compressed)')
+    if c1 > 0:
+        print(f'Skipped {c1} files with unwanted extensions')
+    if d1 > 0:
+        print(f'Skipped {d1} editable package directories')
+    if e1 > 0:
+        print(f'Skipped {e1} excluded directories')
+    print(f'Sorting {h3} files by size (largest first)...')
+    while i3:
+        l3, fp = heapq.heappop(i3)
+        yield fp
+    print(f'Scanned {g3} directories, found {h3} files to process')
+def o1(p1, q1, r1=3, m3=4, s1=False):
+    try:
+        t1 = p1.stat().st_size
+        u1 = zstd.ZstdCompressor(level=r1, threads=m3)
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            x1 = u1.stream_reader(v1)
+            while True:
+                y1 = x1.read(d3)
+                if not y1:
+                    break
+                w1.write(y1)
+        z1 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, q1, t1, z1)
+    except Exception as e:
+        if q1.exists():
+            with contextlib.suppress(BaseException):
+                q1.unlink()
+        return (False, p1, str(e), 0, 0)
+def a2(p1, q1, m3=4, s1=False):
+    try:
+        z1 = p1.stat().st_size
+        b2 = zstd.ZstdDecompressor()
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            x1 = b2.stream_reader(v1)
+            while True:
+                y1 = x1.read(d3)
+                if not y1:
+                    break
+                w1.write(y1)
+        c2 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, q1, c2, z1)
+    except Exception as e:
+        if q1.exists():
+            with contextlib.suppress(BaseException):
+                q1.unlink()
+        return (False, p1, str(e), 0, 0)
+def n3(o3, a1, r1=3, m3=4, s1=False):
+    f2 = h()
+    j2 = []
+    i2 = 0
+    h2 = 0
+    print(f"\n{('Compressing' if a1 else 'Decompressing')} files...")
+    print(f"Remove original files: {('Yes' if s1 else 'No')}")
+    print('-' * 40)
+    p3 = list(o3)
+    h3 = len(p3)
+    if h3 == 0:
+        print('No files to process.')
+        return
+    print(f'Processing {h3} files...')
+    q3 = []
+    with Pool(processes=b3) as p2:
+        for h1 in p3:
+            if a1:
+                q1 = h1.with_suffix(h1.suffix + '.zst')
+                if q1.exists():
+                    logger.warning(f'Skipping {h1.name} - output already exists')
+                    i2 += 1
+                    h2 += 1
+                    continue
+                r3 = p2.apply_async(o1, (h1, q1, r1, m3, s1))
+            else:
+                q1 = h1.with_suffix('')
+                if q1.exists():
+                    logger.warning(f'Skipping {h1.name} - output already exists')
+                    i2 += 1
+                    h2 += 1
+                    continue
+                r3 = p2.apply_async(a2, (h1, q1, m3, s1))
+            q3.append((r3, h1, q1))
+        for r3, h1, s3 in q3:
+            try:
+                r2 = r3.get()
+            except Exception as e:
+                j2.append((h1, str(e)))
+                h2 += 1
+                continue
+            t3, h1, u3, v3, w3 = r2
+            if a1:
+                f2.add(v3, w3)
+            else:
+                f2.add(v3, w3)
+            h2 += 1
+            if not t3:
+                j2.append((h1, str(u3)))
+    print('-' * 40)
+    if a1 and h3 > 0:
+        l, m, n = f2.get_savings()
+        print('Compression Statistics:')
+        print(f'   Original size:  {fsz(f2.original_size)}')
+        print(f'   Compressed size: {fsz(f2.compressed_size)}')
+        print(f'   Space saved:    {fsz(l)} ({n:.1f}%)')
+        print(f'   Compression ratio: {m:.1f}%')
+    if i2 > 0:
+        logger.warning(f'Skipped {i2} files (already exist or invalid format)')
+    if j2:
+        logger.error(f'Failed to process {len(j2)} files:')
+        for h1, v2 in j2:
+            logger.error(f'  - {h1}: {v2}')
+    else:
+        w2 = h3 - i2
+        if w2 > 0:
+            logger.success(f"Successfully {('compressed' if a1 else 'decompressed')} {w2} files!")
+            if s1:
+                print('   Original files have been removed.')
+        else:
+            logger.warning('No files were processed.')
+def x2():
+    y2 = argparse.ArgumentParser(description='Recursively compress or decompress files using Zstandard')
+    z2 = y2.add_mutually_exclusive_group(required=False)
+    z2.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no action specified)')
+    z2.add_argument('-d', '--decompress', action='store_true', help='Decompress files')
+    y2.add_argument('--level', type=int, default=3, choices=range(1, 23), help='Compression level (1-22, default: 3)')
+    y2.add_argument('--threads', type=int, default=4, help='Number of threads to use (default: 4)')
+    y2.add_argument('--dir', type=str, default='.', help='Directory to process (default: current directory)')
+    y2.add_argument('--keep', action='store_true', help='Keep original files (default: remove on success)')
+    a3 = y2.parse_args()
+    if not a3.compress and (not a3.decompress):
+        a3.compress = True
+        print('No action specified, defaulting to compression mode')
+    if a3.compress and (a3.level < 1 or a3.level > 22):
+        logger.error('Compression level must be between 1 and 22')
+        return 1
+    z = Path(a3.dir).resolve()
+    if not z.exists():
+        logger.error(f"Directory '{z}' does not exist")
+        return 1
+    if not z.is_dir():
+        logger.error(f"'{z}' is not a directory")
+        return 1
+    s1 = not a3.keep
+    print(f'Working directory: {z}')
+    print(f"Mode: {('Compression' if a3.compress else 'Decompression')}")
+    print(f'Threads: {a3.threads}')
+    if a3.compress:
+        print(f'Compression level: {a3.level}')
+    print(f"Keep original files: {('Yes' if a3.keep else 'No')}")
+    print('\nScanning directory tree...')
+    o3 = e3(z, a3.compress)
+    n3(o3, a3.compress, a3.level, a3.threads, s1)
+    return 0
+if __name__ == '__main__':
+    sys.exit(x2())
+
+# --- File: fast_compress3.py ---
+from __future__ import annotations
+import argparse
+import contextlib
+import fnmatch
+import json
+import sys
+from collections.abc import Generator, Iterable
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Any
+import zstandard as zstd
+from dh import fsz
+from loguru import logger
+a = {'.xz', '.gz', '.7z', '.zip', '.whl', '.lz4', '.zst', '.br', '.bz2', '.lzma', '.z', '.rar', '.tar', '.tgz', '.tbz2', '.bz3', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3', '.exe', '.dll', '.so', '.dylib', '.bin', '.iso', '.img', '.deb', '.rpm', '.pkg', '.msi'}
+c = {'.zst'}
+d = {'.git', '__pycache__', '.pytest_cache', '.mypy_cache', '.bin', 'bin', 'dh', 'print_persian', '.dist-info', '.egg-info', 'zstandard'}
+e = ['*.egg-info', '*.dist-info']
+b = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.svg', '.ico', '.heic', '.heif', '.avif', '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv', '.ts', '.m2ts', '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.mid', '.midi', '.aiff', '.pdf', '.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.epub', '.mobi', '.azw', '.azw3'}
+f = 8
+d3 = 8192
+x3 = 50
+class h:
+    def __init__(self):
+        self.original_size = 0
+        self.compressed_size = 0
+    def add(self, i, j):
+        self.original_size += i
+        self.compressed_size += j
+    def k(self):
+        if self.original_size == 0:
+            return (0, 0.0, 0.0)
+        l = self.original_size - self.compressed_size
+        m = self.compressed_size / self.original_size * 40
+        n = l / self.original_size * 40
+        return (l, m, n)
+class y3:
+    def __init__(self):
+        self.dirs = 0
+        self.files = 0
+        self.skipped_symlinks = 0
+        self.skipped_extensions = 0
+        self.skipped_editable = 0
+        self.skipped_dirs = 0
+        self.skipped_media = 0
+def o(p):
+    if p in d:
+        return True
+    return any((fnmatch.fnmatch(p, q) for q in e))
+def r(s):
+    try:
+        for t in s.iterdir():
+            if t.is_dir() and t.name.endswith('.egg-info'):
+                if (t / 'SOURCES.txt').exists():
+                    return True
+                v = t / 'direct_url.json'
+                if v.exists():
+                    try:
+                        with open(v) as f:
+                            w = json.load(f)
+                        if w.get('dir_info', {}).get('editable', False):
+                            return True
+                    except (OSError, ValueError):
+                        pass
+        return False
+    except (PermissionError, OSError):
+        return False
+def z3(f3, a1):
+    f2 = y3()
+    for j1, k1, a4 in f3.walk():
+        s = Path(j1)
+        if '.git' in s.parts:
+            continue
+        m1 = []
+        for p in k1:
+            if o(p):
+                m1.append(p)
+                f2.skipped_dirs += 1
+        for p in m1:
+            k1.remove(p)
+        if r(s):
+            k1.clear()
+            f2.skipped_editable += 1
+            continue
+        f2.dirs += 1
+        for n1 in a4:
+            h1 = s / n1
+            if h1.is_symlink():
+                f2.skipped_symlinks += 1
+                continue
+            if '.egg-info' in str(h1) or '.dist-info' in str(h1):
+                f2.skipped_extensions += 1
+                continue
+            if a1:
+                if h1.suffix.lower() in a:
+                    f2.skipped_extensions += 1
+                    if h1.suffix.lower() in b:
+                        f2.skipped_media += 1
+                    continue
+            elif h1.suffix not in c:
+                f2.skipped_extensions += 1
+                continue
+            f2.files += 1
+            yield h1
+    if f2.skipped_symlinks > 0:
+        logger.warning(f'⚠️  Skipped {f2.skipped_symlinks} symlinks')
+    if f2.skipped_media > 0:
+        print(f'ℹ️  Skipped {f2.skipped_media} media/binary files (already compressed)')
+    if f2.skipped_extensions > 0:
+        print(f'ℹ️  Skipped {f2.skipped_extensions} files with unwanted extensions')
+    if f2.skipped_editable > 0:
+        print(f'ℹ️  Skipped {f2.skipped_editable} editable package directories')
+    if f2.skipped_dirs > 0:
+        print(f'ℹ️  Skipped {f2.skipped_dirs} excluded directories')
+    print(f'Scanned {f2.dirs} directories, found {f2.files} files to process')
+def o1(p1, q1, r1, m3, s1):
+    try:
+        t1 = p1.stat().st_size
+        u1 = zstd.ZstdCompressor(level=r1, threads=m3)
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            x1 = u1.stream_reader(v1)
+            w1.writelines(iter(lambda: x1.read(d3), b''))
+        z1 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, str(q1), t1, z1)
+    except Exception as e:
+        if q1.exists():
+            with contextlib.suppress(BaseException):
+                q1.unlink()
+        return (False, p1, str(e), 0, 0)
+def a2(p1, q1, m3, s1):
+    try:
+        z1 = p1.stat().st_size
+        b2 = zstd.ZstdDecompressor()
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            x1 = b2.stream_reader(v1)
+            w1.writelines(iter(lambda: x1.read(d3), b''))
+        c2 = q1.stat().st_size
+        if s1:
+            p1.unlink()
+        return (True, p1, str(q1), c2, z1)
+    except Exception as e:
+        if q1.exists():
+            with contextlib.suppress(BaseException):
+                q1.unlink()
+        return (False, p1, str(e), 0, 0)
+def b4(c4, f2, j2, d4, i2, a1, s1):
+    e4 = i2
+    for r2 in c4:
+        t3, p1, f4, t1, z1 = r2
+        e4 += 1
+        o2 = int(e4 / d4 * x3) if d4 else 0
+        bar = '█' * o2 + '░' * (x3 - o2)
+        print(f'\rProgress: [{bar}] {e4}/{d4} files', end='', flush=True)
+        if t3:
+            f2.add(t1, z1)
+        else:
+            j2.append((p1, f4))
+def n3(o3, a1, r1, m3, s1):
+    f2 = h()
+    j2 = []
+    i2 = 0
+    print('Counting files...')
+    p3 = list(o3)
+    d4 = len(p3)
+    if d4 == 0:
+        print('No files to process.')
+        return
+    print(f"{('Compressing' if a1 else 'Decompressing')} {d4} files...")
+    print(f"Remove original files: {('Yes' if s1 else 'No')}")
+    print('-' * 40)
+    p2 = Pool(processes=f)
+    q2 = []
+    try:
+        for h1 in p3:
+            if a1:
+                q1 = h1.with_suffix(h1.suffix + '.zst')
+                if q1.exists():
+                    logger.warning(f'⚠️  Skipping {h1.name} - output already exists')
+                    i2 += 1
+                    continue
+                q2.append(p2.apply_async(o1, (h1, q1, r1, m3, s1)))
+            else:
+                q1 = h1.with_suffix('')
+                if q1.exists():
+                    logger.warning(f'⚠️  Skipping {h1.name} - output already exists')
+                    i2 += 1
+                    continue
+                q2.append(p2.apply_async(a2, (h1, q1, m3, s1)))
+        p2.close()
+        c4 = (ar.get() for ar in q2)
+        b4(c4, f2, j2, d4, i2, a1, s1)
+        p2.join()
+    except BaseException:
+        p2.terminate()
+        p2.join()
+        raise
+    print()
+    print('-' * 40)
+    if a1 and d4 > 0:
+        l, m, n = f2.get_savings()
+        print('📊 Compression Statistics:')
+        print(f'   Original size:   {fsz(f2.original_size)}')
+        print(f'   Compressed size: {fsz(f2.compressed_size)}')
+        print(f'   Space saved:     {fsz(l)} ({n:.1f}%)')
+        print(f'   Compression ratio: {m:.1f}%')
+    if i2 > 0:
+        logger.warning(f'⚠️  Skipped {i2} files')
+    if j2:
+        logger.error(f'❌ Failed to process {len(j2)} files:')
+        for h1, v2 in j2[:10]:
+            logger.error(f'  - {h1}: {v2}')
+        if len(j2) > 10:
+            logger.error(f'  ... and {len(j2) - 10} more errors')
+    else:
+        w2 = d4 - i2
+        if w2 > 0:
+            g4 = 'compressed' if a1 else 'decompressed'
+            logger.success(f'✅ Successfully {g4} {w2} files!')
+            if s1:
+                print('   Original files have been removed.')
+def h4():
+    y2 = argparse.ArgumentParser(description='Recursively compress or decompress files using Zstandard')
+    i4 = y2.add_mutually_exclusive_group(required=False)
+    i4.add_argument('-c', '--compress', action='store_true', help='Compress files (default)')
+    i4.add_argument('-d', '--decompress', action='store_true', help='Decompress files')
+    y2.add_argument('--level', type=int, default=3, choices=range(1, 23), help='Compression level (1-22, default: 3)')
+    y2.add_argument('--threads', type=int, default=4, help='Number of threads per compression call (default: 4)')
+    y2.add_argument('--dir', type=str, default='.', help='Directory to process (default: current)')
+    y2.add_argument('--keep', action='store_true', help='Keep original files (default: remove on success)')
+    return y2
+def x2():
+    y2 = h4()
+    a3 = y2.parse_args()
+    a1 = a3.compress
+    j4 = a3.decompress
+    if not a1 and (not j4):
+        a1 = True
+        print('No action specified, defaulting to compression mode')
+    z = Path(a3.dir).resolve()
+    if not z.exists():
+        logger.error(f"Error: Directory '{z}' does not exist")
+        return 1
+    if not z.is_dir():
+        logger.error(f"Error: '{z}' is not a directory")
+        return 1
+    s1 = not a3.keep
+    print(f'Working directory: {z}')
+    print(f"Mode: {('Compression' if a1 else 'Decompression')}")
+    print(f'Threads: {a3.threads}')
+    if a1:
+        print(f'Compression level: {a3.level}')
+    print(f"Keep original files: {('Yes' if a3.keep else 'No')}")
+    print('Scanning directory tree...')
+    o3 = z3(z, a1)
+    n3(o3, a1, a3.level, a3.threads, s1)
+    return 0
+if __name__ == '__main__':
+    sys.exit(x2())
+
+# --- File: fast_compress4.py ---
+from __future__ import annotations
+import argparse
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+import zstandard as zstd
+def z3(f3, q='*'):
+    for h1 in f3.rglob(q):
+        if not h1.is_file():
+            continue
+        if h1.suffix == '.zst':
+            continue
+        q1 = h1.with_suffix(h1.suffix + '.zst')
+        if q1.exists():
+            print(f'Skipping {h1} - output already exists', file=sys.stderr)
+            continue
+        yield (h1, q1)
+def o1(p1, q1, r1=3, m3=4, k4=1024 * 1024, s1=True):
+    try:
+        u1 = zstd.ZstdCompressor(level=r1, threads=m3)
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            with u1.stream_writer(w1) as l4:
+                while True:
+                    y1 = v1.read(k4)
+                    if not y1:
+                        break
+                    l4.write(y1)
+        if q1.exists() and q1.stat().st_size > 0:
+            t1 = p1.stat().st_size
+            z1 = q1.stat().st_size
+            m = z1 / t1 * 40 if t1 > 0 else 0
+            if s1:
+                p1.unlink()
+                print(f'✓ Compressed & removed: {p1} -> {q1}')
+            else:
+                print(f'✓ Compressed: {p1} -> {q1}')
+            print(f'  Size: {t1:,} -> {z1:,} bytes ({m:.1f}%)')
+            return True
+        else:
+            raise RuntimeError('Compression produced empty or invalid file')
+    except Exception as e:
+        print(f'✗ Failed to compress {p1}: {e}', file=sys.stderr)
+        if q1.exists():
+            q1.unlink()
+        return False
+def a2(p1, q1=None, k4=1024 * 1024, s1=True):
+    if not p1.suffix == '.zst':
+        print(f'Skipping {p1} - not a .zst file', file=sys.stderr)
+        return False
+    if q1 is None:
+        q1 = p1.with_suffix('')
+    if q1.exists():
+        print(f'Skipping {p1} - output already exists', file=sys.stderr)
+        return False
+    try:
+        b2 = zstd.ZstdDecompressor()
+        with open(p1, 'rb') as v1, open(q1, 'wb') as w1:
+            with b2.stream_reader(v1) as m4:
+                while True:
+                    y1 = m4.read(k4)
+                    if not y1:
+                        break
+                    w1.write(y1)
+        if s1:
+            p1.unlink()
+            print(f'✓ Decompressed & removed: {p1} -> {q1}')
+        else:
+            print(f'✓ Decompressed: {p1} -> {q1}')
+        return True
+    except Exception as e:
+        print(f'✗ Failed to decompress {p1}: {e}', file=sys.stderr)
+        if q1.exists():
+            q1.unlink()
+        return False
+def x2():
+    y2 = argparse.ArgumentParser(description='Recursively compress/decompress files using zstandard')
+    y2.add_argument('directory', type=str, help='Root directory to process')
+    y2.add_argument('--decompress', '-d', action='store_true', help='Decompress .zst files instead of compressing')
+    y2.add_argument('--level', '-l', type=int, default=3, help='Compression level (1-22, default: 3)')
+    y2.add_argument('--threads', '-t', type=int, default=4, help='Number of threads (default: 4)')
+    y2.add_argument('--pattern', '-p', type=str, default='*', help='File pattern to match (default: *)')
+    y2.add_argument('--chunk-size', '-c', type=int, default=1024 * 1024, help='Chunk size in bytes (default: 1MB)')
+    y2.add_argument('--dry-run', '-n', action='store_true', help='Show what would be done without actually doing it')
+    y2.add_argument('--keep-original', '-k', action='store_true', help="Keep original files (don't remove them)")
+    a3 = y2.parse_args()
+    n4 = Path(a3.directory)
+    if not n4.exists():
+        print(f"Error: Directory '{n4}' does not exist", file=sys.stderr)
+        sys.exit(1)
+    if not n4.is_dir():
+        print(f"Error: '{n4}' is not a directory", file=sys.stderr)
+        sys.exit(1)
+    s1 = not a3.keep_original
+    print(f"{('Decompressing' if a3.decompress else 'Compressing')} files in: {n4}")
+    print(f'Pattern: {a3.pattern}')
+    print(f"Remove original: {('Yes' if s1 else 'No')}")
+    if not a3.decompress:
+        print(f'Level: {a3.level}, Threads: {a3.threads}')
+    e4 = 0
+    j2 = 0
+    if a3.decompress:
+        for h1, _ in z3(n4, f'*{a3.pattern}*.zst'):
+            if a3.dry_run:
+                print(f"[DRY RUN] Would decompress & {('remove' if s1 else 'keep')}: {h1}")
+            elif a2(h1, chunk_size=a3.chunk_size, remove_original=s1):
+                e4 += 1
+            else:
+                j2 += 1
+    else:
+        for p1, q1 in z3(n4, a3.pattern):
+            if a3.dry_run:
+                print(f"[DRY RUN] Would compress & {('remove' if s1 else 'keep')}: {p1} -> {q1}")
+            elif o1(p1, q1, level=a3.level, threads=a3.threads, chunk_size=a3.chunk_size, remove_original=s1):
+                e4 += 1
+            else:
+                j2 += 1
+    print(f"\n{'=' * 40}")
+    print(f"Completed: {e4} files {('decompressed' if a3.decompress else 'compressed')}")
+    if j2 > 0:
+        print(f'Failed: {j2} files')
+    return 0 if j2 == 0 else 1
+if __name__ == '__main__':
+    raise SystemExit(x2())
+
+# --- File: fast_xz.py ---
+from __future__ import annotations
+import argparse
+import textwrap
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import lzma_mt
+from loguru import logger
+o4 = {'.zip', '.br', '.xz', '.gz', '.bz2', '.bz3', '.zst', '.7z', '.lz4', '.rar', '.tar', '.tgz', '.tbz', '.tbz2', '.z', '.lz', '.lzma', '.xza'}
+p4 = {'.git', '__pycache__', '.venv', 'venv', '.env', 'node_modules'}
+q4 = 8
+def r4(h1):
+    return any((s4 in p4 for s4 in h1.parts))
+def t4(n4, a1):
+    a4 = []
+    if a1:
+        for u4 in n4.rglob('*'):
+            if u4.is_file() and (not r4(u4)):
+                if u4.suffix.lower() not in o4:
+                    a4.append(u4)
+    else:
+        for u4 in n4.rglob('*'):
+            if u4.is_file() and (not r4(u4)) and (u4.suffix.lower() == '.xz'):
+                a4.append(u4)
+    return sorted(a4)
+def o1(h1, v4=9, m3=4, w4=True):
+    try:
+        with open(h1, 'rb') as f:
+            w = f.read()
+        j = lzma_mt.compress(w, preset=v4, threads=m3)
+        q1 = h1.parent / (h1.name + '.xz')
+        with open(q1, 'wb') as f:
+            f.write(j)
+        if w4:
+            h1.unlink()
+        return (h1, True, f'Compressed to {q1.name}')
+    except Exception as e:
+        return (h1, False, f'Error: {e!s}')
+def a2(h1, w4=True):
+    try:
+        if h1.suffix.lower() != '.xz':
+            return (h1, False, 'Error: Not an .xz file')
+        with open(h1, 'rb') as f:
+            w = f.read()
+        x4 = lzma_mt.decompress(w)
+        q1 = h1.parent / h1.stem
+        with open(q1, 'wb') as f:
+            f.write(x4)
+        if w4:
+            h1.unlink()
+        return (h1, True, f'Decompressed to {q1.name}')
+    except Exception as e:
+        return (h1, False, f'Error: {e!s}')
+def y4(n4, a1, v4, m3, w4):
+    a4 = t4(n4, a1)
+    if not a4:
+        z4 = 'compress' if a1 else 'decompress'
+        print(f'No files found to {z4}')
+        return
+    z4 = 'Compressing' if a1 else 'Decompressing'
+    print(f'{z4} {len(a4)} files with {q4} workers...')
+    print(f'Preset: {v4}, Threads: {m3}')
+    a5 = 0
+    b5 = 0
+    d4 = len(a4)
+    with Pool(processes=q4) as p2:
+        c4 = []
+        if a1:
+            for u4 in a4:
+                c4.append(p2.apply_async(o1, (u4, v4, m3, w4)))
+        else:
+            for u4 in a4:
+                c4.append(p2.apply_async(a2, (u4, w4)))
+        h2 = 0
+        for r2 in c4:
+            h1, t3, c5 = r2.get()
+            h2 += 1
+            pct = h2 / d4 * 40
+            print(f'[{pct:5.1f}%] {h2}/{d4}')
+            if t3:
+                a5 += 1
+                d5 = '✓'
+            else:
+                b5 += 1
+                d5 = '✗'
+            e5 = h1.relative_to(n4)
+            print(f'{d5} {e5}: {c5}')
+    print('─' * 40)
+    print(f'Total successful: {a5}')
+    print(f'Total failed: {b5}')
+def n3(n4, a1, v4, m3, w4=True):
+    y4(n4, a1, v4, m3, w4)
+def x2():
+    y2 = argparse.ArgumentParser(description='Compress or decompress files using lzma_mt with parallel processing', formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('\n            Examples:\n              python compress_files.py\n              python compress_files.py -c --preset 6 --threads 8\n              python compress_files.py -d /path/to/files\n              python compress_files.py -c /path/to/files\n        '))
+    y2.add_argument('-c', '--compress', action='store_true', help='Compress files (default if no -d specified)')
+    y2.add_argument('-d', '--decompress', action='store_true', help='Decompress .xz files')
+    y2.add_argument('--preset', type=int, default=9, choices=range(10), help='Compression preset 0-9 (default: 9)')
+    y2.add_argument('--threads', type=int, default=4, help='Threads per compression job (default: 4)')
+    y2.add_argument('--keep-orig', action='store_true', help='Keep original files after compression/decompression')
+    y2.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    a3 = y2.parse_args()
+    if a3.compress and a3.decompress:
+        logger.error('Cannot specify both -c and -d')
+        return 1
+    f5 = a3.compress or not a3.decompress
+    n4 = Path(a3.directory).resolve()
+    if not n4.is_dir():
+        logger.error(f'{n4} is not a directory')
+        return 1
+    n3(n4, compress=f5, preset=a3.preset, threads=a3.threads, remove_orig=not a3.keep_orig)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(x2())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

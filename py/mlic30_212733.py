@@ -1,4 +1,3 @@
-
 import argparse
 import concurrent.futures
 from collections import defaultdict
@@ -25,23 +24,19 @@ def find_multiline_strings(
     i = 0
 
     while i < len(lines):
-        
         if lines[i].strip():
             start = i
             string_lines = [lines[i]]
             i += 1
 
-            
             while i < len(lines) and lines[i].strip():
                 string_lines.append(lines[i])
                 i += 1
 
             end = i - 1
 
-            
             full_string = "".join(string_lines)
             if len(string_lines) >= min_lines and len(full_string.strip()) >= min_chars:
-                
                 normalized = normalize_string(full_string)
                 strings[normalized].append((start, end))
         else:
@@ -56,7 +51,6 @@ def normalize_string(text: str) -> str:
 
 def find_files(directory: Path, extensions: Set[str] = None) -> List[Path]:
     if extensions is None:
-        
         extensions = {
             ".txt",
             ".md",
@@ -113,17 +107,13 @@ def find_repeated_strings(
 
     print(f"Found {len(files)} files to process...")
 
-    
     all_strings = defaultdict(list)
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        
         args = [(f, min_lines, min_chars, extensions) for f in files]
 
-        
         futures = {executor.submit(process_file, arg): arg[0] for arg in args}
 
-        
         for future in concurrent.futures.as_completed(futures):
             file_path = futures[future]
             try:
@@ -133,7 +123,6 @@ def find_repeated_strings(
             except Exception as e:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
 
-    
     repeated = {k: v for k, v in all_strings.items() if len(v) > 1}
 
     return repeated
@@ -142,12 +131,10 @@ def find_repeated_strings(
 def remove_strings_from_files(
     repeated_strings: Dict[str, List[Tuple[Path, List[Tuple[int, int]]]]], string_numbers: List[int] = None
 ):
-    
+
     string_list = list(repeated_strings.items())
 
-    
     if string_numbers:
-        
         indices_to_remove = [n - 1 for n in string_numbers if 1 <= n <= len(string_list)]
         strings_to_remove = {
             norm_str: occurrences for i, (norm_str, occurrences) in enumerate(string_list) if i in indices_to_remove
@@ -161,25 +148,20 @@ def remove_strings_from_files(
 
     files_to_modify = defaultdict(set)
 
-    
     for norm_str, occurrences in strings_to_remove.items():
         for file_path, positions in occurrences:
             files_to_modify[file_path].update(positions)
 
-    
     for file_path, positions in files_to_modify.items():
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
 
-            
             sorted_positions = sorted(positions, key=lambda x: x[0], reverse=True)
 
             for start, end in sorted_positions:
-                
                 del lines[start : end + 1]
 
-            
             with open(file_path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
 
@@ -199,11 +181,9 @@ def save_strings_to_file(repeated_strings: Dict[str, List[Tuple[Path, List[Tuple
                 f.write(f"String #{i} (found {len(occurrences)} times):\n")
                 f.write("-" * 30 + "\n")
 
-                
                 f.write(norm_str)
                 f.write("\n\n")
 
-                
                 f.write("Found in:\n")
                 for file_path, positions in occurrences:
                     f.write(f"  - {file_path}\n")
@@ -238,18 +218,15 @@ def print_summary(repeated_strings: Dict[str, List[Tuple[Path, List[Tuple[int, i
 
 def parse_string_numbers(args_strings):
     if isinstance(args_strings, str):
-        
         try:
-            
             if "," in args_strings:
                 return [int(x.strip()) for x in args_strings.split(",")]
-            
+
             else:
                 return [int(x.strip()) for x in args_strings.split()]
         except ValueError:
             raise argparse.ArgumentTypeError(f"Invalid string number format: {args_strings}")
     elif isinstance(args_strings, list):
-        
         numbers = []
         for item in args_strings:
             if "," in item:
@@ -268,7 +245,7 @@ def main():
         "--remove",
         nargs="*",
         default=None,
-        const=[],  
+        const=[],
         help="Remove found repeated strings from files. Optionally specify string numbers to remove (e.g., -r 2 4 or -r 2,4)",
     )
     parser.add_argument("-s", "--save", action="store_true", help="Save found strings to lic.txt in current directory")
@@ -294,7 +271,6 @@ def main():
         print(f"Directory {directory} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    
     extensions = None
     if args.extensions:
         extensions = set(args.extensions)
@@ -302,7 +278,6 @@ def main():
             print("Warning: Some extensions don't start with '.', adding it automatically...")
             extensions = {ext if ext.startswith(".") else f".{ext}" for ext in extensions}
 
-    
     print(f"Searching for repeated multiline strings in {directory}...")
 
     repeated = find_repeated_strings(
@@ -313,16 +288,13 @@ def main():
         print("No repeated multiline strings found.")
         return
 
-    
     print_summary(repeated)
 
-    
-    if args.remove is not None:  
-        if args.remove == []:  
+    if args.remove is not None:
+        if args.remove == []:
             print("\nRemoving ALL repeated strings from files...")
             remove_strings_from_files(repeated)
-        else:  
-            
+        else:
             try:
                 string_numbers = parse_string_numbers(args.remove)
                 if not string_numbers:
@@ -335,7 +307,6 @@ def main():
                 print(f"Error: {e}", file=sys.stderr)
                 return
 
-    
     if args.save:
         output_file = Path.cwd() / "lic.txt"
         print(f"\nSaving report to {output_file}...")

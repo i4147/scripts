@@ -1,4 +1,3 @@
-
 import os
 import subprocess
 import sys
@@ -18,7 +17,7 @@ else:
 
 
 SIZE_CACHE_FILE = "repo_sizes.json"
-CACHE_EXPIRY_DAYS = 7  
+CACHE_EXPIRY_DAYS = 7
 
 
 def get_github_token():
@@ -38,7 +37,7 @@ def load_size_cache():
         try:
             with open(cache_file, "r") as f:
                 cache_data = json.load(f)
-                
+
                 cache_date = datetime.fromisoformat(cache_data.get("_cache_date", "2000-01-01"))
                 if datetime.now() - cache_date < timedelta(days=CACHE_EXPIRY_DAYS):
                     print(f"📂 Loaded cache from {SIZE_CACHE_FILE} ({len(cache_data) - 1} repos)")
@@ -65,7 +64,7 @@ def save_size_cache(cache_data):
 
 
 def get_repo_size(repo, token=None, cache_data=None):
-    
+
     if cache_data and repo in cache_data:
         cached_size = cache_data[repo].get("size_mb")
         cached_date = cache_data[repo].get("fetched_at", "")
@@ -73,7 +72,6 @@ def get_repo_size(repo, token=None, cache_data=None):
             print(f"  📦 Using cached size: {cached_size:.2f} MB (fetched: {cached_date})")
             return cached_size
 
-    
     api_url = f"https://api.github.com/repos/{repo}"
     headers = {}
 
@@ -85,11 +83,10 @@ def get_repo_size(repo, token=None, cache_data=None):
 
         if response.status_code == 200:
             data = response.json()
-            
+
             size_kb = data.get("size", 0)
             size_mb = size_kb / 1024
 
-            
             if cache_data is not None:
                 cache_data[repo] = {
                     "size_mb": size_mb,
@@ -117,7 +114,6 @@ def get_repo_info(repo, token=None, cache_data=None):
     if cache_data and repo in cache_data:
         return cache_data[repo]
 
-    
     api_url = f"https://api.github.com/repos/{repo}"
     headers = {}
 
@@ -149,7 +145,6 @@ def get_repo_info(repo, token=None, cache_data=None):
                 "ssh_url": data.get("ssh_url", ""),
             }
 
-            
             if cache_data is not None:
                 cache_data[repo] = repo_info
 
@@ -166,7 +161,6 @@ def clone_repo(repo):
     clone_url = f"https://github.com/{repo}.git"
     repo_name = repo.split("/")[-1]
 
-    
     if os.path.exists(repo_name):
         print(f"  ⏭️  {repo_name} already exists, skipping...")
         return True
@@ -216,19 +210,16 @@ def display_cached_stats(cache_data):
 
 
 def main():
-    
+
     repos_file = Path("repos.txt")
     if not repos_file.exists():
         print("❌ repos.txt not found in current directory")
         sys.exit(1)
 
-    
     token = get_github_token()
 
-    
     cache_data = load_size_cache()
 
-    
     with open(repos_file, "r") as f:
         repos = [line.strip() for line in f if line.strip()]
 
@@ -240,7 +231,6 @@ def main():
     print(f"🔍 Checking repository sizes...")
     print("-" * 50)
 
-    
     filtered_repos = []
     size_limit_mb = 0.2
     skipped_no_size = 0
@@ -263,7 +253,6 @@ def main():
             filtered_repos.append(repo)
             total_size += size_mb
 
-            
             repo_info = get_repo_info(repo, token, cache_data)
             if repo_info:
                 repo_info_list.append(repo_info)
@@ -272,13 +261,10 @@ def main():
 
         print()
 
-    
     save_size_cache(cache_data)
 
-    
     display_cached_stats(cache_data)
 
-    
     if filtered_repos:
         print(f"\n📋 Repositories within size limit:")
         print(f"  📦 Count: {len(filtered_repos)}")
@@ -288,7 +274,6 @@ def main():
     if skipped_no_size > 0:
         print(f"  ⚠️  Skipped: {skipped_no_size} (could not determine size)")
 
-    
     if not filtered_repos:
         print("\n❌ No repositories within size limit found")
         sys.exit(1)
@@ -308,19 +293,16 @@ def main():
             clone_stats[repo] = "failed"
         print()
 
-    
     print("=" * 50)
     print(f"✅ Successfully cloned: {success_count}/{len(filtered_repos)}")
     print(f"❌ Failed: {len(filtered_repos) - success_count}")
 
-    
     if token:
         print(f"\n💡 Using authenticated requests (rate limit: 5000/hr)")
     else:
         print(f"\n💡 Using unauthenticated requests (rate limit: 60/hr)")
         print("   Consider adding GITHUB_TOKEN to ~/.env for higher limits")
 
-    
     print(f"\n💾 Repository size data saved to: {SIZE_CACHE_FILE}")
 
 

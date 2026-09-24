@@ -1,0 +1,282 @@
+# filename: chmodi.py
+from dh import is_binary;M=493;D=436;C=493;y={'.git','__pycache__','.idea','node_modules','.venv','venv'};h={'bin','sbin','.bin','libexec','scripts','tools'}
+def k(ah):return bool(ah&(ao.S_IXUSR|ao.S_IXGRP|ao.S_IXOTH))
+def v(al):try:with al.open('rb') as f:z=f.readline()
+        return z.startswith(b'#!')
+    except OSError:return False
+def A(al):try:return al.is_symlink()
+    except OSError:return False
+def g(al):return any((ak in y for ak in al.parts))
+def c(al):return any((ak in h for ak in al.parts))
+def F(al):try:W=al.parent;return W.exists() and os.access(str(W),os.W_OK)
+    except (OSError,PermissionError):return False
+def a(al,p):if A(al):return (None,'symbolic link')
+    if al.is_dir():return (M,'directory')
+    if k(p):if is_binary(al) or v(al):return (None,'executable binary/script (preserved)')
+        return (D,'executable (normalizing to 664)')
+    if c(al):return (C,'file in executable directory')
+    return (D,'regular file')
+def r(al):Z={'dirs_changed':0,'files_changed':0,'files_made_exec':0,'skipped':0,'errors':0,'permission_errors':0,'other_errors':0,'messages':[]}
+    try:if g(al):Z['skipped']+=1;return Z
+        try:p=ao.S_IMODE(al.stat().st_mode)
+        except FileNotFoundError:return Z
+        except PermissionError:Z['permission_errors']+=1;Z['errors']+=1;return Z
+        w,Y=a(al,p)
+        if w is None:Z['skipped']+=1;return Z
+        if p==w:return Z
+        if not F(al):Z['permission_errors']+=1;Z['errors']+=1;return Z
+        try:al.chmod(w)
+        except PermissionError:Z['permission_errors']+=1;Z['errors']+=1;return Z
+        except OSError:Z['other_errors']+=1;Z['errors']+=1;return Z
+        if al.is_dir():Z['dirs_changed']+=1;Z['messages'].append(f'[DIR]  {str(al)[:60]} {oct(p)}->{oct(w)}')
+        elif c(al) and (not k(p)):Z['files_made_exec']+=1;Z['messages'].append(f'[EXEC] {str(al)[:60]} {oct(p)}->{oct(w)} ({Y})')
+        else:Z['files_changed']+=1;Z['messages'].append(f'[FILE] {str(al)[:60]} {oct(p)}->{oct(w)}')
+    except Exception as e:Z['other_errors']+=1;Z['errors']+=1;Z['messages'].append(f'[ERR]  {str(al)[:60]}:{type(e).__name__}:{e}')
+    return Z
+def i(aq):an=ad(aq).resolve()
+    if not an.exists():print(f'❌ Error:Path does not exist:{aq}',file=at.stderr);at.exit(1)
+    ab=[]
+    try:for u,P,K in os.walk(str(an),topdown=True,followlinks=False):P[:]=[d for d in P if d not in y];cd=ad(u);ab.append(cd)
+            for aj in K:ab.append(cd/aj)
+    except PermissionError as e:print(f'⚠️  Warning:Permission denied during traversal:{e}',file=at.stderr)
+    return ab
+def l(t):V={'dirs_changed':0,'files_changed':0,'files_made_exec':0,'skipped':0,'errors':0,'permission_errors':0,'other_errors':0,'messages':[]}
+    for Z in t:V['dirs_changed']+=Z['dirs_changed'];V['files_changed']+=Z['files_changed'];V['files_made_exec']+=Z['files_made_exec'];V['skipped']+=Z['skipped'];V['errors']+=Z['errors'];V['permission_errors']+=Z.get('permission_errors',0);V['other_errors']+=Z.get('other_errors',0);V['messages'].extend(Z['messages'])
+    return V
+def o(S,x,q):print('\n'+'='*40);print('📊 PERMISSION NORMALIZATION SUMMARY');print('-'*40);print(f'⏱️  Time elapsed:{q:.2f} seconds');print(f'📁 Total items processed:{x}');print(f"⏭️  Skipped:{S['skipped']}");print('-'*40);print(f"✓  Directories changed:{S['dirs_changed']}");print(f"✓  Files normalized:{S['files_changed']}");print(f"✓  Files made executable:{S['files_made_exec']}");print(f"❌ Total errors:{S['errors']}")
+    if S.get('permission_errors',0)>0:print(f"   └─ Permission errors:{S['permission_errors']}")
+    if S.get('other_errors',0)>0:print(f"   └─ Other errors:{S['other_errors']}")
+    print('-'*40)
+    if S.get('permission_errors',0)>0:print('\n💡 Tip:Permission errors can be fixed by:');print('-Running with appropriate privileges (sudo/root)');print('-Changing ownership of files');print('-Running chmod on problematic directories first')
+def n(S,T=False):if not T or not S['messages']:return
+    print('\n📝 DETAILED CHANGES:');print('-'*40);O=[m for m in S['messages'] if m.startswith('[DIR]')];I=[m for m in S['messages'] if m.startswith('[EXEC]')];J=[m for m in S['messages'] if m.startswith('[FILE]')];Q=[m for m in S['messages'] if m.startswith('[ERR]')]
+    for ai,aa in [(O,'Directory changes'),(I,'Files made executable'),(J,'Files normalized')]:if ai:print(f'\n{aa}:')
+            for ar in ai[:50]:print(f'  {ar}')
+            if len(ai)>50:print(f'  ... and {len(ai)-50} more')
+    if Q:print(f'\n❌ Errors ({len(Q)}):')
+        for ar in Q[:20]:print(f'  {ar}')
+        if len(Q)>20:print(f'  ... and {len(Q)-20} more')
+def b(aq='.',T=False):B=ap.time();print(f'🔍 Scanning:{ad(aq).resolve()}');E=i(aq);ac=len(E)
+    if ac==0:print('⚠️  No files found to process.');return
+    U=min(H(),4);print(f'📦 Found {ac} items to process');print(f'⚙️  Using {U} worker processes');print('🚀 Processing...\n')
+    try:with ae(processes=U) as am:G=max(1000,ac//(U*10));s=am.imap_unordered(r,E,G=G);t=[];L=0
+            for Z in s:t.append(Z);L+=1
+                if L%500==0 or L==ac:print(f'  Progress:{L:,}/{ac:,} ({100*L/ac:.1f}%)')
+    except KeyboardInterrupt:print('\n⚠️  Interrupted by user!');am.terminate();am.join();at.exit(1)
+    j=l(t);R=ap.time()-B;o(j,ac,R);n(j,T=T);print('\n✅ Done!')
+def ag():X=N.ArgumentParser(description='Normalize file and directory permissions.',epilog='Example:python3 normalize_perms.py .-v');X.add_argument('path',nargs='?',default='.',help='Path to start normalization (default:current directory)');X.add_argument('-v','--verbose',action='store_true',help='Print detailed changes');X.add_argument('-q','--quiet',action='store_true',help='Suppress progress output');af=X.parse_args()
+    try:b(af.path,T=af.verbose)
+    except KeyboardInterrupt:print('\n\n⚠️  Interrupted!');at.exit(1)
+    except Exception as e:print(f'\n❌ Fatal error:{e}',file=at.stderr);at.exit(1)
+if __name__=='__main__':raise SystemExit(ag())
+# filename: dirperm.py
+from tqdm import tqdm;x={'.git','.ruff_cache','__pycache__'}
+def g(G):return G in x
+def E(A='.'):W=Q(A)
+    def Y(p):if g(p.name):return
+        yield ('dir',str(p))
+        try:for T in p.iterdir():if T.is_dir():yield from Y(T)
+                elif T.is_file():if T.is_symlink():continue
+                    yield ('file',str(T))
+        except PermissionError:pass
+    yield from Y(W)
+def B(A='.'):for z,V in E(A):if z=='dir':yield V
+def w(A='.'):for z,V in E(A):if z=='file':yield V
+def r(V):try:with open(V,'rb') as f:u=f.readline();return u.startswith(b'#!')
+    except OSError:return False
+def i(V):try:return os.access(V,os.X_OK)
+    except:return False
+def c(V):try:return X.S_IMODE(Q(V).stat().st_mode)
+    except:return None
+def b():return 509
+def a(V):if i(V):return None
+    v=Q(V).parent.name
+    if r(V) or v=='bin':return 493
+    return 420
+def l(z,V):if z=='dir':s=b(V)
+    else:s=a(V)
+    if s is None:return ('skip_executable',V,None,None)
+    m=c(V)
+    if m is None:return ('error',V,None,s)
+    if m!=s:return ('change',V,m,s)
+    return ('skip_correct',V,m,s)
+def o(V,s,H=False):if H:return True
+    try:Q(V).chmod(s);return True
+    except Exception as e:print(f'Error:{V}:{e}');return False
+def h(P,H=False):q=P['dirs_to_change']+P['files_make_executable']+P['files_set_standard']
+    if not q:print('\nNo changes needed!');return (0,0)
+    print(f'\nApplying changes to {len(q)} items...');I=0;J=0
+    for V,C,M in tqdm(q,desc='Changing permissions',unit='items'):if o(V,M,H):I+=1
+        else:J+=1
+    return (I,J)
+def n(P,I=None,J=None):t=P['total_dirs']+P['total_files'];k=len(P['dirs_to_change'])+len(P['files_make_executable'])+len(P['files_set_standard']);print(f"\n{'='*40}");print('Scan Summary:');print(f'  Total items scanned:{t}');print(f"    Directories:{P['total_dirs']}");print(f"    Files:{P['total_files']}");print('\nDirectory Permissions:');print(f"  → Will set to 0775:{len(P['dirs_to_change'])}");print(f"  ✓ Already correct (0775):{len(P['dirs_correct'])}");print('\nFile Permissions:');print(f"  ⊘ Already executable (skipped):{len(P['files_skip_executable'])}");print(f"  → Will make executable (+x):{len(P['files_make_executable'])}");print(f"  → Will set to standard (0644):{len(P['files_set_standard'])}");print(f"  ✓ Already correct:{len(P['files_skip_correct'])}");print(f'\nTotal changes needed:{k}')
+    if P['errors']:print(f"  ✗ Errors during analysis:{len(P['errors'])}")
+    if I is not None:print(f"\n{'='*40}");print('Results:');print(f'  ✓ Changes successful:{I}')
+        if J:print(f'  ✗ Changes failed:{J}')
+    print(f"{'='*40}")
+def j(P,Z=5):if P['dirs_to_change']:print('\nExamples of directories to change to 0775:')
+        for V,F,M in P['dirs_to_change'][:Z]:print(f'  {oct(F)}->{oct(M)}  {V}')
+        if len(P['dirs_to_change'])>Z:print(f"  ... and {len(P['dirs_to_change'])-Z} more")
+    if P['files_make_executable']:print('\nExamples of files to make executable (+x):')
+        for V,F,M in P['files_make_executable'][:Z]:print(f'  {oct(F)}->{oct(M)}  {V}')
+        if len(P['files_make_executable'])>Z:print(f"  ... and {len(P['files_make_executable'])-Z} more")
+    if P['files_set_standard']:print('\nExamples of files to set to 0644:')
+        for V,F,M in P['files_set_standard'][:Z]:print(f'  {oct(F)}->{oct(M)}  {V}')
+        if len(P['files_set_standard'])>Z:print(f"  ... and {len(P['files_set_standard'])-Z} more")
+    if P['files_skip_executable']:print('\nExamples of skipped files (already executable):')
+        for V in P['files_skip_executable'][:Z]:print(f'  {V}')
+        if len(P['files_skip_executable'])>Z:print(f"  ... and {len(P['files_skip_executable'])-Z} more")
+def U():K=D.ArgumentParser(description='Fix directory and file permissions with smart rules',formatter_class=D.RawDescriptionHelpFormatter,epilog=f"\nRules for directories:\n-All directories:set to 0775 (rwxrwxr-x)\n\nRules for files:\n-Files that are already executable:no changes\n-Files with shebang (#!) or in 'bin' directory:set to 0755 (rwxr-xr-x)\n-All other files:set to 0644 (rw-r--r--)\n\nSkipped directories:{','.join(sorted(x))}\n\nExamples:\n%(prog)s                    # Process current directory\n%(prog)s/path/to/project   # Process specific path\n%(prog)s .--dry-run        # Preview changes\n%(prog)s .--show-examples  # Show examples of changes\n%(prog)s .--dirs-only      # Only process directories\n%(prog)s .--files-only     # Only process files\n        ");K.add_argument('path',nargs='?',default='.',help='Root path to start from (default:current directory)');K.add_argument('--dry-run',action='store_true',help='Show what would be done without actually changing permissions');K.add_argument('--show-examples',action='store_true',help='Show example files/directories that would be changed');K.add_argument('--dirs-only',action='store_true',help='Only process directories,skip files');K.add_argument('--files-only',action='store_true',help='Only process files,skip directories');R=K.parse_args();print(f"Skip directories:{','.join(sorted(x))}")
+    if R.dirs_only:print('Mode:Directories only')
+    elif R.files_only:print('Mode:Files only')
+    if R.dry_run:print('DRY RUN-No changes will be made\n')
+    if R.dirs_only:print('Scanning directories...');S=list(tqdm(B(R.path),desc='Scanning dirs',unit='dirs'));O=[('dir',d) for d in S]
+    elif R.files_only:print('Scanning files...');N=list(tqdm(w(R.path),desc='Scanning files',unit='files'));O=[('file',f) for f in N]
+    else:O=E(R.path)
+    P={'total_dirs':0,'total_files':0,'dirs_to_change':[],'dirs_correct':[],'files_skip_executable':[],'files_skip_correct':[],'files_make_executable':[],'files_set_standard':[],'errors':[]};y=list(O) if not isinstance(O,list) else O
+    for z,V in tqdm(y,desc='Analyzing',unit='items'):if z=='dir':P['total_dirs']+=1
+        else:P['total_files']+=1
+        L,V,F,M=l(z,V)
+        if L=='skip_executable':P['files_skip_executable'].append(V)
+        elif L=='skip_correct':if z=='dir':P['dirs_correct'].append(V)
+            else:P['files_skip_correct'].append(V)
+        elif L=='change':if z=='dir':P['dirs_to_change'].append((V,F,M))
+            elif M==493:P['files_make_executable'].append((V,F,M))
+            else:P['files_set_standard'].append((V,F,M))
+        elif L=='error':P['errors'].append(V)
+    n(P)
+    if R.show_examples:j(P)
+    if not R.dry_run:I,J=h(P,H=False)
+        if I is not None:print(f"\n{'='*40}");print('Final Results:');print(f'  ✓ Changes applied successfully:{I}')
+            if J:print(f'  ✗ Failed changes:{J}')
+            print(f"{'='*40}")
+    else:k=len(P['dirs_to_change'])+len(P['files_make_executable'])+len(P['files_set_standard'])
+        if k>0:print(f'\nWould apply {k} changes')
+if __name__=='__main__':raise SystemExit(U())
+# filename: fileperm.py
+from tqdm import tqdm;v={'.git','.ruff_cache','__pycache__'}
+def g(E):return E in v
+def u(x='.'):for F,A,w in S.walk(x):A[:]=[d for d in A if not g(d)]
+        for B in w:P=S.path.join(F,B)
+            if S.path.islink(P):continue
+            yield P
+def q(P):try:with open(P,'rb') as f:s=f.readline();return s.startswith(b'#!')
+    except OSError:return False
+def j(P):try:return S.access(P,S.X_OK)
+    except:return False
+def b(P):try:return Q.S_IMODE(S.stat(P).st_mode)
+    except:return None
+def a(P):if j(P):return None
+    t=S.path.basename(S.path.dirname(P))
+    if q(P) or t=='bin':return 493
+    return 420
+def m(P):r=a(P)
+    if r is None:return ('skip_executable',P,None,None)
+    n=b(P)
+    if n is None:return ('error',P,None,None)
+    if n!=r:return ('change',P,n,r)
+    return ('skip_correct',P,n,r)
+def p(P,r,G=False):if G:return True
+    try:S.chmod(P,r);return True
+    except Exception as e:print(f'Error:{P}:{e}');return False
+def c(x='.'):M={'total':0,'skip_executable':[],'skip_correct':[],'make_executable':[],'set_standard':[],'errors':[]};print('Scanning files...');h=u(x)
+    for P in tqdm(h,desc='Analyzing',unit='files'):M['total']+=1;K,P,D,L=m(P)
+        if K=='skip_executable':M['skip_executable'].append(P)
+        elif K=='skip_correct':M['skip_correct'].append(P)
+        elif K=='change':if L==493:M['make_executable'].append((P,D,L))
+            else:M['set_standard'].append((P,D,L))
+        elif K=='error':M['errors'].append(P)
+    return M
+def i(M,G=False):C=M['make_executable']+M['set_standard']
+    if not C:print('\nNo changes needed!');return
+    print(f'\nApplying changes to {len(C)} files...');H=0;I=0
+    for P,y,L in tqdm(C,desc='Changing permissions',unit='files'):if p(P,L,G):H+=1
+        else:I+=1
+    return (H,I)
+def o(M,H=None,I=None):print(f"\n{'='*40}");print('Scan Results:');print(f"  Total files scanned:{M['total']}");print(f"  ⊘ Already executable (skipped):{len(M['skip_executable'])}");print(f"  ✓ Already correct:{len(M['skip_correct'])}");print(f"  → Will make executable (+x):{len(M['make_executable'])}");print(f"  → Will set to standard (0644):{len(M['set_standard'])}")
+    if M['errors']:print(f"  ✗ Errors during analysis:{len(M['errors'])}")
+    if H is not None:print('\nResults:');print(f'  ✓ Changes successful:{H}')
+        if I:print(f'  ✗ Changes failed:{I}')
+    print(f"{'='*40}")
+def k(M,R=5):if M['make_executable']:print('\nExamples of files to make executable (+x):')
+        for P,D,L in M['make_executable'][:R]:print(f'  {oct(D)}->{oct(L)}  {P}')
+        if len(M['make_executable'])>R:print(f"  ... and {len(M['make_executable'])-R} more")
+    if M['set_standard']:print('\nExamples of files to set to 0644:')
+        for P,D,L in M['set_standard'][:R]:print(f'  {oct(D)}->{oct(L)}  {P}')
+        if len(M['set_standard'])>R:print(f"  ... and {len(M['set_standard'])-R} more")
+    if M['skip_executable']:print('\nExamples of skipped files (already executable):')
+        for P in M['skip_executable'][:R]:print(f'  {P}')
+        if len(M['skip_executable'])>R:print(f"  ... and {len(M['skip_executable'])-R} more")
+def O():J=z.ArgumentParser(description='Fix file permissions with smart rules using generator-based scanning',formatter_class=z.RawDescriptionHelpFormatter,epilog=f"\nRules:\n-Files that are already executable:no changes\n-Files with shebang (#!) or in 'bin' directory:set to 0755\n-All other files:set to 0644\n\nSkipped directories:{','.join(sorted(v))}\n\nExamples:\n%(prog)s                    # Process current directory\n%(prog)s/path/to/project   # Process specific path\n%(prog)s .--dry-run        # Preview changes\n%(prog)s .--show-examples  # Show examples of changes\n        ");J.add_argument('path',nargs='?',default='.',help='Root path to start from (default:current directory)');J.add_argument('--dry-run',action='store_true',help='Show what would be done without actually changing permissions');J.add_argument('--show-examples',action='store_true',help='Show example files that would be changed');N=J.parse_args();print(f"Skip directories:{','.join(sorted(v))}")
+    if N.dry_run:print('DRY RUN-No changes will be made\n')
+    M=c(N.path);o(M)
+    if N.show_examples:k(M)
+    if not N.dry_run:H,I=i(M,G=False)
+        if H is not None:print(f"\n{'='*40}");print('Final Results:');print(f'  ✓ Changes applied successfully:{H}')
+            if I:print(f'  ✗ Failed changes:{I}')
+            print(f"{'='*40}")
+    else:l=len(M['make_executable'])+len(M['set_standard'])
+        if l>0:print(f'\nWould apply {l} changes')
+            if N.show_examples:k(M)
+if __name__=='__main__':raise SystemExit(O())
+# filename: nchmod.py
+def j(q):return r.S_IMODE(q.stat().st_mode)
+def t(i):b=i.stat().st_mode;l=[r.S_IXUSR,r.S_IXGRP,r.S_IXOTH]
+    for u in range(len(l),0,-1):try:o=b
+            for m in l[:u]:o|=m
+            i.chmod(o);break
+        except OSError:continue
+def k(q):return bool(q.stat().st_mode&r.S_IXUSR)
+def g(p):if not p.is_dir():yield p
+    for f in p.iterdir():if f.is_file() and (not f.is_symlink()):yield f
+        if f.is_dir():yield f;yield from g(f)
+def a(s):h=509;d=436
+    for q in g(s):if q.is_symlink() or not q.exists():continue
+        if q.is_file() and (k(q) or 'bin' in q.parts):t(q);continue
+        try:c=j(q)
+            if q.is_dir():if c!=h:n(q).chmod(h);print(f'{q.relative_to(s)} {oct(c)} :{oct(h)}')
+            elif q.is_file():if q.suffix in {'.sh','.so'} and (not k(q)):t(q);continue
+                if c!=d:if q.parent.name!='bin' and q.suffix!='.sh':q.chmod(d)
+                    print(f'{q.relative_to(s)}:{oct(c)}-->{oct(d)}')
+        except PermissionError as e:print(f'Permission denied:{q.name} ({e})')
+        except FileNotFoundError:continue
+        except OSError as e:print(f'OS error on {q.name}:{e}')
+if __name__=='__main__':s=n.cwd();a(s)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

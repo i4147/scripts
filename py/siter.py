@@ -25,14 +25,12 @@ class WheelBuilder:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.force_all = force_all
         self.parallel = parallel
-        self.max_workers = max_workers or min(cpu_count(), 8)  
+        self.max_workers = max_workers or min(cpu_count(), 8)
 
-        
         self.venv_root = self._find_venv_root()
         self.bin_dir = self._find_bin_dir()
         self.share_dir = self.venv_root / "share" if self.venv_root else None
 
-        
         self.processed_packages: Set[str] = set()
 
     def _find_venv_root(self) -> Optional[Path]:
@@ -169,7 +167,6 @@ class WheelBuilder:
         pkg_name = parts[0]
         version = parts[1] if len(parts) > 1 else "0.0.0"
 
-        
         pkg_key = f"{pkg_name}-{version}"
         if pkg_key in self.processed_packages:
             return None
@@ -214,7 +211,6 @@ class WheelBuilder:
                 data_dir = None
                 new_record = []
 
-                
                 for path_str in records:
                     src = self.site_packages / path_str
                     if not src.exists():
@@ -233,7 +229,6 @@ class WheelBuilder:
                     file_size = dest.stat().st_size
                     new_record.append((str(rel_path), file_hash, str(file_size)))
 
-                
                 if scripts:
                     data_dir = tmp_path / data_dir_name
                     scripts_dir = data_dir / "scripts"
@@ -250,7 +245,6 @@ class WheelBuilder:
                         file_size = dest.stat().st_size
                         new_record.append((str(rel_path), file_hash, str(file_size)))
 
-                
                 if data_files:
                     if not data_dir:
                         data_dir = tmp_path / data_dir_name
@@ -267,7 +261,6 @@ class WheelBuilder:
                         file_size = dest.stat().st_size
                         new_record.append((str(rel_path), file_hash, str(file_size)))
 
-                
                 wheel_file = dist_info_dest / "WHEEL"
                 with wheel_file.open("w", encoding="utf-8") as f:
                     f.write("Wheel-Version: 1.0\n")
@@ -280,7 +273,6 @@ class WheelBuilder:
                 file_size = wheel_file.stat().st_size
                 new_record.append((str(rel_path), file_hash, str(file_size)))
 
-                
                 record_file = dist_info_dest / "RECORD"
                 with record_file.open("w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
@@ -288,7 +280,6 @@ class WheelBuilder:
                         writer.writerow(row)
                     writer.writerow([f"{dist_info_name}/RECORD", "", ""])
 
-                
                 with zipfile.ZipFile(wheel_path, "w", zipfile.ZIP_DEFLATED) as whl:
                     for file in tmp_path.rglob("*"):
                         if file.is_file():
@@ -342,25 +333,18 @@ class WheelBuilder:
         return built
 
     def _build_parallel(self, dist_infos: List[Path]) -> int:
-        
+
         self.processed_packages.clear()
 
-        
-        
         from multiprocessing import get_context
 
-        
         ctx = get_context("spawn")
 
-        
         build_func = self._build_wheel_worker
 
-        
         with ctx.Pool(processes=self.max_workers) as pool:
-            
             results = pool.map(build_func, dist_infos)
 
-        
         built = sum(1 for _, result in results if result is not None)
 
         print(f"\n✅ Built {built}/{len(dist_infos)} wheels in {self.output_dir}")
@@ -412,7 +396,6 @@ Examples:
 
     args = parser.parse_args()
 
-    
     if args.site_packages:
         site_packages = args.site_packages.resolve()
     else:
@@ -422,7 +405,6 @@ Examples:
         print(f"❌ Site-packages not found: {site_packages}")
         return 1
 
-    
     dist_infos = list(site_packages.glob("*.dist-info"))
     if not dist_infos:
         print(f"⚠️  No .dist-info directories found in {site_packages}")
@@ -433,11 +415,9 @@ Examples:
 
     print(f"📂 Using site-packages: {site_packages}")
 
-    
     parallel = not args.no_parallel
     builder = WheelBuilder(site_packages, args.output, args.all, parallel=parallel, max_workers=args.workers)
 
-    
     if args.package:
         matches = list(site_packages.glob(f"{args.package}*.dist-info"))
         if not matches:
@@ -450,7 +430,6 @@ Examples:
                 print(f"  - {m.name}")
             print("Building all matches...")
 
-        
         builder.parallel = False
         built = 0
         for dist_info in matches:
@@ -463,7 +442,6 @@ Examples:
 
 
 if __name__ == "__main__":
-    
     from multiprocessing import freeze_support
 
     freeze_support()

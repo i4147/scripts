@@ -1,4 +1,3 @@
-
 import argparse
 import ast
 import concurrent.futures
@@ -118,7 +117,6 @@ def find_repeated_strings(
             except Exception as e:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
 
-    
     repeated = {k: v for k, v in all_strings.items() if len(v) > 1}
 
     if half:
@@ -244,7 +242,6 @@ def main():
         directory, min_lines=args.min_lines, min_chars=args.min_chars, max_workers=args.workers, half=args.half
     )
 
-    
     output_file = Path.cwd() / "lic.txt"
     save_strings_to_file(repeated, output_file)
 

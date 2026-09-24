@@ -17,7 +17,6 @@ class COCBaseExtractor:
 
             soup = BeautifulSoup(response.content, "html.parser")
 
-            
             base_links = soup.find_all("a", class_="base-link")
 
             for link in base_links:
@@ -39,11 +38,10 @@ class COCBaseExtractor:
 
             soup = BeautifulSoup(response.content, "html.parser")
 
-            
             base_links = soup.find_all("a", href=True)
             th18_links = [link for link in base_links if "th18" in link.get("href", "").lower()]
 
-            for link in th18_links[:20]:  
+            for link in th18_links[:20]:
                 href = link.get("href")
                 name = link.get_text(strip=True)
                 full_url = urljoin(url, href)

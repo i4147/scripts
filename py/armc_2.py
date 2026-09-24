@@ -1,4 +1,3 @@
-
 import ast
 import re
 import sys
@@ -11,21 +10,19 @@ from dh import get_pyfiles
 
 
 class CommentRemover:
-
     def __init__(self) -> None:
-        
+
         self.preserve_patterns = [
-            r"^#!",  
-            r"#\s*type:",  
-            r"#\s*fmt:",  
-            r"#\s*pragma:",  
-            r"#\s*noqa",  
-            r"#\s*pylint:",  
-            r"#\s*flake8:",  
-            r"#\s*mypy:",  
+            r"^#!",
+            r"#\s*type:",
+            r"#\s*fmt:",
+            r"#\s*pragma:",
+            r"#\s*noqa",
+            r"#\s*pylint:",
+            r"#\s*flake8:",
+            r"#\s*mypy:",
         ]
 
-        
         self.preserve_regex = re.compile("|".join(self.preserve_patterns))
 
     def remove_comments(self, content: str) -> Tuple[str, int]:
@@ -37,7 +34,6 @@ class CommentRemover:
         escape_next = False
 
         for line in lines:
-            
             new_line_chars = []
             i = 0
             comment_start = -1
@@ -46,7 +42,6 @@ class CommentRemover:
             while i < len(line):
                 char = line[i]
 
-                
                 if escape_next:
                     if not in_comment:
                         new_line_chars.append(char)
@@ -61,7 +56,6 @@ class CommentRemover:
                     i += 1
                     continue
 
-                
                 if not in_comment and char in ('"', "'"):
                     if not in_string:
                         in_string = True
@@ -76,9 +70,7 @@ class CommentRemover:
                     i += 1
                     continue
 
-                
                 if not in_string and char == "#" and not in_comment:
-                    
                     remaining_line = line[i:]
                     is_preserved = False
 
@@ -88,35 +80,28 @@ class CommentRemover:
                             break
 
                     if is_preserved:
-                        
                         new_line_chars.extend(line[i:])
                         break
                     else:
-                        
                         in_comment = True
                         comment_start = i
-                        
+
                         while new_line_chars and new_line_chars[-1] in (" ", "\t"):
                             new_line_chars.pop()
                         i += 1
                         continue
 
-                
                 if not in_comment:
                     new_line_chars.append(char)
 
                 i += 1
 
-            
             if not in_comment and comment_start == -1:
-                
                 modified_lines.append("".join(new_line_chars))
             else:
-                
                 if new_line_chars and new_line_chars[-1] == "\n":
                     modified_lines.append("".join(new_line_chars))
                 else:
-                    
                     result_line = "".join(new_line_chars)
                     if line.endswith("\n") and not result_line.endswith("\n"):
                         result_line += "\n"
@@ -124,11 +109,7 @@ class CommentRemover:
                 if in_comment:
                     removed_count += 1
 
-            
-            
             if in_string and string_char:
-                
-                
                 pass
 
         return "".join(modified_lines), removed_count
@@ -148,28 +129,22 @@ def process_file(file_path: Path) -> Tuple[Path, bool, int, float, bool]:
     start_time = time.perf_counter()
 
     try:
-        
         original_content = file_path.read_text(encoding="utf-8")
 
-        
         remover = CommentRemover()
         modified_content, removed_count = remover.remove_comments(original_content)
 
-        
         was_modified = False
         syntax_valid = True
 
         if modified_content != original_content and removed_count > 0:
-            
             is_valid, error_msg = validate_python_syntax(modified_content)
 
             if is_valid:
-                
                 file_path.write_text(modified_content, encoding="utf-8")
                 was_modified = True
                 syntax_valid = True
             else:
-                
                 syntax_valid = False
                 was_modified = False
                 print(f"  ⚠ Warning: {file_path} would have syntax error, skipping write: {error_msg}", file=sys.stderr)
@@ -200,7 +175,6 @@ def format_report(file_path: Path, was_modified: bool, count: int, elapsed_ms: f
 def main() -> None:
     cwd = Path.cwd()
 
-    
     python_files = get_pyfiles(cwd)
 
     if not python_files:
@@ -209,15 +183,12 @@ def main() -> None:
 
     print(f"Found {len(python_files)} Python file(s) to process\n")
 
-    
     results = []
     total_start = time.perf_counter()
 
     with ProcessPoolExecutor(max_workers=4) as executor:
-        
         future_to_file = {executor.submit(process_file, file_path): file_path for file_path in python_files}
 
-        
         for future in as_completed(future_to_file):
             try:
                 result = future.result()
@@ -228,10 +199,8 @@ def main() -> None:
 
     total_elapsed = (time.perf_counter() - total_start) * 1000
 
-    
     results.sort(key=lambda x: str(x[0]))
 
-    
     total_removed = 0
     total_modified = 0
     total_skipped = 0
@@ -244,7 +213,6 @@ def main() -> None:
         elif not syntax_valid and count > 0:
             total_skipped += 1
 
-    
     print("-" * 80)
     print(f"Summary: {total_modified} file(s) modified, {total_removed} comment(s) removed")
     if total_skipped > 0:

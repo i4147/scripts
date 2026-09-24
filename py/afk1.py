@@ -8,22 +8,14 @@ def check_or_fix_imports(file_path, autofix=False):
         print(f"Error: The file `{file_path}` does not exist.")
         return
 
-    
-    
-    
     command = ["autoflake", "--remove-all-unused-imports", "--ignore-init-module-imports", file_path]
 
     if autofix:
-        
         command.append("--in-place")
     else:
-        
-        
-        
         command.append("--check")
 
     try:
-        
         result = subprocess.run(command, capture_output=True, text=True)
 
         if result.returncode == 0:

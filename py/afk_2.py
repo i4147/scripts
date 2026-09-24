@@ -1,4 +1,3 @@
-
 import sys
 import re
 from pathlib import Path
@@ -11,30 +10,24 @@ import subprocess
 
 @dataclass
 class UnusedImport:
-
     name: str
     line: int
     col: int
 
 
 class ImportRemover:
-
     def __init__(self, file_path: Path) -> None:
         self.file_path = file_path
         self.unused_imports = []
 
     def analyze(self) -> List[UnusedImport]:
         try:
-            
             result = subprocess.run(["pyflakes", str(self.file_path)], capture_output=True, text=True, check=False)
 
             unused_imports = []
 
-            
             for line in result.stderr.split("\n"):
-                
                 if "imported but unused" in line or "unused import" in line:
-                    
                     match = re.match(r'.*?:(\d+):(\d+):.*?[\'"](\w+)[\'"]', line)
                     if match:
                         line_num = int(match.group(1))
@@ -57,30 +50,22 @@ class ImportRemover:
             return []
 
         try:
-            
             with open(self.file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
-            
             removed_imports = []
             lines_to_remove = sorted([(imp.line, imp.name) for imp in self.unused_imports], reverse=True)
 
-            
             for line_num, import_name in lines_to_remove:
                 if 0 <= line_num - 1 < len(lines):
                     line_content = lines[line_num - 1]
 
-                    
                     if import_name in line_content:
-                        
                         removed_line = lines.pop(line_num - 1).rstrip()
                         removed_imports.append(f"{import_name} (line {line_num})")
                     else:
-                        
-                        
                         pass
 
-            
             if removed_imports:
                 with open(self.file_path, "w", encoding="utf-8") as f:
                     f.writelines(lines)
@@ -106,9 +91,7 @@ def find_python_files(root_path: Path) -> List[Path]:
         if root_path.suffix == ".py":
             python_files.append(root_path)
     else:
-        
         for file_path in root_path.rglob("*.py"):
-            
             if any(part.startswith(".") or part in ["__pycache__", "venv", "env", ".venv"] for part in file_path.parts):
                 continue
             python_files.append(file_path)
@@ -146,7 +129,7 @@ def print_summary(results: Dict[Path, List[str]], total_files: int, total_import
 
 
 def main() -> None:
-    
+
     if len(sys.argv) > 1:
         input_path = Path(sys.argv[1])
         if not input_path.exists():
@@ -156,7 +139,6 @@ def main() -> None:
         input_path = Path.cwd()
         print(f"No input provided, processing current directory: {input_path}")
 
-    
     print(f"Scanning for Python files in: {input_path}")
     python_files = find_python_files(input_path)
 
@@ -166,19 +148,15 @@ def main() -> None:
 
     print(f"Found {len(python_files)} Python files")
 
-    
     num_workers = min(cpu_count(), len(python_files))
     print(f"Using {num_workers} worker processes...")
 
     results = {}
     total_imports_removed = 0
 
-    
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        
         future_to_file = {executor.submit(process_file, file_path): file_path for file_path in python_files}
 
-        
         from concurrent.futures import as_completed
 
         for i, future in enumerate(as_completed(future_to_file), 1):
@@ -197,12 +175,10 @@ def main() -> None:
                 print(f"[{i}/{len(python_files)}] ✗ Failed to process {file_path}: {e}", file=sys.stderr)
                 results[file_path] = []
 
-    
     print_summary(results, len(python_files), total_imports_removed)
 
 
 if __name__ == "__main__":
-    
     try:
         import pyflakes
     except ImportError:

@@ -19,7 +19,6 @@ def get_installed_packages() -> list[str]:
 
 def get_package_files(pkg_name: str) -> list[str]:
     try:
-        
         dpkg_info_dir = Path("/data/data/com.termux/files/usr/var/lib/dpkg/info")
         list_file = dpkg_info_dir / f"{pkg_name}.list"
 
@@ -27,7 +26,7 @@ def get_package_files(pkg_name: str) -> list[str]:
             return []
 
         files = list_file.read_text().splitlines()
-        
+
         return [f for f in files if Path(f).exists()]
     except Exception:
         return []
@@ -41,15 +40,13 @@ def get_package_metadata(pkg_name: str) -> dict[str, str]:
 
     pkg = cache[pkg_name]
 
-    
     if pkg.is_installed:
         version = pkg.installed.version
     else:
         version = pkg.candidate.version
 
-    
     description = pkg.description or "No description available"
-    
+
     maintainer = pkg.record.get("Maintainer", "Unknown Maintainer") if hasattr(pkg, "record") else "Unknown Maintainer"
 
     return {
@@ -74,7 +71,6 @@ def create_control_file(path: Path, meta: dict[str, str]) -> None:
 
 def copy_pkg_files(files: list[str], dest: Path) -> None:
     for f in files:
-        
         path = Path(f)
         if not path.is_file():
             continue
@@ -83,17 +79,15 @@ def copy_pkg_files(files: list[str], dest: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            
             shutil.copy2(f, target)
-            
+
             stat_info = os.stat(f)
             os.chmod(target, stat_info.st_mode)
         except (PermissionError, OSError, shutil.Error):
-            
             try:
                 content = path.read_bytes()
                 target.write_bytes(content)
-                
+
                 try:
                     os.chmod(target, path.stat().st_mode)
                 except:
@@ -112,18 +106,13 @@ def build_deb(pkg_dir: Path, output_deb: Path) -> None:
     control_tar_path = pkg_dir / "control.tar.xz"
     data_tar_path = pkg_dir / "data.tar.xz"
 
-    
     build_tar_xz(pkg_dir / "DEBIAN", control_tar_path)
 
-    
     build_tar_xz(pkg_dir / "files", data_tar_path)
 
-    
     control_data = control_tar_path.read_bytes()
     data_data = data_tar_path.read_bytes()
 
-    
-    
     create_ar_archive(
         output_deb,
         [("debian-binary", debian_binary_content), ("control.tar.xz", control_data), ("data.tar.xz", data_data)],
@@ -132,37 +121,23 @@ def build_deb(pkg_dir: Path, output_deb: Path) -> None:
 
 def create_ar_archive(output_path: Path, files: list[tuple[str, bytes]]) -> None:
     with open(output_path, "wb") as f:
-        
         f.write(b"!<arch>\n")
 
         for name, content in files:
-            
             name_bytes = name.encode("ascii")
             if len(name_bytes) > 16:
                 name_bytes = name_bytes[:16]
             name_padded = name_bytes.ljust(16, b" ")
 
-            
             size = len(content)
             size_str = str(size).encode("ascii")
             size_padded = size_str.rjust(10, b" ")
 
-            
-            header = (
-                name_padded  
-                + b"1234567890"  
-                + b"123456"  
-                + b"123456"  
-                + b"100644 "  
-                + size_padded  
-                + b"\x60\x0a"  
-            )
+            header = name_padded + b"1234567890" + b"123456" + b"123456" + b"100644 " + size_padded + b"\x60\x0a"
             f.write(header)
 
-            
             f.write(content)
 
-            
             if size % 2 == 1:
                 f.write(b"\n")
 
@@ -179,7 +154,6 @@ def process_pkg(pkg_name: str) -> str | None:
         files_dir.mkdir()
         debian_dir.mkdir()
 
-        
         meta = get_package_metadata(pkg_name)
         files = get_package_files(pkg_name)
 
@@ -187,17 +161,14 @@ def process_pkg(pkg_name: str) -> str | None:
             print(f"[!] No files found for {pkg_name}")
             return
 
-        
         copy_pkg_files(files, files_dir)
         create_control_file(debian_dir, meta)
 
-        
         output_deb = BASE_DIR / f"{pkg_name}.deb"
         build_deb(pkg_dir, output_deb)
 
         print(f"[✔] {pkg_name} → {output_deb}")
 
-        
         shutil.rmtree(pkg_dir)
         return str(output_deb)
 

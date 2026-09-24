@@ -1,0 +1,742 @@
+# --- File: fa_trans.py ---
+import json
+import re
+import sys
+import time
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+a = 8
+b = 3
+c = 0.5
+d = 2000
+e = re.compile('[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]')
+def f(g):
+    return bool(e.search(g))
+def h(i):
+    j = []
+    k = []
+    l = 0
+    for m in i:
+        n = len(m) + 1
+        if l + n > d and k:
+            j.append(k)
+            k = []
+            l = 0
+        if n > d:
+            if k:
+                j.append(k)
+                k = []
+                l = 0
+            j.append([m])
+        else:
+            k.append(m)
+            l += n
+    if k:
+        j.append(k)
+    return j
+def o(p):
+    q = '\n'.join(p)
+    r = GoogleTranslator(source='fa', target='en')
+    for s in range(b):
+        try:
+            t = r.translate(q)
+            if t:
+                return (p, t)
+        except Exception as e:
+            m1.warning("Failed chunk starting with '{}' (attempt {}/{}): {}", p[0][:50], s + 1, b, e)
+            if s < b - 1:
+                time.sleep(c)
+    return (p, None)
+def u(v):
+    with v.open(encoding='utf-8') as f:
+        return [m.strip() for m in f if m.strip()]
+def w(x, y):
+    with y.open('w', encoding='utf-8') as f:
+        json.dump(x, f, ensure_ascii=False, indent=2)
+def z(v, a1, x):
+    with v.open('w', encoding='utf-8') as f:
+        for m in a1:
+            f.write(f'{x.get(m, m)}\n')
+def b1(j, c1):
+    x = {}
+    d1 = [c1.apply_async(o, (p,)) for p in j]
+    for e1 in d1:
+        try:
+            f1, g1 = e1.get()
+        except Exception as e:
+            m1.error('Unexpected error while translating chunk: {}', e)
+            continue
+        if not g1:
+            m1.error('Failed to translate chunk starting with: {}', f1[0][:50])
+            continue
+        h1 = g1.split('\n')
+        for i, i1 in enumerate(f1):
+            if i < len(h1):
+                x[i1] = h1[i]
+                print('{} → {}', i1, h1[i])
+            else:
+                m1.error('Line count mismatch in chunk, missing translation for: {}', i1)
+    return x
+def j1():
+    if len(sys.argv) < 2:
+        m1.error('Usage: {} <input_file>', sys.argv[0])
+        return 1
+    v = Path(sys.argv[1].strip())
+    if not v.exists():
+        m1.error('Input file not found: {}', v.name)
+        return 1
+    try:
+        a1 = u(v)
+    except Exception as e:
+        m1.error('Error reading input file: {}', e)
+        return 1
+    if not a1:
+        print('No lines found in {}', v.name)
+        return 0
+    k1 = [m for m in a1 if f(m)]
+    l1 = len(a1) - len(k1)
+    print('Loaded {} lines: {} with persian, {} already English/skipped', len(a1), len(k1), l1)
+    if not k1:
+        print('No persian lines to translate in {}', v.name)
+        return 0
+    j = h(k1)
+    print('Created {} chunks from {} persian lines (max {} chars per chunk)', len(j), len(k1), d)
+    x = {}
+    c1 = Pool(processes=a)
+    try:
+        x = b1(j, c1)
+    finally:
+        c1.close()
+        c1.join()
+    y = v.with_suffix('.json')
+    try:
+        w(x, y)
+        print('Saved {} translations to {}', len(x), y.name)
+    except Exception as e:
+        m1.error('Error saving JSON file: {}', e)
+    try:
+        z(v, a1, x)
+        print('Updated {}: translated {} lines, kept {} lines unchanged', v.name, len(x), l1)
+    except Exception as e:
+        m1.error('Error updating input file: {}', e)
+        return 1
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: fatrans.py ---
+import argparse
+import json
+import logging
+import readline
+import sys
+from collections.abc import Iterable
+from difflib import get_close_matches
+from pathlib import Path
+from typing import Final
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+m1 = logging.getLogger(__name__)
+n1 = '/sdcard/isaac/dic.json'
+def o1(p1):
+    if not p1.exists():
+        m1.error('Error: Dictionary file %s not found', p1)
+        sys.exit(1)
+    try:
+        with p1.open(encoding='utf-8') as f:
+            q1 = json.load(f)
+        r1 = {str(k).strip(): str(v).strip() for k, v in q1.items()}
+        s1 = {v: k for k, v in r1.items()}
+        return (r1, s1)
+    except Exception as e:
+        m1.error('Error loading dictionary: %s', e)
+        sys.exit(1)
+def t1(u1):
+    v1 = sorted(u1)
+    def w1(g, x1):
+        y1 = [w for w in v1 if w.startswith(g)]
+        return y1[x1] if x1 < len(y1) else None
+    readline.set_completer(w1)
+    readline.parse_and_bind('tab: complete')
+    readline.set_completer_delims(' \t\n')
+def z1(a2, r1, s1):
+    return r1.get(a2) or s1.get(a2)
+def b2(a2, c2, d2=5, e2=0.6):
+    return get_close_matches(a2, c2, n=d2, cutoff=e2)
+def f2(r1, s1):
+    c2 = set(r1) | set(s1)
+    t1(c2)
+    print('\n🌐 Offline Persian ↔ English Translator')
+    print('⌨  TAB for suggestions, Ctrl+C to exit\n')
+    while True:
+        try:
+            a2 = input('> ').strip()
+            if not a2:
+                continue
+            t = z1(a2, r1, s1)
+            if t:
+                print(f'✅ {t}')
+            else:
+                y1 = b2(a2, c2)
+                if y1:
+                    print(f"❓ Not found. Did you mean: {', '.join(y1)}?")
+                else:
+                    print('❌ Not found')
+        except (KeyboardInterrupt, EOFError):
+            print('\n👋 Bye.')
+            break
+def j1():
+    g2 = argparse.ArgumentParser(description='Offline Persian ↔ English translator')
+    g2.add_argument('word', nargs='*', help='Word to translate')
+    g2.add_argument('--prefix', help='List words starting with prefix')
+    g2.add_argument('--fuzzy', help='Fuzzy search (typo tolerant)')
+    h2 = g2.parse_args()
+    r1, s1 = o1(Path(n1))
+    c2 = set(r1) | set(s1)
+    if h2.prefix:
+        y1 = sorted((w for w in c2 if w.startswith(h2.prefix)))
+        if y1:
+            print('\n'.join(y1))
+            sys.exit(0)
+        print('No matches found for prefix: %s', h2.prefix)
+        sys.exit(1)
+    if h2.fuzzy:
+        y1 = b2(h2.fuzzy, c2)
+        if y1:
+            print('\n'.join(y1))
+            sys.exit(0)
+        print('No close matches found for: %s', h2.fuzzy)
+        sys.exit(1)
+    if h2.word:
+        a2 = ' '.join(h2.word).strip()
+        t = z1(a2, r1, s1)
+        if t:
+            print(t)
+            sys.exit(0)
+        else:
+            y1 = b2(a2, c2)
+            if y1:
+                print(f"Not found. Did you mean: {', '.join(y1)}?", file=sys.stderr)
+            else:
+                print('Not found', file=sys.stderr)
+            sys.exit(1)
+    f2(r1, s1)
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: fztrans.py ---
+import argparse
+import json
+import logging
+import readline
+import shutil
+import subprocess
+import sys
+from difflib import get_close_matches
+from pathlib import Path
+from typing import Final
+from faprint import faprint
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+m1 = logging.getLogger(__name__)
+n1 = Path('~/dic.json').expanduser()
+def o1(p1):
+    if not p1.exists():
+        m1.error('Error: Dictionary file %s not found', p1)
+        sys.exit(1)
+    try:
+        with p1.open(encoding='utf-8') as f:
+            q1 = json.load(f)
+        r1 = {str(k).strip(): str(v).strip() for k, v in q1.items()}
+        s1 = {v: k for k, v in r1.items()}
+        return (r1, s1)
+    except Exception as e:
+        m1.error('Error loading dictionary: %s', e)
+        sys.exit(1)
+def t1(u1):
+    v1 = sorted(u1)
+    def w1(g, x1):
+        y1 = [w for w in v1 if w.startswith(g)]
+        return y1[x1] if x1 < len(y1) else None
+    readline.set_completer(w1)
+    readline.parse_and_bind('tab: complete')
+    readline.set_completer_delims(' \t\n')
+def z1(a2, r1, s1):
+    return r1.get(a2) or s1.get(a2)
+def b2(a2, c2, d2=5, e2=0.6):
+    return get_close_matches(a2, c2, n=d2, cutoff=e2)
+def i2(c2):
+    if not shutil.which('fzf'):
+        m1.warning('fzf not found in PATH. Falling back to normal mode.')
+        return None
+    try:
+        j2 = subprocess.run(['fzf', '--prompt=Select word: ', '--height=40%', '--layout=reverse', '--border'], input='\n'.join(sorted(c2)), text=True, capture_output=True, check=False)
+        k2 = j2.stdout.strip()
+        return k2 if k2 else None
+    except Exception as e:
+        m1.error('fzf execution error: %s', e)
+        return None
+def f2(r1, s1):
+    c2 = set(r1) | set(s1)
+    t1(c2)
+    print('\n🌐 Offline Persian ↔ English Translator')
+    print('⌨  TAB for suggestions, Ctrl+C to exit\n')
+    while True:
+        try:
+            a2 = input('> ').strip()
+            if not a2:
+                continue
+            t = z1(a2, r1, s1)
+            if t:
+                print(f'✅ {t}')
+            else:
+                y1 = b2(a2, c2)
+                if y1:
+                    print(f"❓ Not found. Did you mean: {', '.join(y1)}?")
+                else:
+                    print('❌ Not found')
+        except (KeyboardInterrupt, EOFError):
+            print('\n👋 Bye.')
+            break
+def j1():
+    g2 = argparse.ArgumentParser(description='Offline Persian ↔ English translator')
+    g2.add_argument('word', nargs='*', help='Word to translate')
+    g2.add_argument('--prefix', help='List words starting with prefix')
+    g2.add_argument('--fuzzy', help='Fuzzy search (typo tolerant)')
+    g2.add_argument('--no-fzf', action='store_true', help='Disable interactive fzf selector')
+    h2 = g2.parse_args()
+    r1, s1 = o1(Path(n1))
+    c2 = set(r1) | set(s1)
+    if not h2.no_fzf and (not h2.word) and (not h2.prefix) and (not h2.fuzzy):
+        l2 = i2(c2)
+        if l2:
+            t = z1(l2, r1, s1)
+            print(f'{l2} → {t}')
+            sys.exit(0)
+        elif shutil.which('fzf'):
+            sys.exit(0)
+    if h2.prefix:
+        y1 = sorted((w for w in c2 if w.startswith(h2.prefix)))
+        if y1:
+            print('\n'.join(y1))
+            sys.exit(0)
+        print('No matches found for prefix: %s', h2.prefix)
+        sys.exit(1)
+    if h2.fuzzy:
+        y1 = b2(h2.fuzzy, c2)
+        if y1:
+            print('\n'.join(y1))
+            sys.exit(0)
+        print('No close matches found for: %s', h2.fuzzy)
+        sys.exit(1)
+    if h2.word:
+        a2 = ' '.join(h2.word).strip()
+        t = z1(a2, r1, s1)
+        if t:
+            faprint(t)
+            sys.exit(0)
+        else:
+            y1 = b2(a2, c2)
+            if y1:
+                faprint(f"Not found. Did you mean: {', '.join(y1)}?", file=sys.stderr)
+            else:
+                print('Not found', file=sys.stderr)
+            sys.exit(1)
+    f2(r1, s1)
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: runtcli.py ---
+import json
+import os
+import sys
+from dh import runcmd
+def m2(m):
+    res, txt, err = runcmd(['translate-cli', '-f', 'en', '-t', 'fa', '-o', m], show_output=True)
+    if res != 0:
+        return f'__ERROR__: {err.strip()}'
+    return txt.strip()
+def j1():
+    if len(sys.argv) < 2:
+        print(f'Usage: {sys.argv[0]} <input_file> [output_file]', file=sys.stderr)
+        sys.exit(1)
+    n2 = sys.argv[1]
+    if len(sys.argv) >= 3:
+        o2 = sys.argv[2]
+    else:
+        p2, _ = os.path.splitext(n2)
+        o2 = f'{p2}.json'
+    if not os.path.isfile(n2):
+        print(f"Error: input file '{n2}' not found.", file=sys.stderr)
+        sys.exit(1)
+    x = []
+    with open(n2, 'r', encoding='utf-8') as f:
+        for q2, r2 in enumerate(f, start=1):
+            m = r2.rstrip('\n')
+            if not m.strip():
+                continue
+            print(f'[{q2}] Translating: {m}', file=sys.stderr)
+            s2 = m2(m)
+            x.append({'line_number': q2, 'source': m, 'translation': s2})
+    with open(o2, 'w', encoding='utf-8') as f:
+        json.dump(x, f, ensure_ascii=False, indent=2)
+    print(f'\nDone. Wrote {len(x)} entries to {o2}', file=sys.stderr)
+if __name__ == '__main__':
+    j1()
+
+# --- File: tcli.py ---
+import json
+import multiprocessing as mp
+import sys
+from pathlib import Path
+from translate import Translator
+t2 = 8
+u2 = 'en'
+v2 = 'fa'
+def w2(a2):
+    a2 = a2.strip()
+    if not a2:
+        return {'source': a2, 'translation': None, 'error': 'empty'}
+    try:
+        r = Translator(from_lang=u2, to_lang=v2)
+        x2 = r.translate(a2)
+        print(f'{a2} -> {x2}')
+        return {'source': a2, 'translation': x2, 'error': None}
+    except Exception as exc:
+        return {'source': a2, 'translation': None, 'error': str(exc)}
+def j1():
+    if len(sys.argv) < 2:
+        print(f'Usage: {sys.argv[0]} <input_file> [output_file]', file=sys.stderr)
+        return 1
+    v = Path(sys.argv[1])
+    if not v.is_file():
+        print(f"Error: input file '{v}' not found.", file=sys.stderr)
+        return 1
+    if len(sys.argv) >= 3:
+        y = Path(sys.argv[2])
+    else:
+        y = v.with_suffix('.fa.json')
+    u1 = [m.strip() for m in v.read_text(encoding='utf-8').splitlines() if m.strip()]
+    print(f'Loaded {len(u1)} words from {v}', file=sys.stderr)
+    with mp.Pool(processes=t2) as c1:
+        x = c1.map(w2, u1)
+    y.write_text(json.dumps(x, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(f'Wrote {len(x)} entries to {y}', file=sys.stderr)
+    y2 = sum((1 for r in x if r['error']))
+    if y2:
+        print(f'Warning: {y2} entries failed.', file=sys.stderr)
+    return 0
+if __name__ == '__main__':
+    sys.exit(j1())
+
+# --- File: tfa.py ---
+import json
+from pathlib import Path
+from deep_translator import GoogleTranslator
+z2 = 'words.txt'
+a3 = 'dic.json'
+def w2(a2):
+    try:
+        return GoogleTranslator(source='auto', target='en').translate(a2)
+    except Exception as e:
+        print(f"Error translating '{a2}': {e}")
+        return None
+def j1():
+    b3 = {}
+    with Path(z2).open(encoding='utf-8') as f:
+        u1 = [m.strip() for m in f if m.strip()]
+    print(f'Loaded {len(u1)} Persian words')
+    for w in u1:
+        eng = w2(w)
+        if eng:
+            b3[w] = eng
+            print(f'{w} → {eng}')
+    with Path(a3).open('w', encoding='utf-8') as f:
+        json.dump(b3, f, ensure_ascii=False, indent=2)
+    print(f'\nSaved JSON dictionary to {a3}')
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: tper.py ---
+import json
+import multiprocessing
+import time
+from pathlib import Path
+from typing import Any
+from deep_translator import GoogleTranslator
+from loguru import logger
+from tqdm import tqdm
+z2 = 'words.txt'
+a3 = 'dic.json'
+a = 8
+c3 = 1000
+d3 = 3
+e3 = 0.5
+def w2(a2):
+    for s in range(d3):
+        try:
+            return GoogleTranslator(source='auto', target='en').translate(a2)
+        except Exception as exc:
+            m1.warning("Failed '{}' (attempt {}/{}): {}", a2, s + 1, d3, exc)
+            time.sleep(e3)
+    return None
+def f3(n2):
+    g3 = set()
+    u1 = []
+    with Path(n2).open(encoding='utf-8') as fh:
+        for raw in fh:
+            a2 = raw.strip()
+            if a2 and a2 not in g3:
+                g3.add(a2)
+                u1.append(a2)
+    return u1
+def h3(o2):
+    p1 = Path(o2)
+    if not p1.exists():
+        return {}
+    try:
+        with p1.open(encoding='utf-8') as fh:
+            q1 = json.load(fh)
+        if isinstance(q1, dict):
+            return {str(k): str(v) for k, v in q1.items()}
+        m1.warning('Existing {} is not a JSON object; ignoring.', o2)
+    except Exception as exc:
+        m1.warning('Could not load existing {}: {}', o2, exc)
+    return {}
+def i3(x, o2):
+    j3 = Path(o2)
+    tmp = j3.with_suffix(j3.suffix + '.tmp')
+    with tmp.open('w', encoding='utf-8') as fh:
+        json.dump(x, fh, ensure_ascii=False, indent=2)
+    tmp.replace(j3)
+def j1():
+    u1 = f3(z2)
+    print('Loaded {} Persian words', len(u1))
+    x = h3(a3)
+    print('Loaded {} existing translations from {}', len(x), a3)
+    k3 = [w for w in u1 if w not in x]
+    l3 = len(k3)
+    print('{} words to translate (skipping already translated)', l3)
+    if l3 == 0:
+        print('Nothing to do. Exiting.')
+        return 0
+    m3 = 0
+    n3 = tqdm(total=l3, desc='Translating', unit='word')
+    o3 = multiprocessing.Value('i', 0)
+    def p3(a2, x2):
+        nonlocal new_count
+        if x2:
+            x[a2] = x2
+            m3 += 1
+            print('{} → {}', a2, x2)
+        else:
+            m1.error('Could not translate: {}', a2)
+        n3.update(1)
+        with o3.get_lock():
+            o3.value += 1
+            q3 = o3.value
+        if q3 % c3 == 0:
+            print('Saving progress after {} new translations...', m3)
+            i3(x, a3)
+    def r3(exc):
+        m1.error('Unexpected worker error: {}', exc)
+        n3.update(1)
+    try:
+        with multiprocessing.Pool(processes=a) as c1:
+            for a2 in k3:
+                c1.apply_async(w2, args=(a2,), callback=lambda x2, w=a2: p3(w, x2), error_callback=r3)
+            c1.close()
+            c1.join()
+    except KeyboardInterrupt:
+        print('Interrupted by user. Saving progress...')
+    finally:
+        i3(x, a3)
+        n3.close()
+        print('Translation dictionary saved to {}', a3)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: trans_fa_mp.py ---
+import json
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+a = 16
+b = 3
+c = 0.5
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
+m1 = logging.getLogger(__name__)
+def w2(a2):
+    r = GoogleTranslator(source='auto', target='en')
+    for s in range(b):
+        try:
+            t = r.translate(a2)
+            if t:
+                return t
+        except Exception as e:
+            m1.warning("Failed '%s' (attempt %d/%d): %s", a2, s + 1, b, e)
+            if s < b - 1:
+                time.sleep(c)
+    return None
+def j1():
+    import sys
+    v = Path(sys.argv[1].strip())
+    y = v.with_suffix('.json')
+    if not v.exists():
+        m1.error('Input file not found: %s', v.name)
+        return
+    try:
+        with v.open(encoding='utf-8') as f:
+            u1 = [w.strip() for w in f if w.strip()]
+    except Exception as e:
+        m1.error('Error reading input file: %s', e)
+        return
+    if not u1:
+        print('No words found in %s', v.name)
+        return
+    print('Loaded %d Persian words. Starting translation with %d workers...', len(u1), a)
+    x = {}
+    with ThreadPoolExecutor(max_workers=a) as s3:
+        t3 = {s3.submit(w2, a2): a2 for a2 in u1}
+        for u3 in as_completed(t3):
+            v3 = t3[u3]
+            try:
+                w3 = u3.result()
+                if w3:
+                    x[v3] = w3
+                    print(f'{v3} → {w3}')
+                else:
+                    m1.error('Could not translate: %s', v3)
+            except Exception as e:
+                m1.error("Unexpected error for '%s': %s", v3, e)
+    try:
+        with y.open('w', encoding='utf-8') as f:
+            json.dump(x, f, ensure_ascii=False, indent=2)
+        print('Translation dictionary saved to %s (%d entries)', y.name, len(x))
+    except Exception as e:
+        m1.error('Error saving results: %s', e)
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: transwords.py ---
+import json
+import time
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final, TypedDict
+from deep_translator import GoogleTranslator
+from loguru import logger
+x3 = 4500
+a = 8
+z2 = Path('words.txt')
+a3 = Path('fa_en.json')
+class y3(TypedDict):
+    pass
+z3 = tuple[int, int, str]
+def a4(b4, c4=x3):
+    j = []
+    k = []
+    l = 0
+    d4 = 0
+    q2 = 0
+    try:
+        with b4.open('r', encoding='utf-8') as f:
+            for q2, m in enumerate(f):
+                if l + len(m) > c4 and k:
+                    j.append((d4, q2 - 1, ''.join(k)))
+                    k = [m]
+                    l = len(m)
+                    d4 = q2
+                else:
+                    k.append(m)
+                    l += len(m)
+            if k:
+                j.append((d4, q2, ''.join(k)))
+    except Exception as exc:
+        m1.error(f'Error reading file {b4}: {exc}')
+    return j
+def o(e4, f4, g4):
+    d4, h4, g = e4
+    if f4 > 0:
+        time.sleep(2)
+    try:
+        r = GoogleTranslator(source='fa', target='en')
+        s2 = r.translate(g)
+        if not s2:
+            return None
+        return {'chunk_id': f'{d4}_{h4}', 'start_line': d4, 'end_line': h4, 'original': g, 'translated': s2}
+    except Exception as exc:
+        m1.error(f'Error translating chunk {d4}_{h4}: {exc}')
+        return None
+def j1():
+    if not z2.exists():
+        m1.error(f'Input file {z2} not found.')
+        return
+    print('Extracting chunks...')
+    j = a4(z2)
+    print(f'Total chunks: {len(j)}')
+    if not j:
+        m1.warning('No text found to translate.')
+        return
+    print('Translating chunks...')
+    b3 = []
+    g4 = len(j)
+    with Pool(processes=a) as c1:
+        d1 = [c1.apply_async(o, (p, idx, g4)) for idx, p in enumerate(j)]
+        for i, i4 in enumerate(d1, 1):
+            t = i4.get()
+            if t is not None:
+                b3.append(t)
+            print(f'Progress: {i}/{g4}')
+    if not b3:
+        m1.warning('No translations were successful.')
+        return
+    print(f'Writing results to {a3}...')
+    try:
+        j4 = {'translations': sorted(b3, key=lambda k4: k4['start_line'])}
+        a3.write_text(json.dumps(j4, ensure_ascii=False, indent=2), encoding='utf-8')
+        print('Done!')
+    except Exception as exc:
+        m1.error(f'Error writing output file: {exc}')
+if __name__ == '__main__':
+    raise SystemExit(j1())You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

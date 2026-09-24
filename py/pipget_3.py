@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -14,8 +13,8 @@ import pycurl
 
 RETRIES = 3
 TIMEOUT = 30
-CHUNK_SIZE = 1024 * 1024  
-CHUNK_THRESHOLD = 5 * 1024 * 1024  
+CHUNK_SIZE = 1024 * 1024
+CHUNK_THRESHOLD = 5 * 1024 * 1024
 
 MIRRORS = [
     "https://pypi.org",
@@ -93,8 +92,6 @@ def is_compatible_file(file_info: dict[str, Any]) -> bool:
         return filename.endswith(".tar.gz")
 
     if package_type == "bdist_wheel":
-        
-        
         return (
             filename.endswith(".whl")
             and re.search(
@@ -250,8 +247,6 @@ def download_from_mirror(
     package_url = quote(normalized_package_name(package), safe="")
     file_url = f"{mirror}/packages/{selected['url'].split('/packages/', 1)[-1]}"
 
-    
-    
     original_url = selected["url"]
     if "/packages/" in original_url:
         file_url = mirror.rstrip("/") + "/packages/" + original_url.split("/packages/", 1)[1]

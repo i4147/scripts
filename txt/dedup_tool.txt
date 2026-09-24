@@ -1,0 +1,485 @@
+# --- File: check_const.py ---
+import re
+import sys
+from pathlib import Path
+def a():
+    if len(sys.argv) != 2:
+        print('Usage: python check_dups.py <const_file.py>')
+        sys.exit(1)
+    b = Path(sys.argv[1])
+    if not b.exists():
+        print(f'File not found: {b}')
+        sys.exit(1)
+    c = b.parent / 'dup_const.py'
+    d = re.compile('^\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*=')
+    e = b.read_text().splitlines(keepends=True)
+    f = {}
+    g = []
+    for i, h in enumerate(e):
+        i = d.match(h)
+        if i:
+            j = i.group(1)
+            if j not in f:
+                f[j] = i
+            else:
+                g.append((i, h))
+    if not g:
+        print('No duplicates found.')
+        return
+    k = [h for idx, h in enumerate(e) if idx not in {d[0] for d in g}]
+    b.write_text(''.join(k))
+    with c.open('a') as f:
+        f.write(f'\n# Duplicate declarations from {b.name}\n')
+        for _, l in g:
+            f.write(l)
+    print('Kept the first declaration of each constant.')
+    print(f'Moved {len(g)} duplicate declarations to {c}')
+    print(f'Updated {b} in place.')
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: check_dups.py ---
+import ast
+import copy
+import hashlib
+import sys
+from ast import AsyncFunctionDef, ClassDef, FunctionDef
+from dataclasses import dataclass
+from pathlib import Path
+from dh import get_pyfiles, gsz, mpf3
+@dataclass
+class m:
+    pass
+class n(ast.NodeTransformer):
+    def o(self, p):
+        p = copy.deepcopy(p)
+        p.name = '__NAME__'
+        self.generic_visit(p)
+        return p
+    def q(self, p):
+        p = copy.deepcopy(p)
+        p.name = '__NAME__'
+        self.generic_visit(p)
+        return p
+    def r(self, p):
+        p = copy.deepcopy(p)
+        p.name = '__NAME__'
+        self.generic_visit(p)
+        return p
+    def s(self, p):
+        p = copy.deepcopy(p)
+        if isinstance(p.ctx, ast.Store):
+            return p
+def t(p):
+    p = copy.deepcopy(p)
+    p = n().visit(p)
+    ast.fix_missing_locations(p)
+    u = ast.dump(p, annotate_fields=True, include_attributes=False)
+    return hashlib.sha256(u.encode('utf-8')).hexdigest()
+def v(e, w, x):
+    return ''.join(e[w - 1:x])
+def y(p):
+    if not isinstance(p, ast.Assign):
+        return False
+    for z in p.targets:
+        if isinstance(z, ast.Name):
+            continue
+        if isinstance(z, (ast.Tuple, ast.List)):
+            return False
+        return False
+    return True
+def a1(p):
+    b1 = []
+    for z in p.targets:
+        if isinstance(z, ast.Name):
+            b1.append(z.id)
+    return b1
+def c1(p, e):
+    b1 = a1(p)
+    d1 = v(e, p.lineno, p.end_lineno)
+    h = t(p)
+    e1 = []
+    for j in b1:
+        e1.append(m(kind='assign', name=j, lineno=p.lineno, end_lineno=p.end_lineno, source=d1, content_hash=h))
+    return e1
+def f1(p, g1, j, e):
+    return m(kind=g1, name=j, lineno=p.lineno, end_lineno=p.end_lineno, source=v(e, p.lineno, p.end_lineno), content_hash=t(p))
+def h1(b):
+    Path(n2)
+    c = b.parent / f'{b.stem}_dups.py'
+    i1 = b.read_text(encoding='utf-8')
+    e = i1.splitlines(keepends=True)
+    try:
+        j1 = ast.parse(i1)
+    except SyntaxError as e:
+        print(f'Syntax error in {b}: {e}')
+        sys.exit(1)
+    e1 = []
+    k1 = []
+    for p in j1.body:
+        if y(p):
+            e1.extend(c1(p, e))
+            k1.append(p)
+        elif isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            e1.append(f1(p, 'function', p.name, e))
+            k1.append(p)
+        elif isinstance(p, ast.ClassDef):
+            e1.append(f1(p, 'class', p.name, e))
+            k1.append(p)
+    l1 = set()
+    m1 = set()
+    n1 = []
+    o1 = []
+    p1 = set()
+    for q1 in e1:
+        r1 = (q1.kind, q1.name)
+        s1 = (q1.kind, q1.content_hash)
+        rng = (q1.lineno, q1.end_lineno)
+        t1 = False
+        u1 = None
+        if r1 in l1:
+            t1 = True
+            u1 = f'duplicate {q1.kind} name: {q1.name}'
+        elif s1 in m1:
+            t1 = True
+            u1 = f'duplicate {q1.kind} content hash: {q1.name}'
+        else:
+            l1.add(r1)
+            m1.add(s1)
+        if t1 and rng not in p1:
+            n1.append(rng)
+            o1.append((q1, u1))
+            p1.add(rng)
+    if not n1:
+        print('No duplicate top-level assignments/functions/classes found.')
+        return
+    v1 = set()
+    for w1, end in n1:
+        v1.update(range(w1, end + 1))
+    x1 = [h for i, h in enumerate(e, start=1) if i not in v1]
+    out = []
+    out.append(f'\n# Duplicates moved from {b.name}\n')
+    for q1, u1 in o1:
+        out.append(f'\n# {u1} @ lines {q1.lineno}-{q1.end_lineno}\n')
+        out.append(q1.source)
+        if not q1.source.endswith('\n'):
+            out.append('\n')
+    b.write_text(''.join(x1), encoding='utf-8')
+    with c.open('a', encoding='utf-8') as f:
+        f.write(''.join(out))
+    print(f'Updated {b} in place')
+    print(f'Moved {len(n1)} duplicate declaration block(s) to {c}')
+def a():
+    cwd = Path.cwd()
+    gsz(cwd)
+    y1 = sys.argv[1:]
+    z1 = []
+    if y1:
+        for arg in y1:
+            p = Path(arg)
+            if p.is_file():
+                z1.append(p)
+            elif p.is_dir():
+                z1.extend(get_pyfiles(p))
+    else:
+        z1 = get_pyfiles(cwd)
+    a2 = mpf3(h1, z1)
+    for b2 in a2:
+        if b2:
+            pass
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: diduper.py ---
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+import tree_sitte_python as tsp
+from tree_sitter import Language, Node, Parser
+c2 = 'utils.py'
+d2 = {c2, Path(__file__).name}
+@dataclass(frozen=True)
+class e2:
+    pass
+def f2(i1):
+    return hashlib.sha256(i1.encode('utf-8')).hexdigest()
+def g2():
+    h2 = Parser()
+    i2 = Language(tsp.language())
+    h2.language = i2
+    return h2
+def j2(k2, p):
+    return k2[p.start_byte:p.end_byte].decode('utf-8', errors='replace')
+def l2(j):
+    return j.isupper()
+def m2(n2, h2):
+    try:
+        d1 = n2.read_text(encoding='utf-8')
+    except (UnicodeDecodeError, OSError):
+        return []
+    o2 = d1.encode('utf-8', errors='replace')
+    j1 = h2.parse(o2)
+    p2 = j1.root_node
+    q2 = []
+    for r2 in p2.children:
+        if r2.type == 'function_definition':
+            s2 = r2.child_by_field_name('name')
+            if s2 is None:
+                continue
+            j = j2(o2, s2)
+            t2 = j2(o2, r2)
+            q2.append(e2(kind='function', name=j, source=t2, path=str(n2), hash=f2(t2)))
+        elif r2.type == 'class_definition':
+            s2 = r2.child_by_field_name('name')
+            if s2 is None:
+                continue
+            j = j2(o2, s2)
+            t2 = j2(o2, r2)
+            q2.append(e2(kind='class', name=j, source=t2, path=str(n2), hash=f2(t2)))
+        elif r2.type == 'expression_statement':
+            u2 = r2.children[0] if r2.children else None
+            if u2 is None:
+                continue
+            if u2.type == 'assignment':
+                if len(u2.children) < 3:
+                    continue
+                lhs = u2.children[0]
+                u2.children[-1]
+                if lhs.type != 'identifier':
+                    continue
+                j = j2(o2, lhs)
+                if not l2(j):
+                    continue
+                t2 = j2(o2, r2)
+                q2.append(e2(kind='const', name=j, source=t2, path=str(n2), hash=f2(t2)))
+            elif u2.type == 'assignment_expression':
+                pass
+        elif r2.type == 'assignment':
+            if len(r2.children) < 3:
+                continue
+            lhs = r2.children[0]
+            if lhs.type != 'identifier':
+                continue
+            j = j2(o2, lhs)
+            if not l2(j):
+                continue
+            t2 = j2(o2, r2)
+            q2.append(e2(kind='const', name=j, source=t2, path=str(n2), hash=f2(t2)))
+    return q2
+def v2(g, w2):
+    x2 = []
+    y2 = set()
+    for h, z2 in g.items():
+        if h in y2:
+            continue
+        y2.add(h)
+        x2.append(f'# Duplicate {z2.kind}: {z2.name}\n{z2.source}\n')
+    a3 = '# Auto-generated by find_duplicates_ts.py\n' + '\n'.join(x2)
+    w2.write_text(a3, encoding='utf-8')
+def a():
+    h2 = g2()
+    b3 = {}
+    g = {}
+    c3 = Path.cwd()
+    for n2 in c3.rglob('*.py'):
+        if n2.name in d2:
+            continue
+        q2 = m2(n2, h2)
+        for z2 in q2:
+            if z2.hash in b3:
+                g[z2.hash] = b3[z2.hash]
+            else:
+                b3[z2.hash] = z2
+    w2 = c3 / c2
+    if g:
+        v2(g, w2)
+        print(f'Found {len(g)} duplicate items.')
+        print(f'Wrote representative copies to: {w2}')
+    else:
+        print('No duplicates found.')
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: refactorer.py ---
+import ast
+import os
+from ast import AST
+from pathlib import Path
+d3 = Path('output')
+d3.mkdir(exist_ok=True)
+e3 = d3 / 'func.py'
+f3 = d3 / 'classes.py'
+g3 = d3 / 'const.py'
+h3 = d3 / '__init__.py'
+for i3 in [e3, f3, g3, h3]:
+    if i3.exists():
+        i3.unlink()
+def j3(p):
+    return isinstance(p, ast.Assign) and all((isinstance(t, ast.Name) for t in p.targets))
+def k3(n2, a3):
+    with Path(n2).open('a', encoding='utf-8') as f:
+        f.write(a3 + '\n\n')
+for p2, _, z1 in os.walk('.'):
+    for i3 in z1:
+        if i3.endswith('.py') and (not i3.startswith('output')):
+            n2 = Path(p2) / i3
+            a3 = Path(n2).read_text(encoding='utf-8')
+            j1 = ast.parse(a3)
+            for p in ast.walk(j1):
+                if isinstance(p, ast.FunctionDef):
+                    l3 = ast.get_source(j1, p)
+                    k3(e3, l3)
+                elif isinstance(p, ast.ClassDef):
+                    m3 = ast.get_source(j1, p)
+                    k3(f3, m3)
+                elif j3(p):
+                    n3 = ast.get_source(j1, p)
+                    k3(g3, n3)
+with Path(h3).open('w', encoding='utf-8') as f:
+    f.write('from .func import *\n')
+    f.write('from .classes import *\n')
+    f.write('from .const import *\n')
+o3 = e3.read_text() if e3.exists() else ''
+p3 = f3.read_text() if f3.exists() else ''
+q3 = g3.read_text() if g3.exists() else ''
+r3 = h3.read_text() if h3.exists() else ''
+(o3, p3, q3, r3)
+
+# --- File: tsdeduper.py ---
+import hashlib
+import os
+from dataclasses import dataclass
+from pathlib import Path
+import tree_sitter_python as tsp
+from tree_sitter import Language, Node, Parser
+c2 = 'utils.py'
+@dataclass(frozen=True)
+class e2:
+    pass
+def f2(i1):
+    return hashlib.sha256(i1.encode('utf-8')).hexdigest()
+def s3():
+    h2 = Parser()
+    h2.language = Language(tsp.language())
+    return h2
+def j2(src, p):
+    return src[p.start_byte:p.end_byte].decode('utf-8', errors='replace')
+def l2(j):
+    return j.isupper()
+def t3(n2, h2):
+    try:
+        i1 = n2.read_text(encoding='utf-8')
+    except (UnicodeDecodeError, OSError):
+        return []
+    src = i1.encode('utf-8', errors='replace')
+    j1 = h2.parse(src)
+    p2 = j1.root_node
+    q2 = []
+    for p in p2.children:
+        if p.type == 'function_definition':
+            s2 = p.child_by_field_name('name')
+            if not s2:
+                continue
+            j = j2(src, s2)
+            t2 = j2(src, p)
+            q2.append(e2(kind='function', name=j, source=t2, path=str(n2), hash=f2(t2)))
+        elif p.type == 'class_definition':
+            s2 = p.child_by_field_name('name')
+            if not s2:
+                continue
+            j = j2(src, s2)
+            t2 = j2(src, p)
+            q2.append(e2(kind='class', name=j, source=t2, path=str(n2), hash=f2(t2)))
+        elif p.type in {'expression_statement', 'assignment'}:
+            t2 = j2(src, p)
+            u3 = p
+            if p.type == 'expression_statement' and p.children:
+                u3 = p.children[0]
+            if u3.type != 'assignment':
+                continue
+            if len(u3.children) < 3:
+                continue
+            lhs = u3.children[0]
+            if lhs.type != 'identifier':
+                continue
+            j = j2(src, lhs)
+            if not l2(j):
+                continue
+            q2.append(e2(kind='const', name=j, source=t2, path=str(n2), hash=f2(t2)))
+    return q2
+def v2(v3, w3):
+    e = ['# Auto-generated file', '# Contains duplicate top-level constants, functions, and classes.', '']
+    x3 = set()
+    for h, z2 in v3.items():
+        if h in x3:
+            continue
+        x3.add(h)
+        e.append(f'# Duplicate {z2.kind}: {z2.name}')
+        e.append(f'# Source: {z2.path}')
+        e.append(z2.source)
+        e.append('')
+    w3.write_text('\n'.join(e), encoding='utf-8')
+def a():
+    h2 = s3()
+    y3 = Path.cwd()
+    x3 = {}
+    v3 = {}
+    for p2, _, z1 in os.walk(y3):
+        for z3 in z1:
+            if not z3.endswith('.py'):
+                continue
+            if z3 == c2:
+                continue
+            n2 = Path(p2) / z3
+            for z2 in t3(n2, h2):
+                if z2.hash in x3:
+                    v3[z2.hash] = x3[z2.hash]
+                else:
+                    x3[z2.hash] = z2
+    out = y3 / c2
+    if v3:
+        v2(v3, out)
+        print(f'Found {len(v3)} duplicate items.')
+        print(f'Wrote them to: {out}')
+    else:
+        print('No duplicates found.')
+if __name__ == '__main__':
+    raise SystemExit(a())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

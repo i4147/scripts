@@ -1,4 +1,3 @@
-
 import sys
 import json
 import time
@@ -6,7 +5,7 @@ from googletrans import Translator
 
 
 def translate_words(input_file, output_file):
-    
+
     with open(input_file, "r", encoding="utf-8") as f:
         words = [line.strip() for line in f if line.strip()]
 
@@ -21,22 +20,19 @@ def translate_words(input_file, output_file):
             result = translator.translate(word, src="en", dest="fa")
             translated = result.text
             translations[word] = translated
-            
+
             print(f"[{i}/{total}] {word}  →  {translated}")
         except Exception as e:
             translations[word] = None
             print(f"[{i}/{total}] {word}  →  ERROR: {e}")
-            time.sleep(1)  
+            time.sleep(1)
 
-        
         time.sleep(0.3)
 
-        
         if i % 50 == 0:
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(translations, f, ensure_ascii=False, indent=2)
 
-    
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(translations, f, ensure_ascii=False, indent=2)
 

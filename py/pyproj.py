@@ -28,28 +28,22 @@ def write_file_if_missing(path: Path, content: str = "") -> None:
 def create_project_structure(pkg: str, author: str, email: str, url: str) -> None:
     cwd = Path.cwd()
 
-    
     version = "1.4.7"
 
-    
     readme_path = cwd / "README.md"
     write_file_if_missing(readme_path, f"# {pkg}\n")
 
-    
     src_pkg = cwd / "src" / pkg
     src_pkg.mkdir(parents=True, exist_ok=True)
     write_file_if_missing(src_pkg / "__init__.py")
 
-    
     tests_path = cwd / "tests"
     tests_path.mkdir(exist_ok=True)
     write_file_if_missing(tests_path / "__init__.py")
 
-    
     setup_py = cwd / "setup.py"
     setup_py.write_text('__import__("setuptools").setup()\n')
 
-    
     setup_cfg = cwd / "setup.cfg"
     cfg_content = [
         "[metadata]",
@@ -80,7 +74,6 @@ def create_project_structure(pkg: str, author: str, email: str, url: str) -> Non
 
     setup_cfg.write_text("\n".join(cfg_content))
 
-    
     pyproject_path = cwd / "pyproject.toml"
     pyproject_path.write_text(
         '[build-system]\nrequires = ["setuptools>=69.0", "wheel"]\nbuild-backend = "setuptools.build_meta"\n'
@@ -97,12 +90,10 @@ def main() -> None:
     parser.add_argument("--version", default="1.4.7", help="Initial version (default: 1.4.7)")
     args = parser.parse_args()
 
-    
     author = user_info.get("name", "")
     email = user_info.get("email", "")
     github_user = user_info.get("github_username", "")
 
-    
     url = f"https://github.com/{github_user}/{args.name}" if github_user else ""
 
     create_project_structure(args.name, author, email, url)

@@ -14,7 +14,6 @@ class DocoptLanguageError(Exception):
 
 
 class DocoptExit(SystemExit):
-
     usage = ""
 
     def __init__(self, message: str = "") -> None:

@@ -23,19 +23,15 @@ def move_package(pkg_name):
     src = PREFIX_SITE_PACKAGES / pkg_name
     dest = USER_SITE_PACKAGES / pkg_name
 
-    
     if not src.exists():
         return (pkg_name, "not_found", None)
 
-    
     if dest.exists():
         return (pkg_name, "exists", None)
 
     try:
-        
         shutil.move(str(src), str(dest))
 
-        
         dist_info_pattern = f"{pkg_name}-*.dist-info"
         moved_info = []
         for info_dir in PREFIX_SITE_PACKAGES.glob(dist_info_pattern):
@@ -51,15 +47,13 @@ def move_package(pkg_name):
 
 
 def main():
-    
+
     if not PKG_LIST.exists():
         print(f"{RED}Error: Package list not found at {PKG_LIST}{RESET}")
         return 1
 
-    
     USER_SITE_PACKAGES.mkdir(parents=True, exist_ok=True)
 
-    
     try:
         with open(PKG_LIST) as f:
             packages = [line.strip() for line in f if line.strip()]
@@ -75,13 +69,11 @@ def main():
     print(f"{BLUE}Total packages to process: {total_pkgs}{RESET}")
     print()
 
-    
     cpu_count_available = cpu_count()
     num_processes = max(1, (cpu_count_available * 3) // 4)
     print(f"{BLUE}Using {num_processes} parallel processes{RESET}")
     print()
 
-    
     start_time = datetime.now()
 
     with Pool(processes=num_processes) as pool:
@@ -90,7 +82,6 @@ def main():
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
 
-    
     success = 0
     exists = 0
     not_found = 0
@@ -113,7 +104,6 @@ def main():
             print(f"{RED}❌ {pkg_name}: Failed - {extra}{RESET}")
             errors += 1
 
-    
     print()
     print(f"{YELLOW}Summary:{RESET}")
     print(f"  Total packages: {total_pkgs}")

@@ -1,0 +1,253 @@
+# filename: 223.py
+l=8
+def c():return list(a('lib2to3.fixes'))
+def h(k):y=t(k)
+    try:j=y.read_text(encoding='utf-8');A=b(c());g=A.refactor_string(j,k)
+        if g and g!=j:y.write_text(g,encoding='utf-8');return (k,True,'changed')
+        return (k,True,'unchanged')
+    except SyntaxError as e:return (k,False,f'syntax error:{e}')
+    except Exception as e:return (k,False,f'error:{e!s}')
+def d(s,w=('.py',)):q=[]
+    for p in s:y=t(p)
+        if y.is_file() and y.suffix in w:q.append(str(y))
+        elif y.is_dir():for B in w:q.extend((str(f) for f in y.rglob(f'*{B}')))
+    return list(dict.fromkeys(q))
+def x():v=D.argv[1:] or ['.'];o=d(v)
+    if not o:print('No Python files found.');return 1
+    print(f'Processing {len(o)} file(s) with {l} workers');n=0
+    with u(l) as z:m=[z.apply_async(h,(f,)) for f in o]
+        for i,r in enumerate(m,1):y,E,C=r.get();print(f"[{i}/{len(o)}] {('✓' if E else '✗')} {t(y).name} — {C}")
+            if not E:n+=1
+    print(f'\nDone. {len(o)-n} ok,{n} failed.');return 0 if n==0 else 1
+if __name__=='__main__':raise SystemExit(x())
+# filename: 2232.py
+from loguru import logger;y=8;h=['.py'];t=5;c=20;k=80;a=50;q=['lib2to3.fixes.fix_apply','lib2to3.fixes.fix_asserts','lib2to3.fixes.fix_basestring','lib2to3.fixes.fix_buffer','lib2to3.fixes.fix_dict','lib2to3.fixes.fix_except','lib2to3.fixes.fix_exec','lib2to3.fixes.fix_execfile','lib2to3.fixes.fix_exitfunc','lib2to3.fixes.fix_filter','lib2to3.fixes.fix_funcattrs','lib2to3.fixes.fix_future','lib2to3.fixes.fix_getcwdu','lib2to3.fixes.fix_has_key','lib2to3.fixes.fix_idioms','lib2to3.fixes.fix_import','lib2to3.fixes.fix_imports','lib2to3.fixes.fix_imports2','lib2to3.fixes.fix_input','lib2to3.fixes.fix_itertools','lib2to3.fixes.fix_itertools_imports','lib2to3.fixes.fix_long','lib2to3.fixes.fix_map','lib2to3.fixes.fix_metaclass','lib2to3.fixes.fix_methodattrs','lib2to3.fixes.fix_ne','lib2to3.fixes.fix_next','lib2to3.fixes.fix_nonzero','lib2to3.fixes.fix_numliterals','lib2to3.fixes.fix_operator','lib2to3.fixes.fix_paren','lib2to3.fixes.fix_print','lib2to3.fixes.fix_raise','lib2to3.fixes.fix_raw_input','lib2to3.fixes.fix_reduce','lib2to3.fixes.fix_reload','lib2to3.fixes.fix_renames','lib2to3.fixes.fix_repr','lib2to3.fixes.fix_set_literal','lib2to3.fixes.fix_standarderror','lib2to3.fixes.fix_sys_exc','lib2to3.fixes.fix_throw','lib2to3.fixes.fix_tuple_params','lib2to3.fixes.fix_types','lib2to3.fixes.fix_unicode','lib2to3.fixes.fix_urllib','lib2to3.fixes.fix_ws_comma','lib2to3.fixes.fix_xrange','lib2to3.fixes.fix_xreadlines','lib2to3.fixes.fix_zip']
+class g(r):def __init__(self,V,N=None,T=None):self.output_lines=[];self.errors=[];super().__init__(V,N,T)
+    def L(self,aq,*ag,**W):self.errors.append(aq%ag if ag else aq)
+    def ad(self,aq,*ag,**W):if ag:aq%=ag
+        self.output_lines.append(aq)
+def u():try:V=b('lib2to3.fixes');return list(V)
+    except ImportError as e:logger.warning(f'Error loading fixers:{e}');return list(q)
+def B(n,J,E,x,O):v=n.splitlines();o=J.splitlines();H=[];Q=0
+    for i,(al,ar) in enumerate(zip(v,o,strict=False)):if al!=ar:Q+=1
+            if O:H.append(f'  Line {i+1}:{al[:x]}->{ar[:x]}')
+            else:H.append(f'-{al[:x]}');H.append(f'+{ar[:x]}')
+    R=f'Changed {Q} line(s)'
+    if H:R+='\n'+'\n'.join(H[:E])
+    if len(H)>E:R+=f'\n  ... and {len(H)-E} more changes'
+    return (Q,R)
+def m(am):try:am=ae(am);n=am.read_text(encoding='utf-8');G=u();ao=g(V=G,N=G)
+        try:J=ao.refactor_string(n,am)
+            if J and J!=n:am.write_text(J,encoding='utf-8');_,R=B(n,J,E=t,x=a,O=True);return (am,True,R)
+            return (am,True,'No changes needed')
+        except SyntaxError as e:return (am,False,f'Syntax error in file:{e}')
+        except Exception as e:return (am,False,f'Refactoring error:{e!s}')
+    except FileNotFoundError:return (am,False,'File not found')
+    except PermissionError:return (am,False,'Permission denied')
+    except Exception as e:return (am,False,f'Unexpected error:{e!s}')
+def l(ab,I=None):aj=list(I) if I is not None else list(h);A=[]
+    for am in ab:P=ae(am)
+        if not P.exists():logger.warning(f"Path '{am}' does not exist");continue
+        if P.is_file():if P.suffix in aj:A.append(str(P))
+        elif P.is_dir():for ap in aj:A.extend((str(p) for p in P.rglob(f'*{ap}')))
+    return A
+def d(ab):K=[];U=[];ac=len(ab);print(f'Processing {ac} files using {y} workers...');print('-'*40);an=af(processes=y)
+    try:w=[(am,an.apply_async(m,(am,))) for am in ab]
+        for i,(am,Z) in enumerate(w,1):try:F,S,R=Z.get()
+                if S:K.append(F);aa='✓'
+                else:U.append(F);aa='✗'
+                print(f'[{i}/{ac}] {aa} {ae(F).name}')
+                if R!='No changes needed':print(f'    {R}')
+            except Exception as e:U.append(am);logger.error(f'[{i}/{ac}] ✗ {ae(am).name}');logger.error(f'    Unexpected error:{e!s}')
+    finally:an.close();an.join()
+    return (K,U)
+def z(am):try:n=ae(am).read_text(encoding='utf-8');G=u();ao=g(V=G,N=G)
+        try:J=ao.refactor_string(n,am)
+            if J and J!=n:v=n.splitlines();o=J.splitlines();ai=[]
+                for al,ar in zip(v,o,strict=False):if al!=ar:ai.append(f'-{al[:k]}');ai.append(f'+{ar[:k]}')
+                if len(v)!=len(o):ai.append(f'  (Line count changed:{len(v)}->{len(o)})')
+                return (am,'\n'.join(ai[:c]),True)
+            return (am,'No changes needed',False)
+        except SyntaxError as e:return (am,f'Syntax error:{e}',False)
+        except Exception as e:return (am,f'Error:{e!s}',False)
+    except Exception as e:return (am,f'Error reading file:{e!s}',False)
+def s(ab):print(f'\nDRY RUN-Preview of changes using {y} workers:');print('-'*40);j=0;an=af(processes=y)
+    try:w=[(am,an.apply_async(z,(am,))) for am in ab]
+        for am,Z in w:try:F,X,D=Z.get()
+            except Exception as e:logger.error(f'✗ {ae(am).name}:Unexpected error:{e!s}');continue
+            if D:j+=1;print(f'\n📝 {ae(F).name}:');print(X)
+            else:print(f'✓ {ae(F).name}:{X}')
+    finally:an.close();an.join()
+    print(f"\n{'='*40}");print(f'Dry run complete:{j} of {len(ab)} files would be changed')
+def C(ah=None):Y=M.ArgumentParser(description='Apply all available 2to3 fixes to Python files using lib2to3 and multiprocessing');Y.add_argument('paths',nargs='+',help='Files or directories to process');Y.add_argument('-d','--dry-run',action='store_true',help='Preview changes without applying them');Y.add_argument('-e','--extensions',nargs='+',default=list(h),help='File extensions to process (default:.py)');return Y.parse_args(ah)
+def ak(ah=None):ag=C(ah);A=l(ag.paths,ag.extensions)
+    if not A:logger.warning('No Python files found to process.');return 1
+    A=list(dict.fromkeys(A));print(f'Found {len(A)} Python file(s) to process')
+    if ag.dry_run:s(A);return 0
+    K,U=d(A);print('\n'+'='*40);print('SUMMARY');print('-'*40);print(f'Total files processed:{len(A)}');print(f'✓ Successful:{len(K)}');print(f'✗ Failed:{len(U)}')
+    if U:print('\nFailed files:')
+        for f in U:print(f'-{ae(f).name}')
+    return 0 if not U else 1
+if __name__=='__main__':at.exit(ak())
+# filename: 2to3ruff.py
+from dh import get_files,mpf3
+def a(m):q=m.split('\n');k=[]
+    for u in q:l=u.strip()
+        if not l or l.startswith('#'):k.append(u);continue
+        if B.search('\\bprint\\s+',u) and (not c(u,'print')):if '>>' in u:u=B.sub('print\\s+>>\\s*(\\w+)\\s*,\\s*(.+?)(?:\\s*#.*)?$','print(\\2,file=\\1)',u)
+            else:u=B.sub('print\\s+(.+?)(?:\\s*#.*)?$','print(\\1)',u)
+            k.append(u)
+        else:k.append(u)
+    return '\n'.join(k)
+def c(u,x):j=False;g=None
+    for i,t in enumerate(u):if t in ('"',"'") and (i==0 or u[i-1]!='\\'):if not j:j=True;g=t
+            elif t==g:j=False;g=None
+        elif j and x in u[i-len(x):i+1]:return True
+    return False
+def d(w):w=r(w)
+    try:with open(w,encoding='utf-8') as f:m=f.read()
+        b=a(m)
+        if b!=m:with open(w,'w',encoding='utf-8') as f:f.write(b)
+            print('  ✅ Manual conversion applied');n=h.run(['ruff','check','--fix','--select','UP010',w],capture_output=True,x=True)
+            if not n.returncode:print('  ✅ Ruff applied additional fixes');return True
+            print(f'  📝 Would convert {w}');return True
+        print(f'  ⚠️  Could not automatically convert {w}');return False
+    except Exception as e:print(f'  ❌ Error:{e}');return False
+def v():z=r.cwd();s=A.argv[1:];o=[]
+    if s:for y in s:p=r(y)
+            if p.is_file():o.append(p)
+            elif p.is_dir():o.extend(get_files(p))
+    else:o=get_files(z)
+    if len(o)==1:d(o[0]);A.exit(1)
+    mpf3(d,o)
+if __name__=='__main__':raise SystemExit(v())
+# filename: f23.py
+h=N.compile('^\\s*print\\s+(?!\\()(.+)$');b=N.compile('^\\s*print\\s*$');g=N.compile('^\\s*except\\s+(\\S+)\\s*,\\s*(\\S+)\\s*:')
+def c(H):u=H;H=H.replace('xrange(','range(');H=H.replace('raw_input(','input(');m=g.match(H.strip())
+    if m:y=H[:len(H)-len(H.lstrip())];s,x=(m.group(1),m.group(2));H=f'{y}except {s} as {x}:\n'
+    return (H,H!=u)
+def a(K):D=K.splitlines(True);q=[];w=False
+    for H in D:v=H.strip()
+        if b.match(v):y=H[:len(H)-len(H.lstrip())];q.append(f'{y}print()\n');w=True;continue
+        m=h.match(v)
+        if m:G=m.group(1);y=H[:len(H)-len(H.lstrip())];q.append(f'{y}print({G})\n');w=True;continue
+        q.append(H)
+    return (''.join(q),w)
+def d(K):D=K.splitlines(True);q=[];w=False
+    for H in D:t,L=c(H);p,M=a(t);w=w or L or M;q.append(p)
+    return (''.join(q),w)
+i=[];n=[]
+def j(I,C=False,o=False):I=E(I)
+    try:u=I.read_text(encoding='utf-8')
+        if o:B,w=d(u)
+        else:B,w=a(u)
+        if w:if not C:l=I.with_suffix(I.suffix+'.bak');A.copy2(I,l)
+            I.write_text(B,encoding='utf-8');i.append(str(I))
+    except Exception as e:n.append((str(I),str(e)))
+def k(J,C,o):for f in J.rglob('*.py'):j(f,C=C,o=o)
+if __name__=='__main__':z=r.ArgumentParser(description='Fix Python2 print statements and optionally apply all Py2→Py3 conversions.');z.add_argument('-f','--force',action='store_true',help='Overwrite original files (no .bak backups)');z.add_argument('-a','--all',action='store_true',help='Apply all Python2→Python3 fixes');F=z.parse_args()
+    if not any(vars(F).values()):F.force=True;F.all=True
+    J=E.cwd();k(J,C=F.force,o=F.all);print('\n===SUMMARY===');print(f'Files changed:{len(i)}')
+    for f in i:print('-',f)
+    print(f'\nFiles with errors:{len(n)}')
+    for f,e in n:print(f'-{f}:{e}')
+# filename: is2or3.py
+from dh import get_files
+def a(n):try:i=n.read_text(encoding='utf-8')
+    except Exception as e:print(f'Error reading file:{e}');return
+    c=0;d=0;g=[]
+    try:o=q.parse(i);d+=1;g.append('Parsed successfully with Python 3 syntax.')
+    except SyntaxError:print(f'{n.name}\nConfidence:High\nReason:Syntax error when parsed with Python 3.');return
+    if 'print ' in i and 'print(' not in i:c+=2;g.append('Uses print statement without parentheses (Python 2 style).')
+    if '__future__' in i and 'print_function' in i:d+=2;g.append("Uses 'from __future__ import print_function' (Python 3 compatibility).")
+    for m in q.walk(o):if isinstance(m,(q.AsyncFunctionDef,q.Await)):d+=3;g.append('Uses async/await syntax (Python 3 only).')
+        if isinstance(m,q.Try) and hasattr(m,'finalbody'):d+=1;g.append('Uses try/finally block (Python 3 syntax).')
+        if isinstance(m,q.FunctionDef):for p in m.args.args:if hasattr(p,'annotation') and p.annotation is not None:d+=2;g.append('Uses function argument annotations (Python 3 feature).')
+    if c>d:h='2';b='High' if c-d>2 else 'Medium'
+    elif d>c:h='3';b='High' if d-c>2 else 'Medium'
+    else:h='3';b='Low';g.append('No strong indicators found; defaulting to Python 3.')
+    if h=='2':print(f'{n.name} :{h}\nConfidence:{b}\nReason(s):')
+if __name__=='__main__':l=s.argv[1:];r=k.cwd();j=[k(f) for f in l] if l else get_files(r,ext=['.py'])
+    for n in j:a(n)
+# filename: my2to3.py
+from dh import get_pyfiles,mpf3;j=a()
+def a():c=[]
+    for _,g,k in i.iter_modules(m.__path__,prefix='lib2to3.fixes.'):if not k:c.append(g)
+    return c
+def b(p):h={'print_function':True};q=f.RefactoringTool(j,h)
+    try:e=p.read_text();r=q.refactor_string(e,str(p));d=str(r)
+        if e==d:print(f'  nothing changed:{p}')
+        else:p.write_text(d);print(f'  refactored:{p}')
+    except Exception as exc:print(f'  ERROR {p}:{t}',file=u.stderr)
+def o():s=n.cwd();l=get_pyfiles(s);mpf3(b,l)
+if __name__=='__main__':raise SystemExit(o())
+# filename: nopy2.py
+b={'WHEEL'};o='Tag:py2-none-any'
+def f(A):return '\n'.join((v for v in A.splitlines() if not v.startswith(o)))+('\n' if A.endswith('\n') else '')
+def e(y):try:h=r(y).read_text(encoding='utf-8',errors='ignore')
+    except Exception:return
+    j=f(h)
+    if j!=h:r(y).write_text(j,encoding='utf-8')
+def d(y):D=i.mktemp(suffix='.zip')
+    with n.ZipFile(y,'r') as E,n.ZipFile(D,'w') as B:for u in E.infolist():t=E.read(u.filename);s=r(u.filename).name
+            if s in b:try:A=t.decode('utf-8',errors='ignore');j=f(A);t=j.encode('utf-8')
+                except Exception:pass
+            B.writestr(u,t)
+    p.move(D,y)
+def c(y):l=i.mkdtemp();m=i.mktemp(suffix='.tar.gz')
+    with k.open(y,'r:*') as C:C.extractall(l)
+    for z,_,q in F.walk(l):for x in q:if x in b:e(F.path.join(z,x))
+    with k.open(m,'w:gz') as C:C.add(l,arcname='')
+    p.move(m,y);p.rmtree(l)
+def a(y):x=y.lower()
+    if x.endswith(('.zip','.whl')):d(y)
+    elif x.endswith(('.tar.gz','.tgz','.tar')):c(y)
+def w():for z,_,q in F.walk('.'):for x in q:g=F.path.join(z,x)
+            if x in b:e(g);continue
+            if x.lower().endswith(('.zip','.whl','.tar.gz','.tgz','.tar')):a(g)
+if __name__=='__main__':raise SystemExit(w())
+# filename: run223.py
+from dh import get_files
+def b(h):if not h.is_file():print(f'File not found:{h.name}');return
+    try:a.run(['2to3','-w','-n','-f','all',h],check=True)
+    except a.CalledProcessError as e:print(f'Error running 2to3:{e}')
+if __name__=='__main__':g=j.argv[1:];i=d.cwd();c=[d(f) for f in g] if g else get_files(i,ext=['.py'])
+    for h in c:b(h)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

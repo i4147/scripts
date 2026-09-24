@@ -1,4 +1,3 @@
-
 from fontTools.ttLib.ttFont import TTFont
 import sys
 from pathlib import Path

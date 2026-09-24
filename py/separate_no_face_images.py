@@ -1,4 +1,3 @@
-
 import os
 import shutil
 from pathlib import Path
@@ -21,24 +20,20 @@ def is_image_file(filename):
 
 def has_human_face(image_path, cascade_path=None):
     if not FACE_DETECTION_AVAILABLE:
-        return True  
+        return True
 
-    
     if cascade_path is None:
         cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 
     face_cascade = cv2.CascadeClassifier(cascade_path)
 
-    
     image = cv2.imread(str(image_path))
     if image is None:
         print(f"  Warning: Could not read image {image_path}")
-        return True  
+        return True
 
-    
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
     return len(faces) > 0
@@ -55,11 +50,9 @@ def folderize_images():
     current_dir = Path.cwd()
     no_face_dir = current_dir / "no_face"
 
-    
     no_face_dir.mkdir(exist_ok=True)
     print(f"📁 Created/Using directory: {no_face_dir}\n")
 
-    
     image_count = 0
     no_face_count = 0
     moved_count = 0
@@ -67,7 +60,6 @@ def folderize_images():
     for root, dirs, files in os.walk(current_dir):
         root_path = Path(root)
 
-        
         if root_path == no_face_dir:
             continue
 
@@ -80,7 +72,6 @@ def folderize_images():
             image_count += 1
             print(f"📷 Processing: {file_path.relative_to(current_dir)}")
 
-            
             try:
                 has_face = has_human_face(file_path)
             except Exception as e:
@@ -90,14 +81,11 @@ def folderize_images():
             if not has_face:
                 no_face_count += 1
 
-                
                 relative_path = file_path.relative_to(current_dir)
                 destination = no_face_dir / relative_path
 
-                
                 destination.parent.mkdir(parents=True, exist_ok=True)
 
-                
                 try:
                     shutil.move(str(file_path), str(destination))
                     print(f"  🚫 Moved to no_face/{relative_path}")
@@ -107,7 +95,6 @@ def folderize_images():
             else:
                 print(f"  ✅ Has face - keeping in place")
 
-    
     print("\n" + "=" * 50)
     print("📊 SUMMARY")
     print("=" * 50)

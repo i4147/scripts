@@ -1,5 +1,3 @@
-
-
 import os
 import sys
 import json
@@ -10,12 +8,8 @@ from pathlib import Path
 from dh import STDLIB, PKG_MAPPING
 
 
-
-
-
 def normalize(name):
     return name.lower().replace("_", "-")
-
 
 
 PKG_MAP_NORM = {normalize(k): v for k, v in PKG_MAPPING.items()}
@@ -30,9 +24,6 @@ def load_pypi_packages(path="/sdcard/data/pip.txt"):
                 continue
             pypi.add(normalize(name))
     return pypi
-
-
-
 
 
 def get_installed_packages(pip_version="pip"):
@@ -56,9 +47,6 @@ def get_installed_packages(pip_version="pip"):
         name = line.split("==")[0].split("@")[0].strip()
         installed.add(normalize(name))
     return installed_with_versions, installed
-
-
-
 
 
 def get_local_modules(directory):
@@ -103,9 +91,6 @@ def get_local_modules(directory):
         local.add(normalize(root.name))
 
     return local
-
-
-
 
 
 def extract_imports_from_lines(lines):
@@ -181,18 +166,12 @@ def get_project_imports(directory=os.curdir):
     return modules
 
 
-
-
-
 def resolve_package_name(import_name):
     norm = normalize(import_name)
     mapped = PKG_MAP_NORM.get(norm)
     if mapped:
         return mapped, True
     return import_name, False
-
-
-
 
 
 def init(args):
@@ -223,38 +202,31 @@ def init(args):
     for mod in modules:
         norm = normalize(mod)
 
-        
         if norm in stdlib_set:
             skipped_stdlib.append(mod)
             continue
 
-        
         if norm in local_modules:
             skipped_local.append(mod)
             continue
 
-        
         pkg_name, was_mapped = resolve_package_name(mod)
         pkg_norm = normalize(pkg_name)
 
-        
         if pkg_norm in installed or norm in installed:
             skipped_installed.append(mod)
             continue
 
-        
         if pkg_norm in pypi_index:
             if was_mapped:
                 mapped_count += 1
                 print("[→] {} -> {}".format(mod, pkg_name))
             output_text.append(pkg_name)
         elif norm in pypi_index:
-            
             output_text.append(mod)
         else:
             missing.append(mod)
 
-    
     print("\n[i] Skipped {} stdlib modules".format(len(skipped_stdlib)))
     print("[i] Skipped {} local modules: {}".format(len(skipped_local), ", ".join(sorted(skipped_local)) or "-"))
     print("[i] Skipped {} already-installed modules".format(len(skipped_installed)))
@@ -262,7 +234,6 @@ def init(args):
     if missing:
         print("[i] Skipped {} unknown modules: {}".format(len(missing), ", ".join(sorted(missing))))
 
-    
     out_dir = args["path"] if args["path"] else os.curdir
     out_file = os.path.join(out_dir, "requirements.txt")
     unique = sorted(set(output_text))

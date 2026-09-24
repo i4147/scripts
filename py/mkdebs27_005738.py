@@ -20,7 +20,6 @@ def get_installed_packages() -> list[str]:
 
 def get_package_files(pkg_name: str) -> list[str]:
     try:
-        
         dpkg_info_dir = Path("/data/data/com.termux/files/usr/var/lib/dpkg/info")
         list_file = dpkg_info_dir / f"{pkg_name}.list"
 
@@ -28,7 +27,7 @@ def get_package_files(pkg_name: str) -> list[str]:
             return []
 
         files = list_file.read_text().splitlines()
-        
+
         return [f for f in files if Path(f).exists()]
     except Exception:
         return []
@@ -42,28 +41,23 @@ def get_package_metadata(pkg_name: str) -> dict[str, str]:
 
     pkg = cache[pkg_name]
 
-    
     if pkg.is_installed:
         version = pkg.installed.version
     else:
         version = pkg.candidate.version
 
-    
     architecture = pkg.architecture or "all"
 
-    
     try:
-        
         if hasattr(pkg, "description"):
             description = pkg.description
         elif hasattr(pkg, "candidate") and hasattr(pkg.candidate, "description"):
             description = pkg.candidate.description
         else:
-            
             status_file = Path("/data/data/com.termux/files/usr/var/lib/dpkg/status")
             if status_file.exists():
                 content = status_file.read_text()
-                
+
                 sections = content.split("\n\n")
                 for section in sections:
                     if f"Package: {pkg_name}" in section:
@@ -71,7 +65,7 @@ def get_package_metadata(pkg_name: str) -> dict[str, str]:
                         for line in lines:
                             if line.startswith("Description:"):
                                 desc = line.replace("Description:", "").strip()
-                                
+
                                 desc_lines = [desc]
                                 idx = lines.index(line) + 1
                                 while idx < len(lines) and lines[idx].startswith(" "):
@@ -87,14 +81,12 @@ def get_package_metadata(pkg_name: str) -> dict[str, str]:
     except:
         description = "No description available"
 
-    
     try:
         if hasattr(pkg, "maintainer"):
             maintainer = pkg.maintainer
         elif hasattr(pkg, "candidate") and hasattr(pkg.candidate, "maintainer"):
             maintainer = pkg.candidate.maintainer
         else:
-            
             status_file = Path("/data/data/com.termux/files/usr/var/lib/dpkg/status")
             if status_file.exists():
                 content = status_file.read_text()
@@ -136,7 +128,6 @@ def create_control_file(path: Path, meta: dict[str, str]) -> None:
 
 def copy_pkg_files(files: list[str], dest: Path) -> None:
     for f in files:
-        
         path = Path(f)
         if not path.is_file():
             continue
@@ -145,17 +136,15 @@ def copy_pkg_files(files: list[str], dest: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            
             shutil.copy2(f, target)
-            
+
             stat_info = os.stat(f)
             os.chmod(target, stat_info.st_mode)
         except (PermissionError, OSError, shutil.Error):
-            
             try:
                 content = path.read_bytes()
                 target.write_bytes(content)
-                
+
                 try:
                     os.chmod(target, path.stat().st_mode)
                 except:
@@ -174,17 +163,13 @@ def build_deb(pkg_dir: Path, output_deb: Path) -> None:
     control_tar_path = pkg_dir / "control.tar.xz"
     data_tar_path = pkg_dir / "data.tar.xz"
 
-    
     build_tar_xz(pkg_dir / "DEBIAN", control_tar_path)
 
-    
     build_tar_xz(pkg_dir / "files", data_tar_path)
 
-    
     control_data = control_tar_path.read_bytes()
     data_data = data_tar_path.read_bytes()
 
-    
     with unix_ar.open(str(output_deb), "w") as ar:
         ar.add_file("debian-binary", debian_binary_content)
         ar.add_file("control.tar.xz", control_data)
@@ -203,7 +188,6 @@ def process_pkg(pkg_name: str) -> str | None:
         files_dir.mkdir()
         debian_dir.mkdir()
 
-        
         meta = get_package_metadata(pkg_name)
         files = get_package_files(pkg_name)
 
@@ -211,17 +195,14 @@ def process_pkg(pkg_name: str) -> str | None:
             print(f"[!] No files found for {pkg_name}")
             return
 
-        
         copy_pkg_files(files, files_dir)
         create_control_file(debian_dir, meta)
 
-        
         output_deb = BASE_DIR / f"{pkg_name}.deb"
         build_deb(pkg_dir, output_deb)
 
         print(f"[✔] {pkg_name} → {output_deb}")
 
-        
         shutil.rmtree(pkg_dir)
         return str(output_deb)
 

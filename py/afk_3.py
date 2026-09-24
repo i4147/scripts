@@ -1,4 +1,3 @@
-
 import sys
 import ast
 from pathlib import Path
@@ -10,7 +9,6 @@ from concurrent.futures import ProcessPoolExecutor
 
 @dataclass
 class ImportInfo:
-
     name: str
     alias: Optional[str]
     line: int
@@ -22,16 +20,14 @@ class ImportInfo:
 
 
 class ImportAnalyzer(ast.NodeVisitor):
-
     def __init__(self) -> None:
-        self.imports = []  
-        self.used_names = set()  
-        self.defined_names = set()  
-        self.current_scope = []  
+        self.imports = []
+        self.used_names = set()
+        self.defined_names = set()
+        self.current_scope = []
 
     def visit_Import(self, node) -> None:
         for alias in node.names:
-            
             base_name = alias.name.split(".")[0]
             self.imports.append(
                 ImportInfo(
@@ -46,12 +42,12 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node) -> None:
-        if node.module is None:  
+        if node.module is None:
             self.generic_visit(node)
             return
 
         for alias in node.names:
-            if alias.name == "*":  
+            if alias.name == "*":
                 continue
 
             self.imports.append(
@@ -75,7 +71,7 @@ class ImportAnalyzer(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node) -> None:
         self.defined_names.add(node.name)
-        
+
         for arg in node.args.args:
             self.defined_names.add(arg.arg)
         if node.args.vararg:
@@ -104,7 +100,7 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_alias(self, node) -> None:
-        
+
         if node.asname:
             if node.asname in self.used_names:
                 self.used_names.add(node.name.split(".")[0])
@@ -112,7 +108,6 @@ class ImportAnalyzer(ast.NodeVisitor):
 
 
 class ImportRemover:
-
     def __init__(self, file_path: Path) -> None:
         self.file_path = file_path
         self.removed_imports = []
@@ -122,25 +117,18 @@ class ImportRemover:
             with open(self.file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            
             tree = ast.parse(content, filename=str(self.file_path))
 
-            
             analyzer = ImportAnalyzer()
             analyzer.visit(tree)
 
-            
             unused_imports = []
             for imp in analyzer.imports:
-                
                 name_to_check = imp.alias if imp.alias else imp.name
 
-                
                 if imp.is_from_import and imp.names:
-                    
                     pass
 
-                
                 if name_to_check not in analyzer.used_names and name_to_check not in analyzer.defined_names:
                     unused_imports.append(imp)
 
@@ -161,29 +149,20 @@ class ImportRemover:
             with open(self.file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
-            
             lines_to_remove = sorted(set([imp.line for imp in unused_imports]), reverse=True)
 
             removed_imports = []
             for line_num in lines_to_remove:
                 if 1 <= line_num <= len(lines):
-                    
                     line_content = lines[line_num - 1].rstrip()
 
-                    
-                    
-                    
-
-                    
                     lines.pop(line_num - 1)
 
-                    
                     for imp in unused_imports:
                         if imp.line == line_num:
                             import_name = imp.alias if imp.alias else imp.name
                             removed_imports.append(f"{import_name} (line {line_num})")
 
-            
             if removed_imports:
                 with open(self.file_path, "w", encoding="utf-8") as f:
                     f.writelines(lines)
@@ -209,9 +188,7 @@ def find_python_files(root_path: Path) -> List[Path]:
         if root_path.suffix == ".py":
             python_files.append(root_path)
     else:
-        
         for file_path in root_path.rglob("*.py"):
-            
             if any(
                 part.startswith(".") or part in ["__pycache__", "venv", "env", ".venv", "node_modules"]
                 for part in file_path.parts
@@ -252,7 +229,7 @@ def print_summary(results: Dict[Path, List[str]], total_files: int, total_import
 
 
 def main() -> None:
-    
+
     if len(sys.argv) > 1:
         input_path = Path(sys.argv[1])
         if not input_path.exists():
@@ -262,7 +239,6 @@ def main() -> None:
         input_path = Path.cwd()
         print(f"No input provided, processing current directory: {input_path}")
 
-    
     print(f"Scanning for Python files in: {input_path}")
     python_files = find_python_files(input_path)
 
@@ -272,19 +248,15 @@ def main() -> None:
 
     print(f"Found {len(python_files)} Python files")
 
-    
     num_workers = min(cpu_count(), len(python_files))
     print(f"Using {num_workers} worker processes...")
 
     results = {}
     total_imports_removed = 0
 
-    
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        
         future_to_file = {executor.submit(process_file, file_path): file_path for file_path in python_files}
 
-        
         from concurrent.futures import as_completed
 
         for i, future in enumerate(as_completed(future_to_file), 1):
@@ -303,7 +275,6 @@ def main() -> None:
                 print(f"[{i}/{len(python_files)}] ✗ Failed to process {file_path}: {e}", file=sys.stderr)
                 results[file_path] = []
 
-    
     print_summary(results, len(python_files), total_imports_removed)
 
 

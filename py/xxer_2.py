@@ -59,7 +59,7 @@ SUPPORTED_EXTS = {
     ".7z",
 }
 COMPRESSION_LEVELS = {"xz": 9, "gz": 9, "bz2": 9, "brotli": 11, "zstd": 9, "7z": 9}
-CHUNK_SIZE = 1024 * 1024  
+CHUNK_SIZE = 1024 * 1024
 
 
 @dataclass
@@ -132,7 +132,7 @@ def atomic_write(src: Path, dst: Path, write_func, *args, **kwargs) -> Path:
         with tempfile.NamedTemporaryFile(delete=False, dir=dst.parent, prefix=f"{dst.stem}.") as tmp:
             temp_path = Path(tmp.name)
             write_func(src, temp_path, *args, **kwargs)
-        
+
         dst.parent.mkdir(parents=True, exist_ok=True)
         os.replace(temp_path, dst)
         return dst
@@ -214,19 +214,15 @@ def compress_one(path_str: str, mode: str, is_dir: bool) -> Result:
             raise ValueError(f"Unsupported compression mode: {mode}")
 
         if is_dir:
-            
             tar_path = src.parent / f"{src.name}.tar"
             tar_directory(src, tar_path)
             dst = output_name_for_dir(src, mode)
 
-            
             atomic_write(tar_path, dst, compress_funcs[mode])
 
-            
             tar_path.unlink(missing_ok=True)
             shutil.rmtree(src)
         else:
-            
             dst = output_name_for_file(src, mode)
             atomic_write(src, dst, compress_funcs[mode])
             src.unlink()
@@ -254,7 +250,6 @@ def decompress_one(path_str: str) -> Result:
         name = src.name.lower()
         dst_dir = src.parent
 
-        
         handlers = {
             ".tar.xz": lambda: handle_tar_xz(src, dst_dir),
             ".tar": lambda: handle_tar(src, dst_dir),
@@ -271,7 +266,6 @@ def decompress_one(path_str: str) -> Result:
             ".7z": lambda: handle_7z(src, dst_dir),
         }
 
-        
         for ext, handler in handlers.items():
             if name.endswith(ext):
                 extracted_path = handler()
@@ -290,7 +284,6 @@ def decompress_one(path_str: str) -> Result:
         if temp_file_to_remove and temp_file_to_remove.exists():
             temp_file_to_remove.unlink()
         return result
-
 
 
 def lzma_open(file, mode) -> LZMAFile | TextIOWrapper:
@@ -321,7 +314,7 @@ def handle_tar(src: Path, dst_dir: Path):
 
 
 def handle_tar_gz(src: Path, dst_dir: Path):
-    extracted_path = dst_dir / src.stem[:-4]  
+    extracted_path = dst_dir / src.stem[:-4]
     with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
         temp_path = Path(tmp_tar.name)
         with gzip.open(src, "rb") as fin:
@@ -333,7 +326,7 @@ def handle_tar_gz(src: Path, dst_dir: Path):
 
 
 def handle_tar_bz2(src: Path, dst_dir: Path):
-    extracted_path = dst_dir / src.stem[:-5]  
+    extracted_path = dst_dir / src.stem[:-5]
     with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
         temp_path = Path(tmp_tar.name)
         with bz2.open(src, "rb") as fin:
@@ -345,7 +338,7 @@ def handle_tar_bz2(src: Path, dst_dir: Path):
 
 
 def handle_tar_xz(src: Path, dst_dir: Path):
-    extracted_path = dst_dir / src.stem[:-4]  
+    extracted_path = dst_dir / src.stem[:-4]
     with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
         temp_path = Path(tmp_tar.name)
         with lzma.open(src, "rb") as fin:
@@ -359,7 +352,7 @@ def handle_tar_xz(src: Path, dst_dir: Path):
 def handle_tar_br(src: Path, dst_dir: Path):
     if brotli is None:
         raise RuntimeError("brotli not installed")
-    extracted_path = dst_dir / src.stem[:-4]  
+    extracted_path = dst_dir / src.stem[:-4]
     data = brotli.decompress(src.read_bytes())
     with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
         temp_path = Path(tmp_tar.name)
@@ -373,7 +366,7 @@ def handle_tar_br(src: Path, dst_dir: Path):
 def handle_tar_7z(src: Path, dst_dir: Path):
     if py7zr is None:
         raise RuntimeError("py7zr not installed")
-    extracted_path = dst_dir / src.stem[:-4]  
+    extracted_path = dst_dir / src.stem[:-4]
     with py7zr.SevenZipFile(src, "r") as zf:
         zf.extractall(path=dst_dir)
     return extracted_path
@@ -382,7 +375,7 @@ def handle_tar_7z(src: Path, dst_dir: Path):
 def handle_tar_zst(src: Path, dst_dir: Path):
     if zstd is None:
         raise RuntimeError("zstandard not installed")
-    extracted_path = dst_dir / src.stem[:-4]  
+    extracted_path = dst_dir / src.stem[:-4]
     dctx = zstd.ZstdDecompressor()
     with src.open("rb") as fin:
         with dctx.stream_reader(fin) as reader:
@@ -423,14 +416,14 @@ def handle_7z(src: Path, dst_dir: Path):
 
 def get_safe_workers() -> int:
     if psutil is None:
-        return 2  
+        return 2
 
     try:
         total_mem = psutil.virtual_memory().total
         mem_headroom_gb = 2
-        mem_per_worker_gb = 2  
+        mem_per_worker_gb = 2
         max_workers = max(1, int((total_mem / 1024**3 - mem_headroom_gb) / mem_per_worker_gb))
-        return min(max_workers, 4)  
+        return min(max_workers, 4)
     except:
         return 2
 
@@ -478,7 +471,6 @@ def main() -> None:
     group.add_argument("-c", "--compress", action="store_true", help="Compress")
     group.add_argument("-d", "--decompress", action="store_true", help="Decompress")
 
-    
     method_group = parser.add_mutually_exclusive_group()
     method_group.add_argument("-7", "--7z", dest="use_7z", action="store_true", help="Use 7z")
     method_group.add_argument("-z", "--zstd", action="store_true", help="Use Zstandard (default)")
@@ -489,12 +481,11 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    
     if not args.compress and not args.decompress:
         args.compress = True
 
     if args.compress and not (args.use_7z or args.zstd or args.xz or args.gz or args.brotli or args.bz2):
-        args.zstd = True  
+        args.zstd = True
 
     overall_original_size = 0
     overall_new_size = 0
@@ -502,7 +493,6 @@ def main() -> None:
     error_count = 0
 
     if args.decompress:
-        
         targets = []
         for p in Path(".").iterdir():
             if p.is_file() and has_compressed_suffix(p):
@@ -529,7 +519,6 @@ def main() -> None:
                 print(f"✗ Failed to decompress: {res.src} - Error: {res.error}")
 
     else:
-        
         mode = "zstd"
         if args.use_7z:
             mode = "7z"
@@ -544,7 +533,6 @@ def main() -> None:
         elif args.xz:
             mode = "xz"
 
-        
         required_libs = {"brotli": brotli, "zstd": zstd, "7z": py7zr}
         if mode in required_libs and required_libs[mode] is None:
             print(f"Error: {mode} compression requires additional libraries. Please install the required package.")
@@ -560,7 +548,6 @@ def main() -> None:
         print(f"Found {len(items_to_process)} items to compress using '{mode}' mode. Starting compression...")
         COMPRESS_MODE = mode
 
-        
         for path, is_dir in items_to_process:
             res = compress_one(str(path), COMPRESS_MODE, is_dir)
             processed_count += 1
@@ -575,7 +562,6 @@ def main() -> None:
                 error_count += 1
                 print(f"✗ Failed to compress: {res.src} - Error: {res.error}")
 
-    
     if processed_count == 0:
         print("No items were processed.")
         return

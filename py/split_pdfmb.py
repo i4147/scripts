@@ -1,4 +1,3 @@
-
 import io
 import sys
 from multiprocessing.pool import Pool
@@ -37,7 +36,6 @@ def split_pdf_by_size(
             writer.write(buffer)
 
             if buffer.tell() > max_size_bytes and len(current_pages) > 1:
-                
                 current_pages.pop()
 
                 flush_writer: PdfWriter = PdfWriter()

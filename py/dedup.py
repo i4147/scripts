@@ -19,7 +19,7 @@ def main():
             translations = [translations]
 
         total_before += len(translations)
-        deduped = list(dict.fromkeys(translations))  
+        deduped = list(dict.fromkeys(translations))
         total_after += len(deduped)
         cleaned[word] = deduped
 

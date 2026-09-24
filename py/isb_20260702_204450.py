@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 from binaryornot import is_binary
@@ -33,5 +32,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,0 +1,256 @@
+# --- File: fa_trans.py ---
+from __future__ import annotations
+import json
+import re
+import sys
+import time
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+a = 8
+b = 3
+c = 0.5
+d = 2000
+e = re.compile('[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]')
+def f(g):
+    return bool(e.search(g))
+def h(i):
+    j = []
+    k = []
+    l = 0
+    for m in i:
+        n = len(m) + 1
+        if l + n > d and k:
+            j.append(k)
+            k = []
+            l = 0
+        if n > d:
+            if k:
+                j.append(k)
+                k = []
+                l = 0
+            j.append([m])
+        else:
+            k.append(m)
+            l += n
+    if k:
+        j.append(k)
+    return j
+def o(p):
+    q = '\n'.join(p)
+    r = GoogleTranslator(source='fa', target='en')
+    for s in range(b):
+        try:
+            t = r.translate(q)
+            if t:
+                return (p, t)
+        except Exception as e:
+            logger.warning("Failed chunk starting with '{}' (attempt {}/{}): {}", p[0][:50], s + 1, b, e)
+            if s < b - 1:
+                time.sleep(c)
+    return (p, None)
+def u(v):
+    with v.open(encoding='utf-8') as f:
+        return [m.strip() for m in f if m.strip()]
+def w(x, y):
+    with y.open('w', encoding='utf-8') as f:
+        json.dump(x, f, ensure_ascii=False, indent=2)
+def z(v, a1, x):
+    with v.open('w', encoding='utf-8') as f:
+        for m in a1:
+            f.write(f'{x.get(m, m)}\n')
+def b1(j, c1):
+    x = {}
+    d1 = [c1.apply_async(o, (p,)) for p in j]
+    for e1 in d1:
+        try:
+            f1, g1 = e1.get()
+        except Exception as e:
+            logger.error('Unexpected error while translating chunk: {}', e)
+            continue
+        if not g1:
+            logger.error('Failed to translate chunk starting with: {}', f1[0][:50])
+            continue
+        h1 = g1.split('\n')
+        for i, i1 in enumerate(f1):
+            if i < len(h1):
+                x[i1] = h1[i]
+                print('{} → {}', i1, h1[i])
+            else:
+                logger.error('Line count mismatch in chunk, missing translation for: {}', i1)
+    return x
+def j1():
+    if len(sys.argv) < 2:
+        logger.error('Usage: {} <input_file>', sys.argv[0])
+        return 1
+    v = Path(sys.argv[1].strip())
+    if not v.exists():
+        logger.error('Input file not found: {}', v.name)
+        return 1
+    try:
+        a1 = u(v)
+    except Exception as e:
+        logger.error('Error reading input file: {}', e)
+        return 1
+    if not a1:
+        print('No lines found in {}', v.name)
+        return 0
+    k1 = [m for m in a1 if f(m)]
+    l1 = len(a1) - len(k1)
+    print('Loaded {} lines: {} with persian, {} already English/skipped', len(a1), len(k1), l1)
+    if not k1:
+        print('No persian lines to translate in {}', v.name)
+        return 0
+    j = h(k1)
+    print('Created {} chunks from {} persian lines (max {} chars per chunk)', len(j), len(k1), d)
+    x = {}
+    c1 = Pool(processes=a)
+    try:
+        x = b1(j, c1)
+    finally:
+        c1.close()
+        c1.join()
+    y = v.with_suffix('.json')
+    try:
+        w(x, y)
+        print('Saved {} translations to {}', len(x), y.name)
+    except Exception as e:
+        logger.error('Error saving JSON file: {}', e)
+    try:
+        z(v, a1, x)
+        print('Updated {}: translated {} lines, kept {} lines unchanged', v.name, len(x), l1)
+    except Exception as e:
+        logger.error('Error updating input file: {}', e)
+        return 1
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: tfa.py ---
+from __future__ import annotations
+import json
+from pathlib import Path
+from deep_translator import GoogleTranslator
+m1 = 'words.txt'
+n1 = 'dic.json'
+def o1(p1):
+    try:
+        return GoogleTranslator(source='auto', target='en').translate(p1)
+    except Exception as e:
+        print(f"Error translating '{p1}': {e}")
+        return None
+def j1():
+    q1 = {}
+    with Path(m1).open(encoding='utf-8') as f:
+        r1 = [m.strip() for m in f if m.strip()]
+    print(f'Loaded {len(r1)} Persian words')
+    for w in r1:
+        eng = o1(w)
+        if eng:
+            q1[w] = eng
+            print(f'{w} → {eng}')
+    with Path(n1).open('w', encoding='utf-8') as f:
+        json.dump(q1, f, ensure_ascii=False, indent=2)
+    print(f'\nSaved JSON dictionary to {n1}')
+if __name__ == '__main__':
+    raise SystemExit(j1())
+
+# --- File: trans_fa_mp.py ---
+import json
+import sys
+import time
+from multiprocessing.pool import Pool
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+a = 8
+b = 3
+c = 0.5
+def o1(p1):
+    r = GoogleTranslator(source='auto', target='en')
+    for s in range(b):
+        try:
+            t = r.translate(p1)
+            if t:
+                return (p1, t)
+        except Exception as e:
+            logger.warning("Failed '{}' (attempt {}/{}): {}", p1, s + 1, b, e)
+            if s < b - 1:
+                time.sleep(c)
+    return (p1, None)
+def j1():
+    if len(sys.argv) < 2:
+        logger.error('Usage: {} <input_file>', Path(sys.argv[0]).name)
+        return
+    v = Path(sys.argv[1].strip())
+    y = v.with_suffix('.json')
+    if not v.exists():
+        logger.error('Input file not found: {}', v.name)
+        return
+    try:
+        with v.open(encoding='utf-8') as f:
+            r1 = [w.strip() for w in f if w.strip()]
+    except Exception as e:
+        logger.error('Error reading input file: {}', e)
+        return
+    if not r1:
+        logger.info('No words found in {}', v.name)
+        return
+    logger.info('Loaded {} Persian words. Starting translation with {} workers...', len(r1), a)
+    x = {}
+    with Pool(processes=a) as c1:
+        for s1, t1 in c1.imap_unordered(o1, r1):
+            if t1:
+                x[s1] = t1
+                logger.info('{} → {}', s1, t1)
+            else:
+                logger.error('Could not translate: {}', s1)
+    try:
+        with y.open('w', encoding='utf-8') as f:
+            json.dump(x, f, ensure_ascii=False, indent=2)
+        logger.info('Translation dictionary saved to {} ({} entries)', y.name, len(x))
+    except Exception as e:
+        logger.error('Error saving results: {}', e)
+if __name__ == '__main__':
+    raise SystemExit(j1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

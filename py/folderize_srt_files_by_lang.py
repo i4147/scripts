@@ -14,13 +14,11 @@ def detect_language(file_path: Path):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        
         lines = content.split("\n")
         subtitle_text = "\n".join(
             line for i, line in enumerate(lines) if line.strip() and not line.isdigit() and "-->" not in line
         )
 
-        
         if subtitle_text.strip():
             detected = detector.detect_language_of(subtitle_text)
             return detected
@@ -54,7 +52,6 @@ def organize_subtitles(directory: Path = Path.cwd()) -> None:
             lang_code = detected_lang.iso_code_639_1.name
             print(f"   ✓ Detected language: {lang_name} ({lang_code})")
 
-            
             folder_name = f"{lang_name}_{lang_code}".lower()
 
             if folder_name not in language_folders:
@@ -85,5 +82,4 @@ def organize_subtitles(directory: Path = Path.cwd()) -> None:
 
 
 if __name__ == "__main__":
-    
     organize_subtitles()

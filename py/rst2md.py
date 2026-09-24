@@ -1,4 +1,3 @@
-
 import os
 import sys
 import argparse
@@ -18,7 +17,6 @@ except ImportError:
 
 
 class RstToMarkdownWriter(UnfilteredWriter):
-
     supported = ("markdown", "md")
     output = None
 
@@ -27,13 +25,12 @@ class RstToMarkdownWriter(UnfilteredWriter):
         self.output = ""
 
     def translate(self) -> None:
-        
+
         from docutils.core import publish_parts
 
         parts = publish_parts(self.document.source, writer_name="html", settings_overrides={"initial_header_level": 2})
         html_content = parts["html_body"]
 
-        
         from mistletoe import Document
 
         doc = Document(html_content)
@@ -44,26 +41,22 @@ def rst_to_markdown(content: str):
     from docutils.core import publish_parts
     import tempfile
 
-    
     with tempfile.NamedTemporaryFile(mode="w", suffix=".rst", delete=False) as f:
         f.write(content)
         temp_file = f.name
 
     try:
-        
         parts = publish_parts(
             source=content, writer_name="html", settings_overrides={"initial_header_level": 2, "warning_stream": None}
         )
         html_content = parts["html_body"]
 
-        
         from mistletoe import html_to_markdown
 
         markdown_content = html_to_markdown(html_content)
 
         return markdown_content
     finally:
-        
         if os.path.exists(temp_file):
             os.unlink(temp_file)
 
@@ -79,7 +72,6 @@ def convert_file(filepath: Path, backup=True) -> bool:
         print(f"Skipping {filepath}: not an .rst file")
         return False
 
-    
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             rst_content = f.read()
@@ -87,14 +79,12 @@ def convert_file(filepath: Path, backup=True) -> bool:
         print(f"Error reading {filepath}: {e}")
         return False
 
-    
     try:
         markdown_content = rst_to_markdown(rst_content)
     except Exception as e:
         print(f"Error converting {filepath}: {e}")
         return False
 
-    
     if backup:
         backup_path = filepath.with_suffix(".rst.bak")
         try:
@@ -105,14 +95,10 @@ def convert_file(filepath: Path, backup=True) -> bool:
         except Exception as e:
             print(f"Warning: could not create backup: {e}")
 
-    
     md_path = filepath.with_suffix(".md")
     try:
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(markdown_content)
-
-        
-        
 
         print(f"Converted: {filepath} -> {md_path}")
         return True

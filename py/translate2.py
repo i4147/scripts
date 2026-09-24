@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -16,22 +15,18 @@ from typing import Iterable
 
 try:
     from deep_translator import GoogleTranslator
-except ImportError:  
+except ImportError:
     sys.stderr.write("Missing dependency: pip install deep-translator\n")
     raise
 
 
-
-
-
-
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
 DEFAULT_CACHE = "translations.sqlite"
-TRANSLATE_CHUNK = 20  
-DEFAULT_SAVE_INTERVAL = 10.0  
+TRANSLATE_CHUNK = 20
+DEFAULT_SAVE_INTERVAL = 10.0
 
-_shutdown = False  
-_cache: "TranslationCache | None" = None  
+_shutdown = False
+_cache: "TranslationCache | None" = None
 
 
 def _has_cyrillic(text: str) -> bool:
@@ -44,20 +39,13 @@ def _handle_signal(signum, _frame) -> None:
     sys.stderr.write(f"\n[translate] received signal {signum}, finishing up...\n")
 
 
-
-
-
-
-
 class TranslationCache:
-
     def __init__(self, path: str | os.PathLike):
         self.path = str(path)
         self._conn: sqlite3.Connection | None = None
 
     def connect(self) -> sqlite3.Connection:
         if self._conn is None:
-            
             self._conn = sqlite3.connect(self.path, timeout=30.0)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
@@ -109,11 +97,6 @@ class TranslationCache:
             self._conn = None
 
 
-
-
-
-
-
 def _worker_init(cache_path: str) -> None:
     global _cache
     _cache = TranslationCache(cache_path)
@@ -139,7 +122,7 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
         if not text.strip():
             results.append((idx, text))
             continue
-        
+
         if src == "ru" and not _has_cyrillic(text):
             results.append((idx, text))
             continue
@@ -154,7 +137,7 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
         texts = [t for _, t in batch]
         try:
             translated = _translate_texts(texts, src, tgt)
-        except Exception as exc:  
+        except Exception as exc:
             sys.stderr.write(f"[translate] batch failed ({exc}); keeping originals\n")
             translated = texts
 
@@ -164,15 +147,10 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
             pairs.append((original, tr))
         try:
             _cache.put_many(src, tgt, pairs)
-        except sqlite3.Error as exc:  
+        except sqlite3.Error as exc:
             sys.stderr.write(f"[translate] cache write failed: {exc}\n")
 
     return results
-
-
-
-
-
 
 
 def _save_progress(
@@ -206,11 +184,6 @@ def _save_progress(
     os.replace(tmp_meta, meta_path)
 
 
-
-
-
-
-
 def cmd_translate(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
     if not input_path.is_file():
@@ -223,7 +196,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
     output_path = args.output or str(input_path) + ".translated.txt"
     meta_path = output_path + ".meta.json"
 
-    
     indexed = list(enumerate(lines))
     batch_size = max(1, args.batch_size)
     batches = [indexed[i : i + batch_size] for i in range(0, len(indexed), batch_size)]
@@ -232,7 +204,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
     translations: dict[int, str] = {}
     last_save = time.time()
 
-    
     _save_progress(
         output_path,
         meta_path,
@@ -303,8 +274,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         _shutdown = True
     finally:
-        
-        
         pool.terminate()
         pool.join()
 
@@ -324,7 +293,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
     tag = "complete" if complete else "interrupted"
     print(f"[translate] {tag}: wrote {output_path} ({done}/{len(lines)} lines)", file=sys.stderr)
     if not complete:
-        
         sys.exit(130 if _shutdown else 1)
 
 
@@ -351,11 +319,6 @@ def cmd_cache_stats(args: argparse.Namespace) -> None:
     print(f"Total: {total:,} entries")
 
 
-
-
-
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Translate a text file with deep_translator + SQLite caching.",
@@ -379,7 +342,6 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    
     signal.signal(signal.SIGINT, _handle_signal)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _handle_signal)

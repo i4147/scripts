@@ -1,4 +1,3 @@
-
 import argparse
 import ast
 import concurrent.futures
@@ -118,7 +117,6 @@ def find_repeated_strings(
             except Exception as e:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
 
-    
     repeated = {k: v for k, v in all_strings.items() if len(v) > 1}
 
     if half:

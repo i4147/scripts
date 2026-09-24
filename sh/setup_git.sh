@@ -9,7 +9,7 @@
 
 GIT_USERNAME="unforgivenii147"
 GIT_EMAIL="adnanonagh@gmail.com"
-GIT_EDITOR="code --wait"  # Change to your preferred editor (vim, nano, code, etc.)
+GIT_EDITOR="code --wait" # Change to your preferred editor (vim, nano, code, etc.)
 DEFAULT_BRANCH="main"
 
 # ============================================
@@ -20,9 +20,9 @@ echo "Setting up Git configuration..."
 
 # Check if values are set
 if [[ "$GIT_USERNAME" == "YOUR_USERNAME_HERE" ]] || [[ "$GIT_EMAIL" == "YOUR_EMAIL_HERE" ]]; then
-    echo "❌ ERROR: Please edit the script and set your username and email first!"
-    echo "   Open the script and replace YOUR_USERNAME_HERE and YOUR_EMAIL_HERE"
-    exit 1
+	echo "❌ ERROR: Please edit the script and set your username and email first!"
+	echo "   Open the script and replace YOUR_USERNAME_HERE and YOUR_EMAIL_HERE"
+	exit 1
 fi
 
 # Set global Git configuration
@@ -33,7 +33,7 @@ git config --global init.defaultBranch "$DEFAULT_BRANCH"
 
 # Additional useful configurations
 git config --global color.ui auto
-git config --global core.autocrlf input  # Use 'true' on Windows, 'input' on Mac/Linux
+git config --global core.autocrlf input # Use 'true' on Windows, 'input' on Mac/Linux
 git config --global pull.rebase false
 git config --global push.default current
 

@@ -1,0 +1,119 @@
+# filename: fafontpreview.py
+from dh import FONTEXT;a=tuple(FONTEXT);d='fa_fonts_preview.html';e=[14,22]
+def f(r=n.cwd()):m=[]
+    for l,_,h in r.walk():m.extend((n(l)/k for k in h if k.lower().endswith(a)))
+    return m
+def b(g):o=['<!DOCTYPE html>',"<html lang='en'>",'<head>',"<meta charset='UTF-8'>",'<title>Font Preview</title>',"<link rel=stylesheet src='/sdcard/_static/font_css/fontello.css'></link></head>",'<body>','<h1>Font Preview</h1>']
+    for j in g:i=n(j).name;o.extend(("<div class='font-preview'>",'<style>',f"@font-face {{ font-family:'{i}'; src:url('{j}'); }}",'</style>'));o.extend((f'''<h1 style='font-family:"{i}"; font-size:{q}px;'>هنر برتز از گوهر آمد پدید</h1>''' for q in e));o.append(f'''<div style='font-family:"{i}"; font-size:12px;'>{i}</div><hr>''');o.append('</div>')
+    o.append('</body></html>');return '\n'.join(o)
+def p():m=f()
+    if not m:return
+    c=b(m);n(d).write_text(c,encoding='utf-8');print('font-preview.html created.')
+if __name__=='__main__':raise SystemExit(p())
+# filename: fontpre.py
+aa.basicConfig(level=aa.INFO,format='%(levelname)s:%(message)s');ac=aa.getLogger(__name__);Y=frozenset({'.ttf','.otf','.woff','.woff2','.eot','.svg'});w='Lorem ipsum dolor sit amet\nهنر برتر از گوهر آمد پدید';v='fontpreview.html'
+class O(C):pass
+def o():return R.now().isoformat(timespec='seconds')
+def h(F):for ar in ('B','KB','MB','GB'):if F<1024.0:return f'{F:.1f} {ar}'
+        F/=1024.0
+    return f'{F:.1f} TB'
+@J(maxsize=128)
+def j(au):D={'.ttf':'TrueType','.otf':'OpenType','.woff':'WOFF','.woff2':'WOFF2','.eot':'Embedded OpenType','.svg':'SVG Font'};return D.get(au.lower(),au.upper().lstrip('.'))
+def u(ao):return ao.is_file() and ao.suffix.lower() in Y
+def c(ai=None):if not ai:ai=[aj.cwd()]
+    ab=set()
+    for ap in ai:try:ap=ap.resolve()
+            if not ap.exists():ac.warning(f'Path does not exist:{ap}');continue
+            if ap.is_file():if u(ap):yield ap
+            else:for ao in ap.rglob('*'):if ao in ab:continue
+                    ab.add(ao)
+                    if u(ao):try:yield ao
+                        except (OSError,ValueError) as e:ac.debug(f'Skipping {ao}:{e}')
+        except (PermissionError,OSError) as e:ac.warning(f'Cannot access {ap}:{e}')
+def m(ai=None,K=10000):af=[]
+    for i,ao in enumerate(c(ai),1):if i>K:ac.warning(f'Reached maximum font limit ({K})');break
+        try:aq=ao.stat();H=O(ao=ao,index=i,size=aq.st_size,format=j(ao.suffix));af.append(H)
+        except (OSError,ValueError) as e:ac.debug(f'Error processing {ao}:{e}');continue
+    return sorted(af,key=lambda f:(f.path.parent,f.path.name))
+def g(H,at):try:U=H.path.relative_to(at);X=ah(U.as_posix())
+    except ValueError:X=ah(H.path.as_posix())
+        if not X.startswith('/'):X='/'+X
+    Z=f'{H.index:04d}';return f"@font-face {{\n  font-family:'font_{Z}';\n  src:url('{X}');\n  font-display:swap;\n  font-weight:normal;\n  font-style:normal;\n}}"
+def d(H,at):Z=f'{H.index:04d}';I=H.path.name
+    try:q=H.path.relative_to(at)
+    except ValueError:q=H.path
+    r=am.escape(I);s=am.escape(str(q));k=am.escape(w);W=h(H.size);return f"""\n<section>\n<h1 style="font-family:'font_{Z}',serif;">\n    {r}\n<small>({H.format})</small>\n</h1>\n<textarea\n    style="font-family:'font_{Z}',serif; font-size:22px;"\n    spellcheck="false"\n    placeholder="Type to test font..."\n>{k}</textarea>\n<div class="metadata">\n<div class="metadata-item">\n<span class="metadata-label">Path:</span>\n<code>{s}</code>\n</div>\n<div class="metadata-item">\n<span class="metadata-label">Size:</span>\n<code>{W}</code>\n</div>\n<div class="metadata-item">\n<span class="metadata-label">Format:</span>\n<code>{H.format}</code>\n</div>\n</div>\n</section>"""
+def b(af,at):return '\n\n'.join((g(al,at) for al in af))
+def a(af,at):return '\n'.join((d(al,at) for al in af))
+def n(af,at):M=o();E=f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title>Font Preview</title>\n<style>\n:root {{\n--bg:\n--text:\n--border:\n--accent:\n--input-bg:\n}}\n@media (prefers-color-scheme:dark) {{\n  :root {{\n--bg:\n--text:\n--border:\n--accent:\n--input-bg:\n  }}\n}}\n*{{\n  box-sizing:border-box;\n}}\nbody {{\n  background:var(--bg);\n  color:var(--text);\n  font-family:system-ui,-apple-system,sans-serif;\n  margin:0 auto;\n  padding:20px;\n  max-width:960px;\n  transition:background 0.3s,color 0.3s;\n}}\nh1 {{\n  margin-top:40px;\n  margin-bottom:0.5em;\n  font-size:1.6em;\n  border-bottom:2px solid var(--border);\n  padding-bottom:0.3em;\n  color:var(--accent);\n  word-break:break-word;\n}}\nh1 small {{\n  font-size:0.6em;\n  opacity:0.7;\n  display:inline-block;\n  margin-left:0.5em;\n}}\ntextarea {{\n  width:100%;\n  min-height:100px;\n  padding:16px;\n  margin-top:6px;\n  border-radius:8px;\n  border:2px solid var(--border);\n  font-size:clamp(1em,2vw,1.5em);\n  resize:vertical;\n  white-space:pre-wrap;\n  background:var(--input-bg);\n  color:var(--text);\n  transition:border-color 0.3s;\n  line-height:1.6;\n  overflow-wrap:break-word;\n}}\ntextarea:focus {{\n  outline:none;\n  border-color:var(--accent);\n}}\nsection {{\n  margin-top:30px;\n  padding-bottom:20px;\n  border-bottom:1px solid var(--border);\n}}\nsection:last-of-type {{\n  border-bottom:none;\n}}\n.note {{\n  color:var(--text);\n  margin-top:8px;\n  font-size:0.85em;\n  font-family:monospace;\n  word-break:break-all;\n  opacity:0.75;\n}}\nfooter {{\n  margin-top:40px;\n  text-align:center;\n  color:var(--text);\n  font-size:0.9em;\n  opacity:0.6;\n}}\n.metadata {{\n  display:flex;\n  gap:16px;\n  font-size:0.9em;\n  margin-top:8px;\n  flex-wrap:wrap;\n}}\n.metadata-item {{\n  display:flex;\n  align-items:center;\n  gap:4px;\n}}\n.metadata-label {{\n  opacity:0.7;\n  font-weight:500;\n}}\n</style>\n</head>\n<body>\n<h1>Font Preview Generator</h1>\n<p class="note">Generated:{M}</p>\n<style>\n';x='\n</style>\n';S='\n<footer>\nGenerated by Font Preview Generator|Python 3.12+|Pathlib optimized\n</footer>\n</body>\n</html>\n'
+    if not af:return f'{E}{x}{S}'
+    ae=b(af,at);V=a(af,at);return f'{E}{ae}{x}{V}{S}'
+def p(t,A):try:L=A.with_suffix('.tmp');L.write_text(t,encoding='utf-8');L.replace(A);return True
+    except OSError as e:ac.error(f'Failed to write {A}:{e}');return False
+def l(ag):if not ag:return [aj.cwd()]
+    N=[]
+    for T in ag:try:ao=aj(T).expanduser().resolve()
+            if ao.exists():N.append(ao)
+            else:ac.warning(f'Path does not exist:{T}')
+        except (OSError,ValueError) as e:ac.warning(f"Invalid path '{T}':{e}")
+    return N if N else [aj.cwd()]
+def an(y=None,z=v):at=aj.cwd();B=l(y);print(f'Searching for fonts in {len(B)} location(s)...');af=m(B)
+    if not af:ac.warning(f"No font files found. Supported formats:{','.join(sorted(Y))}");return 1
+    print(f'Found {len(af)} font(s)');print('Generating preview HTML...');t=n(af,at);A=at/z;print(f'Writing to {A}...')
+    if p(t,A):print(f'✓ Successfully generated {A}');print(f'  File size:{h(A.stat().st_size)}');return 0
+    return 1
+def Q():ad=P.ArgumentParser(description='Generate interactive HTML preview for font files',formatter_class=P.RawDescriptionHelpFormatter,epilog='\nExamples:\n  fontpreview.py\n  fontpreview.py ./fonts/\n  fontpreview.py ./fonts/~/Downloads/./local/\n  fontpreview.py-o my_preview.html ./fonts/\n        ');ad.add_argument('paths',nargs='*',help='File or directory paths to process (default:current directory)');ad.add_argument('-o','--output',default=v,help=f'Output HTML filename (default:{v})');ad.add_argument('-v','--verbose',action='store_true',help='Enable verbose logging');ak=ad.parse_args()
+    if ak.verbose:aa.getLogger().setLevel(aa.DEBUG)
+    try:G=an(ak.paths if ak.paths else None,ak.output);av.exit(G)
+    except KeyboardInterrupt:ac.warning('Operation cancelled by user');av.exit(130)
+    except Exception as e:ac.error(f'Unexpected error:{e}',exc_info=True);av.exit(1)
+if __name__=='__main__':Q()
+# filename: fontpreview.py
+from dh import FONTEXT;a=tuple(FONTEXT);d='fonts_preview.html';e=[14,22]
+def f(q='.'):m=[]
+    for l,_,h in r.walk(q):m.extend((r.path.join(l,k) for k in h if k.lower().endswith(a)))
+    return m
+def b(g):o=['<!DOCTYPE html>',"<html lang='en'>",'<head>',"<meta charset='UTF-8'>",'<title>Font Preview</title>',"<link rel=stylesheet src='/sdcard/_static/fontello.css'></link></head>",'<body>','<h1>Font Preview</h1>']
+    for j in g:i=n(j).name;o.extend(("<div class='font-preview'>",'<style>',f"@font-face {{ font-family:'{i}'; src:url('{j}'); }}",'</style>'));o.append(f'''<div style='font-family:"{i}"; font-size:16px;'>LIFE IS A DREAM,we are dreaming.</div>''');o.append(f'''<div style='font-family:"{i}"; font-size:22px;'>LIFE IS A DREAM,we are dreaming.</div>''');o.append(f'''<div style='font-family:"{i}"; font-size:28px;'>LIFE IS A DREAM,we are dreaming.</div>''');o.append(f'''<div style='font-family:"{i}"; font-size:14px;'>{i}</div><hr><br/>''');o.append('</div>')
+    o.append('</body></html>');return '\n'.join(o)
+def p():m=f()
+    if not m:return
+    c=b(m);n(d).write_text(c,encoding='utf-8');print('font-preview.html created.')
+if __name__=='__main__':raise SystemExit(p())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

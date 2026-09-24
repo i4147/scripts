@@ -41,7 +41,6 @@ SYNTAX_THEMES = {
 
 
 class SyntaxHighlighter:
-
     PATTERNS = {
         "python": {
             "keywords": r"\b(def|class|import|from|return|if|else|elif|for|while|try|except|finally|with|as|lambda|and|or|not|is|None|True|False|async|await)\b",
@@ -91,7 +90,6 @@ class SyntaxHighlighter:
 
 
 class CommandPaletteScreen(Screen):
-
     def __init__(self, commands: dict, parent_app) -> None:
         super().__init__()
         self.commands = commands
@@ -127,7 +125,6 @@ class CommandPaletteScreen(Screen):
 
 
 class FindReplaceScreen(Screen):
-
     def __init__(self, text_area, mode: str = "find") -> None:
         super().__init__()
         self.text_area = text_area
@@ -181,7 +178,6 @@ class FindReplaceScreen(Screen):
 
 
 class GoToLineScreen(Screen):
-
     def __init__(self, text_area) -> None:
         super().__init__()
         self.text_area = text_area
@@ -199,7 +195,6 @@ class GoToLineScreen(Screen):
             line_num = int(self.query_one("#line-input", Input).value) - 1
             lines = self.text_area.text.split("\n")
             if 0 <= line_num < len(lines):
-                
                 pos = 0
                 for i in range(line_num):
                     pos += len(lines[i]) + 1
@@ -217,7 +212,6 @@ class GoToLineScreen(Screen):
 
 
 class FileBrowserScreen(Screen):
-
     def __init__(self, editor) -> None:
         super().__init__()
         self.editor = editor
@@ -263,7 +257,6 @@ class FileBrowserScreen(Screen):
         name = selected[2:] if selected.startswith(("📁", "📄")) else selected
 
         if selected.startswith("📁"):
-            
             new_path = self.current_path / name.rstrip("/")
             if new_path.is_dir():
                 self.current_path = new_path
@@ -287,7 +280,6 @@ class FileBrowserScreen(Screen):
 
 
 class StatusBar(Container):
-
     language = reactive("python")
     cursor_pos = reactive("Ln 1, Col 1")
     file_info = reactive("Ready")
@@ -309,7 +301,6 @@ class StatusBar(Container):
 
 
 class MiniMap(Vertical):
-
     def __init__(self, text_area) -> None:
         super().__init__()
         self.text_area = text_area
@@ -329,8 +320,7 @@ class MiniMap(Vertical):
         container = self.query_one("#minimap-content", ScrollableContainer)
         container.remove_children()
 
-        
-        step = max(1, total_lines // 50)  
+        step = max(1, total_lines // 50)
         for i in range(0, total_lines, step):
             line = lines[i][:30] if lines[i] else "~"
             label = Label(line, classes="minimap-line")
@@ -341,7 +331,7 @@ class MiniMap(Vertical):
     def on_click(self, event) -> None:
         if hasattr(event, "target") and hasattr(event.target, "line_number"):
             line_num = event.target.line_number
-            
+
             content = self.text_area.text
             lines = content.split("\n")
             pos = 0
@@ -352,7 +342,6 @@ class MiniMap(Vertical):
 
 
 class EditorTab(Container):
-
     def __init__(self, filepath: str = None, content: str = "") -> None:
         super().__init__()
         self.filepath = filepath
@@ -392,7 +381,6 @@ class EditorTab(Container):
         status.file_info = f"{modified} {self.filename} | Ln {lines} | Ch {chars}"
         status.language = self.language
 
-        
         text_area = self.query_one("#editor", TextArea)
         pos = text_area.cursor_position
         content_before = content[:pos]
@@ -402,7 +390,6 @@ class EditorTab(Container):
 
 
 class SublimeTextEditor(App):
-
     CSS = """
     Screen {
         background: $surface;
@@ -594,7 +581,6 @@ class SublimeTextEditor(App):
 
     def save_as(self) -> None:
 
-        
         def save_with_name(filename: str) -> None:
             if filename:
                 current_tab = self.get_current_tab()
@@ -609,13 +595,11 @@ class SublimeTextEditor(App):
                         current_tab.modified = False
                         current_tab.update_status()
 
-                        
                         self.tab_container.active_pane.tab.title = current_tab.filename
                         self.notify(f"Saved as {filename}", severity="information")
                     except Exception as e:
                         self.notify(f"Error saving file: {str(e)}", severity="error")
 
-        
         from textual.widgets import Input
 
         self.push_screen(InputScreen("Save as: ", save_with_name))
@@ -699,7 +683,6 @@ class SublimeTextEditor(App):
                     current_tab.update_status()
                 self.notify(f"Language changed to {lang}", severity="information")
 
-        
         options = [(lang, lang) for lang in languages]
         self.push_screen(SelectScreen("Select Language:", options, set_language))
 
@@ -717,7 +700,6 @@ class SublimeTextEditor(App):
             current_tab.modified = True
             current_tab.update_status()
 
-            
             if self.show_minimap:
                 minimap = self.query("#minimap")
                 if minimap:
@@ -725,7 +707,6 @@ class SublimeTextEditor(App):
 
 
 class InputScreen(Screen):
-
     def __init__(self, prompt: str, callback) -> None:
         super().__init__()
         self.prompt = prompt
@@ -750,7 +731,6 @@ class InputScreen(Screen):
 
 
 class SelectScreen(Screen):
-
     def __init__(self, title: str, options: list, callback) -> None:
         super().__init__()
         self.title = title

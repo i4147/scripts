@@ -1,4 +1,3 @@
-
 import ast
 import importlib.metadata
 import importlib.util
@@ -37,7 +36,6 @@ class ImportVisitor(ast.NodeVisitor):
 def get_local_packages(start_path: Path) -> set:
     packages = set()
     for init_file in start_path.rglob("__init__.py"):
-        
         packages.add(init_file.parent.name)
     return packages
 
@@ -64,13 +62,11 @@ def _process_file(file_path: Path) -> tuple:
 def find_imports(start_path: Path):
     files = get_files(start_path, ext=[".py"])
 
-    
     files_by_dir = defaultdict(list)
     for f in files:
-        
         try:
             rel_path = f.relative_to(start_path)
-            
+
             if len(rel_path.parts) > 1:
                 subdir = rel_path.parts[0]
             else:
@@ -79,7 +75,6 @@ def find_imports(start_path: Path):
             subdir = str(f.parent)
         files_by_dir[subdir].append(f)
 
-    
     show_progress = len(files_by_dir) > 50
 
     all_imports = set()
@@ -95,7 +90,6 @@ def find_imports(start_path: Path):
         if show_progress:
             start_time = time.time()
 
-        
         if HAS_JOBLIB:
             results = Parallel(n_jobs=-1)(delayed(_process_file)(f) for f in dir_files)
             for file_path, imports, success, error in results:
@@ -206,7 +200,7 @@ def main() -> None:
         print("\n✅ No uninstalled packages found")
 
     overall_elapsed = time.time() - overall_start
-    if overall_elapsed > 1.0:  
+    if overall_elapsed > 1.0:
         print(f"\n⏱️  Total time: {overall_elapsed:.2f}s")
 
 

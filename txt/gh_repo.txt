@@ -1,0 +1,202 @@
+# filename: mkghrepo.py
+import requests
+def c(i):j={}
+    try:with open(i) as f:for s in f:s=s.strip()
+                if s and (not s.startswith('#')):u,p=s.split('=',1);j[u.strip()]=p.strip()
+        return j
+    except FileNotFoundError:print(f'Error:{i} not found');v.exit(1)
+    except Exception as e:print(f'Error reading {i}:{e}');v.exit(1)
+def a(o,h,d,m=True):w='https://api.github.com/user/repos';l={'Authorization':f'token {o}','Accept':'application/vnd.github.v3+json'};r={'name':h,'description':d,'public':m,'auto_init':True};k=requests.post(w,l=l,json=r)
+    if k.status_code==201:g=k.json();print('✅ Repository created successfully!');print(f"📁 Name:{g['name']}");print(f"🔗 URL:{g['html_url']}");print(f"📝 Clone URL:{g['clone_url']}");return g
+    print(f'❌ Failed to create repository:{k.status_code}');print(f"Error:{k.json().get('message','Unknown error')}");return None
+def t():if len(v.argv)<2:print('Usage:python create_repo.py<repo_name>');print('Example:python create_repo.py my-new-project');v.exit(1)
+    h=v.argv[1];b='created with python'
+    if len(v.argv)>=3:b=v.argv[2]
+    i=q.home()/'.env';j=c(i);o=j.get('GITHUB_TOKEN')
+    if not o:print('Error:GITHUB_TOKEN not found in ~/.env');print('Please add:GITHUB_TOKEN=your_github_token_here');v.exit(1)
+    n=a(o=o,h=h,d=b,m=True)
+    if n:print(f"\n✨ Repository ready at:{n['html_url']}")
+    else:v.exit(1)
+if __name__=='__main__':raise SystemExit(t())
+# filename: new_repo.py
+import requests;from dotenv import load_dotenv;from git import InvalidGitRepositoryError,Repo;load_dotenv(v.path.expanduser('~/.env'));f='unforgivenii147';h=v.getenv('GITHUB_TOKEN');j=o.cwd().name;m='main'
+def c():try:s=Repo(o.cwd());print('Existing git repository found.');return s
+    except InvalidGitRepositoryError:print('No git repository found. Creating new one...');s=Repo.init(o.cwd());print('Git repository initialized.');return s
+def d(s):if s.is_dirty(untracked_files=True):s.index.add(['*']);s.index.commit('Update files');print('Changes committed.')
+    else:print('No changes to commit.')
+def a(s):try:n=s.remote('origin');print(f"Remote 'origin' already exists:{n.url}");return n
+    except ValueError:print("No remote 'origin' found. Creating GitHub repository...");i=b();n=s.create_remote('origin',i);print(f"Remote 'origin' created:{i}");return n
+def b():u='https://api.github.com/user/repos';l={'Authorization':f'token {h}','Accept':'application/vnd.github.v3+json'};p={'name':j,'private':False,'auto_init':False};k=requests.post(u,l=l,p=q.dumps(p))
+    if k.status_code==422:print(f"Repository '{j}' may already exist on GitHub.");return f'git@github.com:{f}/{j}.git'
+    if k.status_code!=201:raise Exception(f'Failed to create GitHub repo:{k.json()}')
+    return k.json()['ssh_url']
+def g(n):try:n.push(refspec=f'{m}:{m}');print(f'Successfully pushed to {n.url}')
+    except Exception as e:print(f'Push failed:{e}');n.push(refspec=f'{m}:{m}',set_upstream=True)
+def r():if not h:print('Error:GITHUB_TOKEN not found in environment variables.');t.exit(1)
+    try:s=c();d(s);n=a(s);g(n);print(f"✅ Repository '{j}' is now on GitHub!")
+    except Exception as e:print(f'❌ Error:{e}');t.exit(1)
+if __name__=='__main__':raise SystemExit(r())
+# filename: new_repo2.py
+from dotenv import load_dotenv;from git import InvalidGitRepositoryError,NoSuchPathError,Repo;from github import Github;from github.Auth import Token;q=x.home()/'.env';load_dotenv(q);l='unforgivenii147';i=G.getenv('GITHUB_TOKEN')
+def j():return G.path.basename(G.getcwd())
+def d():E=x.home()/'.gitignore';C=x.cwd()/'.gitignore'
+    if E.exists() and (not C.exists()):v.copy2(E,C);print(f'Copied {E}->{C}')
+    elif C.exists():print('.gitignore already exists in current directory.')
+    else:print(f'No global .gitignore found at {E}')
+def o():try:return Repo(x.cwd())
+    except (InvalidGitRepositoryError,NoSuchPathError):return None
+def b():z=o()
+    if z is None:print('Initializing git repository...');z=Repo.init(x.cwd())
+    else:print('Git repository already initialized.')
+    return z
+def h():w=i or G.getenv('GITHUB_TOKEN')
+    if not w:raise SystemExit('Set GITHUB_TOKEN in the environment.')
+    return Github(auth=Token(w))
+def a(p):g=h()
+    try:A=g.get_user(l) if l else g.get_user();A.get_repo(p);return True
+    except Exception:return False
+    finally:g.close()
+def f(z,p):if 'origin' in [r.name for r in z.remotes]:print("Remote 'origin' already exists.");return
+    if a(p):print(f"GitHub repo '{p}' already exists on your account.");m=f'git@github.com:{p}.git';z.create_remote('origin',m);print(f'Added remote origin:{m}')
+    else:print(f"GitHub repo '{p}' does not exist yet.");B=['gh','repo','create',p,'--public','--source=.'];print(f"Running:{' '.join(B)}");u=n.run(B,capture_output=True,text=True)
+        if u.returncode!=0:print(f'Error:{u.stderr}');F.exit(1)
+        m=f'git@github.com:{p}.git';z.create_remote('origin',m);print(f'Added remote origin:{m}')
+def c(z):z.git.add(all=True)
+    if z.is_dirty(untracked_files=True):print('Committing changes...');z.index.commit('initial')
+    else:print('No changes to commit.')
+def k(z):s=z.active_branch.name if not z.head.is_detached else 'main';t=z.remote('origin');print(f"Pushing branch '{s}'...")
+    try:t.push(refspec=f'{s}:{s}')
+    except Exception as e:D=str(e)
+        if 'non-fast-forward' in D or 'fetch first' in D:print('Remote has changes. Pulling first...');t.pull(s,rebase=True);print('Pushing again...');t.push(refspec=f'{s}:{s}')
+        else:raise
+def y():p=j();print(f'Repository name:{p}');d();z=b();f(z,p);c(z);k(z);print(f"\n✅ Success! Repository '{p}' is on GitHub or updated there.");print(f'View it at:https://github.com/{p}')
+if __name__=='__main__':raise SystemExit(y())
+# filename: newrepo.py
+def g(n,l=True):print(f"Running:{' '.join(n)}");j=h.run(n,capture_output=True,text=True)
+    if l and j.returncode!=0:print(f'Error:{j.stderr}');o.exit(1)
+    return j
+def e():j=h.run(['git','rev-parse','--git-dir'],capture_output=True,text=True);return j.returncode==0
+def d():return p.path.basename(p.getcwd())
+def m():i=d();print(f'Repository name:{i}')
+    if not e():print('Initializing git repository...');g(['git','init'])
+    else:print('Git repository already initialized.')
+    j=h.run(['git','remote','get-url','origin'],capture_output=True,text=True)
+    if j.returncode!=0:print(f"Creating GitHub repository '{i}'...");g(['gh','repo','create',i,'--public','--source=.'])
+    else:print("Remote 'origin' already exists. Checking if repo exists on GitHub...");c=h.run(['git','fetch','origin'],capture_output=True,text=True)
+        if c.returncode==0:print('GitHub repository exists. Will push changes.')
+        else:print('Remote exists but seems inaccessible. You might need to authenticate.');print(f'Remote URL:{j.stdout.strip()}')
+    print('Adding all files...');g(['git','add','-A']);k=h.run(['git','status','--porcelain'],capture_output=True,text=True)
+    if k.stdout.strip():print('Committing changes...');g(['git','commit','-m','initial'])
+    else:print('No changes to commit.')
+    print('Pushing to GitHub...');b=h.run(['git','branch','--show-current'],capture_output=True,text=True);a=b.stdout.strip() if b.returncode==0 else 'main';f=h.run(['git','push','--set-upstream','origin',a],capture_output=True,text=True)
+    if f.returncode!=0:if 'remote contains work that you do not have' in f.stderr:print('Remote has changes. Pulling first...');g(['git','pull','origin',a,'--rebase']);print('Pushing again...');g(['git','push','--set-upstream','origin',a])
+        else:print(f'Push failed:{f.stderr}');o.exit(1)
+    print(f"\n✅ Success! Repository '{i}' is now on GitHub.");print(f'View it at:https://github.com/{i}')
+if __name__=='__main__':raise SystemExit(m())
+# filename: pynewrepo.py
+class l:def __init__(self,C=None):self.cwd=T.cwd();self.repo_name=C or self.cwd.name;self.github_username='unforgivenii147';self.git_email='adnanonagh@gmail.com';self.git_user='unforgivenii147';self.repo_url=f'https://github.com/{self.github_username}/{self.repo_name}.git'
+    def u(self,H,W=None,r=False):try:P=B.run(H,check=False,W=W or self.cwd,r=r,text=True);R=P.stdout.strip() if P.stdout else '';Q=P.stderr.strip() if P.stderr else '';return (P.returncode,R,Q)
+        except Exception as e:print(f"Error executing command:{' '.join(H)}");print(f'Exception:{e}');return (1,'',str(e))
+    def c(self):A,_,_=self._run_command(['gh','--version'],r=True);return A==0
+    def b(self):A,_,_=self._run_command(['gh','auth','status'],r=True);return A==0
+    def h(self):I=self.cwd/'.git';return I.exists()
+    def g(self):A,_,_=self._run_command(['gh','repo','view',f'{self.github_username}/{self.repo_name}'],r=True);return A==0
+    def p(self):A,R,_=self._run_command(['git','config','--get','remote.origin.url'],r=True);return R if A==0 and R else None
+    def m(self):print(f'\n📦 Initializing local git repository in {self.cwd}...');A,G,Q=self._run_command(['git','init'],r=True)
+        if A!=0 and 'Reinitialized' not in Q and ('Initialized' not in Q):print(f'Error initializing git repo:{Q}');Z.exit(1)
+        self._run_command(['git','config','user.name',self.git_user],r=True);self._run_command(['git','config','user.email',self.git_email],r=True);print('✓ Local repository initialized')
+    def j(self):print(f'\n🌐 Creating repository on GitHub:{self.repo_name}...')
+        if self._repo_exists_on_github():print(f'✓ Repository {self.repo_name} already exists on GitHub');return True
+        A,R,Q=self._run_command(['gh','repo','create',self.repo_name,'--source=.','--remote=origin','--public'],r=True)
+        if A!=0:print('Error creating repository on GitHub');print(f'stdout:{R}');print(f'stderr:{Q}');return False
+        print('✓ Repository created on GitHub');return True
+    def k(self):print('\n📝 Staging all changes...');A,_,Q=self._run_command(['git','add','.'],r=True)
+        if A!=0:print(f'Error staging changes:{Q}');Z.exit(1)
+        print('✓ Changes staged')
+    def o(self):S=list(self.cwd.glob('*'));v=list(self.cwd.glob('.*'));S=[f for f in S if f.name!='.git'];v=[f for f in v if f.name not in {'.git','.','..'}];z=len(S)>0 or len(v)>0
+        if not z:print('📄 No files found,creating initial README.md...');O=self.cwd/'README.md'
+            if not O.exists():O.write_text(f"# {self.repo_name}\nRepository initialized on {F.now().strftime('%Y-%m-%d%H:%M:%S')}\n");print('✓ Created README.md');return True
+        return z
+    def n(self,K=None):if not K:K=self._generate_commit_message()
+        print(f"\n💾 Committing changes with message:'{K}'");A,R,Q=self._run_command(['git','commit','-m',K],r=True)
+        if A!=0:if 'nothing to commit' in Q or 'nothing to commit' in R:print('⚠️  Nothing to commit');return False
+            print(f'Error committing changes:{Q}');return False
+        print('✓ Changes committed');return True
+    def a(self):X=F.now();return X.strftime('Auto-commit:%Y-%m-%d%H:%M:%S')
+    def x(self):print(f'\n🔗 Adding remote:{self.repo_url}');A,y,_=self._run_command(['git','remote','get-url','origin'],r=True)
+        if A==0 and y:if y==self.repo_url:print("✓ Remote 'origin' already configured correctly");return
+            print(f'Updating remote URL from {y} to {self.repo_url}');self._run_command(['git','remote','set-url','origin',self.repo_url],r=True);return
+        A,_,Q=self._run_command(['git','remote','add','origin',self.repo_url],r=True)
+        if A!=0:print(f'Error adding remote:{Q}');Z.exit(1)
+        print('✓ Remote added')
+    def q(self,L='main'):print(f'\n🚀 Pushing to GitHub ({L} branch)...');A,R,Q=self._run_command(['git','push','-u','origin',L],r=True)
+        if A!=0:print(f'stdout:{R}');print(f'stderr:{Q}')
+            if 'permission denied' in Q.lower():print('Error:Permission denied.  Check your GitHub credentials.');Z.exit(1)
+            elif 'not found' in Q.lower() or 'does not appear' in Q.lower():print(f"Note:Remote branch '{L}' doesn't exist yet (creating on push)")
+            else:print(f'Warning:Push encountered an issue:{Q}')
+        print('✓ Successfully pushed to GitHub')
+    def d(self):A,s,_=self._run_command(['git','rev-parse','--abbrev-ref','HEAD'],r=True)
+        if A==0 and s and (s!='main'):print(f"\n🔄 Renaming branch from '{s}' to 'main'...");A,_,Q=self._run_command(['git','branch','-M','main'],r=True)
+            if A!=0:print(f'Warning:Could not rename branch:{Q}')
+    def i(self):print(f'\n⚠️  Git repository already exists in {self.cwd}');t=self._get_remote_url();print(f"Current remote:{t or 'None'}")
+        while 1:print('\nOptions:');print('1. Merge changes (stage and commit to current repo)');print('2. Create new repository (enter new name)');print('3. Exit');M=input('\nSelect option (1-3):').strip()
+            if M=='1':print('✓ Using existing repository');return True
+            if M=='2':self.repo_name=input('Enter new repository name:').strip()
+                if not self.repo_name:print('Error:Repository name cannot be empty.');continue
+                self.repo_url=f'https://github.com/{self.github_username}/{self.repo_name}.git';print(f'✓ New repository name set:{self.repo_name}');return False
+            if M=='3':print('Exiting...');Z.exit(0)
+            else:print('Invalid choice. Please select 1,2,or 3.')
+    def Y(self):print('-'*40);print('GitHub Repository Manager (with gh CLI)');print('-'*40);print(f'Directory:{self.cwd}');print(f'Repository:{self.repo_name}');print(f'GitHub User:{self.github_username}');print(f'Email:{self.git_email}');print('-'*40)
+        if not self._check_gh_cli_installed():print('\n❌ Error:GitHub CLI (gh) is not installed.');print('Please install it from:https://cli.github.com');Z.exit(1)
+        if not self._check_gh_authenticated():print('\n❌ Error:GitHub CLI is not authenticated.');print('Please run:gh auth login');Z.exit(1)
+        print('\n✓ GitHub CLI is installed and authenticated\n')
+        if self._repo_exists_locally():w=self.handle_existing_repo()
+            if not w:self._run_command(['git','remote','remove','origin'],r=True)
+        else:self._init_local_repo()
+        self._ensure_content();self._stage_all_changes()
+        if self._commit_changes():self._rename_branch_to_main()
+            if self._create_github_repo():self._add_remote();self._push_to_github();print('\n'+'='*40);print('✅ Success! Repository created and pushed to GitHub');print(f'Repository URL:https://github.com/{self.github_username}/{self.repo_name}');print('-'*40)
+            else:print('\n❌ Failed to create repository on GitHub');Z.exit(1)
+        else:print('\n⚠️  Could not commit changes.');Z.exit(1)
+def V():N=E.ArgumentParser(description='Create a GitHub repository using gh CLI and auto-commit with current date/time');N.add_argument('-n','--name',help='Repository name (default:current directory name)',type=str);N.add_argument('-m','--message',help='Custom commit message (default:auto-generated with timestamp)',type=str);U=N.parse_args()
+    try:J=l(C=U.name);J.run()
+    except KeyboardInterrupt:print('\n\nExiting...');Z.exit(0)
+    except Exception as e:print(f'\nUnexpected error:{e}');D.print_exc();Z.exit(1)
+if __name__=='__main__':raise SystemExit(V())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

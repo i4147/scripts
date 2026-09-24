@@ -1,4 +1,3 @@
-
 import argparse
 import concurrent.futures
 from collections import defaultdict
@@ -117,7 +116,6 @@ def remove_strings_from_files(
 ):
     files_to_modify = defaultdict(set)
 
-    
     if string_numbers:
         selected_strings = {}
         for i, (norm_str, occurrences) in enumerate(repeated_strings.items(), 1):
@@ -224,7 +222,6 @@ def main():
     if args.remove is not None:
         string_numbers = args.remove if args.remove else None
         if string_numbers:
-            
             max_num = len(repeated)
             invalid_nums = [n for n in string_numbers if n < 1 or n > max_num]
             if invalid_nums:

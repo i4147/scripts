@@ -1,0 +1,2043 @@
+# --- File: cext.py ---
+import argparse
+import ast
+import io
+import multiprocessing as mp
+import os
+import re
+import sys
+import tarfile
+import zipfile
+from collections import defaultdict
+from collections.abc import Callable, Iterable
+from pathlib import Path
+from typing import Any, NamedTuple
+from loguru import logger
+try:
+    import tree_sitter
+    import tree_sitter_python as tspython
+    a = True
+except ImportError:
+    a = False
+try:
+    import zstd
+    b = True
+except ImportError:
+    b = False
+c = 8
+class d(NamedTuple):
+    pass
+e = re.compile('^[A-Z_][A-Z0-9_]*$')
+f = {'List': 'from typing import List', 'Dict': 'from typing import Dict', 'Optional': 'from typing import Optional', 'Tuple': 'from typing import Tuple', 'Set': 'from typing import Set', 'Any': 'from typing import Any', 'Union': 'from typing import Union', 'Callable': 'from typing import Callable', 'Type': 'from typing import Type', 'ClassVar': 'from typing import ClassVar', 'Final': 'from typing import Final', 'Literal': 'from typing import Literal', 'Generator': 'from typing import Generator', 'Iterator': 'from typing import Iterator', 'Iterable': 'from typing import Iterable', 'Sequence': 'from typing import Sequence', 'Mapping': 'from typing import Mapping', 'TypeVar': 'from typing import TypeVar', 'overload': 'from typing import overload', 'cast': 'from typing import cast', 'TYPE_CHECKING': 'from typing import TYPE_CHECKING', 'dataclass': 'from dataclasses import dataclass', 'field': 'from dataclasses import field', 'Path': 'from pathlib import Path', 'datetime': 'from datetime import datetime', 'date': 'from datetime import date', 'timedelta': 'from datetime import timedelta', 're': 'import re', 'json': 'import json', 'os': 'import os', 'sys': 'import sys', 'math': 'import math', 'time': 'import time', 'copy': 'import copy', 'abc': 'import abc', 'ABC': 'from abc import ABC', 'abstractmethod': 'from abc import abstractmethod', 'functools': 'import functools', 'itertools': 'import itertools', 'collections': 'import collections', 'defaultdict': 'from collections import defaultdict', 'OrderedDict': 'from collections import OrderedDict', 'Counter': 'from collections import Counter', 'deque': 'from collections import deque', 'namedtuple': 'from collections import namedtuple', 'contextmanager': 'from contextlib import contextmanager', 'asynccontextmanager': 'from contextlib import asynccontextmanager', 'partial': 'from functools import partial', 'wraps': 'from functools import wraps', 'lru_cache': 'from functools import lru_cache', 'cached_property': 'from functools import cached_property', 'Enum': 'from enum import Enum', 'auto': 'from enum import auto', 'IntEnum': 'from enum import IntEnum', 'logging': 'import logging', 'getLogger': 'import logging', 'traceback': 'import traceback', 'threading': 'import threading', 'asyncio': 'import asyncio', 'subprocess': 'import subprocess', 'tempfile': 'import tempfile', 'hashlib': 'import hashlib', 'base64': 'import base64', 'struct': 'import struct', 'io': 'import io', 'StringIO': 'from io import StringIO', 'BytesIO': 'from io import BytesIO', 'socket': 'import socket', 'uuid': 'import uuid', 'warnings': 'import warnings', 'weakref': 'import weakref', 'inspect': 'import inspect', 'textwrap': 'import textwrap', 'string': 'import string', 'random': 'import random', 'heapq': 'import heapq', 'bisect': 'import bisect', 'array': 'import array', 'pickle': 'import pickle', 'shelve': 'import shelve', 'sqlite3': 'import sqlite3', 'csv': 'import csv', 'configparser': 'import configparser', 'argparse': 'import argparse', 'shutil': 'import shutil', 'glob': 'import glob', 'fnmatch': 'import fnmatch', 'stat': 'import stat', 'platform': 'import platform', 'signal': 'import signal', 'atexit': 'import atexit', 'pprint': 'import pprint', 'unittest': 'import unittest', 'pytest': 'import pytest', 'dataclasses': 'import dataclasses', 'typing_extensions': 'import typing_extensions', 'Protocol': 'from typing import Protocol', 'runtime_checkable': 'from typing import runtime_checkable'}
+def g(h):
+    i = []
+    j = set()
+    for k, l in f.items():
+        if re.search(f'\\b{re.escape(k)}\\b', h) and l not in j:
+            i.append(l)
+            j.add(l)
+    return i
+class m(ast.NodeVisitor):
+    def __init__(self, n, o):
+        self.source_lines = n
+        self.source_path = o
+        self.entities = []
+        self.imports = []
+        self._class_stack = []
+    def p(self, q):
+        r = q.lineno - 1
+        end = q.end_lineno or q.lineno
+        s = self.source_lines[r:end]
+        col = q.col_offset
+        t = [l[col:] if len(l) > col else l for l in s]
+        return ''.join(t)
+    def u(self, q):
+        src = ast.unparse(q)
+        if src not in self.imports:
+            self.imports.append(src)
+    def v(self, q):
+        self._record_import(q)
+    def w(self, q):
+        self._record_import(q)
+    def x(self, q):
+        self._class_stack.append(q.name)
+        y = self._slice(q)
+        z = g(y)
+        a1 = d(name=q.name, full_name=q.name, entity_type='class', source=y, imports=z, source_path=self.source_path)
+        self.entities.append(a1)
+        for b1 in ast.iter_child_nodes(q):
+            if isinstance(b1, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self._visit_method(b1, q.name)
+            elif isinstance(b1, ast.ClassDef):
+                self.visit_ClassDef(b1)
+        self._class_stack.pop()
+    def c1(self, q, d1):
+        e1 = self._slice(q)
+        f1 = f'{d1}_{q.name}'
+        g1 = g(e1)
+        a1 = d(name=q.name, full_name=f1, entity_type='function', source=e1, imports=g1, source_path=self.source_path)
+        self.entities.append(a1)
+    def h1(self, q):
+        if self._class_stack:
+            return
+        i1 = self._slice(q)
+        j1 = g(i1)
+        a1 = d(name=q.name, full_name=q.name, entity_type='function', source=i1, imports=j1, source_path=self.source_path)
+        self.entities.append(a1)
+    k1 = h1
+    def l1(self, q):
+        if self._class_stack:
+            return
+        for m1 in q.targets:
+            if isinstance(m1, ast.Name) and e.match(m1.id):
+                n1 = self._slice(q)
+                a1 = d(name=m1.id, full_name=m1.id, entity_type='const', source=n1, imports=[], source_path=self.source_path)
+                self.entities.append(a1)
+    def o1(self, q):
+        if self._class_stack:
+            return
+        m1 = q.target
+        if isinstance(m1, ast.Name) and e.match(m1.id):
+            n1 = self._slice(q)
+            a1 = d(name=m1.id, full_name=m1.id, entity_type='const', source=n1, imports=[], source_path=self.source_path)
+            self.entities.append(a1)
+def p1(h):
+    if not a:
+        return []
+    try:
+        q1 = tree_sitter.Language(tspython.language())
+        r1 = tree_sitter.Parser(q1)
+        s1 = r1.parse(h.encode())
+        t1 = []
+        def u1(q):
+            if q.type in ('import_statement', 'import_from_statement'):
+                t1.append(q.text.decode(errors='replace'))
+            for b1 in q.children:
+                u1(b1)
+        u1(s1.root_node)
+        return t1
+    except Exception as exc:
+        k13.debug('tree-sitter parsing failed: {}', exc)
+        return []
+def v1(h, w1):
+    try:
+        s1 = ast.parse(h, filename=w1)
+    except SyntaxError as exc:
+        k13.warning('syntax error in {}: {}', w1, exc)
+        return ([], [])
+    s = [l + '\n' for l in h.splitlines()]
+    x1 = m(s, w1)
+    x1.visit(s1)
+    y1 = p1(h)
+    z1 = y1 if y1 else x1.imports
+    return (x1.entities, z1)
+a2 = {'.py'}
+b2 = {'.zip', '.whl', '.tar', '.gz', '.tgz', '.zst', '.xz'}
+c2 = {'.git', '__pycache__'}
+def d2(e2):
+    f2 = e2[:512]
+    if b'#!/usr/bin/env python' in f2 or b'#!/usr/bin/python' in f2:
+        return True
+    return any((kw in f2 for kw in (b'import ', b'def ', b'class ', b'if __name__')))
+def g2(h2):
+    try:
+        return h2.read_text(encoding='utf-8', errors='replace')
+    except (OSError, PermissionError) as exc:
+        k13.error('cannot read {}: {}', h2, exc)
+        return None
+def i2(h2, w1=None, j2=None):
+    k2 = w1 or str(h2)
+    h = j2 if j2 is not None else g2(h2)
+    if h is None:
+        return ([], [])
+    if not h.strip():
+        return ([], [])
+    return v1(h, k2)
+def l2(m2):
+    n2 = []
+    try:
+        with zipfile.ZipFile(m2, 'r') as zf:
+            for o2 in zf.infolist():
+                k = o2.filename
+                if k.endswith('/'):
+                    continue
+                p = Path(k)
+                p2 = p.suffix == '.py'
+                h = None
+                if not p2:
+                    try:
+                        e2 = zf.read(o2)
+                        p2 = d2(e2)
+                        if p2:
+                            h = e2.decode('utf-8', errors='replace')
+                    except Exception:
+                        continue
+                else:
+                    try:
+                        h = zf.read(o2).decode('utf-8', errors='replace')
+                    except Exception:
+                        continue
+                if p2 and h:
+                    k2 = f'{m2.name}::{k}'
+                    n2.append(v1(h, k2))
+    except (zipfile.BadZipFile, OSError) as exc:
+        k13.error('bad zip {}: {}', m2, exc)
+    return n2
+def q2(m2):
+    r2 = ''.join(m2.suffixes).lower()
+    try:
+        if r2.endswith(('.zst', '.tar.zst')):
+            if not b:
+                k13.warning('zstd not available, skipping {}', m2)
+                return None
+            raw = zstd.decompress(m2.read_bytes())
+            return tarfile.open(fileobj=io.BytesIO(raw))
+        return tarfile.open(m2, mode='r:*')
+    except (tarfile.TarError, OSError) as exc:
+        k13.error('cannot open tar {}: {}', m2, exc)
+        return None
+def s2(m2):
+    n2 = []
+    tf = q2(m2)
+    if tf is None:
+        return n2
+    with tf:
+        for o2 in tf.getmembers():
+            if not o2.isfile():
+                continue
+            k = o2.name
+            p = Path(k)
+            p2 = p.suffix == '.py'
+            try:
+                t2 = tf.extractfile(o2)
+                if t2 is None:
+                    continue
+                e2 = t2.read()
+            except Exception:
+                continue
+            if not p2:
+                p2 = d2(e2)
+            if p2:
+                h = e2.decode('utf-8', errors='replace')
+                k2 = f'{m2.name}::{k}'
+                n2.append(v1(h, k2))
+    return n2
+def u2(m2):
+    k = m2.name.lower()
+    if k.endswith(('.whl', '.zip')):
+        return l2(m2)
+    return s2(m2)
+def v2(h2):
+    k = h2.name.lower()
+    return any((k.endswith(ext) for ext in ('.whl', '.zip', '.tar.gz', '.tgz', '.tar.zst', '.tar.xz', '.tar')))
+def w2(x2):
+    y2 = []
+    z2 = []
+    for a3, b3, c3 in os.walk(x2):
+        b3[:] = [d for d in b3 if d not in c2 and (not Path(a3, d).is_symlink())]
+        for d3 in c3:
+            e3 = Path(a3) / d3
+            if e3.is_symlink():
+                continue
+            if e3.suffix == '.py':
+                y2.append(e3)
+            elif v2(e3):
+                z2.append(e3)
+            else:
+                try:
+                    if e3.stat().st_size < 1000000:
+                        e2 = e3.read_bytes()
+                        if d2(e2):
+                            y2.append(e3)
+                except (OSError, PermissionError):
+                    pass
+    return (y2, z2)
+def f3(h2):
+    g3, t1 = i2(h2)
+    return (g3, t1, str(h2))
+def h3(h2):
+    i3 = []
+    z1 = []
+    for g3, t1 in u2(h2):
+        i3.extend(g3)
+        z1.extend(t1)
+    return (i3, z1, str(h2))
+j3 = {'function': 'function', 'class': 'class', 'const': 'const'}
+def k3(l3):
+    return re.sub('[^\\w\\-.]', '_', l3)
+def m3(n3, o3, r2='.py'):
+    p3 = n3 / f'{o3}{r2}'
+    q3 = 1
+    while p3.exists():
+        p3 = n3 / f'{o3}_{q3}{r2}'
+        q3 += 1
+    return p3
+def r3(a1, s3):
+    t3 = s3 / j3.get(a1.entity_type, 'other')
+    t3.mkdir(parents=True, exist_ok=True)
+    o3 = k3(a1.full_name)
+    u3 = m3(t3, o3)
+    z1 = sorted(set(a1.imports), key=lambda s: 0 if s.startswith(('import ', 'from ')) else 1)
+    v3 = '\n'.join(z1)
+    if v3:
+        v3 += '\n\n'
+    w3 = v3 + a1.source
+    if not w3.endswith('\n'):
+        w3 += '\n'
+    try:
+        ast.parse(w3)
+        u3.write_text(w3, encoding='utf-8')
+        return u3
+    except OSError as exc:
+        k13.error('cannot write {}: {}', u3, exc)
+        return None
+    except SyntaxError as exc:
+        k13.warning('generated file {} has syntax error: {}', u3, exc)
+        return None
+def x3(t1, s3):
+    y3 = sorted(set(t1))
+    w3 = '# Global imports collected from all processed files\n\n'
+    w3 += '\n'.join(y3) + '\n'
+    out = s3 / 'global_imports.py'
+    try:
+        out.write_text(w3, encoding='utf-8')
+        print('Global imports saved → {}', out)
+    except OSError as exc:
+        k13.error('cannot write global imports: {}', exc)
+def z3(g3, z1, a4):
+    print('=' * 40)
+    print('EXTRACTION SUMMARY')
+    print('-' * 40)
+    b4 = defaultdict(int)
+    for e in g3:
+        b4[e.entity_type] += 1
+    for c4, d4 in sorted(b4.items()):
+        print('  {:<12}: {}', c4, d4)
+    print('  {:<12}: {}', 'total', len(g3))
+    print('  {:<12}: {}', 'saved', a4)
+    e4 = defaultdict(int)
+    for l in z1:
+        m = re.match('(?:from|import)\\s+([\\w.]+)', l)
+        if m:
+            e4[m.group(1)] += 1
+    if e4:
+        print('Top imported modules:')
+        for mod, cnt in sorted(e4.items(), key=lambda x: -x[1])[:15]:
+            print('  {:<30} {}', mod, cnt)
+    print('-' * 40)
+def f4(g4=None):
+    r1 = argparse.ArgumentParser(description='Extract Python code entities from files and archives.')
+    r1.add_argument('-t', '--tmp', action='store_true', help='Write output to ~/tmp/output/ instead of ./output/')
+    r1.add_argument('-w', '--workers', type=int, default=c, help=f'Number of parallel workers (default: {c})')
+    r1.add_argument('-d', '--dir', type=Path, default=Path.cwd(), help='Root directory to scan (default: current directory)')
+    h4 = r1.parse_args(g4)
+    s3 = Path.home() / 'tmp' / 'output' if h4.tmp else Path.cwd() / 'output'
+    s3.mkdir(parents=True, exist_ok=True)
+    print('Output directory: {}', s3)
+    x2 = h4.dir.resolve()
+    print('Scanning: {}', x2)
+    print('Discovering files…')
+    y2, z2 = w2(x2)
+    print('  Found {} Python files and {} archive(s).', len(y2), len(z2))
+    if not y2 and (not z2):
+        print('Nothing to process.')
+        return 0
+    i3 = []
+    z1 = []
+    i4 = [(f3, p) for p in y2] + [(h3, p) for p in z2]
+    print('Processing {} file(s) with {} worker(s)…', len(i4), h4.workers)
+    with mp.Pool(processes=h4.workers) as j4:
+        k4 = []
+        for fn, h2 in i4:
+            k4.append((fn, h2, j4.apply_async(fn, (h2,))))
+        for fn, h2, l4 in k4:
+            try:
+                g3, t1, m4 = l4.get()
+                print('  ✓ {}  ({} entities)', m4, len(g3))
+                i3.extend(g3)
+                z1.extend(t1)
+            except Exception as exc:
+                k13.error('  ✗ {}: {}', h2, exc)
+    print('Writing {} entities…', len(i3))
+    n4 = 0
+    for a1 in i3:
+        if r3(a1, s3):
+            n4 += 1
+    x3(z1, s3)
+    z3(i3, z1, n4)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: ex_const.py ---
+import ast
+import logging
+import operator
+from pathlib import Path
+from joblib import Parallel, delayed
+from xxhash import xxh64
+o4 = Path('output')
+p4 = o4 / 'const.py'
+q4 = o4 / 'error.log'
+o4.mkdir(exist_ok=True)
+logging.basicConfig(filename=q4, level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+def r4(h2):
+    s4 = xxh64()
+    with Path(h2).open('rb') as f:
+        while (t4 := f.read(CHUNK_SIZE)):
+            s4.update(t4)
+    return s4.hexdigest()
+def u4(h2):
+    v4 = []
+    try:
+        with Path(h2).open('r', encoding='utf-8') as f:
+            s1 = ast.parse(f.read(), filename=str(h2))
+        for q in ast.walk(s1):
+            if isinstance(q, ast.Assign):
+                w4 = all((isinstance(t, ast.Name) for t in q.targets))
+                if w4 and isinstance(q.value, ast.Constant):
+                    for m1 in q.targets:
+                        x4 = m1.id
+                        if x4.isupper():
+                            y4 = ast.unparse(q.value)
+                            z4 = type(q.value.value).__name__
+                            v4.append((x4, y4, z4))
+            elif isinstance(q, ast.AnnAssign):
+                if isinstance(q.target, ast.Name) and q.value is not None:
+                    if q.target.id.isupper():
+                        x4 = q.target.id
+                        y4 = ast.unparse(q.value)
+                        z4 = type(q.value.value).__name__ if isinstance(q.value, ast.Constant) else 'unknown'
+                        v4.append((x4, y4, z4))
+    except SyntaxError as e:
+        logging.error(f'Syntax error in {h2}: {e}')
+    except Exception as e:
+        logging.error(f'Error processing {h2}: {e}')
+    return v4
+def a5(h2):
+    b5 = r4(h2)
+    Path(h2)
+    v4 = u4(h2)
+    return (b5, v4)
+def f4():
+    cwd = Path.cwd()
+    c5 = list(get_pyfiles(cwd))
+    if not c5:
+        print('No Python files found in the current directory.')
+        return
+    print(f'Found {len(c5)} Python files. Processing...')
+    n2 = Parallel(n_jobs=-1)((delayed(a5)(f) for f in c5))
+    d5 = set()
+    e5 = {}
+    for b5, v4 in n2:
+        if v4 is None:
+            continue
+        if b5 not in d5:
+            d5.add(b5)
+            for k, f5, g5 in v4:
+                if b5 not in e5:
+                    e5[b5] = []
+                h5 = False
+                for idx, (i5, j5, k5) in enumerate(e5[b5]):
+                    if i5 == k and j5 == f5:
+                        e5[b5][idx] = (k, f5, g5)
+                        h5 = True
+                        break
+                if not h5:
+                    e5[b5].append((k, f5, g5))
+    l5 = []
+    for b5, m5 in e5.items():
+        l5.extend(m5)
+    l5.sort(key=operator.itemgetter(0))
+    with Path(p4).open('w', encoding='utf-8') as f:
+        f.write('# Automatically generated constants file\n')
+        f.write('# Based on files in the current directory\n\n')
+        n5 = set()
+        for k, f5, g5 in l5:
+            o5 = f'{k} = {f5}'
+            if o5 not in n5:
+                f.write(f'# Type: {g5}\n')
+                f.write(f'{o5}\n\n')
+                n5.add(o5)
+    print(f'Successfully extracted {len(n5)} unique constants to {p4}')
+    if q4.exists():
+        print(f'Errors logged to {q4}')
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: ex_nodes.py ---
+import argparse
+from collections import defaultdict
+from pathlib import Path
+import tree_sitter_python as tsp
+from tree_sitter import Language, Parser, Tree
+p5 = {'class': {'class_definition'}, 'func': {'function_definition'}, 'docstrings': {'function_docstrings', 'class_docstrings'}, 'comments': {'comment', 'expression_statements'}}
+p5['all'] = set().union(*p5.values())
+q5 = {'site-packages', '__pycache__', '.git'}
+def r5():
+    r1 = Parser()
+    r1.language = Language(tsp.language())
+    return r1
+def s5(src, s1, t5):
+    x2 = s1.root_node
+    return [src[q.start_byte:q.end_byte].decode() for q in x2.children if q.type in t5]
+def u5(v5, w5):
+    h5 = []
+    x5 = w5.resolve()
+    for x2 in v5:
+        y5 = [x2] if x2.is_file() else sorted(x2.rglob('*.py'))
+        for py in y5:
+            if any((z5.startswith('.') for z5 in py.parts)):
+                continue
+            if q5.intersection(py.parts):
+                continue
+            if py.resolve().parent == x5 or x5 in py.resolve().parents:
+                continue
+            h5.append(py)
+    return h5
+def a6(b6):
+    try:
+        return b6.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        return Path(b6.name)
+def f4():
+    ap = argparse.ArgumentParser(description='Extract top-level Python nodes (functions, classes, docstrings or comments) with tree-sitter into output/<folder>/imports.py.')
+    ap.add_argument('paths', nargs='*', type=Path, help='files or directories to scan (default: current directory)')
+    ap.add_argument('--kind', default='func', choices=sorted(p5), help='which tree-sitter node types to keep (default: func)')
+    ap.add_argument('--out', default=Path('output'), type=Path, help='output directory (default: ./output)')
+    h4 = ap.parse_args()
+    w5 = h4.out
+    w5.mkdir(parents=True, exist_ok=True)
+    t5 = p5[h4.kind]
+    r1 = r5()
+    c6 = defaultdict(list)
+    for py in u5(h4.paths or [Path()], w5):
+        try:
+            src = py.read_bytes()
+        except OSError:
+            continue
+        d6 = s5(src, r1.parse(src), t5)
+        if d6:
+            c6[py.parent].append('\n'.join(d6))
+    for b6, e6 in c6.items():
+        f6 = w5 / a6(b6) / 'imports.py'
+        f6.parent.mkdir(parents=True, exist_ok=True)
+        f6.write_text('\n\n'.join(e6), encoding='utf-8')
+    print(f'\n✨ Done! kind={h4.kind} nodes={sorted(t5)} processed {len(c6)} folder(s) -> {w5}/')
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: exconst.py ---
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import NamedTuple
+import libcst as cst
+class g6(NamedTuple):
+    pass
+class h6(cst.CSTVisitor):
+    def __init__(self, h2):
+        self.path = h2
+        self.constants = []
+    def l1(self, q):
+        for m1 in q.targets:
+            if isinstance(m1.target, cst.Name):
+                k = m1.target.value
+                if k.isupper() and (not k.startswith('_')):
+                    f5 = self._extract_value(q.value)
+                    self.constants.append(g6(k, f5, self.path))
+    def i6(self, q):
+        return q.deep_clone().deep_replace(lambda n: n).deep_equals(q) and q.visit(cst.CSTCodeGenerator()) or cst.Module([cst.SimpleStatementLine([cst.Expr(q)])]).code.strip()
+def j6(h2):
+    try:
+        h = h2.read_text(encoding='utf-8')
+        s1 = cst.parse_module(h)
+        k6 = h6(h2)
+        s1.walk(k6)
+        return k6.constants
+    except (SyntaxError, UnicodeDecodeError):
+        return []
+def l6(m6):
+    c5 = []
+    for h2 in m6:
+        if h2.is_file() and h2.suffix == '.py':
+            c5.append(h2)
+        elif h2.is_dir():
+            c5.extend(h2.glob('**/*.py'))
+    return c5
+def f4():
+    n6 = [Path(arg) for arg in sys.argv[1:]] if len(sys.argv) > 1 else [Path.cwd()]
+    c5 = l6(n6)
+    v4 = {}
+    with ProcessPoolExecutor() as o6:
+        p6 = {o6.submit(j6, q6): q6 for q6 in c5}
+        for r6 in as_completed(p6):
+            l4 = r6.result()
+            if l4:
+                v4[p6[r6]] = l4
+    for h2 in sorted(v4.keys()):
+        print(f'\n{h2}:')
+        for s6 in sorted(v4[h2], key=lambda c: c.name):
+            print(f'  {s6.name} = {s6.value}')
+    t6 = sum((len(u6) for u6 in v4.values()))
+    print(f'\nTotal constants found: {t6}')
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: excst.py ---
+import ast
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+import libcst as cst
+o4 = Path('output')
+v6 = o4 / 'functions'
+w6 = o4 / 'classes'
+x6 = o4 / 'constants'
+for n3 in [v6, w6, x6]:
+    n3.mkdir(parents=True, exist_ok=True)
+def y6(z6, a7):
+    try:
+        ast.parse(z6)
+        return True
+    except SyntaxError as e:
+        print(f'Syntax error in extracted code of {a7}: {e}')
+        return False
+class b7(cst.CSTVisitor):
+    def __init__(self, c7, d7):
+        super().__init__()
+        self.original_path = c7
+        self.module = d7
+        self.functions = {}
+        self.classes = {}
+        self.constants = {}
+        self.imports = set()
+    def e7(self, n3, a7, w3, f7):
+        if not w3.strip().endswith('\n'):
+            w3 += '\n\n'
+        if not w3.startswith(('#!', '# -*-', '"""')):
+            w3 = f'#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\n{w3}'
+        g7 = f'# Extracted from: {self.original_path.name}\n'
+        if w3.startswith('"""'):
+            h7 = w3.split('"""', 2)
+            if len(h7) >= 3:
+                w3 = '"""'.join([h7[0], h7[1], g7 + '"""' + h7[2]])
+        else:
+            w3 = g7 + w3
+        if y6(w3, f7):
+            i7 = Path(a7).stem
+            h2 = n3 / f'{a7}.py'
+            q3 = 1
+            while h2.exists():
+                h2 = n3 / f'{i7}_{q3}.py'
+                q3 += 1
+            try:
+                h2.write_text(w3.strip() + '\n', encoding='utf-8')
+            except Exception as e:
+                print(f'Error writing to {h2}: {e}')
+    def v(self, q):
+        self.imports.add(cst.Module([q]).code.strip())
+    def w(self, q):
+        self.imports.add(cst.Module([q]).code.strip())
+    def h1(self, q):
+        if not self._is_top_level(q):
+            return
+        try:
+            z6 = cst.Module([q]).code.strip()
+            self.functions[q.name.value] = z6
+            self.save_to_file(v6, q.name.value, z6, f'function_{q.name.value}')
+        except Exception as e:
+            print(f'Error extracting function {q.name.value}: {e}')
+    def x(self, q):
+        if not self._is_top_level(q):
+            return
+        try:
+            z6 = cst.Module([q]).code.strip()
+            self.classes[q.name.value] = z6
+            self.save_to_file(w6, q.name.value, z6, f'class_{q.name.value}')
+        except Exception as e:
+            print(f'Error extracting class {q.name.value}: {e}')
+    def l1(self, q):
+        if not self._is_top_level(q):
+            return
+        if q.semicolon:
+            return
+        try:
+            if len(q.targets) == 1 and isinstance(q.targets[0].target, cst.Name):
+                k = q.targets[0].target.value
+                if k.isidentifier() and k.isupper() and (not k.startswith('_')):
+                    j7 = cst.Module([q]).code.strip()
+                    if y6(j7, f'constant_{k}'):
+                        self.constants[k] = j7
+                        self.save_to_file(x6, k, j7, f'constant_{k}')
+        except Exception as e:
+            print(f'Error extracting constant: {e}')
+    def k7(self, q):
+        l7 = q
+        while hasattr(l7, 'parent') and l7.parent:
+            if isinstance(l7.parent, (cst.FunctionDef, cst.ClassDef, cst.If, cst.For, cst.While, cst.With)):
+                return False
+            l7 = l7.parent
+        return True
+def a5(h2):
+    try:
+        z6 = h2.read_text(encoding='utf-8')
+        d7 = cst.parse_module(z6)
+        m7 = cst.metadata.MetadataWrapper(d7)
+        k6 = b7(h2, d7)
+        m7.visit(k6)
+        return {'path': str(h2), 'functions': k6.functions, 'classes': k6.classes, 'constants': k6.constants, 'imports': k6.imports, 'status': 'success'}
+    except Exception as e:
+        return {'path': str(h2), 'status': 'error', 'error': str(e)}
+def n7(o7=Path('.')):
+    return [p for p in o7.rglob('*.py') if not any((z5.startswith('.') or z5 == '__pycache__' for z5 in p.parts)) and p.name != Path(__file__).name]
+def p7(z1):
+    q7 = o4 / 'imports.py'
+    r7 = sorted(z1)
+    w3 = '#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n'
+    w3 += '# Combined imports from all processed files\n\n'
+    w3 += '\n'.join(r7)
+    w3 += '\n'
+    try:
+        q7.write_text(w3, encoding='utf-8')
+    except Exception as e:
+        print(f'Error writing imports file: {e}')
+def f4():
+    c5 = n7()
+    if not c5:
+        print('No Python files found to process.')
+        return
+    print(f'Found {len(c5)} Python file(s) to process...')
+    z1 = set()
+    s7 = 0
+    t7 = 0
+    u7 = 0
+    v7 = 0
+    w7 = []
+    x7 = min(os.cpu_count() or 1, len(c5))
+    with ProcessPoolExecutor(max_workers=x7) as o6:
+        y7 = {o6.submit(a5, h2): h2 for h2 in c5}
+        try:
+            for r6 in as_completed(y7):
+                h2 = y7[r6]
+                try:
+                    l4 = r6.result()
+                    if l4['status'] == 'success':
+                        s7 += 1
+                        t7 += len(l4['functions'])
+                        u7 += len(l4['classes'])
+                        v7 += len(l4['constants'])
+                        z1.update(l4['imports'])
+                        print(f"✓ Processed [{s7}/{len(c5)}]: {l4['path']}")
+                    else:
+                        w7.append((l4['path'], l4.get('error')))
+                        print(f"✗ Error processing {l4['path']}: {l4.get('error')}")
+                except Exception as e:
+                    w7.append((str(h2), str(e)))
+                    print(f'✗ Unexpected error processing {h2}: {e}')
+        except KeyboardInterrupt:
+            print('\nInterrupted by user.')
+            o6.shutdown(wait=False)
+    if z1:
+        p7(z1)
+    print('\n' + '=' * 40)
+    print(f'Extraction Complete!\nFiles: {s7}/{len(c5)}')
+    print(f'Functions: {t7} | Classes: {u7} | Constants: {v7}')
+    print('-' * 40)
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: ext.py ---
+import ast
+import multiprocessing as mp
+from ast import AST
+from pathlib import Path
+o4 = Path('output')
+z7 = {'test', 'tests', 'examples', 'output'}
+def a8(h2):
+    if h2.suffix == '.py':
+        return True
+    try:
+        with h2.open(encoding='utf-8', errors='ignore') as f:
+            b8 = f.readline()
+        return b8.startswith('#!') and 'python' in b8.lower()
+    except Exception:
+        return False
+def c8():
+    d8 = []
+    e8 = Path('.')
+    for h2 in e8.rglob('*'):
+        if any((z5 in z7 for z5 in h2.parts)):
+            continue
+        if h2.is_file() and a8(h2):
+            d8.append(h2)
+    return d8
+def f8(q, g8=None):
+    for b1 in ast.iter_child_nodes(q):
+        b1._parent = q
+        f8(b1, q)
+def h8(k):
+    return k.isupper()
+def j6(h2):
+    try:
+        h = h2.read_text(encoding='utf-8', errors='ignore')
+        s1 = ast.parse(h)
+    except Exception:
+        return (h2, {}, {}, {}, {}, {})
+    f8(s1)
+    i8, j8 = ({}, {})
+    k8, l8 = ({}, {})
+    u6 = {}
+    for q in ast.walk(s1):
+        if isinstance(q, (ast.ClassDef, ast.FunctionDef)):
+            src = ast.get_source_segment(h, q)
+            if not src:
+                continue
+            g8 = getattr(q, '_parent', None)
+            m8 = isinstance(g8, ast.Module)
+            if isinstance(q, ast.ClassDef):
+                if m8:
+                    i8[q.name] = src
+                else:
+                    k8[q.name] = src
+            elif isinstance(q, ast.FunctionDef):
+                if m8:
+                    j8[q.name] = src
+                else:
+                    l8[q.name] = src
+        if isinstance(q, (ast.Assign, ast.AnnAssign)):
+            g8 = getattr(q, '_parent', None)
+            if not isinstance(g8, ast.Module):
+                continue
+            if isinstance(q, ast.Assign) and len(q.targets) == 1 and isinstance(q.targets[0], ast.Name):
+                k = q.targets[0].id
+            elif isinstance(q, ast.AnnAssign) and isinstance(q.target, ast.Name):
+                k = q.target.id
+            else:
+                continue
+            if not h8(k):
+                continue
+            src = ast.get_source_segment(h, q)
+            if src:
+                u6[k] = src
+    return (h2, i8, j8, k8, l8, u6)
+def n8(h2, e2):
+    with h2.open('w', encoding='utf-8') as f:
+        f.writelines((src.rstrip() + '\n\n' for o8, src in sorted(e2.items())))
+def f4():
+    o4.mkdir(exist_ok=True, parents=True)
+    d8 = c8()
+    if not d8:
+        print('No Python files found.')
+        return
+    with mp.Pool(mp.cpu_count()) as j4:
+        n2 = j4.map(j6, d8)
+    i8, j8 = ({}, {})
+    k8, l8 = ({}, {})
+    p8 = {}
+    for _, c, f, nc, nf, u6 in n2:
+        i8.update(c)
+        j8.update(f)
+        k8.update(nc)
+        l8.update(nf)
+        p8.update(u6)
+    n8(o4 / 'classes.py', i8)
+    n8(o4 / 'functions.py', j8)
+    n8(o4 / 'nested_classes.py', k8)
+    n8(o4 / 'nested_functions.py', l8)
+    n8(o4 / 'const.py', p8)
+    print('\n=== Top-Level Classes ===')
+    for n in sorted(i8):
+        print(' -', n)
+    print('\n=== Top-Level Functions ===')
+    for n in sorted(j8):
+        print(' -', n)
+    print('\n=== Nested Classes ===')
+    for n in sorted(k8):
+        print(' -', n)
+    print('\n=== Nested Functions ===')
+    for n in sorted(l8):
+        print(' -', n)
+    print('\n=== Constants ===')
+    for n in sorted(p8):
+        print(' -', n)
+    print('\nOutputs saved to:', o4)
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: extcode.py ---
+from pathlib import Path
+import tree_sitter_python as tsp
+from tree_sitter import Language, Parser
+q8 = Language(tsp)
+r1 = Parser()
+r1.set_language(q8)
+r8 = Path.cwd()
+o4 = Path('output')
+o4.mkdir(exist_ok=True)
+s8 = {'function_definition', 'class_definition', 'import_statement', 'import_from_statement', 'assignment', 'expression_statement', 'if_statement', 'for_statement', 'while_statement', 'try_statement', 'with_statement'}
+def j6(t8):
+    h = t8.read_bytes()
+    s1 = r1.parse(h)
+    x2 = s1.root_node
+    u8 = [h[b1.start_byte:b1.end_byte].decode() for b1 in x2.children if b1.type in s8]
+    return '\n\n'.join(u8)
+def v8():
+    for t8 in r8.rglob('*.py'):
+        if any((z5.startswith('.') for z5 in t8.parts)):
+            continue
+        if o4 in t8.parents:
+            continue
+        w8 = j6(t8)
+        if not w8.strip():
+            continue
+        x8 = t8.relative_to(r8)
+        f6 = o4 / x8
+        f6.parent.mkdir(parents=True, exist_ok=True)
+        f6.write_text(w8)
+        print(f'Saved: {f6}')
+if __name__ == '__main__':
+    v8()
+
+# --- File: extcst.py ---
+import argparse
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from multiprocessing import Pool
+from pathlib import Path
+import libcst as cst
+from libcst import MetadataWrapper
+from libcst.metadata import PositionProvider
+from loguru import logger
+y8 = 8
+z8 = 'output'
+@dataclass
+class d:
+    a9 = ''
+    g8 = ''
+    t1 = field(default_factory=list)
+    b9 = field(default_factory=list)
+class c9(cst.CSTTransformer):
+    def __init__(self, h2, n):
+        self.path = h2
+        self.source_lines = n
+        self.entities = []
+        self.current_class = ''
+        self.module_imports = []
+        self.constants = set()
+        self.wrapper = None
+    def d9(self, m7):
+        self.wrapper = m7
+    def e9(self, q):
+        if self.wrapper is None:
+            return (0, 0)
+        try:
+            f9 = self.wrapper.resolve(PositionProvider)[q]
+            return (f9.start.line, f9.end.line)
+        except (KeyError, AttributeError):
+            return (0, 0)
+    def g9(self, q, h9, i9):
+        if h9 > 0 and i9 > 0 and (h9 <= len(self.source_lines)):
+            return ''.join(self.source_lines[h9 - 1:i9])
+        d7 = cst.Module(body=[cst.SimpleStatementLine(body=[q])])
+        return d7.code
+    def v(self, q):
+        if not self.current_class:
+            j9 = cst.Module(body=[cst.SimpleStatementLine(body=[q])]).code
+            if j9 not in self.module_imports:
+                self.module_imports.append(j9)
+        return True
+    def w(self, q):
+        if not self.current_class:
+            j9 = cst.Module(body=[cst.SimpleStatementLine(body=[q])]).code
+            if j9 not in self.module_imports:
+                self.module_imports.append(j9)
+        return True
+    def k9(self, l9, m9):
+        d1 = l9.name.value
+        h9, i9 = self._get_node_position(l9)
+        n9 = self._get_source_code(l9, h9, i9)
+        a9 = self._extract_docstring(l9)
+        b9 = []
+        if l9.decorators:
+            for o9 in l9.decorators:
+                b9.append(cst.Module(body=[cst.SimpleStatementLine(body=[o9])]).code.strip())
+        self.entities.append(d(name=d1, type='class', path=str(self.path), source_code=n9, line_start=h9, line_end=i9, docstring=a9, parent=self.current_class, imports=self.module_imports.copy() if not self.current_class else [], decorators=b9))
+        self.current_class = d1
+        return m9
+    def p9(self, l9, m9):
+        q9 = l9.name.value
+        h9, i9 = self._get_node_position(l9)
+        n9 = self._get_source_code(l9, h9, i9)
+        a9 = self._extract_docstring(l9)
+        b9 = []
+        if l9.decorators:
+            for o9 in l9.decorators:
+                b9.append(cst.Module(body=[cst.SimpleStatementLine(body=[o9])]).code.strip())
+        self.entities.append(d(name=q9, type='function', path=str(self.path), source_code=n9, line_start=h9, line_end=i9, docstring=a9, parent=self.current_class, imports=self.module_imports.copy() if not self.current_class else [], decorators=b9))
+        return m9
+    def l1(self, q):
+        if self.current_class:
+            return True
+        for m1 in q.targets:
+            if isinstance(m1.target, cst.Name):
+                r9 = m1.target.value
+                if (r9.isupper() or r9 == '__all__') and r9 not in self.constants:
+                    self.constants.add(r9)
+                    h9, i9 = self._get_node_position(q)
+                    n9 = self._get_source_code(q, h9, i9)
+                    self.entities.append(d(name=r9, type='constant', path=str(self.path), source_code=n9, line_start=h9, line_end=i9, docstring='', parent='', imports=self.module_imports.copy(), decorators=[]))
+        return True
+    def s9(self, q):
+        t9 = getattr(q, 'body', None)
+        if t9 is None:
+            return ''
+        if not isinstance(t9, cst.IndentedBlock):
+            return ''
+        if not t9.body:
+            return ''
+        u9 = t9.body[0]
+        if isinstance(u9, cst.SimpleStatementLine):
+            for l in u9.body:
+                if isinstance(l, cst.Expr) and isinstance(l.value, cst.SimpleString):
+                    doc = l.value.value
+                    if doc.startswith("'''") and doc.endswith("'''") or (doc.startswith('"""') and doc.endswith('"""')):
+                        doc = doc[3:-3]
+                    elif doc.startswith("'") and doc.endswith("'") or (doc.startswith('"') and doc.endswith('"')):
+                        doc = doc[1:-1]
+                    return doc.strip()
+        return ''
+def v9(k):
+    k = re.sub('[<>:"/\\\\|?*]', '_', k)
+    k = k.strip('. ')
+    if not k:
+        k = 'unnamed'
+    return k
+def a5(h4):
+    h2, s3 = h4
+    try:
+        with open(h2, 'r', encoding='utf-8') as f:
+            w3 = f.read()
+        n = w3.splitlines(keepends=True)
+        d7 = cst.parse_module(w3)
+        m7 = MetadataWrapper(d7)
+        k6 = c9(str(h2), n)
+        k6.set_wrapper(m7)
+        m7.visit(k6)
+        w9 = {'function': [], 'class': [], 'constant': []}
+        for a1 in k6.entities:
+            if a1.type in w9:
+                w9[a1.type].append(a1)
+        x9 = {}
+        for y9, g3 in w9.items():
+            if not g3:
+                continue
+            z9 = s3 / y9
+            z9.mkdir(parents=True, exist_ok=True)
+            for a1 in g3:
+                a10 = v9(a1.name)
+                b10 = f'{a10}'
+                q3 = 1
+                c10 = z9 / f'{b10}.py'
+                while c10.exists():
+                    c10 = z9 / f'{b10}_{q3}.py'
+                    q3 += 1
+                with open(c10, 'w', encoding='utf-8') as f:
+                    if a1.imports and (not a1.parent):
+                        for imp in a1.imports:
+                            f.write(imp)
+                            if not imp.endswith('\n'):
+                                f.write('\n')
+                        if a1.imports:
+                            f.write('\n')
+                    if a1.decorators:
+                        for o9 in a1.decorators:
+                            f.write(o9)
+                            if not o9.endswith('\n'):
+                                f.write('\n')
+                    f.write(a1.source_code)
+                d10 = z9 / f'{b10}_metadata.json'
+                e10 = 1
+                while d10.exists():
+                    d10 = z9 / f'{b10}_{e10}_metadata.json'
+                    e10 += 1
+                with open(d10, 'w', encoding='utf-8') as f:
+                    json.dump({'entity': {'name': a1.name, 'type': a1.type, 'path': a1.path, 'line_start': a1.line_start, 'line_end': a1.line_end, 'docstring': a1.docstring, 'parent': a1.parent, 'imports': a1.imports, 'decorators': a1.decorators}, 'extracted_at': datetime.now().isoformat()}, f, indent=2, ensure_ascii=False)
+                x9[y9] = x9.get(y9, 0) + 1
+        return x9
+    except Exception as e:
+        k13.error(f'Error processing {h2}: {e}')
+        import traceback
+        traceback.print_exc()
+        return {}
+def f10(m6):
+    y2 = []
+    for h2 in m6:
+        if h2.is_file() and h2.suffix == '.py':
+            y2.append(h2)
+        elif h2.is_dir():
+            y2.extend(h2.rglob('*.py'))
+    return sorted(y2)
+def g10(n6, h10):
+    y2 = f10(n6)
+    if not y2:
+        k13.warning('No Python files found to process.')
+        return
+    print(f'Found {len(y2)} Python files to process')
+    h10.mkdir(parents=True, exist_ok=True)
+    i10 = {}
+    i4 = [(p, h10) for p in y2]
+    with Pool(processes=y8) as j4:
+        k4 = [(j4.apply_async(a5, (j10,)), j10[0]) for j10 in i4]
+        for k10, h2 in k4:
+            try:
+                x9 = k10.get()
+                if x9:
+                    for y9, d4 in x9.items():
+                        i10[y9] = i10.get(y9, 0) + d4
+                    print(f'✓ Processed {h2.name}: {x9}')
+                else:
+                    print(f'✗ No entities found in {h2.name}')
+            except Exception as e:
+                k13.error(f'✗ Failed to process {h2.name}: {e}')
+    print('=' * 40)
+    print('Extraction Summary:')
+    for y9, d4 in sorted(i10.items()):
+        print(f'  {y9}: {d4}')
+    print('=' * 40)
+def l10(g4=None):
+    r1 = argparse.ArgumentParser(description='Extract entities (functions, classes, constants) from Python files.')
+    r1.add_argument('paths', nargs='*', help='Files or directories to process (default: current directory)')
+    r1.add_argument('-o', '--output', default=z8, help=f'Output directory (default: {z8})')
+    return r1.parse_args(g4)
+def f4(g4=None):
+    h4 = l10(g4)
+    if h4.paths:
+        n6 = [Path(p).resolve() for p in h4.paths]
+    else:
+        n6 = [Path.cwd()]
+    m10 = []
+    for h2 in n6:
+        if h2.exists():
+            m10.append(h2)
+        else:
+            k13.warning(f'Path does not exist: {h2}')
+    if not m10:
+        k13.error('No valid input paths provided.')
+        return 1
+    s3 = Path(h4.output).resolve()
+    g10(m10, s3)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: extfc.py ---
+from collections import defaultdict
+from pathlib import Path
+import tree_sitter_python as tsp
+from tree_sitter import Language, Parser, Tree
+r1 = Parser()
+r1.language = Language(tsp.language())
+n10 = Path('output')
+n10.mkdir(exist_ok=True)
+o10 = {'\n(expression_statement\n  (assignment_expression\n    (=( _ )@name value:value )\n  )\n  (\n)'}
+def p10(src, q):
+    return src[q.start_byte:q.end_byte].decode()
+def q10(src, s1):
+    x2 = s1.root_node
+    r10 = []
+    def s10(q):
+        if q.type in o10:
+            t10 = p10(src, q)
+            b9 = []
+            u10 = q.prev_sibling
+            while u10 and u10.type == 'decorator':
+                b9.append(p10(src, u10))
+                u10 = u10.prev_sibling
+            if b9:
+                t10 = '\n'.join(reversed(b9)) + '\n' + t10
+            r10.append(t10)
+        for b1 in q.children:
+            s10(b1)
+    s10(x2)
+    return r10
+def v10(h2, e8):
+    try:
+        return h2.relative_to(e8)
+    except ValueError:
+        return h2
+def w10(src, q):
+    if q.children and q.children[0].type == 'string':
+        return p10(src, q.children[0])
+    return None
+def x10(y10, z10, a11, a9=None):
+    s = [f'# From: {z10}:{a11}']
+    if a9:
+        s.append(f"# Docstring: {a9[:50]}{('...' if len(a9) > 50 else '')}")
+    s.append(y10)
+    return '\n'.join(s)
+b11 = defaultdict(list)
+c11 = 0
+d11 = set()
+e11 = 0
+cwd = Path.cwd()
+for py in cwd.rglob('*.py'):
+    if any((z5.startswith('.') for z5 in py.parts)) or 'site-packages' in py.parts:
+        continue
+    if n10 in py.parents:
+        continue
+    try:
+        print(f'processing ... {py}')
+        src = py.read_bytes()
+        s1 = r1.parse(src)
+        r10 = q10(src, s1)
+        if r10:
+            f11 = py.parent
+            g11 = v10(f11, Path())
+            d11.add(str(g11))
+            h11 = f"\n# {'=' * 40}\n# File: {py.name}\n# {'=' * 40}\n"
+            b11[g11].append(h11)
+            for i, y10 in enumerate(r10, 1):
+                b11[g11].append(y10)
+                if i < len(r10):
+                    b11[g11].append('\n' + '#' + '-' * 58 + '\n')
+            c11 += 1
+            e11 += len(r10)
+    except Exception as e:
+        print(f'⚠️  Error processing {py}: {e}')
+for b6, i11 in b11.items():
+    if not i11:
+        continue
+    f6 = n10 / b6 / 'definitions.py'
+    f6.parent.mkdir(parents=True, exist_ok=True)
+    w3 = '\n'.join(i11)
+    j11 = '#!/usr/bin/env python\n'
+    f6.write_text(j11 + w3)
+    k11 = len([d for d in i11 if d.strip() and (not d.startswith('#')) and (not d.startswith('\n#'))])
+    print(f"✅ saved: {f6} ({k11} definitions from {len([f for f in i11 if 'File:' in f])} files)")
+print(f'\n✨ Done! Processed {c11} files with {e11} total definitions in {len(b11)} folder(s)')
+print(f"📁 Folders: {', '.join(sorted(d11))}")
+
+# --- File: extt.py ---
+from collections import defaultdict
+from pathlib import Path
+import tree_sitter_python as tsp
+from tree_sitter import Language, Parser, Tree
+r1 = Parser()
+r1.language = Language(tsp.language())
+n10 = Path('output')
+n10.mkdir(exist_ok=True)
+o10 = {'function_definition', 'class_definition'}
+def p10(src, q):
+    return src[q.start_byte:q.end_byte].decode()
+def l11(q):
+    for b1 in q.children:
+        if b1.type == 'identifier':
+            return b1.text.decode() if hasattr(b1, 'text') else None
+    return None
+def q10(src, s1):
+    x2 = s1.root_node
+    r10 = []
+    def s10(q):
+        if q.type in o10:
+            k = l11(q)
+            t10 = p10(src, q)
+            b9 = []
+            u10 = q.prev_sibling
+            while u10 and u10.type == 'decorator':
+                b9.append(p10(src, u10))
+                u10 = u10.prev_sibling
+            if b9:
+                t10 = '\n'.join(reversed(b9)) + '\n' + t10
+            r10.append({'type': q.type.replace('_definition', ''), 'name': k, 'text': t10, 'line': q.start_point.row + 1})
+        for b1 in q.children:
+            s10(b1)
+    s10(x2)
+    return r10
+def v10(h2, e8):
+    try:
+        return h2.relative_to(e8)
+    except ValueError:
+        return h2
+b11 = defaultdict(lambda: defaultdict(list))
+c11 = 0
+d11 = set()
+e11 = 0
+for py in Path().rglob('*.py'):
+    if any((z5.startswith('.') for z5 in py.parts)) or 'site-packages' in py.parts:
+        continue
+    if n10 in py.parents:
+        continue
+    try:
+        src = py.read_bytes()
+        s1 = r1.parse(src)
+        r10 = q10(src, s1)
+        if r10:
+            f11 = py.parent
+            g11 = v10(f11, Path())
+            d11.add(str(g11))
+            b11[g11][py.name] = {'definitions': r10, 'path': py}
+            c11 += 1
+            e11 += len(r10)
+    except Exception as e:
+        print(f'⚠️  Error processing {py}: {e}')
+for b6, m11 in b11.items():
+    if not m11:
+        continue
+    f6 = n10 / b6 / 'definitions.py'
+    f6.parent.mkdir(parents=True, exist_ok=True)
+    n11 = []
+    n11.extend(('#' + '=' * 78, '# TABLE OF CONTENTS', '#' + '=' * 78, ''))
+    for z10, o11 in sorted(m11.items()):
+        n11.append(f'# File: {z10}')
+        p11 = {'function': 0, 'class': 0}
+        for d in o11['definitions']:
+            p11[d['type']] += 1
+        if p11['function'] > 0:
+            n11.append(f"#   Functions: {p11['function']}")
+        if p11['class'] > 0:
+            n11.append(f"#   Classes: {p11['class']}")
+        n11.append('')
+    n11.extend(('#' + '=' * 78, '# DEFINITIONS', '#' + '=' * 78, ''))
+    for z10, o11 in sorted(m11.items()):
+        n11.extend((f"\n# {'=' * 76}", f'# File: {z10}', f"# Path: {o11['path']}", f"# {'=' * 76}\n"))
+        q11 = [d for d in o11['definitions'] if d['type'] == 'class']
+        r11 = [d for d in o11['definitions'] if d['type'] == 'function']
+        if q11:
+            n11.extend(('#' + '-' * 40, '# CLASSES', '#' + '-' * 40, ''))
+            for i, cls in enumerate(q11):
+                if i > 0:
+                    n11.append('\n' + '#' + '-' * 38 + '\n')
+                n11.append(f"# Line: {cls['line']}")
+                if cls['name']:
+                    n11.append(f"# Class: {cls['name']}")
+                n11.append(cls['text'])
+        if r11:
+            if q11:
+                n11.append('\n' + '#' + '-' * 40)
+            else:
+                n11.append('#' + '-' * 40)
+            n11.extend(('# FUNCTIONS', '#' + '-' * 40, ''))
+            for i, s11 in enumerate(r11):
+                if i > 0:
+                    n11.append('\n' + '#' + '-' * 38 + '\n')
+                n11.append(f"# Line: {s11['line']}")
+                if s11['name']:
+                    n11.append(f"# Function: {s11['name']}")
+                n11.append(s11['text'])
+        n11.append('\n' + '#' + '=' * 78 + '\n')
+    w3 = '\n'.join(n11)
+    j11 = '#!/usr/bin/env python\n'
+    f6.write_text(j11 + w3)
+    t11 = sum((len(f['definitions']) for f in m11.values()))
+    print(f'✅ saved: {f6}')
+    print(f'   📊 {len(m11)} files, {t11} definitions')
+    print(f'   📁 {b6}')
+print(f'\n✨ Done! Processed {c11} files with {e11} total definitions in {len(b11)} folder(s)')
+if d11:
+    print('📁 Folders:')
+    for b6 in sorted(d11):
+        u11 = sum((len(f['definitions']) for f in b11[Path(b6)].values()))
+        v11 = len(b11[Path(b6)])
+        print(f'   • {b6}: {v11} files, {u11} definitions')
+
+# --- File: gen_s_expr.py ---
+import tree_sitter_python as tsp
+from tree_sitter import Language, Parser
+w11 = Language(tsp.language())
+r1 = Parser(w11)
+def x11(q, h, y11=0):
+    if q.child_count == 0:
+        z11 = h[q.start_byte:q.end_byte].decode('utf-8')
+        return f'({q.type} "{z11}")'
+    a12 = ' '.join((x11(b1, h, y11 + 1) for b1 in q.children))
+    return f'({q.type} {a12})'
+def b12(z6):
+    s1 = r1.parse(z6.encode('utf-8'))
+    return x11(s1.root_node, z6.encode('utf-8'))
+l4 = b12(z6)
+print(l4)
+
+# --- File: getfuncnames.py ---
+import ast
+import sys
+def c12(a7, d12=True):
+    try:
+        with open(a7) as q6:
+            s1 = ast.parse(q6.read())
+        e12 = []
+        for q in ast.walk(s1):
+            if isinstance(q, ast.FunctionDef):
+                if d12 and q.name == 'main':
+                    continue
+                e12.append(q.name)
+        return e12
+    except FileNotFoundError:
+        print(f"Error: File '{a7}' not found.")
+        return []
+    except SyntaxError as e:
+        print(f"Error: Syntax error in '{a7}': {e}")
+        return []
+    except Exception as e:
+        print(f'Error: {e}')
+        return []
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Usage: python script.py <python_file>')
+        sys.exit(1)
+    a7 = sys.argv[1]
+    r11 = c12(a7, skip_main=True)
+    if r11:
+        print("Functions found (excluding 'main'):")
+        for s11 in r11:
+            print(f'  - {s11}')
+    else:
+        print("No functions found (excluding 'main').")
+
+# --- File: gext2.py ---
+import ast
+import os
+import re
+import shutil
+import tarfile
+import zipfile
+from multiprocessing import cpu_count
+from pathlib import Path
+from typing import Any
+o4 = Path('output')
+b2 = ('.whl', '.zip', '.tar.gz', '.tgz', '.tar.zst', '.tar.xz', '.tar', '.zst')
+f12 = ('.py', '')
+class c9(ast.NodeVisitor):
+    def __init__(self, g12, c7):
+        self.entities = []
+        self.source_lines = g12.splitlines(keepends=True)
+        self.original_path = c7
+        self.scope_stack = []
+    def h12(self, q):
+        h9 = q.lineno - 1
+        i9 = q.end_lineno or q.lineno
+        i12 = self.source_lines[h9:i9]
+        if q.col_offset is not None:
+            i12[0] = i12[0][q.col_offset:]
+        if q.end_col_offset is not None and q.end_col_offset > 0:
+            j12 = i12[-1]
+            i12[-1] = j12[:q.end_col_offset]
+        return ''.join(i12)
+    def k12(self, q, y9, k):
+        l12 = self._get_source_slice(q)
+        m12 = '_'.join(self.scope_stack)
+        f1 = f'{m12}_{k}' if m12 else k
+        self.entities.append({'name': k, 'full_name': f1, 'type': y9, 'code': l12, 'path': str(self.original_path), 'is_constant': y9 in 'constant', 'is_class': y9 in 'class', 'is_function': y9 in {'function', 'method'}})
+    def h1(self, q):
+        y9 = 'method' if self.scope_stack and self.scope_stack[-1].startswith('class_') else 'function'
+        self._extract_and_save(q, y9, q.name)
+        self.scope_stack.append(f'func_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def k1(self, q):
+        y9 = 'method' if self.scope_stack and self.scope_stack[-1].startswith('class_') else 'function'
+        self._extract_and_save(q, y9, q.name)
+        self.scope_stack.append(f'async_func_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def x(self, q):
+        self._extract_and_save(q, 'class', q.name)
+        self.scope_stack.append(f'class_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def l1(self, q):
+        if not self.scope_stack and len(q.targets) == 1 and isinstance(q.targets[0], ast.Name):
+            n12 = q.targets[0].id
+            if re.match('^[A-Z_][A-Z0-9_]*$', n12):
+                self._extract_and_save(q, 'constant', n12)
+    def o12(self, q):
+        super().generic_visit(q)
+def p12(e8):
+    if not e8.exists():
+        return e8
+    k = e8.stem
+    r2 = e8.suffix
+    i = 1
+    while True:
+        q12 = e8.with_name(f'{k}_{i}{r2}')
+        if not q12.exists():
+            return q12
+        i += 1
+def r12(a1):
+    s12 = f"{a1['full_name']}.py"
+    t12 = o4 / a1['type'] / s12
+    t12.parent.mkdir(parents=True, exist_ok=True)
+    w3 = a1['code']
+    u12 = p12(t12)
+    try:
+        Path(u12).write_text(w3, encoding='utf-8')
+    except Exception as e:
+        print(f'Error saving {u12}: {e}')
+        return
+def v12(w3, h2):
+    try:
+        s1 = ast.parse(w3)
+        k6 = c9(w3, h2)
+        k6.visit(s1)
+        return k6.entities
+    except SyntaxError:
+        return []
+    except Exception as e:
+        print(f'Error parsing AST for {h2}: {e}')
+        return []
+def w12(h2):
+    if h2.suffix:
+        return False
+    try:
+        with Path(h2).open(encoding='utf-8', errors='ignore') as f:
+            x12 = ''.join(f.readlines(1024))
+            if re.match('#!\\s*/.*python', x12):
+                return True
+            if 'def ' in x12 or 'class ' in x12 or 'import ' in x12:
+                return True
+    except:
+        pass
+    return False
+def y12(h2):
+    try:
+        if h2.suffix == '.py' or w12(h2):
+            w3 = h2.read_text(encoding='utf-8', errors='ignore')
+            return v12(w3, h2)
+        return []
+    except Exception as e:
+        print(f'Error reading file {h2}: {e}')
+        return []
+def u2(h2):
+    g3 = []
+    if h2.suffix == '.zst':
+        try:
+            z12 = zstd.ZstdDecompressor()
+            w3 = z12.decompress(h2.read_bytes()).decode('utf-8', errors='ignore')
+            return v12(w3, h2)
+        except Exception as e:
+            print(f'Error decompressing ZST file {h2}: {e}')
+            return []
+    if h2.suffix in {'.zip', '.whl'}:
+        try:
+            with zipfile.ZipFile(h2, 'r') as zf:
+                for o2 in zf.namelist():
+                    a13 = Path(o2)
+                    if a13.suffix == '.py':
+                        with zf.open(o2) as b13:
+                            w3 = b13.read().decode('utf-8', errors='ignore')
+                            w1 = Path(f'{h2}/{o2}')
+                            g3.extend(v12(w3, w1))
+        except Exception as e:
+            print(f'Error processing ZIP/WHL archive {h2}: {e}')
+    elif any((h2.name.endswith(ext) for ext in ['.tar', '.tar.gz', '.tgz', '.tar.zst', '.tar.xz'])):
+        c13 = {'.tar.gz': 'r:gz', '.tgz': 'r:gz', '.tar.zst': 'r:zst', '.tar.xz': 'r:xz', '.tar': 'r'}
+        d13 = next((c13[ext] for ext in c13 if h2.name.endswith(ext)), 'r')
+        try:
+            with tarfile.open(h2, d13) as tf:
+                for o2 in tf.getmembers():
+                    a13 = Path(o2.name)
+                    if o2.isfile() and a13.suffix == '.py':
+                        b13 = tf.extractfile(o2)
+                        if b13:
+                            w3 = b13.read().decode('utf-8', errors='ignore')
+                            w1 = Path(f'{h2}/{o2.name}')
+                            g3.extend(v12(w3, w1))
+        except tarfile.ReadError:
+            pass
+        except Exception as e:
+            print(f'Error processing TAR archive {h2}: {e}')
+    return g3
+def e13(f13):
+    h2 = Path(f13)
+    if h2.name.endswith(b2):
+        return u2(h2)
+    return y12(h2)
+def f4():
+    print(f'Starting analysis in {Path.cwd()}...')
+    if o4.exists():
+        shutil.rmtree(o4)
+        print(f'Cleaned previous output directory: {o4}')
+    o4.mkdir(exist_ok=True)
+    g13 = []
+    cwd = Path()
+    for x2, _, c3 in os.walk(cwd):
+        for k in c3:
+            h2 = Path(x2) / k
+            if h2.is_relative_to(o4):
+                continue
+            h13 = h2.suffix in b2 or any((h2.name.endswith(ext) for ext in b2))
+            p2 = h2.suffix in f12 or w12(h2)
+            if h13 or p2:
+                g13.append(str(h2))
+    if not g13:
+        print('No Python files or archives found to process.')
+        return
+    print(f'Found {len(g13)} relevant files/archives. Starting multiprocessing pool...')
+    i13 = cpu_count()
+    i3 = []
+    with Pool(processes=i13) as j4:
+        j13 = j4.map(e13, g13)
+        for l4 in j13:
+            i3.extend(l4)
+    print(f'Processing complete. Extracted {len(i3)} entities.')
+    print(f'Saving entities to {o4}...')
+    for a1 in i3:
+        r12(a1)
+    print('\n\nAll tasks finished successfully!')
+    print(f"Results are saved in the '{o4}' folder, organized by entity type (class, function, constant).")
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: gextco.py ---
+import ast
+import logging
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from tqdm import tqdm
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+k13 = logging.getLogger(__name__)
+@dataclass
+class d:
+    pass
+@dataclass
+class l13:
+    pass
+class c9(ast.NodeVisitor):
+    def __init__(self, h2):
+        self.path = h2
+        self.classes = []
+        self.functions = []
+        self.constants = []
+        self.imports = set()
+        self._in_class = False
+    def x(self, q):
+        self.classes.append(d(name=q.name, path=str(self.path), line_number=q.lineno))
+        m13 = self._in_class
+        self._in_class = True
+        self.generic_visit(q)
+        self._in_class = m13
+    def h1(self, q):
+        if not self._in_class:
+            self.functions.append(d(name=q.name, path=str(self.path), line_number=q.lineno))
+        self.generic_visit(q)
+    def k1(self, q):
+        if not self._in_class:
+            self.functions.append(d(name=q.name, path=str(self.path), line_number=q.lineno))
+        self.generic_visit(q)
+    def l1(self, q):
+        if not self._in_class:
+            for m1 in q.targets:
+                if isinstance(m1, ast.Name) and m1.id.isupper():
+                    self.constants.append(d(name=m1.id, path=str(self.path), line_number=q.lineno))
+        self.generic_visit(q)
+    def v(self, q):
+        for n13 in q.names:
+            self.imports.add(f'import {n13.name}')
+        self.generic_visit(q)
+    def w(self, q):
+        d7 = q.module or ''
+        for n13 in q.names:
+            self.imports.add(f'from {d7} import {n13.name}')
+        self.generic_visit(q)
+def j6(h2):
+    try:
+        w3 = h2.read_text(encoding='utf-8')
+        s1 = ast.parse(w3)
+        k6 = c9(h2)
+        k6.visit(s1)
+        return l13(path=h2, classes=k6.classes, functions=k6.functions, constants=k6.constants, imports=k6.imports)
+    except (SyntaxError, UnicodeDecodeError) as e:
+        k13.warning(f'Failed to parse {h2}: {e}')
+        return l13(path=h2, classes=[], functions=[], constants=[], imports=set())
+def o13(o7):
+    return list(o7.rglob('*.py'))
+def p13(s3, y9, q13, r13):
+    s13 = s3 / y9
+    s13.mkdir(parents=True, exist_ok=True)
+    for h2, g3 in q13.items():
+        if g3:
+            z10 = Path(h2).stem + '.txt'
+            t13 = s13 / z10
+            with open(t13, 'w', encoding='utf-8') as f:
+                f.writelines((f'{a1.name} (line {a1.line_number})\n' for a1 in sorted(g3, key=lambda e: e.name)))
+    u13 = s13 / 'unique.txt'
+    with open(u13, 'w', encoding='utf-8') as f:
+        f.writelines((f'{k}\n' for k in sorted(r13)))
+    print(f'Saved {len(r13)} unique {y9}')
+def v13(s3, w13):
+    x13 = s3 / 'imports'
+    x13.mkdir(parents=True, exist_ok=True)
+    for y13, t1 in w13.items():
+        if t1:
+            z10 = f'imports-{y13}.txt'
+            t13 = x13 / z10
+            with open(t13, 'w', encoding='utf-8') as f:
+                f.writelines((f'{imp}\n' for imp in sorted(t1)))
+    print(f'Saved imports for {len(w13)} directories')
+def f4(o7='.', s3='output', z13=None):
+    a14 = Path(o7)
+    b14 = Path(s3)
+    if not a14.exists():
+        k13.error(f'Root directory not found: {a14}')
+        sys.exit(1)
+    print(f'Scanning for Python files in {a14}...')
+    y2 = o13(a14)
+    if not y2:
+        k13.warning('No Python files found.')
+        return
+    print(f'Found {len(y2)} Python files')
+    z13 = z13 or cpu_count()
+    print(f'Using {z13} workers for parallel processing')
+    q13 = defaultdict(list)
+    c14 = set()
+    d14 = set()
+    e14 = set()
+    w13 = defaultdict(set)
+    with Pool(z13) as j4:
+        n2 = list(tqdm(j4.imap_unordered(j6, y2), total=len(y2), desc='Extracting entities', unit='file'))
+    print('Aggregating results...')
+    for l4 in n2:
+        for a1 in l4.classes:
+            q13['classes'][l4.path].append(a1)
+            c14.add(a1.name)
+        for a1 in l4.functions:
+            q13['functions'][l4.path].append(a1)
+            d14.add(a1.name)
+        for a1 in l4.constants:
+            q13['constants'][l4.path].append(a1)
+            e14.add(a1.name)
+        y13 = l4.path.parent.name or 'root'
+        w13[y13].update(l4.imports)
+    q13 = {key: dict(val) for key, val in q13.items()}
+    print(f'Saving results to {b14}...')
+    b14.mkdir(parents=True, exist_ok=True)
+    p13(b14, 'class', q13.get('classes', {}), c14)
+    p13(b14, 'func', q13.get('functions', {}), d14)
+    p13(b14, 'const', q13.get('constants', {}), e14)
+    v13(b14, w13)
+    print('=' * 40)
+    print('Extraction Summary:')
+    print(f'  Files processed: {len(y2)}')
+    print(f'  Unique classes: {len(c14)}')
+    print(f'  Unique functions: {len(d14)}')
+    print(f'  Unique constants: {len(e14)}')
+    print(f'  Total imports: {sum((len(v) for v in w13.values()))}')
+    print('=' * 40)
+if __name__ == '__main__':
+    import argparse
+    r1 = argparse.ArgumentParser(description='Extract entities from Python files recursively')
+    r1.add_argument('-r', '--root', default='.', help='Root directory to scan (default: current directory)')
+    r1.add_argument('-o', '--output', default='output', help='Output directory (default: output)')
+    r1.add_argument('-w', '--workers', type=int, help='Number of parallel workers (default: CPU count)')
+    h4 = r1.parse_args()
+    f4(h4.root, h4.output, h4.workers)
+
+# --- File: gextdb.py ---
+import argparse
+import ast
+import os
+import re
+import sqlite3
+from pathlib import Path
+from typing import Any
+o4 = Path('output')
+f14 = Path('/sdcard/ext.db')
+f12 = ('.py', '')
+class c9(ast.NodeVisitor):
+    def __init__(self, g12, c7):
+        self.entities = []
+        self.source_lines = g12.splitlines(keepends=True)
+        self.original_path = c7
+        self.scope_stack = []
+    def h12(self, q):
+        h9 = q.lineno - 1
+        i9 = q.end_lineno or q.lineno
+        i12 = self.source_lines[h9:i9]
+        if q.col_offset is not None:
+            i12[0] = i12[0][q.col_offset:]
+        if q.end_col_offset is not None and q.end_col_offset > 0:
+            j12 = i12[-1]
+            i12[-1] = j12[:q.end_col_offset]
+        return ''.join(i12)
+    def k12(self, q, y9, k):
+        l12 = self._get_source_slice(q)
+        m12 = '_'.join(self.scope_stack)
+        f1 = f'{m12}_{k}' if m12 else k
+        self.entities.append({'name': k, 'full_name': f1, 'type': y9, 'code': l12, 'path': str(self.original_path), 'is_constant': y9 == 'constant', 'is_class': y9 == 'class', 'is_function': y9 in {'function', 'method'}})
+    def h1(self, q):
+        if not self.scope_stack:
+            self._extract_and_save(q, 'function', q.name)
+    def x(self, q):
+        self._extract_and_save(q, 'class', q.name)
+        self.scope_stack.append(f'class_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def l1(self, q):
+        if not self.scope_stack and len(q.targets) == 1 and isinstance(q.targets[0], ast.Name):
+            n12 = q.targets[0].id
+            if re.match('^[A-Z_][A-Z0-9_]*$', n12):
+                self._extract_and_save(q, 'constant', n12)
+    def o12(self, q):
+        super().generic_visit(q)
+class c9(ast.NodeVisitor):
+    def __init__(self, g12, c7):
+        self.entities = []
+        self.source_lines = g12.splitlines(keepends=True)
+        self.original_path = c7
+        self.scope_stack = []
+    def h12(self, q):
+        h9 = q.lineno - 1
+        i9 = q.end_lineno or q.lineno
+        i12 = self.source_lines[h9:i9]
+        if q.col_offset is not None:
+            i12[0] = i12[0][q.col_offset:]
+        if q.end_col_offset is not None and q.end_col_offset > 0:
+            j12 = i12[-1]
+            i12[-1] = j12[:q.end_col_offset]
+        return ''.join(i12)
+    def k12(self, q, y9, k):
+        l12 = self._get_source_slice(q)
+        m12 = '_'.join(self.scope_stack)
+        f1 = f'{m12}_{k}' if m12 else k
+        self.entities.append({'name': k, 'full_name': f1, 'type': y9, 'code': l12, 'path': str(self.original_path), 'is_constant': y9 == 'constant', 'is_class': y9 == 'class', 'is_function': y9 in {'function', 'method'}})
+    def h1(self, q):
+        y9 = 'method' if self.scope_stack and self.scope_stack[-1].startswith('class_') else 'function'
+        self._extract_and_save(q, y9, q.name)
+        self.scope_stack.append(f'func_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def k1(self, q):
+        y9 = 'method' if self.scope_stack and self.scope_stack[-1].startswith('class_') else 'function'
+        self._extract_and_save(q, y9, q.name)
+        self.scope_stack.append(f'async_func_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def x(self, q):
+        self._extract_and_save(q, 'class', q.name)
+        self.scope_stack.append(f'class_{q.name}')
+        self.generic_visit(q)
+        self.scope_stack.pop()
+    def l1(self, q):
+        if not self.scope_stack and len(q.targets) == 1 and isinstance(q.targets[0], ast.Name):
+            n12 = q.targets[0].id
+            if re.match('^[A-Z_][A-Z0-9_]*$', n12):
+                self._extract_and_save(q, 'constant', n12)
+    def o12(self, q):
+        super().generic_visit(q)
+def g14():
+    h14 = sqlite3.connect(f14)
+    i14 = h14.cursor()
+    i14.execute('\n        CREATE TABLE IF NOT EXISTS entities (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            name TEXT,\n            full_name TEXT,\n            type TEXT,\n            code TEXT,\n            path TEXT,\n            is_constant BOOLEAN,\n            is_class BOOLEAN,\n            is_function BOOLEAN\n        )\n    ')
+    h14.commit()
+    h14.close()
+def j14(a1):
+    h14 = sqlite3.connect(f14)
+    i14 = h14.cursor()
+    i14.execute('\n        INSERT INTO entities (name, full_name, type, code, path, is_constant, is_class, is_function)\n        VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n    ', (a1['name'], a1['full_name'], a1['type'], a1['code'], a1['path'], a1['is_constant'], a1['is_class'], a1['is_function']))
+    h14.commit()
+    h14.close()
+def v12(w3, h2):
+    try:
+        s1 = ast.parse(w3)
+        k6 = c9(w3, h2)
+        k6.visit(s1)
+        return k6.entities
+    except SyntaxError:
+        return []
+    except Exception as e:
+        print(f'Error parsing AST for {h2}: {e}')
+        return []
+def w12(h2):
+    if h2.suffix:
+        return False
+    try:
+        with Path(h2).open(encoding='utf-8', errors='ignore') as f:
+            x12 = ''.join(f.readlines(1024))
+            return bool(re.match('#!\\s*/.*python', x12) or ('def ' in x12 or 'class ' in x12 or 'import ' in x12))
+    except:
+        return False
+def y12(h2):
+    try:
+        if h2.suffix == '.py' or w12(h2):
+            w3 = h2.read_text(encoding='utf-8', errors='ignore')
+            return v12(w3, h2)
+        return []
+    except Exception as e:
+        print(f'Error reading file {h2}: {e}')
+        return []
+def f4():
+    r1 = argparse.ArgumentParser(description='Extract Python entities and save to database.')
+    r1.add_argument('-db', '--database', action='store_true', help='Save extracted entities to the database')
+    h4 = r1.parse_args()
+    print(f'Starting analysis in {Path.cwd()}...')
+    g14()
+    g13 = []
+    cwd = Path()
+    for x2, _, c3 in os.walk(cwd):
+        for k in c3:
+            h2 = Path(x2) / k
+            if h2.is_relative_to(o4):
+                continue
+            if h2.suffix in f12 or w12(h2):
+                g13.append(h2)
+    if not g13:
+        print('No Python files found to process.')
+        return
+    i3 = []
+    for h2 in g13:
+        g3 = y12(h2)
+        i3.extend(g3)
+    print(f'Processing complete. Extracted {len(i3)} entities.')
+    if h4.database:
+        print(f'Saving entities to database at {f14}...')
+        for a1 in i3:
+            j14(a1)
+        print('All entities saved to database.')
+    print('All tasks finished successfully!')
+if __name__ == '__main__':
+    raise SystemExit(f4())
+
+# --- File: tsext.py ---
+import os
+from pathlib import Path
+import tree_sitter_python as tsp
+from dh import get_pyfiles
+from tree_sitter import Language, Parser
+w11 = Language(tsp.language())
+r1 = Parser(w11)
+def k14(h2):
+    try:
+        with Path(h2).open('rb') as f:
+            s1 = r1.parse(f.read())
+    except Exception as e:
+        print(f'Error parsing file {h2}: {e}')
+        return ([], [], [])
+    r11 = []
+    q11 = []
+    v4 = []
+    t1 = []
+    l14 = [s1.root_node]
+    while l14:
+        q = l14.pop(0)
+        for b1 in q.children:
+            if b1.type == 'function_definition':
+                m14 = b1.child_by_field_name('name')
+                if m14:
+                    r11.append(m14.text.decode('utf-8'))
+            elif b1.type == 'class_definition':
+                n14 = b1.child_by_field_name('name')
+                if n14:
+                    q11.append(n14.text.decode('utf-8'))
+            elif b1.type == 'assignment' and q.type not in {'import_statement', 'import_from_statement'}:
+                m1 = b1.child_by_field_name('name')
+                if (m1 and m1.text.decode('utf-8').isupper() and (len(m1.text.decode('utf-8')) > 1)) and b1.named_child_count == 2:
+                    v4.append(m1.text.decode('utf-8'))
+            elif b1.type == 'import_statement':
+                t1.extend((o14.text.decode('utf-8') for o14 in b1.children if o14.type == 'dotted_name'))
+            elif b1.type == 'import_from_statement':
+                p14 = b1.child_by_field_name('module_name')
+                if p14:
+                    q14 = p14.text.decode('utf-8')
+                    for r14 in b1.children:
+                        if r14.type == 'import_spec':
+                            for s14 in r14.children:
+                                if s14.type == 'dotted_name':
+                                    t1.append(f"{q14}.{s14.text.decode('utf-8')}")
+                                elif s14.type == 'aliased_import':
+                                    t14 = s14.child_by_field_name('name')
+                                    if t14:
+                                        t1.append(f"{q14}.{t14.text.decode('utf-8')}")
+            if b1.children:
+                l14.append(b1)
+    return (r11, q11, v4, t1)
+def v8(u14, s3):
+    v14 = {}
+    w14 = {}
+    x14 = {}
+    z1 = set()
+    if not Path(s3).exists():
+        Path(s3).mkdir(parents=True)
+        print(f'Created output directory: {s3}')
+    y14 = os.path.join(s3, 'imports.py')
+    for h2 in get_pyfiles(u14):
+        r11, q11, v4, t1 = k14(h2)
+        if r11:
+            v14['relative_path'] = r11
+        if q11:
+            w14['relative_path'] = q11
+        if v4:
+            x14['relative_path'] = v4
+        z1.update(t1)
+    with Path(os.path.join(s3, 'functions.txt')).open('w', encoding='utf-8') as f:
+        for q6, z14 in v14.items():
+            f.write(f'# File: {q6}\n')
+            f.writelines((f'{s11}\n' for s11 in z14))
+            f.write('\n')
+    with Path(os.path.join(s3, 'classes.txt')).open('w', encoding='utf-8') as f:
+        for q6, cls in w14.items():
+            f.write(f'# File: {q6}\n')
+            f.writelines((f'{c}\n' for c in cls))
+            f.write('\n')
+    with Path(os.path.join(s3, 'constants.txt')).open('w', encoding='utf-8') as f:
+        for q6, u6 in x14.items():
+            f.write(f'# File: {q6}\n')
+            f.writelines((f'{s6}\n' for s6 in u6))
+            f.write('\n')
+    with Path(y14).open('w', encoding='utf-8') as f:
+        if z1:
+            f.write('# Extracted Imports\n\n')
+            f.writelines((f'import {imp}\n' for imp in sorted(z1)))
+        else:
+            f.write('# No imports found.\n')
+    print(f"\nExtraction complete. Results saved to '{s3}'.")
+    print(f"Imports saved to '{y14}'.")
+if __name__ == '__main__':
+    a15 = '.'
+    b15 = 'output'
+    if not Path(b15).exists():
+        Path(b15).mkdir(parents=True)
+    print('Starting code element extraction...')
+    v8(a15, b15)
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

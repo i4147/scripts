@@ -1,4 +1,3 @@
-
 import subprocess
 import sys
 import shutil
@@ -39,7 +38,6 @@ def get_clipboard_content() -> str:
 def detect_language(content: str) -> str:
     first_line = content.lstrip().split("\n")[0] if content else ""
 
-    
     if first_line.startswith("#!"):
         if "python" in first_line.lower():
             return "python"
@@ -76,15 +74,12 @@ def archive_existing_file(file_path: Path) -> None:
     if not file_path.exists():
         return
 
-    
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     archive_name = f"{file_path.stem}_{timestamp}{file_path.suffix}"
     archive_path = ARCHIVE_DIR / archive_name
 
-    
     counter = 1
     while archive_path.exists():
         archive_name = f"{file_path.stem}_{timestamp}_{counter}{file_path.suffix}"
@@ -103,7 +98,6 @@ def create_symlink(script_path: Path) -> None:
     if script_path.suffix:
         symlink_path = script_path.parent / script_path.stem
 
-        
         if symlink_path.exists() and symlink_path.is_symlink():
             try:
                 symlink_path.unlink()
@@ -128,7 +122,6 @@ def main() -> None:
     cwd = Path.cwd()
     is_script_dir = cwd in SCRIPT_DIRS or cwd.name == "bin"
 
-    
     if output_path.exists():
         archive_existing_file(output_path)
 

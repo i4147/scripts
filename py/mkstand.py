@@ -24,7 +24,7 @@ mimetypes.add_type("application/json", ".json")
 session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; StandaloneHTML/1.0)"})
 
-REMOTE_FILE_SIZE_LIMIT = 5 * 1024 * 1024  
+REMOTE_FILE_SIZE_LIMIT = 5 * 1024 * 1024
 
 
 _confirmed_urls = {}
@@ -51,7 +51,7 @@ def check_remote_file_size(url: str) -> Optional[int]:
         if content_length:
             return int(content_length)
     except Exception as e:
-        pass  
+        pass
     return None
 
 
@@ -74,7 +74,6 @@ def fetch(url, base_dir):
         url = "https:" + url
 
     if is_remote_url(url):
-        
         path = urlparse(url).path.lower()
         if any(
             path.endswith(ext)
@@ -92,12 +91,10 @@ def fetch(url, base_dir):
             print(f"  ⊘ skipped remote image: {url}")
             return None, None
 
-        
         file_size = check_remote_file_size(url)
         if file_size and file_size > REMOTE_FILE_SIZE_LIMIT:
             size_mb = file_size / (1024 * 1024)
 
-            
             if not ask_user_confirmation(url, size_mb):
                 print(f"  ⊘ skipped (user declined): {url}")
                 return None, None
@@ -223,7 +220,6 @@ def make_standalone(html_path):
 
     soup = BeautifulSoup(html_content, "html.parser")
 
-    
     for link in soup.find_all("link", rel=True):
         rels = link.get("rel", [])
         if isinstance(rels, str):
@@ -242,7 +238,6 @@ def make_standalone(html_path):
         style_tag.string = css_text
         link.replace_with(style_tag)
 
-    
     for link in soup.find_all("link", href=True):
         rels = link.get("rel", [])
         if isinstance(rels, str):
@@ -258,7 +253,6 @@ def make_standalone(html_path):
         if content is not None:
             link["href"] = to_data_uri(content, mime)
 
-    
     for script in soup.find_all("script", src=True):
         src = script.get("src")
         if not src or src.startswith("data:"):
@@ -272,7 +266,6 @@ def make_standalone(html_path):
         del script["src"]
         script.string = js_text
 
-    
     for img in soup.find_all("img", src=True):
         src = img.get("src")
         if not src or src.startswith("data:"):
@@ -284,11 +277,9 @@ def make_standalone(html_path):
         if content is not None:
             img["src"] = to_data_uri(content, mime)
 
-    
     for tag in soup.find_all(srcset=True):
         tag["srcset"] = process_srcset(tag["srcset"], base_dir)
 
-    
     for source in soup.find_all("source", src=True):
         src = source.get("src")
         if not src or src.startswith("data:"):
@@ -297,7 +288,6 @@ def make_standalone(html_path):
         if content is not None:
             source["src"] = to_data_uri(content, mime)
 
-    
     for video in soup.find_all("video", poster=True):
         poster = video.get("poster")
         if not poster or poster.startswith("data:"):
@@ -306,7 +296,6 @@ def make_standalone(html_path):
         if content is not None:
             video["poster"] = to_data_uri(content, mime)
 
-    
     for tag in soup.find_all(["audio", "video"], src=True):
         src = tag.get("src")
         if not src or src.startswith("data:"):
@@ -315,7 +304,6 @@ def make_standalone(html_path):
         if content is not None:
             tag["src"] = to_data_uri(content, mime)
 
-    
     for obj in soup.find_all("object", data=True):
         data = obj.get("data")
         if not data or data.startswith("data:"):
@@ -324,7 +312,6 @@ def make_standalone(html_path):
         if content is not None:
             obj["data"] = to_data_uri(content, mime)
 
-    
     for embed in soup.find_all("embed", src=True):
         src = embed.get("src")
         if not src or src.startswith("data:"):
@@ -333,7 +320,6 @@ def make_standalone(html_path):
         if content is not None:
             embed["src"] = to_data_uri(content, mime)
 
-    
     for inp in soup.find_all("input", src=True):
         src = inp.get("src")
         if not src or src.startswith("data:"):
@@ -342,7 +328,6 @@ def make_standalone(html_path):
         if content is not None:
             inp["src"] = to_data_uri(content, mime)
 
-    
     for track in soup.find_all("track", src=True):
         src = track.get("src")
         if not src or src.startswith("data:"):
@@ -351,7 +336,6 @@ def make_standalone(html_path):
         if content is not None:
             track["src"] = to_data_uri(content, mime)
 
-    
     for style in soup.find_all("style"):
         css = style.string
         if not css:
@@ -401,8 +385,6 @@ def main():
 
     print(f"Found {len(html_files)} HTML file(s) to process.\n")
 
-    
-    
     with Pool(8) as pool:
         results = pool.map(make_standalone, html_files)
 

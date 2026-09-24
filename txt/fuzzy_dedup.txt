@@ -1,0 +1,262 @@
+# filename: fsim.py
+import ssdeep
+def c(y='.'):t=[]
+    for m,_,h in E.walk(y):for f in h:j=E.path.join(m,f);t.append(j)
+    return t
+def b(r):p={}
+    for f in r:try:with v(f).open('rb') as D:w=D.read();p[f]=ssdeep.hash(w)
+        except Exception as e:print(f'Skipping {f}:{e}')
+    return p
+def a(p,l):n=set();o=[];r=list(p.keys())
+    for i,B in enumerate(r):if B in n:continue
+        s=[B];n.add(B)
+        for C in r[i+1:]:if C in n:continue
+            u=ssdeep.compare(p[B],p[C])
+            if u>=l:s.append(C);n.add(C)
+        if len(s)>1:o.append(s)
+    return o
+def d(o,g='output'):v(g).mkdir(exist_ok=True,parents=True)
+    for z,s in enumerate(o,start=1):k=E.path.join(g,f'group_{z}');v(k).mkdir(exist_ok=True,parents=True)
+        for f in s:try:q.move(f,k)
+            except Exception as e:print(f'Failed to copy {f}:{e}')
+def x():if len(A.argv)!=2:print(f'Usage:{A.argv[0]}<threshold>');A.exit(1)
+    try:l=int(A.argv[1])
+    except ValueError:print('Threshold must be an integer (0–100).');A.exit(1)
+    r=c('.');print(f'Found {len(r)} files. Computing hashes...');p=b(r);print('Comparing files...');o=a(p,l)
+    if not o:print('No similar files found.')
+    else:print(f'Found {len(o)} groups of similar files.');d(o);print("Copied groups to 'output' directory.")
+if __name__=='__main__':raise SystemExit(x())
+# filename: ssdip.py
+import ssdeep
+def a(o=70):n=t.cwd();h={};k=g(list);print(f'Scanning for fuzzy duplicates in:{n}')
+    for w in n.rglob('*'):if w.is_file() and (not w.is_symlink()):try:m=1048576
+                with t(w).open('rb') as f:u=f.read(m)
+                    if len(u)>50:l=ssdeep.hash(u);h[w]=l
+            except OSError as e:print(f'Error reading file {w}:{e}',v=x.stderr)
+            except Exception as e:print(f'Unexpected error processing {w}:{e}',v=x.stderr)
+    print(f'Calculated fuzzy hashes for {len(h)} files.');c=list(h.keys())
+    for i,q in enumerate(c):if not h.get(q):continue
+        for j in range(i+1,len(c)):r=c[j]
+            if not h.get(r):continue
+            b=ssdeep.compare(h[q],h[r])
+            if b>=o:print(f'Potential match:{q.relative_to(n)} and {r.relative_to(n)} (Score:{b})');k[q].append((r,b))
+    if not k:print('No significantly similar files found.')
+    else:print('\n---Fuzzy Duplicate Sets---')
+        for v,d in k.items():print(f'\nFile:{v.relative_to(n)}')
+            for p,s in d:print(f'-Similar:{p.relative_to(n)} (Score:{s})')
+if __name__=='__main__':a(o=50)
+# filename: ssim.py
+import ssdeep;import xxhash;from loguru import logger;from tqdm import tqdm;k={'.git','__pycache__','node_modules'}
+def q(L):try:H=L.read_bytes();return (str(L),xxhash.xxh64(H).hexdigest(),ssdeep.hash(H))
+    except Exception as e:logger.error(f'Error hashing {L}:{e}');return (str(L),None,None)
+class a:def __init__(self,N='.'):self.cwd=E(N);self.file_hashes={};self.duplicates={}
+    def n(self):for L in self.cwd.rglob('*'):if (L.is_file() and (not L.is_symlink())) and (not any((K in k for K in L.parts))):yield L
+    def j(self,B):print(f'Processing {len(B)} files...')
+        with F(processes=8) as M:d=[M.apply_async(q,(f,)) for f in B]
+            for o in tqdm(d,total=len(d),desc='Hashing'):L,U,T=o.get()
+                if not U or not T:continue
+                self.file_hashes[L]={'xxhash':U,'ssdeep':T};self.duplicates.setdefault(U,[]).append(L)
+        self.duplicates={h:D for h,D in self.duplicates.items() if len(D)>1}
+    def b(self,r):u={p for C in self.duplicates.values() for p in C};l=[p for p in self.file_hashes if p not in u];w=set();x=[]
+        for i,R in enumerate(tqdm(l,desc='Finding Similarities')):if R in w:continue
+            C=[R];w.add(R);Q=self.file_hashes[R]['ssdeep']
+            for S in l[i+1:]:if S in w:continue
+                if ssdeep.compare(Q,self.file_hashes[S]['ssdeep'])>=r:C.append(S);w.add(S)
+            if len(C)>1:x.append(C)
+        return x
+    def g(self,x,*,J,m):P=E(m);P.mkdir(exist_ok=True)
+        for O,C in enumerate(x,1):if J:for A in C[1:]:try:E(A).unlink();print(f'Deleted {A}')
+                    except Exception as e:logger.error(f'Failed to delete {A}:{e}')
+            else:v=P/f'similarity_group_{O}';v.mkdir(exist_ok=True)
+                for p in C:try:z.copy2(p,v/E(p).name);print(f'Copied {p} to {v}')
+                    except Exception as e:logger.error(f'Failed to copy {p}:{e}')
+    def c(self):if not self.duplicates:return
+        print('='*40);print('DUPLICATES (100%identical)')
+        for h,D in self.duplicates.items():print(f'\nHash:{h}')
+            for p in D:print(f'-{p}')
+        print('-'*40)
+def I():y=s.ArgumentParser(description='Detect duplicate and similar files');y.add_argument('threshold',type=int,default=70,help='Similarity threshold (0-100)');y.add_argument('-m','--move',action='store_true',help='Keep one file per similarity group and delete the rest');y.add_argument('-o','--output',default='output',help='Output directory (copy mode only)');G=y.parse_args();t=a();B=list(t.scan_files())
+    if not B:print('No files found.');return
+    t.process_files(B);x=t.find_similarity_groups(G.threshold)
+    if x:t.handle_groups(x,J=G.move,m=G.output);print(f'Processed {len(x)} similarity groups.')
+    else:print('No similar (non-identical) files found.')
+    t.print_duplicates()
+if __name__=='__main__':raise SystemExit(I())
+# filename: ssim2.py
+import ssdeep
+try:from tabulate import tabulate;h=True
+except ImportError:h=False
+try:from colorama import Fore,Style,init;init(autoreset=True);q=True
+except ImportError:q=False
+def g(S='.'):J=[]
+    for y,_,r in os.walk(S):for f in r:t=os.path.join(y,f);J.append(t)
+    return J
+def c(G):B={}
+    for f in G:try:with M(f).open('rb') as Z:O=Z.read();B[f]=ssdeep.hash(O)
+        except Exception as e:print(f'Skipping {f}:{e}')
+    return B
+def a(B,v):I={};z=set();A=[];G=list(B.keys())
+    for i,X in enumerate(G):if X in z:continue
+        H=[X];z.add(X)
+        for Y in G[i+1:]:if Y in z:continue
+            K=ssdeep.compare(B[X],B[Y])
+            if K>=v:I[K]=(X,Y);H.append(Y);z.add(Y)
+        if len(H)>1:A.append(H)
+    with M('similars.json').open('w',encoding='utf-8') as f:P.dump(I,f)
+    print('similars.json created.');return A
+def m(A,p='output'):M(p).mkdir(exist_ok=True,parents=True)
+    for U,H in enumerate(A,start=1):u=os.path.join(p,f'group_{U}');M(u).mkdir(exist_ok=True,parents=True)
+        for f in H:try:E.move(f,u)
+            except Exception as e:print(f'Failed to copy {f}:{e}')
+def k(A,format='csv',p='output'):M(p).mkdir(exist_ok=True,parents=True)
+    if format=='csv':o=os.path.join(p,'similar_report.csv')
+        with M(o).open('w',encoding='utf-8',newline='') as w:F=T.writer(w);F.writerow(['Group','File'])
+            for U,H in enumerate(A,start=1):for f in H:F.writerow([U,f])
+        print(f'CSV report written to {o}')
+    elif format=='json':o=os.path.join(p,'similar_report.json');O={f'group_{U}':H for U,H in enumerate(A,start=1)}
+        with M(o).open('w',encoding='utf-8') as jf:P.dump(O,jf,indent=2)
+        print(f'JSON report written to {o}')
+def b(K,v):if not q or K=='':return str(K)
+    if K==100 or K>=v+10:return Fore.GREEN+str(K)+Style.RESET_ALL
+    if K>=v:return Fore.YELLOW+str(K)+Style.RESET_ALL
+    return Fore.RED+str(K)+Style.RESET_ALL
+def j(B,v,p='output',D=False):M(p).mkdir(exist_ok=True,parents=True);G=list(B.keys());n=os.path.join(p,'similarity_matrix.csv');L=[['File',*G]]
+    with M(n).open('w',encoding='utf-8',newline='') as w:F=T.writer(w);F.writerow(['File',*G])
+        for X in G:V=[X]
+            for Y in G:if X==Y:K=100
+                else:K=ssdeep.compare(B[X],B[Y]);K=K if K>=v else ''
+                V.append(K)
+            F.writerow(V);L.append(V)
+    print(f'Threshold-filtered similarity matrix written to {n}')
+    if D:if h:d=[]
+            for V in L[1:]:l=[V[0]]+[b(N,v) for N in V[1:]];d.append(l)
+            print(tabulate(d,headers=L[0],tablefmt='grid'))
+        else:C='|'.join(L[0]);print(C);print('-'*len(C))
+            for V in L[1:]:s=[V[0]]+[b(N,v) for N in V[1:]];print('|'.join((str(x) if x else '.' for x in s)))
+def Q():if len(W.argv)<2:print(f'Usage:{W.argv[0]}<threshold>[copy|csv|json|matrix]');W.exit(1)
+    try:v=int(W.argv[1])
+    except ValueError:print('Threshold must be an integer (0–100).');W.exit(1)
+    R=W.argv[2] if len(W.argv)>2 else 'copy';G=g('.');print(f'Found {len(G)} files. Computing hashes...');B=c(G);print('Comparing files...');A=a(B,v)
+    if not A and R!='matrix':print('No similar files found.')
+    elif R=='copy':print(f'Found {len(A)} groups of similar files.');m(A);print("Copied groups to 'output' directory.")
+    elif R in {'csv','json'}:print(f'Found {len(A)} groups of similar files.');k(A,format=R)
+    elif R=='matrix':j(B,v,D=True)
+    else:print("Unknown mode. Use 'copy','csv','json',or 'matrix'.")
+if __name__=='__main__':raise SystemExit(Q())
+# filename: ssim3.py
+import ssdeep;import xxhash;from loguru import logger;from tqdm import tqdm;k={'.git','__pycache__','node_modules'};m=tuple[str,str|None,str|None]
+def s(O):try:J=O.read_bytes();return (str(O),xxhash.xxh64(J).hexdigest(),ssdeep.hash(J))
+    except Exception as exc:logger.warning(f'Failed to hash {O}:{S}');return (str(O),None,None)
+class a:def __init__(self,R='.'):self.cwd=G(R);self.file_hashes={};self.duplicates=l(list)
+    def q(self):for Q,K,D in self.cwd.walk():K[:]=[d for d in K if d not in k]
+            for N in D:O=Q/N
+                if not O.is_symlink():yield O
+    def j(self,D):print(f'Processing {len(D)} files...')
+        with H(processes=8) as P:e=[P.apply_async(s,(f,)) for f in D]
+            for r in tqdm(e,total=len(e),desc='Hashing'):O,Z,Y=r.get()
+                if not Z or not Y:continue
+                self.file_hashes[O]={'xxhash':Z,'ssdeep':Y};self.duplicates[Z].append(O)
+        self.duplicates=l(list,{h:F for h,F in self.duplicates.items() if len(F)>1})
+    def b(self,t):w={p for E in self.duplicates.values() for p in E};n=[p for p in self.file_hashes if p not in w];y=set();z=[]
+        for i,W in enumerate(tqdm(n,desc='Finding Similarities')):if W in y:continue
+            E=[W];y.add(W);V=self.file_hashes[W]['ssdeep']
+            for X in n[i+1:]:if X in y:continue
+                if ssdeep.compare(V,self.file_hashes[X]['ssdeep'])>=t:E.append(X);y.add(X)
+            if len(E)>1:z.append(E)
+        return z
+    def g(self,z,*,M,o):U=G(o);U.mkdir(exist_ok=True)
+        for T,E in enumerate(z,1):if M:for C in E[1:]:try:G(C).unlink();print(f'Deleted {C}')
+                    except Exception as exc:logger.error(f'Failed to delete {C}:{S}')
+            else:x=U/f'similarity_group_{T}';x.mkdir(exist_ok=True)
+                for p in E:try:B.copy2(p,x/G(p).name)
+                    except Exception as exc:logger.error(f'Failed to copy {p}:{S}')
+    def c(self):if not self.duplicates:return
+        print('='*40);print('DUPLICATES (100%identical)')
+        for h,F in self.duplicates.items():print(f'Hash:{h}')
+            for p in F:print(f'-{p}')
+        print('-'*40)
+def L():A=u.ArgumentParser(description='Detect duplicate and similar files');A.add_argument('threshold',type=int,help='Similarity threshold (0-100)');A.add_argument('-m','--move',action='store_true',help='Keep one file per similarity group and delete the rest');A.add_argument('-o','--output',default='output',help='Output directory (copy mode only)');I=A.parse_args();v=a();D=list(v.scan_files())
+    if not D:print('No files found.');return
+    v.process_files(D);z=v.find_similarity_groups(I.threshold)
+    if z:v.handle_groups(z,M=I.move,o=I.output);print(f'Processed {len(z)} similarity groups.')
+    else:print('No similar (non-identical) files found.')
+    v.print_duplicates()
+if __name__=='__main__':raise SystemExit(L())
+# filename: ssimove.py
+import ssdeep;z=M.cwd();y=z/'output';a=60;n=2
+def b(N):try:return ssdeep.hash_from_file(str(N))
+    except ssdeep.Error as e:print(f'Error calculating ssdeep hash for {N}:{e}');return ''
+    except Exception as e:print(f'Unexpected error for {N}:{e}');return ''
+def k(E,D,d,o):D.mkdir(parents=True,exist_ok=True);w={}
+    for N in E.rglob('*'):if N.is_file() and (not N.is_symlink()):A=b(N)
+            if A:w[N]=A
+    if not w:print('No files found or no hashes could be generated.');return
+    p={};m=set();L=list(w.keys());H=len(L)
+    for i in range(H):t=L[i]
+        if t in m:continue
+        u=w[t];q=[t]
+        for j in range(i+1,H):B=L[j]
+            if B in m:continue
+            C=w[B]
+            try:F=ssdeep.compare(u,C)
+                if F>=d:print(f'-Found similarity ({F}/{u} vs {C}->{B})');q.append(B)
+            except ssdeep.Error as e:print(f'Error comparing hashes for {t} and {B}:{e}')
+            except Exception as e:print(f'Unexpected error comparing hashes for {t} and {B}:{e}')
+        if len(q)>=o:m.update(q);h=q[0];p[h]=q;print(f'->Added group (starting with {h.name}) with {len(q)} files.')
+    print('\n---Moving Similar Files---');l=0;s=0;r=set();c=[]
+    for I,K in p.items():x=[f for f in K if f not in m or f==I]
+        if len(x)>=o:c.append(x);r.update(x)
+    m.update(r)
+    for K in c:s+=1;g=D/f'group_{s:03d}';g.mkdir(parents=True,exist_ok=True);print(f'Creating group directory:{g}')
+        for v in K:try:G=g/v.name
+                if G.exists():print(f'-Warning:Destination file already exists,skipping:{G}');continue
+                J.move(str(v),str(G));print(f'-Moved:{v.name} to {g.name}/');l+=1
+            except FileNotFoundError:print(f'-Error:File not found during move (might have been moved already or deleted):{v}')
+            except Exception as e:print(f'-Error moving {v.name}:{e}')
+    print('\n---Summary---')
+    if s==0:print('No groups of similar files found that met the criteria.')
+    else:print(f'Moved {l} files into {s} groups.');print(f'Similar files have been moved to:{D}')
+if __name__=='__main__':if M.cwd()==z:print('INFO:Processing files in the current directory.')
+    else:print(f'INFO:Processing files in:{z}')
+    if z.resolve()==y.resolve():print('ERROR:SEARCH_DIR and OUTPUT_DIR cannot be the same. Please configure them differently.')
+    else:k(E=z,D=y,d=a,o=n)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

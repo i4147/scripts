@@ -1,4 +1,3 @@
-
 import tarfile
 import shutil
 from pathlib import Path
@@ -18,16 +17,13 @@ def compress_subdir(subdir: Path) -> tuple[Path, bool, str]:
     archive_path = subdir.with_suffix(subdir.suffix + ".tar.xz")
 
     try:
-        
         with lzma.LZMAFile(archive_path, mode="wb", preset=9) as lzma_file:
             with tarfile.open(fileobj=lzma_file, mode="w") as tar:
                 tar.add(subdir, arcname=subdir.name)
 
-        
         if not archive_path.is_file() or archive_path.stat().st_size == 0:
             return (subdir, False, f"Archive {archive_path.name} is missing or empty")
 
-        
         shutil.rmtree(subdir)
         return (subdir, True, f"Compressed {subdir.name} -> {archive_path.name}")
 
@@ -40,7 +36,6 @@ def compress_subdir(subdir: Path) -> tuple[Path, bool, str]:
 def main() -> None:
     cwd = Path.cwd()
 
-    
     subdirs = sorted(
         [entry for entry in cwd.iterdir() if entry.is_dir()],
         key=lambda p: p.name.lower(),
@@ -55,14 +50,11 @@ def main() -> None:
 
     results = []
     with Pool(processes=WORKERS) as pool:
-        
         async_results = [pool.apply_async(compress_subdir, (subdir,)) for subdir in subdirs]
 
-        
         for async_result in async_results:
             results.append(async_result.get())
 
-    
     successes = failures = 0
     for subdir, success, message in results:
         print(message)

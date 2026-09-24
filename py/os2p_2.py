@@ -1,4 +1,3 @@
-
 import ast
 import sys
 from pathlib import Path
@@ -11,7 +10,6 @@ from termcolor import cprint
 
 
 class PathlibTransformer(ast.NodeTransformer):
-
     def __init__(self, file_path: Path) -> None:
         self.file_path = file_path
         self.needs_path_import = False
@@ -33,13 +31,11 @@ class PathlibTransformer(ast.NodeTransformer):
 
     def visit_Call(self, node: ast.Call) -> ast.AST:
 
-        
         if self._is_os_path_attr(node, "join"):
             self.infos.append(f"os.path.join -> Path / operator")
             new_node = self._transform_join(node)
             return new_node if new_node else self.generic_visit(node)
 
-        
         if self._is_os_path_attr(node, "dirname"):
             self.infos.append(f"os.path.dirname -> Path.parent")
             new_node = ast.Call(
@@ -49,7 +45,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "basename"):
             self.infos.append(f"os.path.basename -> Path.name")
             new_node = ast.Call(
@@ -59,10 +54,9 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "splitext"):
             self.infos.append(f"os.path.splitext -> Path.stem/.suffix")
-            
+
             path_var = self._ensure_path(node.args[0])
             new_node = ast.Tuple(
                 elts=[
@@ -73,7 +67,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "exists"):
             self.infos.append(f"os.path.exists -> Path.exists()")
             new_node = ast.Call(
@@ -83,7 +76,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "isfile"):
             self.infos.append(f"os.path.isfile -> Path.is_file()")
             new_node = ast.Call(
@@ -93,7 +85,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "isdir"):
             self.infos.append(f"os.path.isdir -> Path.is_dir()")
             new_node = ast.Call(
@@ -103,7 +94,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_path_attr(node, "abspath"):
             self.infos.append(f"os.path.abspath -> Path.resolve()")
             new_node = ast.Call(
@@ -117,7 +107,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_func(node, "remove"):
             self.infos.append(f"os.remove -> Path.unlink()")
             new_node = ast.Call(
@@ -127,12 +116,10 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_func(node, "listdir"):
             self.warnings.append(f"os.listdir requires manual review - consider Path.iterdir() or Path.glob('*')")
             return self.generic_visit(node)
 
-        
         if self._is_os_func(node, "makedirs"):
             self.infos.append(f"os.makedirs -> Path.mkdir(parents=True)")
             new_node = ast.Call(
@@ -145,7 +132,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_func(node, "mkdir"):
             self.infos.append(f"os.mkdir -> Path.mkdir()")
             new_node = ast.Call(
@@ -155,7 +141,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_func(node, "rename"):
             self.infos.append(f"os.rename -> Path.rename()")
             new_node = ast.Call(
@@ -165,7 +150,6 @@ class PathlibTransformer(ast.NodeTransformer):
             )
             return ast.copy_location(new_node, node)
 
-        
         if self._is_os_func(node, "getcwd"):
             self.infos.append(f"os.getcwd -> Path.cwd()")
             new_node = ast.Call(
@@ -180,7 +164,6 @@ class PathlibTransformer(ast.NodeTransformer):
     def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
         if isinstance(node.value, ast.Name) and node.value.id == "os":
             if node.attr == "path":
-                
                 return node
             elif node.attr in ["remove", "rename", "mkdir", "listdir"]:
                 self.warnings.append(f"Direct os.{node.attr} reference found - may need manual refactoring")
@@ -209,14 +192,13 @@ class PathlibTransformer(ast.NodeTransformer):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "Path":
                 return node
-        
+
         return ast.Call(func=ast.Name(id="Path", ctx=ast.Load()), args=[node], keywords=[])
 
     def _transform_join(self, node: ast.Call) -> Optional[ast.AST]:
         if not node.args:
             return None
 
-        
         result = self._ensure_path(node.args[0])
         for arg in node.args[1:]:
             result = ast.BinOp(left=result, op=ast.Div(), right=arg)
@@ -234,17 +216,14 @@ def process_file(file_path: Path) -> Tuple[Optional[str], bool, List[str], List[
         new_tree = transformer.visit(tree)
         ast.fix_missing_locations(new_tree)
 
-        
         if transformer.needs_path_import:
             path_import = ast.ImportFrom(module="pathlib", names=[ast.alias(name="Path")], level=0)
             new_tree.body.insert(0, path_import)
             transformer.infos.append("Added 'from pathlib import Path'")
 
-        
         new_content = ast.unparse(new_tree)
-        ast.parse(new_content)  
+        ast.parse(new_content)
 
-        
         for info in transformer.infos:
             cprint(f"  ℹ️ {info}", "cyan", attrs=["dark"])
         for warning in transformer.warnings:
@@ -275,16 +254,13 @@ def main() -> int:
     root_dir = Path.cwd()
     before_size = gsz(root_dir)
 
-    
     args = sys.argv[1:]
     dry_run = "--dry-run" in args
     verbose = "--verbose" in args
     no_backup = "--no-backup" in args
 
-    
     paths = [arg for arg in args if not arg.startswith("--")]
 
-    
     files: List[Path] = []
     if paths:
         for path_str in paths:
@@ -296,7 +272,6 @@ def main() -> int:
     else:
         files = get_files(root_dir)
 
-    
     python_files = [f for f in files if f.suffix == ".py"]
 
     if not python_files:
@@ -307,7 +282,6 @@ def main() -> int:
     if dry_run:
         cprint("DRY RUN - No files will be modified", "yellow")
 
-    
     results = {}
     total_warnings = 0
     total_changes = 0
@@ -326,7 +300,6 @@ def main() -> int:
                 cprint(f"✗ Failed to process {file_path}: {e}", "red")
                 results[file_path] = (None, False, [], [])
 
-    
     modified_count = 0
     for file_path, (new_content, success, warnings, infos) in results.items():
         if success and new_content and (infos or warnings):
@@ -339,7 +312,6 @@ def main() -> int:
             else:
                 cprint(f"  🔍 Would modify: {file_path}", "yellow")
 
-    
     after_size = gsz(root_dir)
     size_diff = before_size - after_size
 

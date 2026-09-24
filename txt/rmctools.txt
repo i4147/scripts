@@ -1,0 +1,1188 @@
+# --- File: aremci.py ---
+import ast
+import shutil
+from collections.abc import Sequence
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import libcst as cst
+from dh import get_pyfiles
+from loguru import logger
+a = 8
+class b(cst.CSTTransformer):
+    def c(self, d, e):
+        return cst.RemovalSentinel.REMOVE
+    @staticmethod
+    def f(g):
+        if not g:
+            return tuple(g)
+        h = g[0]
+        if isinstance(h, cst.SimpleStatementLine) and len(h.body) == 1 and isinstance(h.body[0], cst.Expr) and isinstance(h.body[0].value, cst.SimpleString):
+            return tuple(g[1:])
+        return tuple(g)
+    def i(self, j):
+        if isinstance(j, cst.IndentedBlock):
+            k = self._strip_leading_docstring(j.body)
+            if not k:
+                k = (cst.SimpleStatementLine(body=[cst.Pass()]),)
+            return j.with_changes(body=k)
+        if isinstance(j, cst.SimpleStatementSuite):
+            k = self._strip_leading_docstring(j.body)
+            if not k:
+                k = (cst.Pass(),)
+            return j.with_changes(body=k)
+        return j
+    def l(self, d, e):
+        k = self._strip_leading_docstring(e.body)
+        return e.with_changes(body=k)
+    def m(self, d, e):
+        return e.with_changes(body=self._strip_suite(e.body))
+    def n(self, d, e):
+        return e.with_changes(body=self._strip_suite(e.body))
+def o(p):
+    q = Path(p)
+    r = q.with_suffix(q.suffix + '.bak')
+    try:
+        s = q.read_text(encoding='utf-8')
+    except Exception as exc:
+        logger.error(f'Error reading file {q}: {exc}')
+        return False
+    try:
+        ast.parse(s, filename=str(q))
+    except SyntaxError as exc:
+        logger.warning(f'Original code has syntax error: {q} - {exc}. Skipping.')
+        return False
+    try:
+        t = cst.parse_module(s)
+    except cst.ParserSyntaxError as exc:
+        logger.warning(f'libcst failed to parse {q}: {exc}. Skipping.')
+        return False
+    u = b()
+    v = t.visit(u)
+    w = v.code
+    if w == s:
+        print(f'No comments or docstrings to strip in {q}')
+        return False
+    try:
+        ast.parse(w, filename=str(q))
+    except SyntaxError as exc:
+        logger.warning(f'Syntax error after stripping comments/docstrings from {q}. Reverting. ({exc})')
+        return False
+    try:
+        shutil.copy2(q, r)
+        print(f'Backup created: {r}')
+    except Exception as exc:
+        logger.error(f'Error creating backup for {q}: {exc}')
+        return False
+    try:
+        q.write_text(w, encoding='utf-8')
+        print(f'Successfully stripped comments/docstrings from {q}')
+        return True
+    except Exception as exc:
+        logger.error(f'Error writing cleaned file {q}: {exc}')
+        try:
+            shutil.move(str(r), str(q))
+            print(f'Restored original content from backup for {q}')
+        except Exception as restore_exc:
+            logger.critical(f'Failed to write cleaned file and restore backup for {q}: {restore_exc}')
+        return False
+def x(y):
+    z = list(get_pyfiles(y))
+    print(f'Found {len(z)} Python files to process.')
+    if not z:
+        print('Nothing to do.')
+        return
+    a1 = 0
+    b1 = sorted(z)
+    with Pool(processes=a) as c1:
+        d1 = [c1.apply_async(o, (str(q),)) for q in b1]
+        for q, e1 in zip(b1, d1):
+            try:
+                if e1.get():
+                    a1 += 1
+            except Exception as exc:
+                logger.error(f'Error processing future for {q}: {exc}')
+    print(f'Finished processing. Successfully stripped comments/docstrings from {a1}/{len(z)} files.')
+def f1():
+    g1 = '.'
+    print(f'Starting comment and docstring stripping in directory: {Path(g1).resolve()}')
+    x(g1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: clean_py.py ---
+import argparse
+import ast
+import multiprocessing as mp
+import shutil
+import traceback
+from pathlib import Path
+class h1(ast.NodeVisitor):
+    def __init__(self):
+        self.func_defs = set()
+        self.class_defs = set()
+        self.var_defs = set()
+        self.var_uses = set()
+        self.func_calls = set()
+        self.class_uses = set()
+        self.imports = {}
+        self.import_uses = set()
+    def i1(self, j1):
+        self.func_defs.add(j1.name)
+        self.generic_visit(j1)
+    def k1(self, j1):
+        self.class_defs.add(j1.name)
+        self.generic_visit(j1)
+    def l1(self, j1):
+        if isinstance(j1.parent, ast.Module):
+            for m1 in j1.targets:
+                if isinstance(m1, ast.Name):
+                    self.var_defs.add(m1.id)
+        self.generic_visit(j1)
+    def n1(self, j1):
+        if isinstance(j1.ctx, ast.Load):
+            self.var_uses.add(j1.id)
+            self.func_calls.add(j1.id)
+            self.class_uses.add(j1.id)
+            self.import_uses.add(j1.id)
+        self.generic_visit(j1)
+    def o1(self, j1):
+        for p1 in j1.names:
+            self.imports[p1.asname or p1.name] = j1
+    def q1(self, j1):
+        for p1 in j1.names:
+            self.imports[p1.asname or p1.name] = j1
+def r1(s1):
+    for j1 in ast.walk(s1):
+        for t1 in ast.iter_child_nodes(j1):
+            t1.parent = j1
+def u1(v1):
+    try:
+        s1 = ast.parse(v1)
+    except SyntaxError:
+        return ({}, ['SyntaxError while parsing file'])
+    r1(s1)
+    w1 = h1()
+    w1.visit(s1)
+    x1 = {}
+    y1 = w1.func_defs - w1.func_calls
+    z1 = w1.class_defs - w1.class_uses
+    a2 = w1.var_defs - w1.var_uses
+    b2 = {c2: j1 for c2, j1 in w1.imports.items() if c2 not in w1.import_uses}
+    x1['functions'] = sorted(y1)
+    x1['classes'] = sorted(z1)
+    x1['variables'] = sorted(a2)
+    x1['imports'] = b2
+    return (x1, [])
+def d2(v1, x1):
+    s1 = ast.parse(v1)
+    r1(s1)
+    k = []
+    for j1 in s1.body:
+        if isinstance(j1, ast.FunctionDef) and j1.name in x1['functions']:
+            continue
+        if isinstance(j1, ast.ClassDef) and j1.name in x1['classes']:
+            continue
+        if isinstance(j1, ast.Assign) and isinstance(j1.parent, ast.Module):
+            e2 = [t.id for t in j1.targets if isinstance(t, ast.Name)]
+            if all((t in x1['variables'] for t in e2)):
+                continue
+        if isinstance(j1, (ast.Import, ast.ImportFrom)):
+            f2 = [p1.asname or p1.name for p1 in j1.names]
+            if all((n in x1['imports'] for n in f2)):
+                continue
+        k.append(j1)
+    s1.body = k
+    return ast.unparse(s1)
+def g2(h2, i2=False):
+    Path(h2)
+    j2 = []
+    h2 = Path(h2)
+    try:
+        v1 = h2.read_text(encoding='utf-8')
+    except Exception as e:
+        return (h2, {}, [f'Error reading file: {e}'])
+    x1, k2 = u1(v1)
+    j2.extend(k2)
+    l2 = not x1['functions'] and (not x1['classes']) and (not x1['variables']) and (not x1['imports'])
+    if l2:
+        return (h2, x1, j2)
+    try:
+        m2 = d2(v1, x1)
+    except Exception:
+        j2.append('Error rewriting file:\n' + traceback.format_exc())
+        return (h2, x1, j2)
+    if not i2:
+        r = h2.with_suffix(h2.suffix + '.bak')
+        shutil.copy2(h2, r)
+        h2.write_text(m2, encoding='utf-8')
+    return (h2, x1, j2)
+def n2(o2):
+    return [p for p in o2.rglob('*.py') if p.is_file()]
+def p2(q2):
+    return g2(*q2)
+def f1():
+    r2 = argparse.ArgumentParser(description='Remove unused functions, classes, variables, and imports.')
+    r2.add_argument('--dry-run', action='store_true', help='Show what would change without modifying files.')
+    r2.add_argument('--workers', type=int, default=mp.cpu_count(), help='Number of processes')
+    q2 = r2.parse_args()
+    o2 = Path.cwd()
+    s2 = n2(o2)
+    print(f'Scanning {len(s2)} Python files...')
+    with mp.Pool(q2.workers) as c1:
+        t2 = c1.map(p2, [(f, q2.dry_run) for f in s2])
+    print('\n=== RESULTS ===\n')
+    for h2, x1, j2 in t2:
+        if any(x1.values()):
+            if q2.dry_run:
+                print(f'[DRY-RUN] {h2}')
+            else:
+                print(f'Updated {h2} (backup created)')
+            if x1['functions']:
+                print('  Unused functions:', x1['functions'])
+            if x1['classes']:
+                print('  Unused classes:', x1['classes'])
+            if x1['variables']:
+                print('  Unused variables:', x1['variables'])
+            if x1['imports']:
+                print('  Unused imports:', list(x1['imports'].keys()))
+        for err in j2:
+            print(f'[ERROR] {h2}: {err}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: cleanpy2.py ---
+import argparse
+import multiprocessing
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+import libcst as cst
+from loguru import logger
+u2 = 8
+v2 = ('#!', '# fmt:', '# type:')
+w2 = ('# fmt:', '# type:')
+class x2(cst.CSTTransformer):
+    def __init__(self):
+        super().__init__()
+        self.comments_removed = 0
+        self.docstrings_removed = 0
+    def l(self, d, e):
+        return e
+    def m(self, d, e):
+        return self._strip_docstring(e)
+    def n(self, d, e):
+        return self._strip_docstring(e)
+    def y2(self, j1):
+        g = j1.body.body
+        if not g:
+            return j1
+        z2 = g[0]
+        if isinstance(z2, cst.SimpleStatementLine) and len(z2.body) == 1 and isinstance(z2.body[0], cst.Expr):
+            a3 = z2.body[0].value
+            if isinstance(a3, (cst.SimpleString, cst.ConcatenatedString)):
+                self.docstrings_removed += 1
+                b3 = list(g[1:])
+                if b3:
+                    k = j1.body.with_changes(body=b3)
+                else:
+                    k = j1.body.with_changes(body=[cst.SimpleStatementLine(body=[cst.Pass()])])
+                return j1.with_changes(body=k)
+        return j1
+    def c(self, d, e):
+        c3 = d.value.strip()
+        if c3.startswith(v2) or any((d3 in c3 for d3 in w2)):
+            return e
+        self.comments_removed += 1
+        return cst.RemoveFromParent()
+def g2(h2):
+    try:
+        e3 = h2.read_text(encoding='utf-8')
+        t = cst.parse_module(e3)
+        u = x2()
+        f3 = t.visit(u)
+        m2 = f3.code
+        if m2 == e3:
+            return (h2, 0, 0, True)
+        h2.write_text(m2, encoding='utf-8', newline='\n')
+        return (h2, u.comments_removed, u.docstrings_removed, True)
+    except Exception as exc:
+        logger.error(f'Error processing {h2}: {exc}')
+        return (h2, 0, 0, False)
+def g3(h3):
+    s2 = []
+    for raw in h3:
+        h2 = Path(raw).resolve()
+        if h2.is_file() and h2.suffix == '.py':
+            s2.append(h2)
+        elif h2.is_dir():
+            s2.extend(h2.rglob('*.py'))
+        else:
+            logger.warning(f'Skipping non-existent path: {h2}')
+    return sorted(set(s2))
+def i3():
+    r2 = argparse.ArgumentParser(description='Remove comments & docstrings from Python files (preserves shebangs, # fmt, # type, module docstrings)')
+    r2.add_argument('paths', nargs='*', default=['.'], help='Files or directories to process (default: current directory)')
+    return r2
+def f1():
+    r2 = i3()
+    q2 = r2.parse_args()
+    s2 = g3(q2.paths)
+    if not s2:
+        print('No Python files found.')
+        return 0
+    print(f'Found {len(s2)} Python files to process...')
+    j3 = 0
+    k3 = 0
+    l3 = 0
+    with Pool(processes=u2) as c1:
+        d1 = [c1.apply_async(g2, (f,)) for f in s2]
+        for m3 in d1:
+            h2, n3, o3, p3 = m3.get()
+            l3 += 1
+            if not p3:
+                continue
+            j3 += n3
+            k3 += o3
+            if n3 or o3:
+                logger.success(f'{h2.name:<30} removed {n3:>2} comments, {o3:>2} docstrings')
+            else:
+                print(f'{h2.name:<30} (no changes)')
+    print('=' * 40)
+    logger.success('Finished!')
+    print(f'Files processed   : {l3}')
+    print(f'Comments removed  : {j3}')
+    print(f'Docstrings removed: {k3}')
+    print('-' * 40)
+    return 0
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
+    raise SystemExit(f1())
+
+# --- File: cormc.py ---
+import ast
+import concurrent.futures
+import multiprocessing
+import sys
+import tokenize
+from pathlib import Path
+class q3(ast.NodeTransformer):
+    def r3(self, j1):
+        g = getattr(j1, 'body', None)
+        if not g:
+            return j1
+        h = g[0]
+        if isinstance(h, ast.Expr) and isinstance(getattr(h, 'value', None), ast.Constant) and isinstance(h.value.value, str):
+            g.pop(0)
+            if not g:
+                g.append(ast.Pass())
+        return j1
+    def i1(self, j1):
+        self.generic_visit(j1)
+        return self._maybe_strip_first_docstring(j1)
+    def s3(self, j1):
+        self.generic_visit(j1)
+        return self._maybe_strip_first_docstring(j1)
+    def k1(self, j1):
+        self.generic_visit(j1)
+        return self._maybe_strip_first_docstring(j1)
+def t3(v1):
+    u3 = v1.splitlines(keepends=True)
+    v3 = []
+    i = 0
+    for i, w3 in enumerate(u3):
+        x3 = w3.strip()
+        if i == 0 and w3.startswith('#!'):
+            v3.append(w3)
+            continue
+        if x3 == '':
+            if v3:
+                v3.append(w3)
+            else:
+                continue
+            continue
+        if x3.startswith('#'):
+            low = x3.lower()
+            if 'coding' in low or 'encoding' in low or 'type:' in low or low.startswith(('# type', '# fmt')) or ('fmt:' in low):
+                v3.append(w3)
+                continue
+            continue
+        break
+    y3 = ''.join(v3)
+    z3 = ''.join(u3[i:]) if i < len(u3) else ''
+    return (y3, z3)
+def g2(h2):
+    try:
+        with tokenize.open(h2) as f:
+            a4 = f.read()
+            b4 = f.encoding
+    except Exception as exc:
+        return (h2, f'read-error: {exc}')
+    if not a4.strip():
+        return (h2, None)
+    try:
+        s1 = ast.parse(a4)
+    except SyntaxError as exc:
+        return (h2, f'syntax-error-original: {exc}')
+    ast.get_docstring(s1, clean=False)
+    c4 = q3()
+    d4 = c4.visit(s1)
+    ast.fix_missing_locations(d4)
+    try:
+        e4 = ast.unparse(d4)
+    except Exception as exc:
+        return (h2, f'unparse-failed: {exc}')
+    y3, _ = t3(a4)
+    if y3:
+        if not y3.endswith('\n'):
+            y3 = y3 + '\n'
+        m2 = y3 + e4
+    else:
+        m2 = e4
+    if not m2.endswith('\n'):
+        m2 = m2 + '\n'
+    try:
+        ast.parse(m2)
+    except SyntaxError as exc:
+        return (h2, f'syntax-error-transformed: {exc}')
+    if m2 == a4:
+        return (h2, None)
+    try:
+        with open(h2, 'w', encoding=b4, newline='\n') as f:
+            f.write(m2)
+    except Exception as exc:
+        return (h2, f'write-error: {exc}')
+    return (h2, None)
+def f4(p):
+    g4 = {h4.lower() for h4 in p.parts}
+    i4 = {'.git', '__pycache__', 'venv', '.venv', 'env', '.env', 'node_modules'}
+    return bool(g4 & i4)
+def j4(o2):
+    k4 = []
+    for p in o2.rglob('*.py'):
+        if f4(p):
+            continue
+        if p.is_symlink():
+            continue
+        k4.append(p)
+    return k4
+def f1():
+    o2 = Path.cwd()
+    k4 = j4(o2)
+    if not k4:
+        print('No .py files found.')
+        return 0
+    l4 = []
+    j2 = []
+    m4 = max(1, min(32, multiprocessing.cpu_count()))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=m4) as exc:
+        n4 = {exc.submit(g2, p): p for p in k4}
+        for fut in concurrent.futures.as_completed(n4):
+            p = n4[fut]
+            try:
+                h2, err = fut.result()
+            except Exception as exc:
+                j2.append((p, f'worker-exception: {exc}'))
+            else:
+                if err is None:
+                    pass
+                if err:
+                    j2.append((h2, err))
+    l4 = []
+    j2 = []
+    for p in k4:
+        h2, err = o4(p)
+        if err:
+            j2.append((h2, err))
+        elif h2 is not None:
+            l4.append(h2)
+    if l4:
+        print('Files changed:')
+        for p in l4:
+            print(f'  {p}')
+    else:
+        print('No files were changed.')
+    if j2:
+        print('\nFiles with errors (left unchanged):')
+        for p, e in j2:
+            print(f'  {p}: {e}')
+        return 2
+    return 0
+def o4(h2):
+    try:
+        with tokenize.open(h2) as f:
+            a4 = f.read()
+    except Exception as exc:
+        return (h2, f'read-error: {exc}')
+    if not a4.strip():
+        return (None, None)
+    try:
+        s1 = ast.parse(a4)
+    except SyntaxError as exc:
+        return (h2, f'syntax-error-original: {exc}')
+    c4 = q3()
+    d4 = c4.visit(s1)
+    ast.fix_missing_locations(d4)
+    try:
+        e4 = ast.unparse(d4)
+    except Exception as exc:
+        return (h2, f'unparse-failed: {exc}')
+    y3, _ = t3(a4)
+    if y3:
+        if not y3.endswith('\n'):
+            y3 = y3 + '\n'
+        m2 = y3 + e4
+    else:
+        m2 = e4
+    if not m2.endswith('\n'):
+        m2 = m2 + '\n'
+    try:
+        ast.parse(m2)
+    except SyntaxError as exc:
+        return (h2, f'syntax-error-transformed: {exc}')
+    if m2 != a4:
+        return (h2, None)
+    return (None, None)
+if __name__ == '__main__':
+    p4 = f1()
+    sys.exit(p4)
+
+# --- File: grmc.py ---
+import argparse
+import ast
+import multiprocessing as mp
+from pathlib import Path
+import libcst as cst
+from libcst import matchers as m
+class q4(cst.CSTTransformer):
+    def __init__(self):
+        super().__init__()
+        self.comments_removed = 0
+        self.docstrings_removed = 0
+    def r4(self, j1):
+        return True
+    def c(self, d, e):
+        self.comments_removed += 1
+        return cst.RemoveFromParent()
+    def s4(self, t4):
+        if not t4.body:
+            return t4
+        z2 = t4.body[0]
+        if m.matches(z2, m.SimpleStatementLine(body=[m.Expr(value=m.SimpleString())])):
+            self.docstrings_removed += 1
+            u4 = list(t4.body[1:])
+            if not u4:
+                u4 = [cst.SimpleStatementLine(body=[cst.Pass()])]
+            return t4.with_changes(body=u4)
+        return t4
+    def m(self, d, e):
+        if isinstance(e.body, cst.IndentedBlock):
+            k = self._process_body_docstring(e.body)
+            return e.with_changes(body=k)
+        return e
+    def n(self, d, e):
+        if isinstance(e.body, cst.IndentedBlock):
+            k = self._process_body_docstring(e.body)
+            return e.with_changes(body=k)
+        return e
+def g2(h2):
+    try:
+        v4 = h2.read_text(encoding='utf-8')
+        try:
+            w4 = cst.parse_module(v4)
+        except Exception as e:
+            return (h2, 0, 0, f'CST Parse Error: {e}')
+        u3 = v4.splitlines(keepends=True)
+        x4 = len(u3) > 0 and u3[0].startswith('#!')
+        y4 = u3[0] if x4 else ''
+        u = q4()
+        z4 = w4.visit(u)
+        a5 = z4.code
+        if x4 and (not a5.startswith('#!')):
+            a5 = y4 + a5
+        b5 = u.comments_removed
+        c5 = u.docstrings_removed
+        if x4 and b5 > 0:
+            b5 -= 1
+        try:
+            ast.parse(a5)
+        except SyntaxError as e:
+            return (h2, 0, 0, f'Resulting code failed AST validation: {e}')
+        if b5 > 0 or c5 > 0:
+            h2.write_text(a5, encoding='utf-8')
+        return (h2, b5, c5, None)
+    except Exception as e:
+        return (h2, 0, 0, f'Unexpected error: {e}')
+def d5(e5):
+    k4 = set()
+    if not e5:
+        return list(Path('.').rglob('*.py'))
+    for f5 in e5:
+        p = Path(f5)
+        if p.is_file() and p.suffix == '.py':
+            k4.add(p)
+        elif p.is_dir():
+            k4.update(p.rglob('*.py'))
+    return sorted(k4)
+def f1():
+    r2 = argparse.ArgumentParser(description='Recursively strip comments/docstrings in-place while preserving code formatting.')
+    r2.add_argument('inputs', nargs='*', help='Files or directories to process')
+    q2 = r2.parse_args()
+    k4 = d5(q2.inputs)
+    if not k4:
+        print('No Python files found.')
+        return
+    print(f'Processing {len(k4)} Python file(s) across 8 processes using LibCST...\n')
+    j3, k3, g5, h5 = (0, 0, 0, 0)
+    with mp.Pool(processes=8) as c1:
+        d1 = [c1.apply_async(g2, args=(f,)) for f in k4]
+        for res in d1:
+            h2, b5, c5, i5 = res.get()
+            if i5:
+                h5 += 1
+                print(f'[ERROR] {h2}: {i5}')
+            elif b5 > 0 or c5 > 0:
+                g5 += 1
+                j3 += b5
+                k3 += c5
+                print(f'[UPDATED] {h2} -> Removed {b5} comment(s), {c5} docstring(s)')
+    print('\n' + '=' * 60)
+    print('Summary:')
+    print(f'  - Total files checked: {len(k4)}')
+    print(f'  - Files updated in-place: {g5}')
+    print(f'  - Total comments removed: {j3}')
+    print(f'  - Total docstrings removed: {k3}')
+    if h5 > 0:
+        print(f'  - Errors encountered: {h5}')
+if __name__ == '__main__':
+    f1()
+
+# --- File: jtc.py ---
+import ast
+from pathlib import Path
+from fastwalk import walk_files
+def g2(h2):
+    h2 = Path(h2)
+    try:
+        cmd = f'just-the-code -s --language=python {h2!s}'
+        ret, j5, k5 = run_command(cmd)
+        if ret == 0:
+            try:
+                ast.parse(j5)
+                h2.write_text(j5, encoding='utf-8')
+                print(f'{h2.name} updated.')
+                return True
+            except:
+                print('result code is not valid')
+                return False
+    except Exception as e:
+        print(f'Error processing {h2.name}: {e}')
+        return False
+def l5(o2):
+    k4 = []
+    for pth in walk_files(o2):
+        h2 = Path(pth)
+        if h2.suffix == '.py':
+            k4.append(h2)
+    return k4
+def f1():
+    cwd = Path.cwd()
+    k4 = l5(cwd)
+    for f in k4:
+        print(g2(f))
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: jtc2.py ---
+import ast
+from pathlib import Path
+from sys import argv
+from dh import runcmd
+if __name__ == '__main__':
+    h2 = Path(argv[1])
+    m5 = h2.read_text(encoding='utf-8')
+    if h2.suffix == '.rs':
+        cmd = f'just-the-code -s {h2!s}'
+    elif h2.suffix == '.py':
+        cmd = f'just-the-code -s --language=python {h2!s}'
+    ret, j5, err = runcmd(cmd, show_output=True)
+    if not ret and len(m5) != len(j5):
+        if h2.suffix == '.py':
+            try:
+                ast.parse(j5)
+                h2.write_text(j5, encoding='utf-8')
+            except:
+                print('error')
+        else:
+            h2.write_text(j5, encoding='utf-8')
+
+# --- File: pyjtc.py ---
+import argparse
+import re
+from pathlib import Path
+def n5(o5, p5, q5=False):
+    if p5 in {'c', 'cpp', 'h', 'hpp'}:
+        o5 = re.sub('//.*', '', o5)
+        o5 = re.sub('/\\*.*?\\*/', '', o5, flags=re.DOTALL)
+        if not q5:
+            o5 = re.sub('\\"[^\\"]*\\"', '', o5)
+            o5 = re.sub("'[^']*'", '', o5)
+    elif p5 == 'py':
+        o5 = re.sub('#.*', '', o5)
+        o5 = re.sub('\\"\\"\\"[\\s\\S]*?\\"\\"\\"', '', o5)
+        o5 = re.sub("'''[\\s\\S]*?'''", '', o5)
+        if not q5:
+            o5 = re.sub('\\"[^\\"]*\\"', '', o5)
+            o5 = re.sub("'[^']*'", '', o5)
+    elif p5 == 'sh':
+        o5 = re.sub('#.*', '', o5)
+        if not q5:
+            o5 = re.sub('\\"[^\\"]*\\"', '', o5)
+            o5 = re.sub("'[^']*'", '', o5)
+    return o5
+def g2(h2, r5=False, q5=False):
+    p = Path(h2)
+    ext = p.suffix[1:].lower()
+    if ext not in {'hpp', 'h', 'c', 'cpp', 'py', 'sh'}:
+        print(f'Unsupported file type: {ext}')
+        return
+    o5 = p.read_text(encoding='utf-8')
+    s5 = n5(o5, ext, q5)
+    if r5:
+        p.write_text(s5, encoding='utf-8')
+        print(f'File {h2} cleaned and saved in-place.')
+    else:
+        print(f'--- Cleaned {h2} ---\n{s5}\n')
+if __name__ == '__main__':
+    r2 = argparse.ArgumentParser(description='Remove comments and docstrings from code files, optionally keeping strings.')
+    r2.add_argument('files', metavar='FILE', type=str, nargs='+', help='Files to process')
+    r2.add_argument('-i', '--inplace', action='store_true', help='Edit files in-place')
+    r2.add_argument('-s', '--strings', action='store_true', help='Keep strings in the output')
+    q2 = r2.parse_args()
+    for h2 in q2.files:
+        g2(h2, inplace=q2.inplace, keep_strings=q2.strings)
+
+# --- File: rmco.py ---
+import argparse
+import ast
+import concurrent.futures
+import io
+import multiprocessing
+import sys
+import tokenize
+from pathlib import Path
+from typing import NamedTuple
+try:
+    import astor
+except Exception:
+    print("This script requires the 'astor' package. Install with: pip install astor", file=sys.stderr)
+    sys.exit(2)
+class t5(NamedTuple):
+    pass
+class q3(ast.NodeTransformer):
+    def __init__(self):
+        self.docstrings_removed = 0
+    def y2(self, j1):
+        g = getattr(j1, 'body', None)
+        if not g:
+            return j1
+        h = g[0]
+        if isinstance(h, ast.Expr) and isinstance(getattr(h, 'value', None), ast.Constant) and isinstance(h.value.value, str):
+            g.pop(0)
+            self.docstrings_removed += 1
+            if not g:
+                g.append(ast.Pass())
+        return j1
+    def u5(self, j1):
+        self.generic_visit(j1)
+        return self._strip_docstring(j1)
+    def i1(self, j1):
+        self.generic_visit(j1)
+        return self._strip_docstring(j1)
+    def s3(self, j1):
+        self.generic_visit(j1)
+        return self._strip_docstring(j1)
+    def k1(self, j1):
+        self.generic_visit(j1)
+        return self._strip_docstring(j1)
+def t3(v1):
+    u3 = v1.splitlines(keepends=True)
+    v3 = []
+    i = 0
+    for i, w3 in enumerate(u3):
+        x3 = w3.strip()
+        if i == 0 and w3.startswith('#!'):
+            v3.append(w3)
+            continue
+        if x3 == '':
+            if v3:
+                v3.append(w3)
+            continue
+        if x3.startswith('#'):
+            low = x3.lower()
+            if any((x in low for x in ('coding', 'encoding', 'type:', 'fmt:'))):
+                v3.append(w3)
+                continue
+            break
+        break
+    y3 = ''.join(v3)
+    z3 = ''.join(u3[i:]) if i < len(u3) else ''
+    return (y3, z3)
+def v5(v1):
+    u3 = v1.splitlines(keepends=True)
+    w5 = {}
+    x5 = {}
+    y5 = 0
+    sio = io.StringIO(v1)
+    try:
+        for tok in tokenize.generate_tokens(sio.readline):
+            if tok.type == tokenize.COMMENT:
+                z5 = tok.string
+                low = z5.lower()
+                row = tok.start[0]
+                col = tok.start[1]
+                if any((x in low for x in ('type:', 'fmt:', 'noqa'))):
+                    w5.setdefault(row, []).append(z5)
+                else:
+                    a6 = u3[row - 1][:col].rstrip()
+                    if not a6:
+                        x5.setdefault(row, set()).add(z5)
+                        y5 += 1
+    except tokenize.TokenError:
+        pass
+    return (w5, y5)
+def g2(h2):
+    try:
+        with tokenize.open(h2) as f:
+            a4 = f.read()
+            b4 = f.encoding
+    except Exception as exc:
+        return (str(h2), False, f'read-error: {exc}', t5(0, 0))
+    if not a4.strip():
+        return (str(h2), False, None, t5(0, 0))
+    y3, b6 = t3(a4)
+    c6, y5 = v5(a4)
+    try:
+        s1 = ast.parse(a4)
+    except SyntaxError as exc:
+        return (str(h2), False, f'syntax-error-original: {exc}', t5(0, 0))
+    c4 = q3()
+    d4 = c4.visit(s1)
+    ast.fix_missing_locations(d4)
+    try:
+        m2 = astor.to_source(d4)
+    except Exception as exc:
+        return (str(h2), False, f'unparse-failed: {exc}', t5(0, 0))
+    d6 = y3 + m2
+    d6 = f6(d6, c6)
+    d6 = d6.rstrip('\n') + '\n'
+    try:
+        ast.parse(d6)
+    except SyntaxError as exc:
+        return (str(h2), False, f'syntax-error-transformed: {exc}', t5(0, 0))
+    if d6 == a4:
+        return (str(h2), False, None, t5(0, 0))
+    try:
+        with open(h2, 'w', encoding=b4, newline='\n') as f:
+            f.write(d6)
+    except Exception as exc:
+        return (str(h2), False, f'write-error: {exc}', t5(0, 0))
+    e6 = t5(c4.docstrings_removed, y5)
+    return (str(h2), True, None, e6)
+def f6(m2, w5):
+    if not w5:
+        return m2
+    g6 = m2.splitlines()
+    h6 = len(g6)
+    i6 = set()
+    for j6 in sorted(w5.keys()):
+        k6 = j6 - 1
+        if 0 <= k6 < h6:
+            for l6 in w5[j6]:
+                w3 = g6[k6]
+                if l6 not in w3:
+                    if w3.rstrip():
+                        g6[k6] = w3 + '  ' + l6
+                    else:
+                        g6[k6] = l6
+                i6.add((j6, l6))
+    for j6 in sorted(w5.keys()):
+        for l6 in w5[j6]:
+            if (j6, l6) not in i6:
+                g6.append(l6)
+    m3 = '\n'.join(g6)
+    if m2.endswith('\n') and (not m3.endswith('\n')):
+        m3 += '\n'
+    return m3
+def f4(p):
+    g4 = {m6.lower() for m6 in p.parts}
+    i4 = {'.git', '__pycache__', '.venv', 'venv', 'node_modules', '.tox', 'build', 'dist'}
+    return bool(g4 & i4)
+def j4(h3):
+    k4 = []
+    for h2 in h3:
+        if h2.is_file():
+            if h2.suffix == '.py' and (not h2.is_symlink()):
+                k4.append(h2)
+        elif h2.is_dir():
+            for p in h2.rglob('*.py'):
+                if f4(p) or p.is_symlink():
+                    continue
+                k4.append(p)
+    return list(set(k4))
+def f1():
+    r2 = argparse.ArgumentParser(description='Strip docstrings and comments from Python files', prog='strip-py')
+    r2.add_argument('paths', nargs='*', type=Path, help='Files or directories to process (default: current directory)')
+    q2 = r2.parse_args()
+    if not q2.paths:
+        h3 = [Path.cwd()]
+    else:
+        h3 = q2.paths
+    k4 = j4(h3)
+    if not k4:
+        print('No .py files found.')
+        return 0
+    print(f'Processing {len(k4)} file(s)...\n')
+    l4 = []
+    j2 = []
+    m4 = max(1, min(32, multiprocessing.cpu_count()))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=m4) as n6:
+        n4 = {n6.submit(g2, p): p for p in k4}
+        for fut in concurrent.futures.as_completed(n4):
+            try:
+                o6, p6, err, e6 = fut.result()
+                if err:
+                    j2.append((o6, err))
+                elif p6:
+                    l4.append((o6, e6))
+            except Exception as exc:
+                p = n4[fut]
+                j2.append((str(p), f'worker-exception: {exc}'))
+    if l4:
+        k3 = 0
+        j3 = 0
+        print('Modified files:')
+        for p in sorted(l4, key=lambda x: x[0]):
+            o6, e6 = p
+            k3 += e6.docstrings_removed
+            j3 += e6.comments_removed
+            print(f'  {Path(o6).name}: {e6.docstrings_removed} docstring(s), {e6.comments_removed} comment(s)')
+        print(f'\nTotals: {k3} docstring(s), {j3} comment(s) removed\n')
+    if j2:
+        print('Errors:', file=sys.stderr)
+        for p, e in sorted(j2):
+            print(f'  {p}: {e}', file=sys.stderr)
+        return 2
+    if not l4:
+        print('No changes made.')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: rmmc.py ---
+import ast
+import re
+import sys
+from multiprocessing import get_context
+from pathlib import Path
+from dh import fsz, get_nobinary, gsz, is_binary
+def g2(h2):
+    Path(h2)
+    if is_binary(h2):
+        return
+    q6 = gsz(h2)
+    h2.read_text(encoding='utf-8')
+    r6 = re.sub('#.*', '')
+    r6 = re.sub('\\n\\n*', '\n')
+    if h2.suffix == '.py':
+        try:
+            ast.parse(r6)
+            h2.write_text(r6, encoding='utf-8')
+            s6 = gsz(h2)
+            print(f'{h2.name} ', end=' ')
+            print(fsz(q6 - s6))
+        except:
+            return
+    else:
+        h2.write_text(r6, encoding='utf-8')
+        s6 = gsz(h2)
+        print(f'{h2.name} ', end=' ')
+        print(fsz(q6 - s6))
+def f1():
+    cwd = Path.cwd()
+    q6 = gsz(cwd)
+    q2 = sys.argv[1:]
+    k4 = [Path(f) for f in q2] if q2 else get_nobinary(cwd)
+    p = get_context('spawn').Pool(8)
+    for f in k4:
+        p.apply_async(g2, (f,))
+    p.close()
+    p.join()
+    t6 = q6 - gsz(cwd)
+    print(f'space change: {fsz(t6)}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: rrmc.py ---
+import argparse
+import ast
+from collections.abc import Sequence
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import libcst as cst
+from loguru import logger
+u6 = frozenset({'.git', '__pycache__', '.ruff_cache', '.pytest_cache'})
+a = 8
+v6 = tuple[Path, Path]
+def w6(x6):
+    if not isinstance(x6, cst.SimpleStatementLine):
+        return False
+    if len(x6.body) != 1:
+        return False
+    y6 = x6.body[0]
+    if not isinstance(y6, cst.Expr):
+        return False
+    z6 = y6.value
+    if not isinstance(z6, cst.SimpleString):
+        return False
+    return 'b' not in z6.prefix.lower()
+def a7(x6):
+    if not isinstance(x6, cst.Expr):
+        return False
+    z6 = x6.value
+    if not isinstance(z6, cst.SimpleString):
+        return False
+    return 'b' not in z6.prefix.lower()
+class b7(cst.CSTTransformer):
+    def __init__(self):
+        super().__init__()
+        self.comments_removed = 0
+        self.docstrings_removed = 0
+    def c(self, d, e):
+        self.comments_removed += 1
+        return cst.RemovalSentinel.REMOVE
+    def c7(self, g):
+        if not g:
+            return tuple(g)
+        if w6(g[0]):
+            self.docstrings_removed += 1
+            return tuple(g[1:])
+        return tuple(g)
+    def i(self, j):
+        if isinstance(j, cst.IndentedBlock):
+            k = self._strip_statements(j.body)
+            if not k:
+                k = (cst.SimpleStatementLine(body=[cst.Pass()]),)
+            return j.with_changes(body=k)
+        if isinstance(j, cst.SimpleStatementSuite):
+            d7 = tuple(j.body)
+            if d7 and a7(d7[0]):
+                self.docstrings_removed += 1
+                d7 = d7[1:]
+            if not d7:
+                d7 = (cst.Pass(),)
+            return j.with_changes(body=d7)
+        return j
+    def l(self, d, e):
+        k = self._strip_statements(e.body)
+        return e.with_changes(body=k)
+    def m(self, d, e):
+        return e.with_changes(body=self._strip_suite(e.body))
+    def n(self, d, e):
+        return e.with_changes(body=self._strip_suite(e.body))
+def e7(h2):
+    if h2.suffix == '.py':
+        return True
+    try:
+        with h2.open('r', encoding='utf-8') as f:
+            f7 = f.readline()
+        return f7.startswith('#!') and 'python' in f7.lower()
+    except Exception:
+        return False
+def g2(g7):
+    h2, o2 = g7
+    try:
+        h7 = h2.relative_to(o2)
+        v1 = h2.read_text(encoding='utf-8')
+        t = cst.parse_module(v1)
+        i7 = b7()
+        f3 = t.visit(i7)
+        j7 = f3.code
+        if i7.comments_removed == 0 and i7.docstrings_removed == 0:
+            return 0
+        ast.parse(j7)
+        h2.write_text(j7, encoding='utf-8')
+        print(f'{h7}: removed {i7.comments_removed} comments, {i7.docstrings_removed} docstrings')
+        return i7.comments_removed + i7.docstrings_removed
+    except Exception as exc:
+        logger.error(f'Failed {h2}: {exc}')
+        return 0
+def f1():
+    r2 = argparse.ArgumentParser(description='Strip comments and docstrings from Python files using libcst.')
+    r2.add_argument('targets', nargs='*', type=str)
+    q2 = r2.parse_args()
+    o2 = Path.cwd().resolve()
+    e2 = [Path(t).resolve() for t in q2.targets] if q2.targets else [o2]
+    k7 = []
+    for m1 in e2:
+        if m1.is_file():
+            if not any((m6 in u6 for m6 in m1.parts)) and e7(m1):
+                k7.append((m1, o2))
+        elif m1.is_dir():
+            for h2 in m1.rglob('*'):
+                if h2.is_file() and (not any((m6 in u6 for m6 in h2.parts))):
+                    if e7(h2):
+                        k7.append((h2.resolve(), o2))
+    if not k7:
+        print('No Python files found to process.')
+        return
+    l7 = 0
+    with Pool(processes=a) as c1:
+        d1 = [c1.apply_async(g2, (g7,)) for g7 in k7]
+        for e1 in d1:
+            try:
+                l7 += e1.get()
+            except Exception as exc:
+                logger.error(f'Worker raised: {exc}')
+    logger.success(f'Cleanup complete. Total elements removed: {l7}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

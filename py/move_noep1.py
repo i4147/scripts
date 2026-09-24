@@ -50,16 +50,14 @@ PKG_MAP = {
     "click": "click",
     "werkzeug": "werkzeug",
     "itsdangerous": "itsdangerous",
-    
 }
 
 
 def get_package_name(import_name):
-    
+
     if import_name in PKG_MAP:
         return PKG_MAP[import_name]
 
-    
     variants = [
         import_name,
         import_name.replace("_", "-"),
@@ -69,12 +67,10 @@ def get_package_name(import_name):
         import_name.title(),
     ]
 
-    
     for variant in set(variants):
         if (PREFIX_SITE_PACKAGES / variant).exists():
             return variant
 
-        
         dist_info_pattern = f"{variant}-*.dist-info"
         if any(PREFIX_SITE_PACKAGES.glob(dist_info_pattern)):
             return variant
@@ -87,23 +83,18 @@ def move_package(import_name):
     src = PREFIX_SITE_PACKAGES / pkg_name
     dest = USER_SITE_PACKAGES / pkg_name
 
-    
     if not src.exists():
-        
         dist_info_pattern = f"{pkg_name}-*.dist-info"
         if any(PREFIX_SITE_PACKAGES.glob(dist_info_pattern)):
             return ("dist_info_only", import_name, pkg_name, None)
         return ("not_found", import_name, pkg_name, None)
 
-    
     if dest.exists():
         return ("exists", import_name, pkg_name, None)
 
     try:
-        
         shutil.move(str(src), str(dest))
 
-        
         moved_info = []
         dist_info_pattern = f"{pkg_name}-*.dist-info"
         for info_dir in PREFIX_SITE_PACKAGES.glob(dist_info_pattern):
@@ -119,15 +110,13 @@ def move_package(import_name):
 
 
 def main():
-    
+
     if not PKG_LIST.exists():
         print(f"{RED}Error: Package list not found at {PKG_LIST}{RESET}")
         return 1
 
-    
     USER_SITE_PACKAGES.mkdir(parents=True, exist_ok=True)
 
-    
     try:
         with open(PKG_LIST) as f:
             packages = [line.strip() for line in f if line.strip()]
@@ -143,13 +132,11 @@ def main():
     print(f"{BLUE}Total packages to process: {total_pkgs}{RESET}")
     print()
 
-    
     cpu_count_available = cpu_count()
     num_processes = max(1, (cpu_count_available * 3) // 4)
     print(f"{BLUE}Using {num_processes} parallel processes{RESET}")
     print()
 
-    
     start_time = datetime.now()
 
     with Pool(processes=num_processes) as pool:
@@ -158,7 +145,6 @@ def main():
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
 
-    
     successful = []
     exists = []
     not_found = []
@@ -181,7 +167,6 @@ def main():
         elif status == "dist_info_only":
             print(f"{CYAN}📦 {import_name} -> {pkg_name}: Only dist-info found (package may already be moved){RESET}")
             dist_info_only.append(import_name)
-            
 
         elif status == "not_found":
             if import_name != pkg_name:
@@ -195,13 +180,9 @@ def main():
             print(f"{RED}❌ {import_name} -> {pkg_name}: Failed - {extra}{RESET}")
             errors.append(import_name)
 
-    
-    
     keep_packages = []
     for pkg in packages:
-        
         if pkg not in successful and pkg not in dist_info_only:
-            
             mismatch_found = any(m[0] == pkg for m in mismatches)
             if mismatch_found:
                 print(f"{YELLOW}📝 Keeping {pkg} in list (name mismatch - manual attention needed){RESET}")
@@ -209,7 +190,6 @@ def main():
             else:
                 keep_packages.append(pkg)
 
-    
     if keep_packages:
         with open(PKG_LIST, "w") as f:
             f.write("\n".join(keep_packages))
@@ -217,10 +197,9 @@ def main():
                 f.write("\n")
         print(f"{YELLOW}Updated package list saved to: {PKG_LIST}{RESET}")
     else:
-        
         if PKG_LIST.exists():
             PKG_LIST.unlink()
-    
+
     print()
     print(f"{YELLOW}Summary:{RESET}")
     print(f"  Total packages: {total_pkgs}")

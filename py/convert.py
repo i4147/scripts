@@ -17,32 +17,24 @@ def preprocess_lines():
         if not line:
             continue
 
-        
         if line.startswith("《"):
-            
             if current_line:
                 processed_lines.append(current_line)
-            
+
             current_line = line
         else:
-            
             if current_line:
                 current_line += line
             else:
-                
                 current_line = line
 
-    
     if current_line:
         processed_lines.append(current_line)
 
-    
     fixed_lines = []
     for line in processed_lines:
-        
         line = re.sub(r"Github:\s*github\.com", "Github: https://github.com", line, flags=re.IGNORECASE)
 
-        
         line = re.sub(r"https://\s*githhub\.com", "https://github.com", line, flags=re.IGNORECASE)
 
         fixed_lines.append(line)
@@ -60,10 +52,8 @@ def process_file(input_file, output_file):
     with open(input_file, "r", encoding="utf-8") as f:
         original_lines = f.readlines()
 
-    
     print("Preprocessing source file...")
 
-    
     for line in original_lines:
         original_line = line
         line = line.strip()
@@ -71,32 +61,27 @@ def process_file(input_file, output_file):
         if not line:
             continue
 
-        
         description_match = re.search(r"《([^》]+)》", line)
         if not description_match:
             remaining_lines.append(original_line)
             continue
 
-        
         url_match = re.search(r"Github?:\s*(https?://[^\s]+)", line, re.IGNORECASE)
         if not url_match:
             remaining_lines.append(original_line)
             continue
 
-        
         description = description_match.group(1)
         url = url_match.group(1)
 
         results.append({"url": url, "description": description})
         parsed_count += 1
 
-    
     with open(input_file, "w", encoding="utf-8") as f:
         f.write("\n".join(remaining_lines))
         if remaining_lines:
-            f.write("\n")  
+            f.write("\n")
 
-    
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 

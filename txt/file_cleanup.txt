@@ -1,0 +1,270 @@
+# filename: detect_repeated_lines.py
+def d(H):return H.strip()==''
+def c(J,k=True):try:with open(J,encoding='utf-8') as f:D=f.readlines()
+        l=[];i=0
+        while i<len(D)-1:w=D[i];p=D[i+1]
+            if k and (d(w) or d(p)):i+=1;continue
+            if w==p:l.append((i+1,w.rstrip('\n')));i+=1
+            i+=1
+        return l
+    except Exception as e:print(f'  Error:{e}',file=M.stderr);return []
+def a(D,l):m=D.copy();z=0
+    for s,_ in reversed(l):L=s+1-z-1
+        if 0<=L<len(m):del m[L];z+=1
+    return m
+def g(J,l,x=False,r=False,k=True):if not l:return (False,r)
+    print(f"\n{('[DRY RUN] ' if x else '')}📄 {J.name}")
+    for s,v in l:print(f'  Line {s}:{v}');print(f'  Line {s+1}:{v}')
+    if x:return (False,r)
+    if not r:u=input(f'\n  Remove duplicates from {J.name}? (y/n/a/q):').strip().lower()
+        if u=='q':M.exit(0)
+        elif u=='a':r=True;n=True
+        elif u=='y':n=True
+        else:n=False
+    else:n=True
+    if n:with open(J,encoding='utf-8') as f:D=f.readlines()
+        o=a(D,l);A=J.with_suffix(J.suffix+'.bak')
+        with open(A,'w',encoding='utf-8') as f:f.writelines(D)
+        with open(J,'w',encoding='utf-8') as f:f.writelines(o)
+        print(f'  ✅ Fixed (backup:{A.name})');return (True,r)
+    print('  ⏭️  Skipped');return (False,r)
+def I():B=q.ArgumentParser(description='Find and remove sequential duplicate lines in Python files',epilog='Blank lines are ignored by default.');B.add_argument('--dry-run','-n',action='store_true',help='Preview changes without modifying files');B.add_argument('--yes','-y',action='store_true',help='Automatically answer yes to all prompts');B.add_argument('--include-blanks','-b',action='store_true',help='Include blank lines when checking for duplicates (default:skip blanks)');F=B.parse_args();k=not F.include_blanks;print('-'*40)
+    if F.dry_run:print('🔍 DRY RUN MODE-No files will be modified')
+    print(f"📝 {('Ignoring' if k else 'Including')} blank lines in duplicate detection");print('-'*40);K=E.cwd();t=j(K);b={}
+    for y in t:G=c(y,k)
+        if G:b[y]=G
+    if not b:print('\n✓ No non-blank sequential duplicates found!');return
+    print(f'\nFound {len(b)} file(s) with sequential duplicates\n');r=F.yes;h=0
+    for J,G in b.items():C,r=g(J,G,F.dry_run,r,k)
+        if C:h+=1
+    print('\n'+'='*40)
+    if F.dry_run:print('🔍 Dry run complete. Run without--dry-run to apply changes.')
+    else:print(f'✅ Fixed {h} file(s)');print('💡 Backups saved with .bak extension')
+if __name__=='__main__':try:raise SystemExit(I())
+    except KeyboardInterrupt:print('\n\n⚠️  Operation cancelled by user.');M.exit(1)
+# filename: juniq.py
+def a(l):if isinstance(l,dict):return {k:a(v) for k,v in l.items()}
+    if isinstance(l,list):return [a(m) for m in l]
+    return l
+def b(e,g=None):if not isinstance(e,list):raise ValueError(p)
+    o=set();h=[]
+    for i in e:if not isinstance(i,dict):h.append(i);continue
+        d=i.get(g) if g else n.dumps(i,sort_keys=True)
+        if d not in o:o.add(d);h.append(i)
+    return h
+if __name__=='__main__':r=j(q.argv[1])
+    with r.open(encoding='utf-8') as f:l=n.load(f);c=b(l,g='src')
+        if c:with r.open('w',encoding='utf-8') as s:n.dump(c,s,ensure_ascii=False,indent=2)
+# filename: samecharlines.py
+def a(h):c=h.rstrip('\n')
+    if len(c)<=1:return False
+    return all((k==c[0] for k in c))
+def i():if len(j.argv)!=2:print(f'Usage:{j.argv[0]}<filename>');j.exit(1)
+    d=j.argv[1]
+    if not g(d).is_file():print(f"Error:File '{d}' not found.");j.exit(1)
+    with g(d).open(encoding='utf-8') as f:e=f.readlines()
+    b=[l for l in e if not a(l)]
+    with g(d).open('w',encoding='utf-8') as f:f.writelines(b)
+if __name__=='__main__':raise SystemExit(i())
+# filename: sonic.py
+from dh import fsz
+class p:def __init__(self,ak=False):self.verbose=ak
+    def aK(self,ai):if self.verbose:print(f'[INFO] {ai}')
+    def q(self,aF):return aF.stat().st_size
+class L(p):def __init__(self,ak=False):super().__init__(ak=ak)
+    def k(self,aF,aa='utf-8',S=False):ab=self.get_file_size(aF);self.log(f'Reading {aF} ({fsz(ab)})')
+        try:with az(aF).open('rb') as f:if ab>1048576:with aE.mmap(f.fileno(),0,access=aE.ACCESS_READ) as x:am=0
+                        while am<len(x):E=x.find(b'\n',am)
+                            if E==-1:P=x[am:]
+                            else:P=x[am:E]
+                            try:aC=P.decode(aa).rstrip('\r\n')
+                                if not S or aC.strip():yield aC
+                            except UnicodeDecodeError as e:self.log(f'Warning:Encoding error at offset {am}:{e!s}')
+                            am=E+1
+                            if E==-1:break
+                else:f.seek(0)
+                    for aC in f:u=aC.decode(aa).rstrip('\r\n')
+                        if not S or u.strip():yield u
+        except Exception:aL='error';raise OSError(aL)
+    def c(self,aF,aa='utf-8',S=False):self.log(f'Reading {aF} (regular mode)')
+        try:with az(aF).open('r',aa=aa) as f:for aC in f:u=aC.rstrip('\r\n')
+                    if not S or u.strip():yield u
+        except Exception:aL='error';raise OSError(aL)
+    def R(self,aF,aa='utf-8',S=False,ae=True):if ae:yield from self.read_lines_mmap(aF,aa,S)
+        else:yield from self.read_lines_regular(aF,aa,S)
+class K(p):def __init__(self,ak=False):super().__init__(ak=ak)
+    def o(self,ax,aj=False,g=False):self.log(f'Sorting {len(ax)} lines in memory')
+        if g:return sorted(ax,key=str.lower,aj=aj)
+        return sorted(ax,aj=aj)
+    def b(self,aF,N=100000,aj=False,aa='utf-8',g=False):self.log(f'Sorting large file using external sorting (chunk size:{N})');ao=L(ak=self.verbose);U=[]
+        try:av=[];ac=az(ad.gettempdir())
+            for _i,aC in enumerate(ao.read_lines(aF,aa)):av.append(aC)
+                if len(av)>=N:z=self.sort_in_memory(av,aj,g);V=ac/f'.sort_chunk_{os.getpid()}_{len(U)}.tmp'
+                    with az(V).open('w',aa=aa) as f:for aC in z:f.write(aC+'\n')
+                    U.append(V);av=[];self.log(f'Written {len(U)} chunk(s)')
+            if av:z=self.sort_in_memory(av,aj,g);V=ac/f'.sort_chunk_{os.getpid()}_{len(U)}.tmp'
+                with az(V).open('w',aa=aa) as f:for aC in z:f.write(aC+'\n')
+                U.append(V)
+            return U
+        except Exception:for V in U:if V.exists():V.unlink()
+            raise
+class d(p):def __init__(self,ak=False):super().__init__(ak=ak)
+    def h(self,ax,m=False):if m:self.log(f'Deduplicating {len(ax)} lines (preserving order)');aG=set();at=[]
+            for aC in ax:if aC not in aG:aG.add(aC);at.append(aC)
+            return at
+        self.log(f'Deduplicating {len(ax)} lines');return list(dict.fromkeys(ax))
+    def a(self,ax):aG=set();aw=0
+        for aC in ax:if aC not in aG:aG.add(aC);yield aC;aw+=1
+        self.log(f'Found {aw} unique lines')
+class J(p):def __init__(self,ak=False,ag=False):super().__init__(ak=ak);self.dry_run=ag;self.reader=L(ak=ak);self.sorter=K(ak=ak);self.deduplicator=d(ak=ak)
+    def y(self,aF,F=None,aH=True,at=True,aj=False,g=False,S=False,al=True,aa='utf-8'):O=az(aF)
+        if not O.exists():aL='error';raise FileNotFoundError(aL)
+        if F is None:j=O
+        else:j=az(F)
+        print('\n╔════════════════════════════════════════════════════════════╗');print('║              File Line Sorter&Deduplicator               ║');print('╚════════════════════════════════════════════════════════════╝\n');print(f'Input file:{O}');print(f'Output file:{j}');print(f"Mode:{('DRY RUN' if self.dry_run else 'NORMAL')}");print('-'*40);T=aI.time()
+        try:r=self.get_file_size(O);l=sum((1 for _ in self.reader.read_lines(O,aa,S)));self.log(f'Original file:{l} lines,{fsz(r)}');ax=list(self.reader.read_lines(O,aa,S))
+            if aH:ax=self.sorter.sort_in_memory(ax,aj,g);self.log('Lines sorted')
+            A=len(ax)
+            if at:ax=self.deduplicator.deduplicate_list(ax,m=not aH);A=l-len(ax);self.log(f'Removed {A} duplicate lines')
+            if not self.dry_run:if al and j==O:B=O.with_suffix(O.suffix+'.bak');aq.copy2(O,B);self.log(f'Backup created:{B}')
+                j.parent.mkdir(parents=True,exist_ok=True)
+                with j.open('w',aa=aa) as f:f.writelines((aC+'\n' for aC in ax))
+                self.log(f'Output written:{j}')
+            else:self.log('DRY RUN:File not written')
+            if not self.dry_run:au=self.get_file_size(j)
+            else:au=sum((len(aC.encode(aa))+1 for aC in ax))
+            w=aI.time()-T;return {'input_file':str(O),'output_file':str(j),'original_lines':l,'original_size_bytes':r,'original_size':fsz(r),'final_lines':len(ax),'after_bytes':au,'after':fsz(au),'duplicate_lines':A if at else 0,'size_reduction':r-au if r>0 else 0,'size_reduction_pct':(r-au)/r*40 if r>0 else 0,'processing_time':w,'lines_per_second':l/w if w>0 else 0}
+        except Exception:aL='error';raise RuntimeError(aL)
+    def G(self,ay):print('\n'+'='*40);print('STATISTICS');print('-'*40);print(f"Original lines:{ay['original_lines']:,}");print(f"Final lines:{ay['final_lines']:,}")
+        if ay['duplicate_lines']>0:ah=ay['duplicate_lines']/ay['original_lines']*40 if ay['original_lines']>0 else 0;print(f"Duplicate lines removed:{ay['duplicate_lines']:,} ({ah:.1f}%)")
+        print();print(f"Original size:{ay['original_size']}");print(f"Final size:{ay['after']}")
+        if ay['size_reduction']>0:print(f"Size reduction:{fsz(ay['size_reduction'])} ({ay['size_reduction_pct']:.1f}%)")
+        print();print(f"Processing time:{ay['processing_time']:.2f} seconds");print(f"Speed:{ay['lines_per_second']:,.0f} lines/second");print('-'*40)
+    def I(self,ay,H=None):if H is None:H='sort_report.json'
+        ap={'timestamp':Z.now(tz=aJ).isoformat(),'statistics':ay}
+        try:with az(H).open('w',aa='utf-8') as f:aB.dump(ap,f,indent=2)
+            print(f'\n✓ Report saved:{H}')
+        except Exception as e:print(f'\n✗ Error saving report:{e!s}')
+class s(p):def __init__(self,ak=False):super().__init__(ak=ak);self.reader=L(ak=ak)
+    def t(self,aF,aa='utf-8'):ab=self.get_file_size(aF);ax=list(self.reader.read_lines(aF,aa));C=af(ax);i=sum((aw-1 for aw in C.values()));Q=max((len(aC) for aC in ax),default=0);M=sum((len(aC) for aC in ax))/len(ax) if ax else 0;D=C.most_common(10);return {'file':str(aF),'size_bytes':ab,'size':fsz(ab),'total_lines':len(ax),'unique_lines':len(C),'duplicate_lines':i,'duplicate_percentage':i/len(ax)*40 if ax else 0,'max_line_length':Q,'avg_line_length':M,'most_common_lines':D}
+    def n(self,aF,aa='utf-8'):W=self.analyze_file(aF,aa);print(f"\n{'='*40}");print(f'File Analysis:{aF.name}');print(f"{'='*40}");print('\nBasic Statistics:');print(f"  Size:{W['size']}");print(f"  Total lines:{W['total_lines']:,}");print(f"  Unique lines:{W['unique_lines']:,}");print(f"  Duplicate lines:{W['duplicate_lines']:,} ({W['duplicate_percentage']:.1f}%)");print('\nLine Length Statistics:');print(f"  Maximum:{W['max_line_length']} characters");print(f"  Average:{W['avg_line_length']:.1f} characters")
+        if W['most_common_lines']:print('\nMost Common Lines (Top 10):')
+            for aC,aw in W['most_common_lines']:v=aC[:47]+'...' if len(aC)>50 else aC;print(f'  ({aw}x) {v}')
+        print(f"{'='*40}\n")
+def aD():an=Y.ArgumentParser(description='Sort lines in a file and remove duplicates (uses mmap for large files)',formatter_class=Y.RawDescriptionHelpFormatter,epilog='\nExamples:\n  python sort_unique_lines.py input.txt\n  python sort_unique_lines.py input.txt--no-unique\n  python sort_unique_lines.py input.txt--no-sort\n  python sort_unique_lines.py input.txt--output sorted_output.txt\n  python sort_unique_lines.py input.txt--reverse\n  python sort_unique_lines.py input.txt--case-insensitive\n  python sort_unique_lines.py input.txt--skip-empty\n  python sort_unique_lines.py input.txt--dry-run-v\n  python sort_unique_lines.py input.txt--analyze\n  python sort_unique_lines.py input.txt--report stats.json\n  python sort_unique_lines.py input.txt-v\n        ');an.add_argument('filename',help='Input filename');an.add_argument('--output','-o',help='Output filename (default:overwrite input)');an.add_argument('--sort',action='store_true',default=True,help='Sort lines (default:True)');an.add_argument('--no-sort',dest='sort',action='store_false',help='Do not sort lines');an.add_argument('--unique',action='store_true',default=True,help='Remove duplicates (default:True)');an.add_argument('--no-unique',dest='unique',action='store_false',help='Do not remove duplicates');an.add_argument('--reverse','-r',action='store_true',help='Sort in reverse order');an.add_argument('--case-insensitive','-i',action='store_true',help='Case-insensitive sorting');an.add_argument('--skip-empty',action='store_true',help='Skip empty lines');an.add_argument('--no-backup',action='store_true',default=True,help='Do not create backup file');an.add_argument('--dry-run',action='store_true',default=False,help='Preview without modifying files');an.add_argument('--analyze',action='store_true',help='Analyze file before processing');an.add_argument('--report','-R',metavar='FILE',help='Save report to JSON file');an.add_argument('-v','--verbose',default=True,action='store_true',help='Verbose output');an.add_argument('--encoding',default='utf-8',help='File encoding (default:utf-8)');aA=an.parse_args()
+    try:O=az(aA.filename)
+        if not O.exists():print(f'Error:File not found:{aA.filename}');aM.exit(1)
+        if aA.analyze:X=s(ak=aA.verbose);X.print_analysis(O,aA.encoding);return
+        ar=J(ak=aA.verbose,ag=aA.dry_run);ay=ar.process_file(aA.filename,F=aA.output,aH=aA.sort,at=aA.unique,aj=aA.reverse,g=aA.case_insensitive,S=aA.skip_empty,al=not aA.no_backup,aa=aA.encoding);ar.print_stats(ay)
+        if aA.report:ar.save_report(ay,aA.report)
+    except Exception as e:print(f'Error:{e!s}',file=aM.stderr);aM.exit(1)
+if __name__=='__main__':raise SystemExit(aD())
+# filename: soniq.py
+from dh import is_binary;r=1048576
+def c(C):return [L.strip() for L in C if L.strip()]
+def p(N):U=N.stat().st_size
+    try:if U>r:with open(N,encoding='utf-8',errors='ignore') as f:with M.mmap(f.fileno(),0,access=M.ACCESS_READ) as T:J=T.read().decode('utf-8','ignore');return J.splitlines()
+        else:return N.read_text(encoding='utf-8',errors='ignore').splitlines()
+    except (UnicodeDecodeError,ValueError) as e:print(f'Warning:Could not read file as text:{e}');return []
+def v(N,F=None,R=None):D=p(N);d=len(D)
+    if not d:return (0,[])
+    if F is not None and R is not None:w=max(0,F-1);z=min(d,R)
+        if w>=d or w>=z:return (0,[])
+        K=D[:w];l=D[w:z];Q=D[z:]
+    else:K=[];l=D;Q=[]
+    if len(l)>1000:n=max(1,len(l)//t());B=[l[i:i+n] for i in range(0,len(l),n)]
+        with H(processes=min(t(),len(B))) as O:b=O.map(c,B)
+        s=[L for C in b for L in C]
+    else:s=[L.strip() for L in l if L.strip()]
+    P=set();o=set()
+    for L in s:if L in P:o.add(L)
+        else:P.add(L)
+    h=sorted(P);g=len(l)-len(h);m=K+h+Q
+    if g>0 or s!=h:N.write_text('\n'.join(m)+('\n' if m else ''),encoding='utf-8')
+    return (g,list(o))
+if __name__=='__main__':I=S.argv[1:];E='--quiet' in I or '-q' in I;y=[a for a in I if not a.startswith('-')]
+    if not y:print('Usage:python sort_uniq_mp.py<filename>[start_line] [end_line] [--quiet|-q]');print('  [start_line] [end_line] :Optional line numbers range (1-based index) to sort&uniq');print('--quiet,-q             :Only show count,not the actual duplicate lines');S.exit(1)
+    j=y[0];q=None;x=None
+    if len(y)>=3:try:q=int(y[1]);x=int(y[2])
+            if q<1 or x<q:print('Error:Invalid line range. start_line must be>=1 and end_line>=start_line.');S.exit(1)
+        except ValueError:print('Error:Start and end line parameters must be integers.');S.exit(1)
+    elif len(y)==2:print('Error:Both start_line and end_line must be provided for line range mode.');S.exit(1)
+    N=G(j)
+    if not N.exists():print(f'Error:File not found:{N}');S.exit(1)
+    if N.is_dir():print(f'Error:{N} is a directory,not a file');S.exit(1)
+    if is_binary(N):print(f'Skipping binary file:{N.name}');S.exit(0)
+    try:A,o=v(N,q,x);u=f' in lines {q}-{x}' if q and x else ''
+        if A>0:print(f"\n✓ {A} duplicate{('s' if A!=1 else '')} removed{u} and file sorted")
+            if not E and o:print('\nDuplicate lines removed:');k=sorted(o)
+                for L in k[:50]:print(f'  {L}')
+                if len(k)>50:print(f'... ({len(k)-50} more duplicate lines not shown)')
+            elif E:print('  (Use without--quiet to see the actual duplicate lines)')
+        else:print(f'✓ File region sorted (all lines were unique){u}')
+    except Exception as e:print(f'Error processing file:{e}');S.exit(1)
+# filename: soniq2.py
+from loguru import logger;m=5242880;i=8
+def h(p):return p.strip()
+def d(s):s=n(s)
+    if not s.exists():logger.error("File '{}' not found.",s);return
+    try:u=s.stat().st_size
+        if u>m:with s.open('r+b') as f,r.mmap(f.fileno(),0,access=r.ACCESS_READ) as z:l=z.read().decode('utf-8').splitlines()
+        else:l=s.read_text(encoding='utf-8').splitlines()
+        with o(processes=i) as t:c=[t.apply_async(h,(p,)) for p in l];b=[v.get() for v in c]
+        a=sorted(set(b));y,g=k.mkstemp(dir=s.parent);j=n(g)
+        try:with open(y,'w',encoding='utf-8') as x:x.writelines((p+'\n' for p in a))
+            j.replace(s);print("Successfully updated '{}'.",s)
+        except Exception:j.unlink(missing_ok=True);raise
+    except Exception as e:logger.error('Failed to process file:{}',e)
+def q():if len(w.argv)<2:print('Usage:python script.py<filename>');return
+    d(w.argv[1])
+if __name__=='__main__':q()
+# filename: sort_quotes.py
+def b(d):j=set();e=[]
+    for q in d:k=q['quote'].lower().strip()
+        if k not in j:j.add(k);e.append(q)
+    return e
+def a(i):if not n.path.exists(i):print(f"Error:'{i}' could not be found.");return
+    with open(i,'r',encoding='utf-8') as f:try:d=h.load(f)
+        except h.JSONDecodeError:print("Error:'quotes.json' is empty or contains invalid formatting.");return
+    c=b(d);c.sort(k=lambda item:g.get('author','').lower())
+    with open(i,'w',encoding='utf-8') as f:h.dump(c,f,indent=2,ensure_ascii=False)
+    print('Success:Sorted')
+if __name__=='__main__':m=l.argv[1];a(m)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

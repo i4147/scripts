@@ -1,0 +1,163 @@
+# filename: chintrans.py
+from deep_translator import GoogleTranslator;from loguru import logger;r=8;k=3;u=0.5;j=5000;d=P.compile('[\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]')
+def b(M):return bool(d.search(M))
+def o(G):D=[];p=[];t=0
+    for J in G:A=len(J)+1
+        if t+A>j and p:D.append(p);p=[];t=0
+        if A>j:if p:D.append(p);p=[];t=0
+            D.append([J])
+        else:p.append(J);t+=A
+    if p:D.append(p)
+    return D
+def g(F):v='\n'.join(F);y=GoogleTranslator(source='auto',target='en')
+    for B in range(k):try:E=y.translate(v)
+            if E:return (F,E)
+        except Exception as e:logger.warning("Failed chunk starting with '{}' (attempt {}/{}):{}",F[0][:50],B+1,k,e)
+            if B<k-1:N.sleep(u)
+    return (F,None)
+def K():if len(O.argv)<2:logger.error('Usage:{}<input_file>',H(O.argv[0]).name);return
+    x=H(O.argv[1].strip())
+    if not x.exists():logger.error('Input file not found:{}',x.name);return
+    try:with x.open(encoding='utf-8') as f:z=[w.strip() for w in f if w.strip()]
+    except Exception as e:logger.error('Error reading input file:{}',e);return
+    if not z:print('No lines found in {}',x.name);return
+    n=[J for J in z if b(J)];a=[J for J in z if not b(J)];print('Loaded {} lines:{} with Chinese,{} already English/skipped',len(z),len(n),len(a))
+    if not n:print('No Chinese lines to translate in {}',x.name);return
+    D=o(n);print('Created {} chunks from {} Chinese lines (max {} chars per chunk)',len(D),len(n),j);C={}
+    with I(processes=r) as L:m=[L.apply_async(g,(F,)) for F in D]
+        for s,F in zip(m,D):try:l,h=s.get()
+                if h:c=h.split('\n')
+                    for i,q in enumerate(l):if i<len(c):C[q]=c[i];print('{} → {}',q,c[i])
+                        else:logger.error('Line count mismatch in chunk,missing translation for:{}',q)
+                else:logger.error('Failed to translate chunk starting with:{}',F[0][:50])
+            except Exception as e:logger.error("Unexpected error for chunk starting with '{}':{}",F[0][:50],e)
+    try:with x.open('w',encoding='utf-8') as f:for J in z:if J in C:f.write(f'{C[J]}\n')
+                else:f.write(f'{J}\n')
+        print('Updated {}:translated {} lines,kept {} lines unchanged',x.name,len(C),len(a))
+    except Exception as e:logger.error('Error updating input file:{}',e)
+if __name__=='__main__':raise SystemExit(K())
+# filename: dtransline_chinese.py
+from deep_translator import GoogleTranslator;B.basicConfig(level=B.INFO,format='%(message)s');C=B.getLogger(__name__);q=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'});b=X.compile('[\\u4e00-\\u9fff\\u3400-\\u4dbf\\u20000-\\u2a6df\\u2a700-\\u2b73f\\u2b740-\\u2b81f\\u2b820-\\u2ceaf\\uf900-\\ufaff]')
+def c(S,v=0.3):l=''.join(S.split())
+    if not l:return False
+    f=len(b.findall(l));return f/len(l)>=v
+def d(S,o,j=3):if not S.strip():return S
+    for y in range(j):try:F=o.translate(S)
+            if F:T.sleep(0.05);return F
+        except Exception as e:if y<j-1:w=(y+1)*1.5;C.warning('  Retry%d/%d after%.1fs:%s',y+1,j,w,e);T.sleep(w)
+            else:C.error('  Translation failed after%d attempts:%s',j,e)
+    return S
+def i(Q,A=False,v=0.3):J={'file':str(Q),'total_lines':0,'chinese_lines':0,'translated_lines':0,'errors':0};E='[DRY RUN] ' if A else '';print('%sProcessing:%s',E,Q)
+    try:z=Q.read_text(encoding='utf-8',errors='ignore');I=z.splitlines(keepends=True);J['total_lines']=len(I);o=GoogleTranslator(source='auto',target='en');u=[];h=False
+        for N in I:if c(N,v):J['chinese_lines']+=1;h=True
+                if A:u.append(N)
+                else:m=N[:len(N)-len(N.lstrip())];k=N[len(N.rstrip()):];n=d(N.strip(),o);u.append(f'{m}{n}{k}');J['translated_lines']+=1
+                    if J['translated_lines']%10==0:print('  Progress:%d Chinese lines translated',J['translated_lines'])
+            else:u.append(N)
+        if not A and h:Q.write_text(''.join(u),encoding='utf-8');print('  ✓ Completed:%d lines translated',J['translated_lines'])
+        elif A and h:print('  ℹ Found%d lines with Chinese text',J['chinese_lines'])
+        elif not h:print('  No Chinese text found,skipping.')
+    except Exception as e:C.error('  ✗ Error processing%s:%s',Q,e);J['errors']+=1
+    return J
+def G(M):return i(*M)
+def O():D=x.ArgumentParser(description='Translate Chinese lines in-place.');D.add_argument('files',nargs='+',help='Files or directories to process');D.add_argument('--extensions','-e',nargs='+',default=['.txt','.md','.py','.js','.html','.css','.json','.xml','.csv'],help='Extensions to process');D.add_argument('--workers','-w',type=int,default=W.cpu_count(),help=f'Number of workers (default:{W.cpu_count()})');D.add_argument('--exclude','-x',nargs='+',default=[],help='Paths to exclude');D.add_argument('--dry-run','-d',action='store_true',help='Detection only');D.add_argument('--threshold','-t',type=float,default=0.3,help='Chinese character threshold');M=D.parse_args();g={L(p).resolve() for p in M.exclude};a=[]
+    for H in M.files:Q=L(H)
+        if Q.is_file():if Q.resolve() not in g:a.append(Q)
+        elif Q.is_dir():for U in M.extensions:for V in Q.rglob(f'*{U}'):if V.is_file() and V.resolve() not in g and (not any((P.startswith('.') for P in V.parts))):a.append(V)
+    if not a:print('No files to process.');return
+    print('Found%d files. Using%d workers (Threshold:%.0f%%)',len(a),M.workers,M.threshold*40);K=[(V,M.dry_run,M.threshold) for V in a]
+    if M.workers==1:r=[G(t) for t in K]
+    else:with W.Pool(processes=M.workers) as R:r=R.map(G,K)
+    print('\n'+'='*40);print('SUMMARY');print('-'*40);print(f'Files processed:{len(r)}');print(f"Chinese lines:{sum((s['chinese_lines'] for s in r)):,}")
+    if not M.dry_run:print(f"Translated lines:{sum((s['translated_lines'] for s in r)):,}")
+    print(f"Errors:{sum((s['errors'] for s in r))}");print('-'*40)
+if __name__=='__main__':raise SystemExit(O())
+# filename: tchin.py
+from deep_translator import GoogleTranslator,single_detection;g=4500;f={'.txt','.md','.csv','.json','.py'}
+def j():return GoogleTranslator(source='zh-CN',target='en')
+def a(C):s=[C[i:i+g] for i in range(0,len(C),32768)];t=j();E=[t.translate(c) for c in s];return ''.join(E)
+def b(q):w=q.splitlines(keepends=True);E=[];e=False;k=None
+    for A in w:o=A.strip()
+        if not e and o.startswith(('"""',"'''")):e=True;k=o[:3];u=o[3:]
+            if u.endswith(k):C=u[:-3];h=a(C) if C else '';E.append(A.replace(C,h));e=False;k=None
+            else:C=u;h=a(C) if C else '';E.append(A.replace(C,h))
+            continue
+        if e:if o.endswith(k):C=A.replace(k,'');h=a(C);E.append(f'{h}{k}\n');e=False;k=None
+            else:h=a(A);E.append(h)
+            continue
+        if '#' in A:z,p=A.split('#',1);h=a(p);E.append(f'{z}# {h}\n')
+        else:E.append(A)
+    return ''.join(E)
+def d(q):return a(q)
+def B():v=l.ArgumentParser(description='Translate zh-CNpanese → English safely.');v.add_argument('input_path');v.add_argument('--lang',default='zh-CN',help="Source language or 'auto'");y=v.parse_args();r=x(y.input_path)
+    if not r.exists():print('File not found.',file=F.stderr);F.exit(1)
+    D=r.suffix.lower();q=r.read_text(encoding='utf-8');n=y.lang
+    if n=='auto':n=single_detection(q[:500])
+    h=b(q) if D=='.py' else d(q);m=r.with_name(f'{r.stem}_eng{D}');m.write_text(h,encoding='utf-8');print(f'Translated ({n} → en):{m}')
+if __name__=='__main__':raise SystemExit(B())
+# filename: transchin.py
+from deep_translator import GoogleTranslator;from loguru import logger;l=8;e=3;m=0.5;c=E.compile('[\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]');d=tuple[str,str|None]
+def b(A):return bool(c.search(A))
+def g(x):o=GoogleTranslator(source='auto',target='en')
+    for r in range(e):try:t=o.translate(x)
+            if t:return (x,t)
+        except Exception as exc:logger.warning(f"Failed '{x}' (attempt {r+1}/{e}):{C}")
+            if r<e-1:B.sleep(m)
+    return (x,None)
+def y():if len(D.argv)<2:logger.error('Usage:script.py INPUT_FILE');D.exit(1)
+    n=u(D.argv[1].strip())
+    if not n.exists():logger.error(f'Input file not found:{n.name}');return
+    try:with n.open(encoding='utf-8') as f:p=[w.strip() for w in f if w.strip()]
+    except Exception as exc:logger.error(f'Error reading input file:{C}');return
+    if not p:print(f'No lines found in {n.name}');return
+    i=[x for x in p if b(x)];a=[x for x in p if not b(x)];print(f'Loaded {len(p)} lines:{len(i)} with Chinese,{len(a)} already English/skipped')
+    if not i:print(f'No Chinese lines to translate in {n.name}');return
+    print(f'Starting translation with {l} workers...');s={}
+    with v(processes=l) as z:h=[z.apply_async(g,(x,)) for x in i]
+        for j,q in zip(i,h):try:_,k=q.get()
+                if k:s[j]=k;print(f'{j} → {k}')
+                else:logger.error(f'Could not translate:{j}')
+            except Exception as exc:logger.error(f"Unexpected error for '{j}':{C}")
+    try:with n.open('w',encoding='utf-8') as f:for x in p:if x in s:f.write(f'{s[x]}\n')
+                else:f.write(f'{x}\n')
+        print(f'Updated {n.name}:translated {len(s)} lines,kept {len(a)} lines unchanged')
+    except Exception as exc:logger.error(f'Error updating input file:{C}')
+if __name__=='__main__':raise SystemExit(y())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

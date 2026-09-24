@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from argparse import Namespace
@@ -28,7 +27,7 @@ def should_compress(path: Path) -> bool:
             return False
         if path.suffix in COMPRESSED_EXTS:
             return False
-        if path.suffix == ZST_EXT:  
+        if path.suffix == ZST_EXT:
             return False
         return path.stat().st_size > 0
     except (OSError, PermissionError):
@@ -90,13 +89,11 @@ def compress_folder_sync(
     tar_path = None
     zst_path = None
     try:
-        
         if fmt == "tar":
             tar_path = f"{output_base_name}.tar"
             with tarfile.open(tar_path, "w") as tar:
                 tar.add(str(folder_path), arcname=folder_path.name)
 
-            
             zst_path = tar_path + ZST_EXT
 
             cctx = zstd.ZstdCompressor(level=level, threads=zstd_threads)
@@ -109,12 +106,11 @@ def compress_folder_sync(
                             break
                         fout.write(chunk)
                     compressor.close()
-            
+
             os.unlink(tar_path)
             return True, zst_path
         return False, f"Unsupported format: {fmt}"
     except Exception as e:
-        
         if tar_path and os.path.exists(tar_path):
             os.unlink(tar_path)
         if zst_path and os.path.exists(zst_path):
@@ -173,11 +169,10 @@ def compress_file_streaming(path: Path, level: int, zstd_threads: int, chunk_siz
 
 
 def decompress_file_streaming(path: Path, chunk_size: int) -> dict:
-    
-    dst = path.with_suffix("")  
-    
+
+    dst = path.with_suffix("")
+
     if path.suffixes and len(path.suffixes) > 1:
-        
         dst = path.with_suffix("").with_suffix(path.suffixes[-2])
 
     if dst.exists():
@@ -247,7 +242,6 @@ def main() -> int:
         description="Memory-optimized parallel zstd compressor/decompressor for a directory."
     )
 
-    
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
         "-c", "--compress", default=True, action="store_true", help="Compress files in the target directory"
@@ -256,12 +250,10 @@ def main() -> int:
         "-d", "--decompress", action="store_true", help="Decompress .zst files in the target directory"
     )
 
-    
     parser.add_argument("--workers", type=int, default=0, help="Number of parallel workers ")
     parser.add_argument("--chunk-size", type=int, default=65536, help="Read/write buffer size in bytes (default 65536)")
     parser.add_argument("path", nargs="?", default=".", help="Target directory (default: current)")
 
-    
     parser.add_argument(
         "--level", type=int, default=3, help="Compression level for zstd (1-22, default 3, lower = faster)"
     )
@@ -280,18 +272,15 @@ def main() -> int:
         print("Target must be a directory", file=sys.stderr)
         return 2
 
-    
     workers = MAX_WORKERS
     zstd_threads = MAX_WORKERS
     chunk_size = 1_048_576
-    
 
-    
     before_total = gsz(target)
 
     if args.compress:
         return handle_compress(target, args, workers, zstd_threads, chunk_size, before_total)
-    
+
     return handle_decompress(target, args, workers, chunk_size, before_total)
 
 
@@ -378,7 +367,6 @@ def handle_decompress(target: Path, args: Namespace, workers: int, chunk_size: i
         print("No .zst files to decompress")
         return 0
 
-    
     batch_size = max(1, min(10, len(files) // max(1, workers)))
     batches = [files[i : i + batch_size] for i in range(0, len(files), batch_size)]
 

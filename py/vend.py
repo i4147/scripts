@@ -390,7 +390,6 @@ def exc_type(exc: Exception) -> str:
 
 @dataclasses.dataclass
 class CompilerImplementation:
-
     name: Literal["gcc"] | Literal["clang"] | Literal["msvc"] | Literal["unknown"]
     version: str
     "random text"

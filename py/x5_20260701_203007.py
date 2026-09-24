@@ -1,4 +1,3 @@
-
 import argparse
 import lzma
 import tarfile
@@ -23,7 +22,6 @@ class FileCompressor:
         try:
             file_path = Path(file_path)
 
-            
             if file_path.suffix in COMPRESSED_EXTENSIONS:
                 self.skipped_files += 1
                 return None
@@ -31,12 +29,10 @@ class FileCompressor:
             original_size = file_path.stat().st_size
             xz_path = file_path.with_suffix(file_path.suffix + ".xz")
 
-            
             if xz_path.exists():
                 self.skipped_files += 1
                 return None
 
-            
             with open(file_path, "rb") as f_in:
                 with lzma.LZMAFile(xz_path, "wb", preset=self.preset) as f_out:
                     shutil.copyfileobj(f_in, f_out)
@@ -46,7 +42,6 @@ class FileCompressor:
             self.freed_space += freed
             self.compressed_files += 1
 
-            
             file_path.unlink()
 
             return {"file": file_path.name, "original": original_size, "compressed": compressed_size, "freed": freed}
@@ -61,13 +56,11 @@ class FileCompressor:
             tar_path = dir_path.parent / tar_name
             tar_xz_path = tar_path.with_suffix(".tar.xz")
 
-            
             with tarfile.open(tar_path, "w") as tar:
                 tar.add(dir_path, arcname=dir_path.name)
 
             tar_size = tar_path.stat().st_size
 
-            
             with open(tar_path, "rb") as f_in:
                 with lzma.LZMAFile(tar_xz_path, "wb", preset=self.preset) as f_out:
                     shutil.copyfileobj(f_in, f_out)
@@ -76,7 +69,6 @@ class FileCompressor:
             freed = tar_size - tar_xz_size
             self.freed_space += freed
 
-            
             tar_path.unlink()
             shutil.rmtree(dir_path)
 
@@ -100,14 +92,12 @@ class FileCompressor:
 
             output_path = file_path.with_suffix("")
 
-            
             if output_path.exists():
                 self.skipped_files += 1
                 return None
 
             xz_size = file_path.stat().st_size
 
-            
             with lzma.LZMAFile(file_path, "rb") as f_in:
                 with open(output_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
@@ -115,7 +105,6 @@ class FileCompressor:
             original_size = output_path.stat().st_size
             self.compressed_files += 1
 
-            
             file_path.unlink()
 
             return {"file": output_path.name, "original": original_size, "compressed": xz_size}
@@ -127,7 +116,6 @@ class FileCompressor:
         dir_path = Path(dir_path)
         files_to_process = []
 
-        
         if recursive:
             files_to_process = list(dir_path.rglob("*"))
         else:
@@ -200,7 +188,6 @@ def main():
 
     args = parser.parse_args()
 
-    
     if not args.compress and not args.decompress and not args.tar:
         parser.print_help()
         sys.exit(1)
@@ -216,19 +203,16 @@ def main():
 
     compressor = FileCompressor(preset=args.preset)
 
-    
     if args.tar:
         print(f"Creating tar.xz archives from subdirectories in {path}...\n")
         for subdir in sorted(path.iterdir()):
             if subdir.is_dir() and not subdir.name.startswith("."):
                 compressor.compress_directory_tar(subdir)
 
-    
     elif args.compress:
         print(f"Compressing files in {path}...\n")
         compressor.process_directory(path, recursive=args.recursive, max_workers=args.workers)
 
-    
     elif args.decompress:
         print(f"Decompressing xz files in {path}...\n")
         xz_files = list(path.rglob("*.xz")) if args.recursive else list(path.glob("*.xz"))

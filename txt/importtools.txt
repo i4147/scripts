@@ -1,0 +1,897 @@
+# --- File: addimport.py ---
+import sys
+from pathlib import Path
+from fastwalk import walk_files
+a = '#!/data/data/com.termux/files/usr/bin/python\n'
+def b(fp, c):
+    if not fp.exists() or fp.is_symlink():
+        return
+    print(f'processing {fp}')
+    d = []
+    e = []
+    with Path(fp).open(encoding='utf-8') as fin:
+        d = fin.readlines()
+    if d[0].startswith('#!'):
+        e.extend((d[0], f'import {c}'))
+        for k in d[1:]:
+            e.append(k)
+    else:
+        e.extend((a, 'import regex as re\nimport os\n'))
+        for k in d:
+            e.append(k)
+    with Path(fp).open('w', encoding='utf-8') as fo:
+        fo.writelines(e)
+    return
+def f():
+    cwd = Path.cwd()
+    g = []
+    cwd = Path.cwd()
+    h = sys.argv[1]
+    for pth in walk_files(cwd):
+        i = Path(pth)
+        if i.is_file() and i.suffix == '.py':
+            g.append(i)
+    for f in g:
+        b(f, h)
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: check4missing_imports.py ---
+import argparse
+import ast
+import sys
+from importlib.util import find_spec
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+def j(k):
+    return list(k.rglob('*.py'))
+def l(i):
+    try:
+        with open(i, encoding='utf-8') as f:
+            m = ast.parse(f.read(), filename=str(i))
+    except (SyntaxError, UnicodeDecodeError):
+        return set()
+    n = set()
+    for o in ast.walk(m):
+        if isinstance(o, ast.Import):
+            for p in o.names:
+                n.add(p.name.split('.')[0])
+        elif isinstance(o, ast.ImportFrom) and o.module:
+            n.add(o.module.split('.')[0])
+    return n
+def q(i):
+    try:
+        with open(i, encoding='utf-8') as f:
+            m = ast.parse(f.read(), filename=str(i))
+    except (SyntaxError, UnicodeDecodeError):
+        return set()
+    r = set()
+    s = set(dir(__builtins__))
+    for o in ast.walk(m):
+        if isinstance(o, ast.Name):
+            r.add(o.id)
+        elif isinstance(o, ast.Attribute) and isinstance(o.value, ast.Name):
+            r.add(o.value.id)
+    return r - s - {'self', 'cls'}
+def t(u):
+    try:
+        return find_spec(u) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+def v(i):
+    w = l(i)
+    x = q(i)
+    y = []
+    for u in x:
+        if u not in w and t(u):
+            y.append(u)
+    return (i, y)
+def z(i, a1):
+    if not a1:
+        return
+    with open(i, encoding='utf-8') as f:
+        b1 = f.read()
+    try:
+        m = ast.parse(b1)
+    except SyntaxError:
+        return
+    c1 = 0
+    for i, o in enumerate(m.body):
+        if isinstance(o, (ast.Import, ast.ImportFrom)) or (isinstance(o, ast.Expr) and isinstance(o.value, ast.Constant)):
+            c1 = i + 1
+        else:
+            break
+    d1 = b1.split('\n')
+    e1 = [f'import {u}' for u in sorted(set(a1))]
+    f1 = '\n'.join(e1) + '\n'
+    g1 = 0
+    for o in m.body[:c1]:
+        g1 = o.end_lineno or g1
+    d1.insert(g1, f1)
+    with open(i, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(d1))
+def f():
+    h1 = argparse.ArgumentParser(description='Check Python files for missing imports recursively.')
+    h1.add_argument('-a', '--auto-fix', action='store_true', help='Automatically add missing imports to files')
+    h1.add_argument('-d', '--directory', type=Path, default=Path.cwd(), help='Root directory to scan (default: current directory)')
+    h1.add_argument('-j', '--jobs', type=int, default=cpu_count(), help=f'Number of parallel jobs (default: {cpu_count()})')
+    i1 = h1.parse_args()
+    k = i1.directory
+    if not k.is_dir():
+        print(f'Error: {k} is not a valid directory')
+        sys.exit(1)
+    print(f'Scanning {k} for Python files...')
+    j1 = j(k)
+    if not j1:
+        print('No Python files found.')
+        sys.exit(0)
+    print(f'Found {len(j1)} Python file(s). Checking with {i1.jobs} workers...')
+    k1 = []
+    with Pool(processes=i1.jobs) as l1:
+        m1 = l1.map(v, j1)
+    for i, y in m1:
+        if y:
+            k1.append((i, y))
+            n1 = i.relative_to(k)
+            print(f'\n{n1}:')
+            for imp in sorted(set(y)):
+                print(f'  - Missing: {imp}')
+            if i1.auto_fix:
+                z(i, y)
+                print('  ✓ Fixed')
+    print(f"\n{'=' * 40}")
+    if k1:
+        print(f'Files with missing imports: {len(k1)}')
+        if i1.auto_fix:
+            print('Files have been automatically fixed.')
+    else:
+        print('No missing imports detected!')
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: check_imports.py ---
+import random
+import string
+import sys
+import traceback
+from importlib.machinery import SourceFileLoader
+if __name__ == '__main__':
+    g = sys.argv[1:]
+    o1 = False
+    for p1 in g:
+        try:
+            c = ''.join((random.choice(string.ascii_letters) for _ in range(20)))
+            SourceFileLoader(c, p1).load_module()
+        except Exception:
+            o1 = True
+            print(p1)
+            traceback.print_exc()
+            print()
+    sys.exit(1 if o1 else 0)
+
+# --- File: chk_imports.py ---
+import argparse
+import ast
+from multiprocessing.pool import ApplyResult, Pool
+from pathlib import Path
+from typing import Final
+from loguru import logger
+q1 = 8
+r1 = 'errors.txt'
+s1 = '-' * 40
+t1 = '=' * 40
+u1 = (ast.Try, ast.If, ast.With, ast.AsyncWith, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.For, ast.AsyncFor, ast.While)
+v1 = tuple[int, int, str]
+w1 = tuple[bool, bool, list[str]]
+class x1(ast.NodeVisitor):
+    def __init__(self):
+        self.parents = {}
+    def y1(self, o):
+        for z1 in ast.iter_child_nodes(o):
+            self.parents[z1] = o
+        self.generic_visit(o)
+def a2(o, b2):
+    c2 = []
+    d2 = o
+    while d2 in b2:
+        d2 = b2[d2]
+        c2.append(d2)
+    return c2
+def e2(o, b2):
+    c2 = a2(o, b2)
+    return any((isinstance(f2, u1) for f2 in c2))
+def g2(i):
+    try:
+        h2 = i.read_text(encoding='utf-8')
+        m = ast.parse(h2)
+    except (SyntaxError, UnicodeDecodeError) as exc:
+        logger.warning(f'[SKIP] {i}: Could not parse ({exc})')
+        return []
+    i2 = x1()
+    i2.visit(m)
+    b2 = i2.parents
+    j2 = 0
+    for o in m.body:
+        if isinstance(o, (ast.Import, ast.ImportFrom)):
+            j2 = max(j2, o.end_lineno or o.lineno)
+        elif isinstance(o, ast.Expr) and isinstance(o.value, ast.Constant) and isinstance(o.value.value, str):
+            j2 = max(j2, o.end_lineno or o.lineno)
+        else:
+            break
+    k2 = []
+    d1 = h2.split('\n')
+    for o in m.body:
+        if not isinstance(o, (ast.Import, ast.ImportFrom)):
+            continue
+        if o.lineno <= j2:
+            continue
+        if e2(o, b2):
+            continue
+        l2 = o.end_lineno or o.lineno
+        f1 = '\n'.join(d1[o.lineno - 1:l2])
+        k2.append((o.lineno, l2, f1))
+    return k2
+def m2(i, n2):
+    if not n2:
+        return False
+    h2 = i.read_text(encoding='utf-8')
+    d1 = h2.split('\n')
+    o2 = [r2 for p2, q2, r2 in n2]
+    for s2, l2, t2 in sorted(n2, reverse=True):
+        del d1[s2 - 1:l2]
+    u2 = 0
+    for i, v2 in enumerate(d1):
+        w2 = v2.strip()
+        if not w2 or w2.startswith('#'):
+            u2 = i + 1
+        elif w2.startswith(('"""', "'''")):
+            if w2.count('"""') == 2 or w2.count("'''") == 2:
+                u2 = i + 1
+            else:
+                x2 = '"""' if '"""' in w2 else "'''"
+                for j in range(i + 1, len(d1)):
+                    if x2 in d1[j]:
+                        u2 = j + 1
+                        break
+                break
+        elif w2.startswith(('import ', 'from ')):
+            u2 = i + 1
+        else:
+            break
+    y2 = d1[:u2] + o2 + [''] + d1[u2:]
+    i.write_text('\n'.join(y2), encoding='utf-8')
+    return True
+def b(i, z2):
+    k2 = g2(i)
+    if not k2:
+        return (False, False, [])
+    a3 = []
+    for s2, b3, f1 in k2:
+        c3 = f'  Line {s2}: {f1.strip()}'
+        print(c3)
+        a3.append(c3)
+    if not z2:
+        return (True, False, a3)
+    if m2(i, k2):
+        msg = f'  [FIXED] Moved {len(k2)} import(s) to top'
+        print(msg)
+        a3.append(msg)
+        return (True, True, a3)
+    msg = '  [ERROR] Failed to fix'
+    logger.error(msg)
+    a3.append(msg)
+    return (True, False, a3)
+def d3(e3, f3, z2):
+    i = Path(f3)
+    with i.open('w', encoding='utf-8') as g3:
+        if not e3:
+            g3.write('No misplaced imports found! All files are clean.\n')
+            return
+        for i, a3 in e3:
+            g3.write(f'File: {i}\n')
+            g3.write(f'{s1}\n')
+            g3.writelines((f'{c3}\n' for c3 in a3))
+            g3.write('\n')
+        if z2:
+            h3 = sum((1 for i3, a3 in e3 if any(('[FIXED]' in d for d in a3))))
+            g3.write(f'  Files fixed: {h3}\n')
+            g3.write(f'  Files with errors: {len(e3) - h3}\n')
+def j3():
+    h1 = argparse.ArgumentParser(description='Find .py files with imports not at the head of the file')
+    h1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    h1.add_argument('-a', '--autofix', action='store_true', help='Automatically move misplaced imports to the top of the file')
+    h1.add_argument('-o', '--output', type=str, default=None, help='Save report to file')
+    return h1
+def k3(l3):
+    if l3.is_file():
+        return [l3] if l3.suffix == '.py' else []
+    return sorted(l3.rglob('*.py'))
+def f():
+    h1 = j3()
+    i1 = h1.parse_args()
+    f3 = i1.output or (None if i1.autofix else r1)
+    l3 = Path(i1.directory)
+    if not l3.exists():
+        logger.error(f"Directory '{l3}' does not exist")
+        return 1
+    g = k3(l3)
+    if not g:
+        logger.warning(f"No .py files found in '{l3}'")
+        return 0
+    print(f'Scanning {len(g)} Python file(s) with {q1} worker(s)...')
+    k1 = 0
+    m3 = 0
+    e3 = []
+    with Pool(processes=q1) as l1:
+        n3 = [(fp, l1.apply_async(b, (fp, i1.autofix))) for fp in g]
+        for i, o3 in n3:
+            p3, q3, a3 = o3.get()
+            if p3:
+                k1 += 1
+                e3.append((i, a3))
+            if q3:
+                m3 += 1
+    print(t1)
+    print('Summary:')
+    print(f'  Files with misplaced imports: {k1}')
+    if i1.autofix:
+        print(f'  Files fixed: {m3}')
+    else:
+        print('  Run with -a to autofix')
+    if f3 and (k1 > 0 or i1.output):
+        d3(e3, f3, i1.autofix)
+        print(f'  Report saved to: {f3}')
+    if k1 > 0 and (not i1.autofix):
+        return 1
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: find_missing_imports.py ---
+import argparse
+import ast
+import importlib.util
+import multiprocessing
+import sys
+import textwrap
+from pathlib import Path
+from typing import Final
+from loguru import logger
+r3 = set(sys.builtin_module_names)
+for c in list(sys.modules.keys()):
+    if hasattr(importlib.util, 'find_spec'):
+        try:
+            s3 = importlib.util.find_spec(c)
+            if s3 and s3.origin and ('site-packages' not in s3.origin):
+                r3.add(c.split('.')[0])
+        except (ImportError, ModuleNotFoundError, ValueError):
+            pass
+t3 = {'abc', 'argparse', 'array', 'asyncio', 'base64', 'bisect', 'builtins', 'bz2', 'calendar', 'cmath', 'cmd', 'code', 'codecs', 'codeop', 'collections', 'colorsys', 'compileall', 'concurrent', 'configparser', 'contextlib', 'copy', 'copyreg', 'cProfile', 'csv', 'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm', 'decimal', 'difflib', 'dis', 'doctest', 'email', 'encodings', 'ensurepip', 'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput', 'fnmatch', 'fractions', 'ftplib', 'functools', 'gc', 'getopt', 'getpass', 'gettext', 'glob', 'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html', 'http', 'imaplib', 'imghdr', 'importlib', 'inspect', 'io', 'ipaddress', 'itertools', 'json', 'keyword', 'lib2to3', 'linecache', 'locale', 'logging', 'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes', 'mmap', 'modulefinder', 'msilib', 'msvcrt', 'multiprocessing', 'netrc', 'nis', 'nntplib', 'numbers', 'operator', 'optparse', 'os', 'ossaudiodev', 'parser', 'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil', 'platform', 'plistlib', 'poplib', 'posix', 'posixpath', 'pprint', 'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr', 'pydoc', 'queue', 'quopri', 'random', 're', 'readline', 'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched', 'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil', 'signal', 'site', 'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'spwd', 'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep', 'struct', 'subprocess', 'sunau', 'symbol', 'symtable', 'sys', 'sysconfig', 'syslog', 'tabnanny', 'tarfile', 'telnetlib', 'tempfile', 'termios', 'test', 'textwrap', 'threading', 'time', 'timeit', 'tkinter', 'token', 'tokenize', 'trace', 'traceback', 'tracemalloc', 'tty', 'turtle', 'turtledemo', 'types', 'typing', 'typing_extensions', 'unicodedata', 'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave', 'weakref', 'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zlib', 'zoneinfo'}
+u3 = {'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple', 'bool', 'bytes', 'bytearray', 'object', 'type', 'super', 'property', 'classmethod', 'staticmethod', 'open', 'input', 'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed', 'sum', 'min', 'max', 'all', 'any', 'abs', 'round', 'pow', 'divmod', 'hex', 'oct', 'bin', 'ord', 'chr', 'ascii', 'repr', 'format', 'hash', 'id', 'isinstance', 'issubclass', 'callable', 'iter', 'next', 'compile', 'eval', 'exec', 'globals', 'locals', 'vars', 'dir', 'help', 'getattr', 'setattr', 'delattr', 'hasattr', 'Exception', 'BaseException', 'ValueError', 'TypeError', 'RuntimeError', 'KeyError', 'IndexError', 'AttributeError', 'NameError', 'IOError', 'OSError', 'ImportError', 'ModuleNotFoundError', 'StopIteration', 'GeneratorExit', 'KeyboardInterrupt', 'SystemExit', 'NotImplemented', 'Ellipsis', 'None', 'True', 'False', '__name__', '__doc__', '__package__', '__file__', '__cached__', '__loader__', '__spec__'}
+v3 = {'imp', 'cmd', 'keyword', 'token'}
+class w3(ast.NodeVisitor):
+    def __init__(self):
+        self.imported_names = set()
+        self.used_names = set()
+        self.assigned_names = set()
+        self.import_lines = {}
+    def x3(self, o):
+        for p in o.names:
+            y3 = p.name.split('.')[0]
+            self.imported_names.add(y3)
+            self.import_lines[y3] = o.lineno
+        self.generic_visit(o)
+    def z3(self, o):
+        if o.module:
+            y3 = o.module.split('.')[0]
+            self.imported_names.add(y3)
+            self.import_lines[y3] = o.lineno
+        for p in o.names:
+            if p.name != '*':
+                self.imported_names.add(p.name)
+        self.generic_visit(o)
+    def a4(self, o):
+        for b4 in o.targets:
+            if isinstance(b4, ast.Name):
+                self.assigned_names.add(b4.id)
+            elif isinstance(b4, (ast.Tuple, ast.List)):
+                for elt in ast.walk(b4):
+                    if isinstance(elt, ast.Name):
+                        self.assigned_names.add(elt.id)
+        self.generic_visit(o)
+    def c4(self, o):
+        if isinstance(o.target, ast.Name):
+            self.assigned_names.add(o.target.id)
+        self.generic_visit(o)
+    def d4(self, o):
+        if isinstance(o.target, ast.Name):
+            self.assigned_names.add(o.target.id)
+        self.generic_visit(o)
+    def e4(self, o):
+        if isinstance(o.target, ast.Name):
+            self.assigned_names.add(o.target.id)
+        elif isinstance(o.target, (ast.Tuple, ast.List)):
+            for elt in ast.walk(o.target):
+                if isinstance(elt, ast.Name):
+                    self.assigned_names.add(elt.id)
+        self.generic_visit(o)
+    def f4(self, o):
+        for g4 in o.items:
+            if g4.optional_vars:
+                if isinstance(g4.optional_vars, ast.Name):
+                    self.assigned_names.add(g4.optional_vars.id)
+                elif isinstance(g4.optional_vars, (ast.Tuple, ast.List)):
+                    for elt in ast.walk(g4.optional_vars):
+                        if isinstance(elt, ast.Name):
+                            self.assigned_names.add(elt.id)
+        self.generic_visit(o)
+    def h4(self, o):
+        if o.name:
+            self.assigned_names.add(o.name)
+        self.generic_visit(o)
+    def i4(self, o):
+        self.assigned_names.add(o.name)
+        for arg in o.args.args:
+            self.assigned_names.add(arg.arg)
+        if o.args.vararg:
+            self.assigned_names.add(o.args.vararg.arg)
+        if o.args.kwarg:
+            self.assigned_names.add(o.args.kwarg.arg)
+        self.generic_visit(o)
+    def j4(self, o):
+        self.assigned_names.add(o.name)
+        for arg in o.args.args:
+            self.assigned_names.add(arg.arg)
+        if o.args.vararg:
+            self.assigned_names.add(o.args.vararg.arg)
+        if o.args.kwarg:
+            self.assigned_names.add(o.args.kwarg.arg)
+        self.generic_visit(o)
+    def k4(self, o):
+        self.assigned_names.add(o.name)
+        self.generic_visit(o)
+    def l4(self, o):
+        if isinstance(o.ctx, ast.Load):
+            self.used_names.add(o.id)
+        self.generic_visit(o)
+    def m4(self, o):
+        if isinstance(o.value, ast.Name):
+            self.used_names.add(o.value.id)
+        self.generic_visit(o)
+def n4():
+    o4 = set(sys.builtin_module_names)
+    o4.update(t3)
+    return o4
+def p4(i):
+    try:
+        with open(i, encoding='utf-8') as f:
+            b1 = f.read()
+        m = ast.parse(b1, str(i))
+        q4 = w3()
+        q4.visit(m)
+        o4 = n4()
+        a1 = []
+        for u in q4.used_names:
+            if u not in q4.imported_names and u not in q4.assigned_names and (u not in u3) and (u in o4) and (u not in v3) and (not u.startswith('_')):
+                s2 = 0
+                for o in ast.walk(m):
+                    if isinstance(o, ast.Name) and o.id == u:
+                        s2 = o.lineno
+                        break
+                a1.append((u, s2 or 1))
+        return (i, a1)
+    except (SyntaxError, UnicodeDecodeError):
+        return (i, [])
+def m2(i, a1):
+    if not a1:
+        return False
+    try:
+        with open(i, encoding='utf-8') as f:
+            d1 = f.readlines()
+        r4 = sorted({imp[0] for imp in a1})
+        s4 = 0
+        t4 = True
+        for i, v2 in enumerate(d1):
+            w2 = v2.lstrip()
+            if not w2 or w2.startswith('#'):
+                continue
+            if w2.startswith(('import ', 'from ')):
+                s4 = i + 1
+            elif t4 and (not w2.startswith(('import ', 'from '))):
+                t4 = False
+        u4 = [f'import {imp}\n' for imp in r4]
+        d1[s4:s4] = u4
+        with open(i, 'w', encoding='utf-8') as f:
+            f.writelines(d1)
+        return True
+    except Exception:
+        return False
+def f():
+    h1 = argparse.ArgumentParser(description='Find and fix missing stdlib imports in Python files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog=textwrap.dedent('\n            Examples:\n              python find_missing_imports.py\n              python find_missing_imports.py --autofix\n        '))
+    h1.add_argument('-a', '--autofix', action='store_true', help='Automatically add missing imports')
+    h1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    i1 = h1.parse_args()
+    k = Path(i1.directory).resolve()
+    if not k.is_dir():
+        logger.error(f'Error: {k} is not a directory')
+        sys.exit(1)
+    v4 = list(k.glob('**/*.py'))
+    if not v4:
+        print(f'No Python files found in {k}')
+        sys.exit(0)
+    w4 = 0
+    x4 = 0
+    with multiprocessing.Pool(processes=8) as l1:
+        m1 = [l1.apply_async(p4, (y4,)) for y4 in v4]
+        for o3 in m1:
+            i, a1 = o3.get()
+            if not a1:
+                continue
+            w4 += len(a1)
+            n1 = i.relative_to(k)
+            logger.warning(f'{n1}:')
+            for z4, a5 in sorted(set(a1)):
+                logger.warning(f'  Line {a5}: missing `import {z4}`')
+            if i1.autofix:
+                if m2(i, a1):
+                    logger.success('  ✓ Fixed')
+                    x4 += 1
+                else:
+                    logger.error('  ✗ Failed to fix')
+    print(f"{'─' * 40}")
+    print(f'Total missing imports found: {w4}')
+    if i1.autofix:
+        print(f'Files fixed: {x4}')
+    sys.exit(1 if w4 > 0 else 0)
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: find_py2_imports.py ---
+from pathlib import Path
+import tree_sitter_python as tsp
+from dh import cprint, should_skip
+from rapidfuzz import fuzz
+from tree_sitter import Language, Parser
+def b5(k):
+    from os import walk as os_walk
+    c5 = set()
+    k = Path(k)
+    if k.is_dir():
+        for d5, e5, f5 in os_walk(k, topdown=True):
+            g5 = Path(d5)
+            for h5 in list(e5):
+                i5 = g5 / h5
+                j5 = i5.resolve()
+                if should_skip(i5) or j5 in c5:
+                    e5.remove(h5)
+                c5.add(j5)
+            for k5 in f5:
+                i = Path(d5) / k5
+                if not should_skip(i):
+                    yield i
+    else:
+        yield k
+cwd = Path.cwd()
+h1 = Parser()
+h1.language = Language(tsp.language())
+l5 = {'import_statement', 'import_from_statement'}
+def b(i):
+    i = Path(i)
+    src = i.read_bytes()
+    m = h1.parse(src)
+    l3 = m.root_node
+    m5 = []
+    m1 = [src[o.start_byte:o.end_byte].decode() for o in l3.children if o.type in l5]
+    if m1:
+        for k in m1:
+            if k.startswith('import '):
+                k = k.replace('import ', '')
+                if ' as ' in k:
+                    n5 = k.index(' as ')
+                    k = k[:n5]
+                if '.' in k:
+                    n5 = k.index('.')
+                    k = k[:n5]
+                if k not in m5 and (not k.startswith('_')):
+                    m5.append(k + '\n')
+            elif k.startswith('from '):
+                k = k.replace('from ', '')
+                if k.startswith('.'):
+                    continue
+                if ' as ' in k:
+                    n5 = k.index(' as ')
+                    k = k[:n5]
+                if '.' in k:
+                    n5 = k.index('.')
+                    k = k[:n5]
+                if ' import' in k:
+                    n5 = k.index(' import')
+                    k = k[:n5]
+                if k not in m5 and (not k.startswith('_')):
+                    m5.append(k + '\n')
+    m5 = sorted(set(m5))
+    o5 = list(STDLIB2)
+    for x in m5:
+        x = x.strip().lower()
+        if x in STDLIB2 and x not in {'io', 'os', 'pathlib', 'ast', 'urllib'}:
+            cprint(f'{i.relative_to(cwd)}', 'cyan')
+            continue
+        for v in o5:
+            v = v.lower()
+            p5 = fuzz.ratio(x, v)
+            if p5 > 85 and len(x) > 3 and (len(v) > 3) and (x not in {'io', 'os', 'pathlib', 'urllib', 'tkinter', 'pickle', 'string', 'queue', 'urllib3', 'configparser', 'copyreg', 'httplib2'}):
+                cprint(f'{i.relative_to(cwd)}', 'yellow')
+                cprint(f'{x} / {v} / {p5}', 'green')
+                continue
+def f():
+    for i in b5(cwd):
+        if i.is_symlink():
+            continue
+        if i.suffix == '.py':
+            b(i)
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: fix_stdlib_imports.py ---
+import ast
+import keyword
+import os
+import sys
+from pathlib import Path
+r3 = {'abc', 'aifc', 'argparse', 'array', 'ast', 'asynchat', 'asyncio', 'asyncore', 'atexit', 'audioop', 'base64', 'bdb', 'binascii', 'binhex', 'bisect', 'builtins', 'bz2', 'calendar', 'cgi', 'cgitb', 'chunk', 'cmath', 'cmd', 'code', 'codecs', 'codeop', 'collections', 'colorsys', 'compileall', 'concurrent', 'configparser', 'contextlib', 'contextvars', 'copy', 'copyreg', 'cProfile', 'crypt', 'csv', 'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm', 'decimal', 'difflib', 'dis', 'distutils', 'doctest', 'email', 'encodings', 'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput', 'fnmatch', 'formatter', 'fractions', 'ftplib', 'functools', 'gc', 'getopt', 'getpass', 'gettext', 'glob', 'graphlib', 'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html', 'http', 'idlelib', 'imaplib', 'imghdr', 'imp', 'importlib', 'inspect', 'io', 'ipaddress', 'itertools', 'json', 'keyword', 'lib2to3', 'linecache', 'locale', 'logging', 'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes', 'mmap', 'modulefinder', 'multiprocessing', 'netrc', 'nis', 'nntplib', 'numbers', 'operator', 'os', 'ossaudiodev', 'parser', 'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil', 'platform', 'plistlib', 'poplib', 'posix', 'pprint', 'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr', 'pydoc', 'queue', 'quopri', 'random', 're', 'readline', 'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched', 'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil', 'signal', 'site', 'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep', 'struct', 'subprocess', 'sunau', 'symtable', 'sys', 'sysconfig', 'syslog', 'tabnanny', 'tarfile', 'telnetlib', 'tempfile', 'termios', 'test', 'textwrap', 'threading', 'time', 'timeit', 'tkinter', 'token', 'tokenize', 'trace', 'traceback', 'tracemalloc', 'tty', 'turtle', 'turtledemo', 'types', 'typing', 'unicodedata', 'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave', 'weakref', 'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zlib', 'collections.abc', 'collections.defaultdict', 'collections.Ordereddict', 'os.path', 'datetime.datetime', 'datetime.date', 'datetime.time', 'datetime.timedelta', 'json.dumps', 'json.loads', 'sys.argv', 'sys.path', 'sys.stdin', 'sys.stdout', 'sys.stderr'}
+def q5():
+    r5 = {'os': {'path', 'environ', 'getenv', 'listdir', 'walk', 'remove', 'rename', 'mkdir', 'makedirs', 'chdir', 'getcwd', 'sep', 'linesep'}, 'sys': {'argv', 'path', 'stdin', 'stdout', 'stderr', 'exit', 'version', 'platform', 'executable', 'modules'}, 'math': {'sqrt', 'ceil', 'floor', 'sin', 'cos', 'tan', 'pi', 'e', 'log', 'log10', 'exp', 'pow', 'fabs', 'factorial'}, 'random': {'random', 'randint', 'choice', 'shuffle', 'sample', 'uniform', 'seed', 'randrange'}, 'datetime': {'datetime', 'date', 'time', 'timedelta', 'timezone'}, 'json': {'dumps', 'loads', 'dump', 'load'}, 'collections': {'defaultdict', 'Ordereddict', 'Counter', 'deque', 'namedtuple'}, 'itertools': {'chain', 'cycle', 'repeat', 'count', 'islice', 'groupby', 'combinations', 'permutations', 'product'}, 'functools': {'reduce', 'partial', 'lru_cache', 'wraps', 'cache'}, 'pathlib': {'Path', 'PurePath', 'PurePosixPath', 'PureWindowsPath'}, 're': {'match', 'search', 'findall', 'sub', 'compile', 'split', 'escape'}, 'argparse': {'ArgumentParser', 'Namespace'}, 'logging': {'debug', 'info', 'warning', 'error', 'critical', 'getLogger', 'basicConfig'}, 'statistics': {'mean', 'median', 'mode', 'stdev', 'variance'}, 'typing': {'list', 'dict', 'set', 'tuple', 'Optional', 'Union', 'Any', 'Callable', 'Iterator'}, 'decimal': {'Decimal'}, 'fractions': {'Fraction'}, 'hashlib': {'md5', 'sha1', 'sha256', 'sha512'}, 'subprocess': {'run', 'Popen', 'call', 'check_output'}, 'shutil': {'copy', 'copy2', 'move', 'rmtree', 'make_archive'}, 'tempfile': {'NamedTemporaryFile', 'TemporaryFile', 'mkdtemp'}, 'glob': {'glob'}, 'time': {'time', 'sleep', 'ctime', 'localtime', 'gmtime', 'strftime', 'strptime'}}
+    for z4 in r3:
+        if '.' not in z4 and z4 not in r5:
+            r5[z4] = set()
+    return r5
+class s5(ast.NodeVisitor):
+    def __init__(self, r5):
+        self.stdlib_names = r5
+        self.imports = {}
+        self.used_names = set()
+        self.import_nodes = []
+def t5(i, r5):
+    try:
+        with open(i, encoding='utf-8') as f:
+            h2 = f.read()
+    except Exception as e:
+        print(f'Error reading {i}: {e}', file=sys.stderr)
+        return []
+    try:
+        m = ast.parse(h2, filename=i)
+    except SyntaxError as e:
+        print(f'Syntax error in {i}: {e}', file=sys.stderr)
+        return []
+    u5 = s5(r5)
+    u5.visit(m)
+    y = []
+    v5 = set(dir(__builtins__)) if isinstance(__builtins__, dict) else set()
+    w5 = set(keyword.kwlist)
+    for u in u5.used_names:
+        if u in u5.imports:
+            continue
+        if u in v5 or u in w5:
+            continue
+        if u.startswith('_'):
+            continue
+        if u in r5:
+            y.append((u, f'import {u}'))
+        else:
+            for z4, x5 in r5.items():
+                if u in x5:
+                    if z4 not in u5.imports:
+                        y.append((u, f'from {z4} import {u}'))
+                    break
+    return y
+def y5(k, z5=None):
+    if z5 is None:
+        z5 = {'.git', '__pycache__', '.venv', 'venv', 'env', '.env', 'build', 'dist', 'egg-info', '.tox', '.eggs'}
+    r5 = q5()
+    m1 = {}
+    a6 = Path(k)
+    if not a6.exists():
+        print(f"Error: Directory '{k}' does not exist.", file=sys.stderr)
+        return m1
+    j1 = list(a6.rglob('*.py'))
+    j1 = [f for f in j1 if not any((b6 in f.parts for b6 in z5))]
+    print(f'Scanning {len(j1)} Python files in {k}...')
+    for i in j1:
+        y = t5(str(i), r5)
+        if y:
+            m1[str(i)] = y
+    return m1
+def c6(m1, d6=False):
+    if not m1:
+        print('\n✅ No missing stdlib imports detected!')
+        return
+    e6 = len(m1)
+    w4 = sum((len(y) for y in m1.values()))
+    print(f"\n{'=' * 40}")
+    print(f' Found {w4} potentially missing import(s) in {e6} file(s)')
+    print(f"{'=' * 40}\n")
+    for i, y in sorted(m1.items()):
+        n1 = os.path.relpath(i)
+        print(f'📄 {n1}')
+        print(f"   {'─' * 40}")
+        for u, f6 in y:
+            print(f"   ⚠️  '{u}' used but not imported")
+            print(f'   💡 Suggested: {f6}')
+        print()
+def f():
+    import argparse
+    h1 = argparse.ArgumentParser(description='Detect potentially missing standard library imports in Python files.', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s .\n  %(prog)s src/\n  %(prog)s . --exclude tests\n  %(prog)s . --exclude tests,docs\n  %(prog)s . --show-all\n        ')
+    h1.add_argument('directory', nargs='?', default='.', help='Root directory to scan (default: current directory)')
+    h1.add_argument('--exclude', '-e', default='', help='Comma-separated list of directories to exclude')
+    h1.add_argument('--show-all', '-a', action='store_true', help='Show all files even if no missing imports detected')
+    i1 = h1.parse_args()
+    z5 = {'.git', '__pycache__', '.venv', 'venv', 'env', '.env', 'build', 'dist', 'egg-info', '.tox', '.eggs'}
+    if i1.exclude:
+        z5.update((d.strip() for d in i1.exclude.split(',')))
+    print(f'🔍 Checking for missing stdlib imports in: {i1.directory}')
+    m1 = y5(i1.directory, z5)
+    c6(m1)
+    if i1.show_all:
+        print(f"\n{'=' * 40}")
+        print(' All scanned files:')
+        print(f"{'=' * 40}")
+        a6 = Path(i1.directory)
+        for i in sorted(a6.rglob('*.py')):
+            if not any((b6 in i.parts for b6 in z5)):
+                n1 = os.path.relpath(i)
+                g6 = '❌' if str(i) in m1 else '✅'
+                print(f'  {g6} {n1}')
+    return 1 if m1 else 0
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: imdetector.py ---
+import ast
+import os
+from pathlib import Path
+h6 = 'found.txt'
+def i6(i):
+    try:
+        with Path(i).open(encoding='utf-8', errors='ignore') as f:
+            j6 = f.read(2048)
+        return 'import ' in j6 or 'def ' in j6 or 'class ' in j6
+    except Exception:
+        return False
+def k6(i):
+    try:
+        l6 = Path(i).read_text(encoding='utf-8', errors='ignore')
+        m = ast.parse(l6)
+    except Exception:
+        return False
+    m6 = False
+    for o in m.body:
+        if isinstance(o, ast.Expr) and isinstance(o.value, ast.Str):
+            continue
+        if isinstance(o, (ast.Import, ast.ImportFrom)) and (not m6):
+            continue
+        if isinstance(o, (ast.Import, ast.ImportFrom)) and m6:
+            return True
+        m6 = True
+    return False
+def n6(l3):
+    m1 = []
+    for d5, _, f5 in os.walk(l3):
+        for u in f5:
+            i = os.path.join(d5, u)
+            if not u.endswith('.py') and (not i6(i)):
+                continue
+            if k6(i):
+                m1.append(os.path.relpath(i, l3))
+    return sorted(m1)
+def f():
+    o6 = n6(Path.cwd())
+    with Path(h6).open('w', encoding='utf-8') as f:
+        f.writelines((i + '\n' for i in o6))
+    print(f'Found {len(o6)} files with late imports.')
+    print(f'Results saved to {h6}')
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+# --- File: transformimports.py ---
+import ast
+import sys
+from pathlib import Path
+from typing import Any
+class p6(ast.NodeTransformer):
+    def __init__(self, m):
+        self.tree = m
+        self.module_to_names = {}
+        self.modified = False
+        self._analyze_usage()
+    def q6(self):
+        r6 = set()
+        for o in ast.walk(self.tree):
+            if isinstance(o, ast.Import):
+                for p in o.names:
+                    if not p.asname:
+                        r6.add(p.name)
+        if not r6:
+            return
+        for o in ast.walk(self.tree):
+            if isinstance(o, ast.Attribute) and isinstance(o.value, ast.Name):
+                if o.value.id in r6:
+                    self.module_to_names.setdefault(o.value.id, set()).add(o.attr)
+    def x3(self, o):
+        s6 = []
+        for p in o.names:
+            if not p.asname and p.name in self.module_to_names:
+                self.modified = True
+                r = sorted(self.module_to_names[p.name])
+                s6.append(ast.ImportFrom(module=p.name, names=[ast.alias(name=n, asname=None) for n in r], level=0))
+            else:
+                s6.append(ast.Import(names=[p]))
+        return s6 if len(s6) > 1 else s6[0] if s6 else None
+    def m4(self, o):
+        if isinstance(o.value, ast.Name) and o.value.id in self.module_to_names:
+            self.modified = True
+            return ast.Name(id=o.attr, ctx=o.ctx)
+        return self.generic_visit(o)
+def f():
+    if len(sys.argv) != 2:
+        print('Usage: python transformimports_optimized.py <python_file>', file=sys.stderr)
+        sys.exit(1)
+    i = Path(sys.argv[1])
+    if not i.exists() or i.suffix != '.py':
+        print(f"Error: Invalid Python file '{i}'", file=sys.stderr)
+        sys.exit(1)
+    try:
+        b1 = i.read_text(encoding='utf-8')
+        m = ast.parse(b1)
+        t6 = p6(m)
+        u6 = t6.visit(m)
+        if t6.modified:
+            ast.fix_missing_locations(u6)
+            v6 = ast.unparse(u6)
+            i.write_text(v6, encoding='utf-8')
+            print(f"✓ Successfully transformed imports in '{i}'.")
+        else:
+            print(f"No transformations needed for '{i}'.")
+    except SyntaxError as e:
+        print(f'Error: File has syntax errors: {e}', file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(f())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

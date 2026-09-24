@@ -1,6 +1,3 @@
-
-
-
 import ast
 import multiprocessing
 from pathlib import Path
@@ -14,7 +11,6 @@ from dh import get_pyfiles
 
 
 class UnusedImportCollector(pyflakes.reporter.Reporter):
-
     def __init__(self) -> None:
         super().__init__()
         self.unused: List[pyflakes.messages.UnusedImport] = []
@@ -58,7 +54,6 @@ def process_file(path: str | Path) -> Tuple[str, List[str]]:
         print(f"Syntax error in {path}: {e}", file=sys.stderr)
         return (str(path), [])
 
-    
     line_unused: Dict[int, Set[str]] = {}
     for msg in unused_msgs:
         line_unused.setdefault(msg.lineno, set()).add(msg.name)
@@ -77,7 +72,6 @@ def process_file(path: str | Path) -> Tuple[str, List[str]]:
                     else:
                         new_aliases.append(alias)
                 if not new_aliases:
-                    
                     return ast.Pass()
                 node.names = new_aliases
             return node
@@ -87,7 +81,6 @@ def process_file(path: str | Path) -> Tuple[str, List[str]]:
                 unused_set = line_unused[node.lineno]
                 new_names = []
                 for alias in node.names:
-                    
                     if alias.name == "*":
                         new_names.append(alias)
                         continue
@@ -124,7 +117,6 @@ def main() -> None:
     with multiprocessing.Pool() as pool:
         results = pool.map(process_file, files)
 
-    
     for path, removed in results:
         if removed:
             print(f"{path}: removed {', '.join(removed)}")

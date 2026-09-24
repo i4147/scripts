@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -32,7 +31,6 @@ def parse_patch(text: str):
         old_path, new_path = m.group(1), m.group(2)
         i += 1
 
-        
         while i < n and not lines[i].startswith("@@"):
             if lines[i].startswith("diff --git "):
                 break
@@ -54,14 +52,13 @@ def parse_patch(text: str):
                 hl = lines[i]
                 if hl.startswith("@@") or hl.startswith("diff --git "):
                     break
-                if hl.startswith("\\"):  
+                if hl.startswith("\\"):
                     i += 1
                     continue
                 if hl and hl[0] in " +-":
                     hunk_lines.append(hl)
                     i += 1
                 elif hl == "\n" or hl == "":
-                    
                     hunk_lines.append(" \n")
                     i += 1
                 else:
@@ -85,7 +82,6 @@ def apply_hunk(file_lines: list[str], hunk: dict, fuzz: int = 0) -> Optional[lis
     old_count = hunk["old_count"]
     hunk_lines = hunk["lines"]
 
-    
     old_side = []
     for hl in hunk_lines:
         tag = hl[0]
@@ -93,7 +89,6 @@ def apply_hunk(file_lines: list[str], hunk: dict, fuzz: int = 0) -> Optional[lis
         if tag in (" ", "-"):
             old_side.append(content)
 
-    
     candidates = [old_start - 1]
     for offset in range(1, fuzz + 1):
         candidates.append(old_start - 1 - offset)
@@ -103,7 +98,6 @@ def apply_hunk(file_lines: list[str], hunk: dict, fuzz: int = 0) -> Optional[lis
         if pos < 0:
             continue
         if old_side == file_lines[pos : pos + len(old_side)]:
-            
             new_side = []
             for hl in hunk_lines:
                 tag = hl[0]
@@ -119,9 +113,7 @@ def apply_to_file(path: Path, hunks: list[dict], reverse: bool, fuzz: int, dry_r
     original = path.read_text()
     file_lines = original.splitlines(keepends=True)
 
-    
     if original and not original.endswith("\n"):
-        
         pass
 
     all_hunks = list(reversed(hunks)) if reverse else hunks

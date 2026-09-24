@@ -1,4 +1,3 @@
-
 import ast
 import sys
 import os
@@ -19,8 +18,6 @@ def get_offset_map(source: str) -> List[int]:
 
 def offset_from_pos(lineno: int, col_offset: int, line_offsets: List[int]) -> int:
     return line_offsets[lineno - 1] + col_offset
-
-
 
 
 RawAction = Tuple[int, int, int, int, Optional[str]]
@@ -67,15 +64,15 @@ def gather_comment_actions(source: str) -> List[RawAction]:
             if tok.type == tokenize.COMMENT:
                 start_line, start_col = tok.start
                 end_line, end_col = tok.end
-                
+
                 start = offset_from_pos(start_line, start_col, line_offsets)
                 end = offset_from_pos(end_line, end_col, line_offsets)
-                
+
                 if end > start and source[end - 1] == "\n":
                     end -= 1
                 actions.append((start_line, start_col, end_line, end_col, None))
     except tokenize.TokenError:
-        pass  
+        pass
     return actions
 
 
@@ -86,22 +83,18 @@ def apply_actions(source: str, raw_actions: List[RawAction]) -> str:
 
     line_offsets = get_offset_map(source)
 
-    
     abs_actions = []
     for sl, sc, el, ec, repl in raw_actions:
         start = offset_from_pos(sl, sc, line_offsets)
         end = offset_from_pos(el, ec, line_offsets)
         abs_actions.append((start, end, repl))
 
-    
     abs_actions.sort(key=lambda a: a[0], reverse=True)
 
     for start, end, repl in abs_actions:
         if repl is None:
-            
             source = source[:start] + source[end:]
         else:
-            
             source = source[:start] + repl + source[end:]
 
     return source
@@ -131,7 +124,6 @@ def process_file(path: str | Path, remove_comments: bool) -> str:
             cprint(f"{path.name}: no changes", "grey")
             return
 
-        
         try:
             ast.parse(new_source, filename=path)
         except SyntaxError as ve:
@@ -139,7 +131,6 @@ def process_file(path: str | Path, remove_comments: bool) -> str:
 
             path.write_text(new_source, encoding="utf-8")
 
-        
         docstring_actions = [a for a in actions if a in gather_docstring_actions(tree)]
         sole_replaced = sum(1 for a in docstring_actions if a[4] == "pass")
         doc_removed = len(docstring_actions) - sole_replaced

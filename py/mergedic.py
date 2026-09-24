@@ -54,9 +54,9 @@ def main():
     input_paths = collect_inputs(sys.argv[1:])
 
     merged: dict = {}
-    
+
     origin: dict = {}
-    duplicates: list = []  
+    duplicates: list = []
 
     for path in input_paths:
         data = load_json(path)
@@ -85,7 +85,6 @@ def main():
     else:
         logger.info("No duplicate keys found across inputs.")
 
-    
     for path in input_paths:
         try:
             path.unlink()

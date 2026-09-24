@@ -1,0 +1,424 @@
+# --- File: xbash_functions.py ---
+import argparse
+import contextlib
+import re
+import sys
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+from fastwalk import walk_files
+from loguru import logger
+a = {'.py', '.h', '.c', '.js', '.ts', '.hpp', '.cpp', '.pyx', '.jsx', '.lua', '.tsx', '.pl', '.am', '.pm', '.syntax'}
+b = 'TERMUX_VERSION' in __import__('os').environ or 'com.termux' in __import__('os').environ.get('PREFIX', '')
+c = 8
+d = 1000000
+e = ('bash', 'sh', 'dash', 'ksh', 'zsh', 'ash', 'shell')
+f = re.compile('^\\s*(?:function\\s+)?(\\w[\\w\\-]*)\\s*(?:\\(\\))?\\s*\\{')
+g = re.compile('[^\\w\\-]')
+def h(i):
+    if i.suffix == '.sh':
+        return True
+    if not i.is_file():
+        return False
+    try:
+        if i.stat().st_size > d:
+            return False
+    except OSError:
+        return False
+    try:
+        with open(i, 'rb') as j:
+            k = j.read(2)
+            if b'\x00' in k:
+                return False
+            j.seek(0)
+            l = j.readline().decode('utf-8', errors='ignore').strip()
+            if l.startswith('#!'):
+                m = l.lower()
+                if any((n in m for n in e)):
+                    return True
+    except (OSError, UnicodeDecodeError):
+        return False
+    return False
+def o(p, q=True):
+    r = set()
+    for i in p:
+        if not i.exists():
+            logger.warning('{} does not exist, skipping...', i)
+            continue
+        if i.is_file():
+            if h(i):
+                r.add(i.resolve())
+        elif i.is_dir():
+            for s in walk_files(i):
+                t = Path(s)
+                if t.suffix in a:
+                    continue
+                if not q and t.suffix != '.sh':
+                    continue
+                if t.is_file() and h(t):
+                    r.add(t.resolve())
+        else:
+            logger.warning('{} is not a file or directory, skipping...', i)
+    return r
+def u(v):
+    try:
+        with open(v, 'r', encoding='utf-8', errors='ignore') as j:
+            w = j.read()
+    except OSError as exc:
+        logger.error('Error reading {}: {}', v, exc)
+        return []
+    x = []
+    y = w.split('\n')
+    z = 0
+    while z < len(y):
+        a1 = y[z]
+        b1 = f.match(a1)
+        if b1:
+            c1 = b1.group(1)
+            d1 = [a1]
+            e1 = a1.count('{') - a1.count('}')
+            f1 = z + 1
+            while f1 < len(y) and e1 > 0:
+                g1 = y[f1]
+                d1.append(g1)
+                e1 += g1.count('{') - g1.count('}')
+                f1 += 1
+            if e1 == 0:
+                h1 = '\n'.join(d1)
+                x.append((c1, h1, v))
+            else:
+                logger.warning("Could not find matching closing brace for function '{}' in {}", c1, v)
+            z = f1
+        else:
+            z += 1
+    return x
+def i1(v, j1, k1=True):
+    x = u(v)
+    l1 = []
+    for c1, m1, n1 in x:
+        o1 = g.sub('_', c1)
+        try:
+            p1 = n1.relative_to(Path.cwd())
+        except ValueError:
+            p1 = n1
+        q1 = j1 / p1.parent
+        if k1:
+            r1 = q1 / f'{o1}.sh'
+        else:
+            r1 = q1 / o1
+        q1.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(r1, 'w', encoding='utf-8') as j:
+                j.write(m1)
+                j.write('\n')
+            l1.append((c1, r1))
+        except OSError as exc:
+            logger.error("Error writing function '{}' to {}: {}", c1, r1, exc)
+    return l1
+def s1(t1):
+    return i1(*t1)
+def u1():
+    v1 = argparse.ArgumentParser(description='Extract functions from shell scripts (.sh and extensionless) recursively', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  # Process all shell scripts in current directory recursively\n  %(prog)s\n  \n  # Process specific files and directories\n  %(prog)s script1.sh myscript dir1/ dir2/\n  \n  # Specify output directory\n  %(prog)s -o extracted_functions dir1/ dir2/\n  \n  # Only process .sh files (ignore extensionless scripts)\n  %(prog)s --sh-only\n  \n  # In Termux, this is automatically detected\n  %(prog)s ~/storage/shared/scripts/\n')
+    v1.add_argument('inputs', nargs='*', type=Path, help='Files and/or directories to process. If none provided, processes all shell scripts in current directory recursively.')
+    v1.add_argument('-o', '--output', type=Path, default=Path('extracted_functions'), help='Output directory for extracted functions (default: extracted_functions)')
+    v1.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (process sequentially)')
+    v1.add_argument('--sh-only', action='store_true', help='Only process files with .sh extension (ignore extensionless scripts)')
+    v1.add_argument('--no-extension', action='store_true', help='Output functions without .sh extension')
+    v1.add_argument('-v', '--verbose', action='store_true', help='Show verbose output including skipped files')
+    t1 = v1.parse_args()
+    if b:
+        print('Running in Termux environment (using {} workers)', c)
+    if t1.inputs:
+        w1 = t1.inputs
+    else:
+        w1 = [Path('.')]
+    print('Searching for shell scripts...')
+    q = not t1.sh_only
+    r = o(w1, q)
+    if not r:
+        print('No shell scripts found to process.')
+        if not t1.sh_only:
+            print('Tip: Use --sh-only to only process .sh files')
+        return 0
+    print('Found {} shell script(s) to process:', len(r))
+    if t1.verbose:
+        for i in sorted(r):
+            logger.debug('  - {}', i)
+    try:
+        t1.output.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        logger.error("Cannot create output directory '{}'. Check permissions.", t1.output)
+        return 1
+    x1 = 0
+    k1 = not t1.no_extension
+    if t1.no_parallel or len(r) == 1:
+        print('Processing files sequentially...')
+        for v in sorted(r):
+            y1 = i1(v, t1.output, k1)
+            x1 += len(y1)
+            if t1.verbose or y1:
+                print('  {}: extracted {} function(s)', v, len(y1))
+    else:
+        print('Processing files in parallel with {} workers...', c)
+        z1 = [(v, t1.output, k1) for v in r]
+        with Pool(processes=c) as a2:
+            b2 = [(v, a2.apply_async(s1, (c2,))) for v, c2 in zip(r, z1)]
+            for v, d2 in b2:
+                try:
+                    y1 = d2.get()
+                    x1 += len(y1)
+                    if t1.verbose or y1:
+                        print('  {}: extracted {} function(s)', v, len(y1))
+                except Exception as exc:
+                    logger.error('Error processing {}: {}', v, exc)
+    print("\nDone! Extracted {} function(s) to '{}'", x1, t1.output.absolute())
+    if b:
+        with contextlib.suppress(BaseException):
+            t1.output.chmod(t1.output.stat().st_mode | 493)
+    return 0
+if __name__ == '__main__':
+    try:
+        raise SystemExit(u1())
+    except KeyboardInterrupt:
+        logger.warning('\nInterrupted by user. Exiting...')
+        sys.exit(1)
+
+# --- File: xbash_functions2.py ---
+import argparse
+import contextlib
+import os
+import re
+import sys
+from collections.abc import Generator
+from pathlib import Path
+b = os.environ.get('TERMUX_VERSION') is not None or 'com.termux' in os.environ.get('PREFIX', '')
+a = {'.py', '.h', '.c', '.js', '.ts', '.hpp', '.cpp', '.pyx', '.jsx', '.lua', '.tsx', '.pl', '.am', '.pm', '.so', '.rmeta', '.syntax'}
+class e2:
+    def __init__(self, q=True, f2=False):
+        self.include_extensionless = q
+        self.skip_hidden = f2
+        self.script_count = 0
+    def h(self, i):
+        if not i.is_file():
+            return False
+        if self.skip_hidden and i.name.startswith('.'):
+            return False
+        if i.suffix == '.sh':
+            return True
+        if not self.include_extensionless:
+            return False
+        try:
+            if i.stat().st_size > 1000000:
+                return False
+        except OSError:
+            return False
+        try:
+            with open(i, 'rb') as f:
+                k = f.read(2)
+                if b'\x00' in k:
+                    return False
+                f.seek(0)
+                l = f.readline().decode('utf-8', errors='ignore').strip()
+                if l.startswith('#!'):
+                    g2 = ['bash', 'sh', 'dash', 'ksh', 'zsh', 'ash', 'shell']
+                    m = l.lower()
+                    if any((n in m for n in g2)):
+                        return True
+        except (OSError, UnicodeDecodeError):
+            return False
+        return False
+    def h2(self, i2):
+        try:
+            with os.scandir(i2) as j2:
+                for k2 in j2:
+                    i = Path(k2.path)
+                    if k2.is_file():
+                        if i.suffix in a:
+                            continue
+                        if self.is_bash_script(i):
+                            self.script_count += 1
+                            yield i.resolve()
+                    elif k2.is_dir():
+                        if self.skip_hidden and i.name.startswith('.'):
+                            continue
+                        yield from self.walk_directory(i)
+        except PermissionError:
+            print(f'Warning: Permission denied accessing {i2}', file=sys.stderr)
+        except OSError as e:
+            print(f'Warning: OS error accessing {i2}: {e}', file=sys.stderr)
+    def l2(self, p):
+        for i in p:
+            if not i.exists():
+                print(f'Warning: {i} does not exist, skipping...', file=sys.stderr)
+                continue
+            if i.is_file():
+                if self.is_bash_script(i):
+                    self.script_count += 1
+                    yield i.resolve()
+            elif i.is_dir():
+                yield from self.walk_directory(i)
+            else:
+                print(f'Warning: {i} is not a file or directory, skipping...', file=sys.stderr)
+class m2:
+    def __init__(self):
+        self.function_count = 0
+    def n2(self, v):
+        try:
+            with open(v, 'r', encoding='utf-8', errors='ignore') as f:
+                w = f.read()
+        except Exception as e:
+            print(f'Error reading {v}: {e}', file=sys.stderr)
+            return
+        y = w.split('\n')
+        o2 = re.compile('^\\s*(?:function\\s+)?(\\w[\\w\\-]*)\\s*(?:\\(\\))?\\s*\\{')
+        i = 0
+        while i < len(y):
+            a1 = y[i]
+            b1 = o2.match(a1)
+            if b1:
+                c1 = b1.group(1)
+                d1 = [a1]
+                e1 = a1.count('{') - a1.count('}')
+                j = i + 1
+                while j < len(y) and e1 > 0:
+                    g1 = y[j]
+                    d1.append(g1)
+                    e1 += g1.count('{') - g1.count('}')
+                    j += 1
+                if e1 == 0:
+                    h1 = '\n'.join(d1)
+                    self.function_count += 1
+                    yield (c1, h1)
+                else:
+                    print(f"Warning: Could not find matching closing brace for function '{c1}' in {v}", file=sys.stderr)
+                i = j
+            else:
+                i += 1
+class p2:
+    def __init__(self, j1, k1=True):
+        self.output_dir = j1
+        self.use_extension = k1
+        self.written_count = 0
+    def q2(self, c1, m1, n1):
+        o1 = re.sub('[^\\w\\-]', '_', c1)
+        try:
+            p1 = n1.relative_to(Path.cwd())
+        except ValueError:
+            p1 = n1
+        q1 = self.output_dir / p1.parent
+        if self.use_extension:
+            r1 = q1 / f'{o1}.sh'
+        else:
+            r1 = q1 / o1
+        q1.mkdir(parents=True, exist_ok=True)
+        r2 = f"#!/bin/bash\n# Function: {c1}\n# Extracted from: {n1}\n# Original file: {n1.name}\n# Environment: {('Termux' if b else 'Standard')}\n\n"
+        try:
+            with open(r1, 'w', encoding='utf-8') as f:
+                f.write(r2)
+                f.write(m1)
+                f.write('\n')
+            with contextlib.suppress(OSError):
+                r1.chmod(r1.stat().st_mode | 73)
+            self.written_count += 1
+            return r1
+        except Exception as e:
+            print(f"Error writing function '{c1}' to {r1}: {e}", file=sys.stderr)
+            return None
+def s2(w1, j1, q=True, k1=True, f2=False, t2=False):
+    u2 = e2(q, f2)
+    v2 = m2()
+    w2 = p2(j1, k1)
+    try:
+        j1.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        print(f"Error: Cannot create output directory '{j1}'. Check permissions.", file=sys.stderr)
+        return (0, 0)
+    x2 = 0
+    print('Processing files using generator pattern...')
+    for y2 in u2.find_scripts(w1):
+        x2 += 1
+        if t2:
+            print(f'  Processing: {y2}')
+        for c1, m1 in v2.extract_functions(y2):
+            z2 = w2.write_function(c1, m1, y2)
+            if z2 and t2:
+                print(f'    -> Extracted: {c1} -> {z2.name}')
+    return (x2, v2.function_count)
+def u1():
+    v1 = argparse.ArgumentParser(description='Extract functions from shell scripts using generator-style filesystem walker', formatter_class=argparse.RawDescriptionHelpFormatter, epilog="\nExamples:\n  # Process all shell scripts in current directory recursively\n  %(prog)s\n  \n  # Process specific files and directories\n  %(prog)s script1.sh myscript dir1/ dir2/\n  \n  # Specify output directory\n  %(prog)s -o extracted_functions dir1/ dir2/\n  \n  # Only process .sh files (ignore extensionless scripts)\n  %(prog)s --sh-only\n  \n  # Skip hidden files and directories\n  %(prog)s --skip-hidden\n  \n  # Verbose output\n  %(prog)s --verbose\n\nGenerator Benefits:\n  - Memory efficient: only processes one file at a time\n  - Lazy evaluation: doesn't load all files into memory\n  - Ideal for large directory trees and Termux environments\n  - Uses os.scandir() for efficient filesystem walking\n        ")
+    v1.add_argument('inputs', nargs='*', type=Path, help='Files and/or directories to process. If none provided, processes all shell scripts in current directory recursively.')
+    v1.add_argument('-o', '--output', type=Path, default=Path('extracted_functions'), help='Output directory for extracted functions (default: extracted_functions)')
+    v1.add_argument('--sh-only', action='store_true', help='Only process files with .sh extension (ignore extensionless scripts)')
+    v1.add_argument('--no-extension', action='store_true', help='Output functions without .sh extension')
+    v1.add_argument('--skip-hidden', action='store_true', help='Skip hidden files and directories (starting with .)')
+    v1.add_argument('--verbose', action='store_true', help='Show verbose output including each processed file')
+    v1.add_argument('--dry-run', action='store_true', help='Only find and list scripts without extracting functions')
+    t1 = v1.parse_args()
+    if b:
+        print('Running in Termux environment (optimized for mobile)')
+    if t1.inputs:
+        w1 = t1.inputs
+    else:
+        w1 = [Path('.')]
+    q = not t1.sh_only
+    if t1.dry_run:
+        print('Searching for shell scripts...')
+        u2 = e2(q, t1.skip_hidden)
+        a3 = list(u2.find_scripts(w1))
+        print(f'\nFound {len(a3)} shell script(s):')
+        for b3 in a3:
+            print(f'  {b3}')
+        print(f'\nWould extract functions to: {t1.output.absolute()}')
+        return 0
+    print('Searching for shell scripts...')
+    x2, c3 = s2(input_paths=w1, output_dir=t1.output, include_extensionless=q, use_extension=not t1.no_extension, skip_hidden=t1.skip_hidden, verbose=t1.verbose)
+    print('\nDone!')
+    print(f'  Files processed: {x2}')
+    print(f'  Functions extracted: {c3}')
+    print(f'  Output directory: {t1.output.absolute()}')
+    if b:
+        with contextlib.suppress(BaseException):
+            t1.output.chmod(t1.output.stat().st_mode | 493)
+    return 0
+if __name__ == '__main__':
+    try:
+        raise SystemExit(u1())
+    except KeyboardInterrupt:
+        print('\nInterrupted by user. Exiting...')
+        sys.exit(1)
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,1081 @@
+# --- File: archive_convert.py ---
+import bz2
+import contextlib
+import gzip
+import lzma
+import os
+import sys
+import tempfile
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+import brotli
+import lz4.frame
+import py7zr
+import zstandard as zstd
+from dh import fsz, gsz
+from loguru import logger
+a = 1024 * 1024
+b = 9
+c = 8
+d = frozenset({'gz', 'zst', 'xz', 'bz2', 'lz4', 'br', '7z'})
+def e(p):
+    f = p.name.split('.')
+    if len(f) < 3 or f[-2] != 'tar':
+        return None
+    g = f[-1].lower()
+    h = '.'.join(f[:-2])
+    if not h:
+        h = 'archive'
+    return (h, g)
+def i(j, k):
+    l = e(j)
+    h = l[0] if l else j.stem
+    return j.with_name(f'{h}.tar.{k}')
+def m(src, dst, g):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if g == 'gz':
+        with gzip.open(src, 'rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                o.write(p)
+    elif g == 'bz2':
+        with bz2.open(src, 'rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                o.write(p)
+    elif g == 'xz':
+        with lzma.open(src, 'rb', format=lzma.FORMAT_XZ) as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                o.write(p)
+    elif g == 'zst':
+        q = zstd.ZstdDecompressor()
+        with src.open('rb') as n, q.stream_reader(n) as r, dst.open('wb') as o:
+            while True:
+                p = r.read(a)
+                if not p:
+                    break
+                o.write(p)
+    elif g == 'br':
+        dec = brotli.Decompressor()
+        with src.open('rb') as n, dst.open('wb') as o:
+            while True:
+                s = n.read(a)
+                if not s:
+                    break
+                out = dec.process(s)
+                if out:
+                    o.write(out)
+            t = dec.finish()
+            if t:
+                o.write(t)
+    elif g == 'lz4':
+        with lz4.frame.open(src, 'rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                o.write(p)
+    else:
+        raise ValueError(f'Unsupported src codec: {g}')
+def u(v, dst, g):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if g == 'gz':
+        with v.open('rb') as n, gzip.open(dst, 'wb', compresslevel=9) as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                o.write(p)
+    elif g == 'bz2':
+        w = bz2.BZ2Compressor(compresslevel=9)
+        with v.open('rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                out = w.compress(p)
+                if out:
+                    o.write(out)
+            t = w.flush()
+            if t:
+                o.write(t)
+    elif g == 'xz':
+        w = lzma.LZMACompressor(format=lzma.FORMAT_XZ, check=-1, preset=b)
+        with v.open('rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                out = w.compress(p)
+                if out:
+                    o.write(out)
+            t = w.flush()
+            if t:
+                o.write(t)
+    elif g == 'zst':
+        x = zstd.ZstdCompressor(level=22)
+        with v.open('rb') as n, dst.open('wb') as o, x.stream_writer(o) as zw:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                zw.write(p)
+    elif g == 'br':
+        y = brotli.Compressor(quality=11)
+        with v.open('rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                out = y.process(p)
+                if out:
+                    o.write(out)
+            t = y.finish()
+            if t:
+                o.write(t)
+    elif g == 'lz4':
+        w = lz4.frame.LZ4FrameCompressor(block_size=lz4.frame.BLOCKSIZE_MAX)
+        with v.open('rb') as n, dst.open('wb') as o:
+            while True:
+                p = n.read(a)
+                if not p:
+                    break
+                out = w.compress(p)
+                if out:
+                    o.write(out)
+            t = w.flush()
+            if t:
+                o.write(t)
+    elif g == '7z':
+        raise RuntimeError('Use py7zr path for dst codec 7z')
+    else:
+        raise ValueError(f'Unsupported dst codec: {g}')
+def z(p):
+    try:
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+def a1(src, b1):
+    c1 = Path(tempfile.mkdtemp(prefix='tar7z_dec_'))
+    try:
+        with py7zr.SevenZipFile(src, mode='r') as z:
+            z.extractall(path=c1)
+        d1 = next(c1.glob('*.tar'), None)
+        if d1 is None:
+            e1 = [p for p in c1.rglob('*') if p.is_file()]
+            if not e1:
+                raise RuntimeError('No files extracted from .tar.7z')
+            d1 = e1[0]
+        d1.replace(b1)
+    finally:
+        for p in c1.rglob('*'):
+            try:
+                if p.is_file():
+                    p.unlink()
+            except Exception:
+                pass
+        with contextlib.suppress(Exception):
+            c1.rmdir()
+def f1(g1, k):
+    src = Path(g1)
+    l = e(src)
+    if not l:
+        return (src.name, False, 'Not a *.tar.<codec> file')
+    h, h1 = l
+    if h1 == k:
+        return (src.name, True, 'Skipped (already target codec)')
+    dst = i(src, k)
+    if dst.exists():
+        return (src.name, True, f'Skipped (exists): {dst.name}')
+    b1 = src.with_name(f'.__tmp_tar_conv_{os.getpid()}_{h}.tar')
+    try:
+        if h1 == '7z':
+            a1(src, b1)
+        else:
+            m(src, b1, h1)
+        if k == '7z':
+            with py7zr.SevenZipFile(dst, mode='w') as z:
+                z.write(b1, arcname=b1.name)
+        else:
+            u(b1, dst, k)
+        src.unlink()
+        return (src.name, True, f'converted -> {dst.name} (removed original)')
+    except Exception as e:
+        z(dst)
+        return (src.name, False, f'error: {e}')
+    finally:
+        z(b1)
+def i1(cwd):
+    j1 = []
+    for p in cwd.rglob('*.tar.*'):
+        if not p.is_file():
+            continue
+        k1 = e(p)
+        if not k1:
+            continue
+        _, g = k1
+        if g in d:
+            j1.append(p)
+    return sorted(j1)
+def l1():
+    if len(sys.argv) < 2:
+        logger.error('Usage: python3 convert.py <target_codec>   (example: xz)')
+        sys.exit(1)
+    k = sys.argv[1].strip().lower()
+    if k not in d:
+        logger.error(f'Unsupported target codec: {k}. Allowed: {sorted(d)}')
+        sys.exit(1)
+    cwd = Path.cwd()
+    j1 = i1(cwd)
+    if not j1:
+        print('No *.tar.<codec> files found recursively in current directory.')
+        return
+    m1 = gsz(cwd)
+    n1 = []
+    with Pool(processes=c) as o1:
+        p1 = [o1.apply_async(f1, (str(p), k)) for p in j1]
+        for ar in p1:
+            try:
+                n1.append(ar.get())
+            except Exception as e:
+                n1.append(('<unknown>', False, f'error: {e}'))
+    q1 = gsz(cwd)
+    r1 = q1 - m1
+    s1 = sum((1 for _, ok, _ in n1 if ok))
+    t1 = len(n1) - s1
+    print(f'Converted inputs: {len(j1)}; OK: {s1}; Failed/Skipped: {t1}')
+    for u1, ok, msg in sorted(n1, key=lambda x: x[0]):
+        v1 = 'OK' if ok else 'FAIL'
+        print(f'[{v1}] {u1}: {msg}')
+    print(f'Disk usage (sum of file sizes under cwd) initial: {fsz(m1)}')
+    print(f'Disk usage (sum of file sizes under cwd) final:   {fsz(q1)}')
+    if r1 < 0:
+        print(f'Saved: {fsz(-r1)}')
+    elif r1 > 0:
+        print(f'Extra used: {fsz(r1)}')
+    else:
+        print('No disk usage change (by summed file sizes).')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: archive_converter.py ---
+import argparse
+import bz2
+import contextlib
+import gzip
+import io
+import lzma
+import sys
+import tarfile
+import tempfile
+import zipfile
+from collections.abc import Iterable, Iterator
+from multiprocessing import Pool
+from pathlib import Path
+from typing import BinaryIO, Final, List, Optional, Tuple
+import brotli
+import cramjam
+import lz4.frame
+import py7zr
+import zstandard as zstd
+from loguru import logger
+c = 8
+w1 = frozenset({'.tar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst', '.tar.br', '.tar.lz4', '.tar.7z', '.tar.sz'})
+x1 = frozenset({'.zip', '.whl'})
+y1 = tuple(sorted(w1 | x1, key=len, reverse=True))
+z1 = frozenset({'.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst', '.tar.br', '.tar.lz4', '.tar.7z', '.tar.sz', '.zip', '.whl'})
+a2 = tuple[str, bytes]
+b2 = tuple[str, str]
+c2 = tuple[str, int, bool, str]
+def d2(e2):
+    u1 = e2.name.lower()
+    for f2 in y1:
+        if u1.endswith(f2):
+            return f2
+    return None
+@contextlib.contextmanager
+def g2(e2, ext):
+    if ext == '.tar':
+        with e2.open('rb') as f:
+            yield f
+    elif ext == '.tar.gz':
+        with gzip.open(e2, 'rb') as f:
+            yield f
+    elif ext == '.tar.bz2':
+        with bz2.open(e2, 'rb') as f:
+            yield f
+    elif ext == '.tar.xz':
+        with lzma.open(e2, 'rb') as f:
+            yield f
+    elif ext == '.tar.zst':
+        with e2.open('rb') as h2:
+            q = zstd.ZstdDecompressor()
+            with q.stream_reader(h2) as i2:
+                yield i2
+    elif ext == '.tar.lz4':
+        with lz4.frame.open(e2, 'rb') as f:
+            yield f
+    elif ext == '.tar.br':
+        s = brotli.decompress(e2.read_bytes())
+        yield io.BytesIO(s)
+    elif ext == '.tar.sz':
+        s = bytes(cramjam.snappy.decompress(e2.read_bytes()))
+        yield io.BytesIO(s)
+    elif ext == '.tar.7z':
+        with py7zr.SevenZipFile(str(e2), mode='r') as j2:
+            k2 = j2.readall()
+            for bio in k2.values():
+                yield io.BytesIO(bio.read())
+                return
+        raise ValueError(f'empty 7z archive: {e2}')
+    else:
+        raise ValueError(f'unsupported tar input extension: {ext}')
+def l2(e2, ext):
+    if ext in x1:
+        with zipfile.ZipFile(e2, 'r') as zf:
+            for m2 in zf.infolist():
+                if m2.is_dir():
+                    continue
+                with zf.open(m2) as f:
+                    yield (m2.filename, f.read())
+        return
+    if ext in w1:
+        with g2(e2, ext) as n2, tarfile.open(fileobj=n2, mode='r|') as tf:
+            for o2 in tf:
+                if not o2.isfile():
+                    continue
+                p2 = tf.extractfile(o2)
+                if p2 is None:
+                    continue
+                yield (o2.name, p2.read())
+        return
+    raise ValueError(f'unsupported input extension: {ext}')
+def q2(tf, r2):
+    s2 = 0
+    for u1, s in r2:
+        m2 = tarfile.TarInfo(name=u1)
+        m2.size = len(s)
+        tf.addfile(m2, io.BytesIO(s))
+        s2 += len(s)
+    return s2
+def t2(r2, dst, ext):
+    if ext == '.tar.gz':
+        with gzip.open(dst, 'wb') as f, tarfile.open(fileobj=f, mode='w|') as tf:
+            return q2(tf, r2)
+    if ext == '.tar.bz2':
+        with bz2.open(dst, 'wb') as f, tarfile.open(fileobj=f, mode='w|') as tf:
+            return q2(tf, r2)
+    if ext == '.tar.xz':
+        with lzma.open(dst, 'wb', preset=9) as f, tarfile.open(fileobj=f, mode='w|') as tf:
+            return q2(tf, r2)
+    if ext == '.tar.zst':
+        x = zstd.ZstdCompressor(level=9)
+        with dst.open('wb') as h2, x.stream_writer(h2) as u2:
+            with tarfile.open(fileobj=u2, mode='w|') as tf:
+                return q2(tf, r2)
+    if ext == '.tar.lz4':
+        with lz4.frame.open(dst, 'wb') as f, tarfile.open(fileobj=f, mode='w|') as tf:
+            return q2(tf, r2)
+    if ext == '.tar.br':
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode='w|') as tf:
+            s2 = q2(tf, r2)
+        dst.write_bytes(brotli.compress(buf.getvalue(), quality=11))
+        return s2
+    if ext == '.tar.sz':
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode='w|') as tf:
+            s2 = q2(tf, r2)
+        dst.write_bytes(bytes(cramjam.snappy.compress(buf.getvalue())))
+        return s2
+    if ext == '.tar.7z':
+        v2 = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.tar', delete=False) as tmp:
+                v2 = Path(tmp.name)
+            with v2.open('wb') as f, tarfile.open(fileobj=f, mode='w|') as tf:
+                s2 = q2(tf, r2)
+            with py7zr.SevenZipFile(str(dst), mode='w') as j2:
+                j2.write(str(v2), arcname='archive.tar')
+            return s2
+        finally:
+            if v2 is not None:
+                v2.unlink(missing_ok=True)
+    raise ValueError(f'unsupported tar output extension: {ext}')
+def w2(r2, dst, ext):
+    if ext in x1:
+        s2 = 0
+        with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for u1, s in r2:
+                zf.writestr(u1, s)
+                s2 += len(s)
+        return s2
+    if ext in w1:
+        return t2(r2, dst, ext)
+    raise ValueError(f'unsupported output extension: {ext}')
+def f1(x2):
+    g1, y2 = x2
+    src = Path(g1)
+    z2 = d2(src)
+    if z2 is None:
+        return (g1, 0, False, f'unsupported input format: {src.name}')
+    h = src.name
+    for f2 in y1:
+        if h.lower().endswith(f2):
+            h = h[:-len(f2)]
+            break
+    dst = src.with_name(h + y2)
+    if dst == src:
+        return (g1, 0, True, f'skipped (already {y2}): {src.name}')
+    if dst.exists():
+        return (g1, 0, True, f'skipped (exists): {dst.name}')
+    try:
+        a3 = src.stat().st_size
+        w2(l2(src, z2), dst, y2)
+        b3 = dst.stat().st_size
+        src.unlink()
+        r1 = b3 - a3
+        return (g1, r1, True, f'converted -> {dst.name}, removed original')
+    except Exception as exc:
+        try:
+            if dst.exists():
+                dst.unlink()
+        except Exception:
+            pass
+        return (g1, 0, False, f'error: {exc}')
+def c3(x2):
+    d3 = []
+    if not x2:
+        d3.extend(Path.cwd().iterdir())
+    else:
+        for arg in x2:
+            p = Path(arg)
+            if p.is_dir():
+                d3.extend(p.iterdir())
+            else:
+                d3.append(p)
+    e1 = []
+    for p in d3:
+        if not p.is_file():
+            continue
+        if d2(p) is None:
+            logger.warning('Skipping unsupported file: {}', p.name)
+            continue
+        e1.append(p)
+    return e1
+def e3(f3):
+    g3 = float(f3)
+    for h3 in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if abs(g3) < 1024.0:
+            return f'{g3:.2f} {h3}'
+        g3 /= 1024.0
+    return f'{g3:.2f} PB'
+def i3():
+    j3 = argparse.ArgumentParser(description='Convert archives between tar-compressed and zip-based formats.')
+    j3.add_argument('inputs', nargs='*', help='Input archive files or directories (default: current directory)')
+    j3.add_argument('-t', '--to', required=True, choices=sorted(z1), help='Target archive format (e.g. .tar.xz or .zip)')
+    return j3
+def l1(k3=None):
+    j3 = i3()
+    x2 = j3.parse_args(list(k3) if k3 is not None else None)
+    y2 = x2.to
+    e1 = c3(list(x2.inputs))
+    if not e1:
+        logger.warning('No convertible archives found.')
+        return 0
+    logger.info('Found {} archive(s); converting to {}', len(e1), y2)
+    l3 = [(str(p), y2) for p in e1]
+    n1 = []
+    with Pool(processes=c) as o1:
+        for m3 in o1.imap_unordered(f1, l3):
+            n1.append(m3)
+    s1 = sum((1 for _, _, ok, _ in n1 if ok))
+    t1 = len(n1) - s1
+    n3 = sum((r1 for _, r1, _, _ in n1))
+    logger.info('Summary: total={} ok={} failed/skipped={}', len(e1), s1, t1)
+    for src, r1, ok, msg in sorted(n1, key=lambda x: x[0]):
+        v1 = 'OK' if ok else 'FAIL'
+        logger.info('[{}] {}: {}', v1, Path(src).name, msg)
+    if n3 < 0:
+        logger.info('Net space saved: {}', e3(-n3))
+    elif n3 > 0:
+        logger.info('Net extra used: {}', e3(n3))
+    else:
+        logger.info('Net disk usage change: none')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: br2zst.py ---
+from pathlib import Path
+import brotli
+import zstandard as zstd
+def o3(n):
+    for h3 in ('B', 'KiB', 'MiB', 'GiB', 'TiB'):
+        if abs(n) < 1024.0:
+            return f'{n:6.2f} {h3}'
+        n /= 1024.0
+    return f'{n:6.2f} PiB'
+def l1():
+    p3 = Path.cwd()
+    e1 = sorted((p for p in p3.rglob('*.json.br') if p.is_file()))
+    if not e1:
+        print(f'No .json.br files found under {p3}')
+        return
+    x = zstd.ZstdCompressor(level=9)
+    q3 = 0
+    r3 = 0
+    print(f'Found {len(e1)} file(s) under {p3}\n')
+    print(f"{'file':<60} {'br':>12} {'zst':>12} {'diff':>12}  {'%':>7}")
+    print('-' * 108)
+    for src in e1:
+        dst = src.with_suffix('')
+        dst = dst.with_suffix('.json.zst')
+        try:
+            s3 = src.read_bytes()
+            raw = brotli.decompress(s3)
+            t3 = x.compress(raw)
+            dst.write_bytes(t3)
+            src.unlink()
+        except Exception as e:
+            print(f'ERROR {src}: {e}')
+            continue
+        u3 = src.stat().st_size if src.exists() else len(s3)
+        u3 = len(s3)
+        v3 = len(t3)
+        w3 = v3 - u3
+        pct = w3 / u3 * 100 if u3 else 0.0
+        q3 += u3
+        r3 += v3
+        try:
+            rel = src.relative_to(p3)
+        except ValueError:
+            rel = src
+        x3 = str(rel)
+        if len(x3) > 58:
+            x3 = '...' + x3[-55:]
+        print(f'{x3:<60} {o3(u3):>12} {o3(v3):>12} {o3(w3):>12}  {pct:>6.2f}%')
+    print('-' * 108)
+    y3 = r3 - q3
+    z3 = y3 / q3 * 100 if q3 else 0.0
+    print(f"{'TOTAL (' + str(len(e1)) + ' files)':<60} {o3(q3):>12} {o3(r3):>12} {o3(y3):>12}  {z3:>6.2f}%")
+if __name__ == '__main__':
+    l1()
+
+# --- File: gz2xz.py ---
+import gzip
+import sys
+from pathlib import Path
+from dh import mpf3
+from lzma_mt import compress
+def a4(e2):
+    e2 = Path(e2)
+    b4 = e2.with_suffix('.xz')
+    try:
+        with gzip.open(e2, 'rb') as c4:
+            s = c4.read()
+        s3 = compress(s, preset=9, threads=4)
+        b4.write_bytes(s3)
+        if b4.exists() and b4.stat().st_size > 0:
+            e2.unlink()
+            d4 = e2.stat().st_size if e2.exists() else 0
+            e4 = b4.stat().st_size
+            f4 = e4 / d4 * 40 if d4 > 0 else 0
+            return (str(e2), True, f'Converted to {b4.name} ({d4} -> {e4} bytes, {f4:.1f}%)')
+        else:
+            return (str(e2), False, 'Output file is empty or missing')
+    except Exception as e:
+        if b4.exists():
+            b4.unlink()
+        return (str(e2), False, f'Error: {e!s}')
+def l1():
+    cwd = Path.cwd()
+    e1 = get_files(cwd, ext=['.gz'])
+    if not e1:
+        print('No .gz files found to convert.')
+        return
+    n1 = mpf3(a4, e1)
+    g4 = 0
+    h4 = 0
+    i4 = 0
+    j4 = 0
+    print('\n' + '=' * 40)
+    print('CONVERSION RESULTS')
+    print('-' * 40)
+    for e2, k4, l4 in n1:
+        if k4:
+            g4 += 1
+            print(f'✓ {l4}')
+            if 'bytes' in l4:
+                try:
+                    f = l4.split('(')[1].split(')')
+                    m4 = f[0].split('->')
+                    i4 += int(m4[0].strip().split()[0])
+                    j4 += int(m4[1].strip().split()[0])
+                except:
+                    pass
+        else:
+            h4 += 1
+            print(f'✗ {e2}: {l4}', file=sys.stderr)
+    print('-' * 40)
+    print(f'Summary: {g4} successful, {h4} failed')
+    print(f'Total files processed: {len(n1)}')
+    if g4 > 0 and i4 > 0:
+        n4 = (1 - j4 / i4) * 40
+        print(f'Total space saved: {i4 - j4:,} bytes ({n4:.1f}%)')
+        print(f'Original total: {i4:,} bytes')
+        print(f'New total: {j4:,} bytes')
+    if g4 > 0:
+        print('\nNote: Original .gz files have been removed.')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: txz2whl.py ---
+import sys
+import tarfile
+import zipfile
+from pathlib import Path
+from dh import get_files, mpf3, unique_path
+def a4(e2):
+    e2 = Path(e2)
+    o4 = ''
+    if e2.name.endswith('.txz'):
+        o4 = e2.name.replace('.txz', '.whl')
+    elif e2.name.endswith('.tar.xz'):
+        o4 = e2.name.replace('.tar.xz', '.whl')
+    else:
+        return
+    p4 = e2.with_name(o4)
+    if p4.exists():
+        print(f'[SKIP] {p4.name} already exists')
+        p4 = unique_path(p4)
+    try:
+        with tarfile.open(e2, 'r:xz') as tf, zipfile.ZipFile(p4, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            for o2 in tf.getmembers():
+                if o2.isdir():
+                    continue
+                d1 = tf.extractfile(o2)
+                if d1 is None:
+                    continue
+                zf.writestr(o2.name, d1.read())
+        print(f'[OK] {p4.name}')
+    except Exception as e:
+        print(f'[ERROR] {e2.name}: {e}')
+def l1():
+    x2 = sys.argv[1:]
+    cwd = Path().cwd()
+    e1 = [Path(arg) for arg in x2] if x2 else get_files(cwd, ext=['.tar.xz', '.txz'])
+    if len(e1) == 1:
+        a4(e1[0])
+        sys.exit(1)
+    mpf3(a4, e1)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+# --- File: whl2txz.py ---
+import argparse
+import sys
+import tarfile
+import traceback
+import zipfile
+from datetime import datetime
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Final
+from loguru import logger
+q4 = 8
+r4 = 420
+s4 = 493
+t4 = 4095
+UID = 0
+GID = 0
+u4 = 'root'
+v4 = 'root'
+w4 = ('.sh', '.py', '.exe')
+x4 = tuple[bool, str, Path | None]
+y4 = tuple[Path, bool, str, Path | None]
+def z4(a5):
+    try:
+        dt = datetime(*a5)
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return datetime.now().timestamp()
+def b5(e2):
+    if not e2.exists():
+        return e2
+    c5 = 1
+    h = e2.stem
+    f2 = e2.suffix
+    d5 = e2.parent
+    while True:
+        e5 = d5 / f'{h}_{c5}{f2}'
+        if not e5.exists():
+            return e5
+        c5 += 1
+def f5(g5, h5):
+    h5.size = g5.file_size
+    if g5.date_time:
+        h5.mtime = z4(g5.date_time)
+    if g5.external_attr:
+        i5 = g5.external_attr >> 16 & t4
+        if i5:
+            h5.mode = i5
+        else:
+            h5.mode = s4 if g5.filename.endswith(w4) else r4
+    else:
+        h5.mode = r4
+    h5.type = tarfile.REGTYPE
+    h5.uid = UID
+    h5.gid = GID
+    h5.uname = u4
+    h5.gname = v4
+    return h5
+def j5(h5, k5):
+    if hasattr(h5, 'mtime') and h5.mtime:
+        dt = datetime.fromtimestamp(h5.mtime)
+        k5.date_time = (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+    if hasattr(h5, 'mode') and h5.mode:
+        k5.external_attr = (h5.mode & 65535) << 16
+    return k5
+def l5(e2, m5=False):
+    try:
+        if not e2.exists() or not e2.is_file():
+            return (False, f'Invalid file: {e2}', None)
+        if e2.suffix.lower() != '.whl':
+            return (False, f'Not a wheel file: {e2.name}', None)
+        n5 = e2.with_suffix('.tar.xz')
+        if n5.exists():
+            n5 = b5(n5)
+            print(f'Target exists, using: {n5.name}')
+        o5 = 0
+        p5 = []
+        with zipfile.ZipFile(e2, 'r') as q5:
+            r5 = q5.testzip()
+            if r5:
+                return (False, f'Corrupt ZIP file: {r5}', None)
+            with tarfile.open(n5, 'w:xz') as s5:
+                for o2 in q5.infolist():
+                    if o2.is_dir():
+                        continue
+                    try:
+                        with q5.open(o2) as t5:
+                            h5 = tarfile.TarInfo(name=o2.filename)
+                            h5 = f5(o2, h5)
+                            s5.addfile(h5, t5)
+                            o5 += 1
+                    except Exception as e:
+                        p5.append(f'{o2.filename}: {e}')
+        if p5:
+            logger.warning(f'Failed to convert {len(p5)} files in {e2.name}')
+        if n5.exists() and n5.stat().st_size > 0:
+            if m5:
+                try:
+                    e2.unlink()
+                    print(f'Removed original: {e2.name}')
+                except Exception as e:
+                    logger.error(f'Failed to remove original file {e2.name}: {e}')
+                    return (False, f'Conversion succeeded but failed to remove original: {e}', n5)
+            return (True, f'Converted {o5} files to tar.xz', n5)
+        else:
+            return (False, 'Output file is empty or missing', None)
+    except Exception as e:
+        return (False, f'Conversion error: {e}', None)
+def u5(e2, m5=False):
+    try:
+        if not e2.exists() or not e2.is_file():
+            return (False, f'Invalid file: {e2}', None)
+        if not (e2.suffix == '.xz' and e2.stem.endswith('.tar')):
+            return (False, f'Not a tar.xz file: {e2.name}', None)
+        h = e2.stem
+        h = h.removesuffix('.tar')
+        n5 = e2.parent / f'{h}.whl'
+        if n5.exists():
+            n5 = b5(n5)
+            print(f'Target exists, using: {n5.name}')
+        o5 = 0
+        with tarfile.open(e2, 'r:xz') as s5, zipfile.ZipFile(n5, 'w', zipfile.ZIP_DEFLATED) as q5:
+            for o2 in s5.getmembers():
+                if o2.isdir():
+                    continue
+                try:
+                    v5 = s5.extractfile(o2)
+                    if v5:
+                        k5 = zipfile.ZipInfo(filename=o2.name)
+                        k5 = j5(o2, k5)
+                        k5.file_size = o2.size
+                        q5.writestr(k5, v5.read())
+                        o5 += 1
+                        v5.close()
+                except Exception as e:
+                    logger.error(f'Failed to convert {o2.name}: {e}')
+                    return (False, f'Failed to convert member {o2.name}: {e}', None)
+        if n5.exists() and n5.stat().st_size > 0:
+            try:
+                with zipfile.ZipFile(n5, 'r') as w5:
+                    r5 = w5.testzip()
+                    if r5:
+                        return (False, f'Created corrupt zip file: {r5}', None)
+            except Exception as e:
+                return (False, f'Verification failed: {e}', None)
+            if m5:
+                try:
+                    e2.unlink()
+                    print(f'Removed original: {e2.name}')
+                except Exception as e:
+                    logger.error(f'Failed to remove original file {e2.name}: {e}')
+                    return (False, f'Conversion succeeded but failed to remove original: {e}', n5)
+            return (True, f'Converted {o5} files to wheel', n5)
+        else:
+            return (False, 'Output file is empty or missing', None)
+    except tarfile.TarError as e:
+        return (False, f'Tar error: {e}', None)
+    except Exception as e:
+        return (False, f'Conversion error: {e}', None)
+def a4(e2, m5=False):
+    e2 = Path(e2)
+    if not e2.exists():
+        return (False, f'File not found: {e2}', None)
+    if e2.suffix.lower() == '.whl':
+        print(f'Converting wheel to tar.xz: {e2.name}')
+        return l5(e2, m5)
+    elif e2.suffix == '.xz' and (e2.stem.endswith('.tar') or '.tar.' in str(e2)):
+        print(f'Converting tar.xz to wheel: {e2.name}')
+        return u5(e2, m5)
+    else:
+        return (False, f'Unsupported file type: {e2.suffix} (only .whl or .tar.xz)', None)
+def x5(y5, z5=False):
+    if not y5.exists() or not y5.is_dir():
+        return []
+    a6 = []
+    b6 = '**/*.whl' if z5 else '*.whl'
+    a6.extend(y5.glob(b6))
+    c6 = '**/*.tar.xz' if z5 else '*.tar.xz'
+    a6.extend(y5.glob(c6))
+    return a6
+def d6(x2):
+    e2, m5 = x2
+    k4, l4, n5 = a4(e2, m5)
+    return (e2, k4, l4, n5)
+def e6():
+    j3 = argparse.ArgumentParser(description='Bidirectional converter between .whl and .tar.xz files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s\n  %(prog)s package.whl\n  %(prog)s package.tar.xz\n  %(prog)s *.whl\n  %(prog)s /path/to/dir\n  %(prog)s --recursive\n  %(prog)s --remove-original\n        ')
+    j3.add_argument('paths', nargs='*', default=['.'], help='Files or directories to process (default: current directory)')
+    j3.add_argument('-r', '--recursive', action='store_true', help='Search directories recursively')
+    j3.add_argument('--remove-original', action='store_true', help='Remove original files after successful conversion')
+    j3.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
+    j3.add_argument('-q', '--quiet', action='store_true', help='Suppress non-error output')
+    return j3
+def f6(g6, h6):
+    logger.remove()
+    if h6:
+        i6 = 'ERROR'
+    elif g6:
+        i6 = 'DEBUG'
+    else:
+        i6 = 'INFO'
+    logger.add(sys.stderr, level=i6, format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> - <level>{level}</level> - <level>{message}</level>')
+def j6(k6, z5):
+    a6 = []
+    for l6 in k6:
+        e2 = Path(l6)
+        if not e2.exists():
+            logger.error(f'Path does not exist: {e2}')
+            continue
+        if e2.is_file():
+            if e2.suffix.lower() == '.whl' or (e2.suffix == '.xz' and '.tar' in str(e2)):
+                a6.append(e2)
+            else:
+                logger.warning(f'Skipping unsupported file: {e2}')
+        elif e2.is_dir():
+            m6 = x5(e2, z5)
+            a6.extend(m6)
+            print(f'Found {len(m6)} convertible files in {e2}')
+        else:
+            logger.error(f'Invalid path: {e2}')
+    return a6
+def n6(a6, m5):
+    n1 = []
+    if len(a6) == 1:
+        k4, l4, n5 = a4(a6[0], m5)
+        n1.append((a6[0], k4, l4, n5))
+        return n1
+    o6 = [(f, m5) for f in a6]
+    with Pool(processes=q4) as o1:
+        p1 = [(p6[0], o1.apply_async(d6, (p6,))) for p6 in o6]
+        for e2, q6 in p1:
+            try:
+                n1.append(q6.get())
+            except Exception as e:
+                n1.append((e2, False, f'Execution failed: {e}', None))
+                logger.error(f'Failed to process {e2.name}: {e}')
+    return n1
+def r6(n1, m5, g6):
+    g4 = 0
+    h4 = 0
+    s6 = []
+    s6.append('')
+    s6.append('=' * 40)
+    s6.append('CONVERSION RESULTS')
+    s6.append('-' * 40)
+    for e2, k4, l4, n5 in n1:
+        if k4:
+            g4 += 1
+            v1 = '✓ OK'
+            t6 = 'whl' if e2.suffix == '.whl' else 'tar.xz'
+            u6 = 'tar.xz' if n5 and n5.suffix == '.xz' else 'whl'
+            v6 = ''
+            if n5 and n5.exists():
+                w6 = n5.stat().st_size / 1024
+                v6 = f' ({w6:.1f} KB)'
+            s6.append(f"{v1} {e2.name} [{t6}] → {(n5.name if n5 else 'unknown')} [{u6}]{v6}")
+            if g6:
+                s6.append(f'   {l4}')
+        else:
+            h4 += 1
+            v1 = '✗ FAIL'
+            s6.append(f'{v1} {e2.name}: {l4}')
+    s6.append('-' * 40)
+    s6.append(f'Summary: {g4} successful, {h4} failed')
+    if m5 and g4 > 0:
+        s6.append('✓ Original files were removed after successful conversion')
+    print('\n'.join(s6))
+    return 0 if h4 == 0 else 1
+def l1():
+    j3 = e6()
+    x2 = j3.parse_args()
+    f6(x2.verbose, x2.quiet)
+    a6 = j6(x2.paths, x2.recursive)
+    if not a6:
+        if x2.paths == ['.']:
+            print('No .whl or .tar.xz files found in current directory')
+        else:
+            logger.error('No convertible files found')
+        return 1
+    print(f'Processing {len(a6)} file(s)')
+    if x2.remove_original:
+        print('Original files will be removed after successful conversion')
+    n1 = n6(a6, x2.remove_original)
+    return r6(n1, x2.remove_original, x2.verbose)
+if __name__ == '__main__':
+    try:
+        raise SystemExit(l1())
+    except KeyboardInterrupt:
+        print('\nInterrupted by user')
+        sys.exit(130)
+    except Exception as e:
+        logger.error(f'Fatal error: {e}\n{traceback.format_exc()}')
+        sys.exit(1)
+
+# --- File: xz2gz.py ---
+import sys
+from gzip import compress as gzip_compress
+from pathlib import Path
+from dh import get_files, mpf3
+from lzma_mt import decompress
+def a4(e2):
+    e2 = Path(e2)
+    if e2.is_symlink():
+        print('symlink')
+        return (str(e2), False, 'Error: symlink')
+    x6 = e2.with_suffix('.gz')
+    try:
+        s = e2.read_bytes()
+        y6 = decompress(s, threads=4)
+        s3 = gzip_compress(y6, compresslevel=9)
+        x6.write_bytes(s3)
+        if x6.exists() and x6.stat().st_size > 0:
+            e2.unlink()
+            d4 = e2.stat().st_size if e2.exists() else 0
+            e4 = x6.stat().st_size
+            f4 = e4 / d4 * 40 if d4 > 0 else 0
+            return (str(e2), True, f'Converted to {x6.name} ({d4} -> {e4} bytes, {f4:.1f}%)')
+        return (str(e2), False, 'Output file is empty or missing')
+    except Exception as e:
+        if x6.exists():
+            x6.unlink()
+        return (str(e2), False, f'Error: {e!s}')
+def l1():
+    cwd = Path.cwd()
+    e1 = get_files(cwd, ext=['.xz'])
+    if not e1:
+        print('No .xz files found to convert.')
+        return
+    n1 = mpf3(a4, e1)
+    g4 = 0
+    h4 = 0
+    i4 = 0
+    j4 = 0
+    print('\n' + '=' * 40)
+    print('CONVERSION RESULTS')
+    print('-' * 40)
+    for e2, k4, l4 in n1:
+        if k4:
+            g4 += 1
+            print(f'✓ {l4}')
+            if 'bytes' in l4:
+                try:
+                    f = l4.split('(')[1].split(')')
+                    m4 = f[0].split('->')
+                    i4 += int(m4[0].strip().split()[0])
+                    j4 += int(m4[1].strip().split()[0])
+                except:
+                    pass
+        else:
+            h4 += 1
+            print(f'✗ {e2}: {l4}', file=sys.stderr)
+    print('-' * 40)
+    print(f'Summary: {g4} successful, {h4} failed')
+    print(f'Total files processed: {len(n1)}')
+    if g4 > 0 and i4 > 0:
+        n4 = (1 - j4 / i4) * 40
+        print(f'Total space saved: {i4 - j4:,} bytes ({n4:.1f}%)')
+        print(f'Original total: {i4:,} bytes')
+        print(f'New total: {j4:,} bytes')
+    if g4 > 0:
+        print('\nNote: Original .xz files have been removed.')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

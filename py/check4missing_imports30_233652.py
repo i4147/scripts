@@ -1,4 +1,3 @@
-
 import ast
 import sys
 from pathlib import Path
@@ -44,11 +43,9 @@ def extract_used_names(file_path: Path) -> Set[str]:
         if isinstance(node, ast.Name):
             names.add(node.id)
         elif isinstance(node, ast.Attribute):
-            
             if isinstance(node.value, ast.Name):
                 names.add(node.value.id)
 
-    
     return names - builtins - {"self", "cls"}
 
 
@@ -56,13 +53,10 @@ def check_file(file_path: Path) -> Tuple[Path, List[str]]:
     imported = extract_imports(file_path)
     used = extract_used_names(file_path)
 
-    
-    
     missing = []
 
     for name in used:
         if name not in imported and not name[0].isupper():
-            
             try:
                 __import__(name)
                 missing.append(name)
@@ -79,19 +73,16 @@ def fix_file(file_path: Path, missing_imports: List[str]) -> None:
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    
     try:
         tree = ast.parse(content)
     except SyntaxError:
         return
 
-    
     insert_pos = 0
     for i, node in enumerate(tree.body):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             insert_pos = i + 1
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            
             insert_pos = i + 1
         else:
             break
@@ -100,7 +91,6 @@ def fix_file(file_path: Path, missing_imports: List[str]) -> None:
     import_lines = [f"import {name}" for name in sorted(set(missing_imports))]
     import_text = "\n".join(import_lines) + "\n"
 
-    
     line_count = 0
     for node in tree.body[:insert_pos]:
         line_count = node.end_lineno or line_count

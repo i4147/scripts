@@ -1,4 +1,3 @@
-
 import os
 import sys
 from pathlib import Path
@@ -8,15 +7,10 @@ from multiprocessing import Pool, cpu_count
 import xxhash
 
 
-
-
 NUM_WORKERS = 8
 SKIP_DIR_NAMES = {".git"}
-HASH_CHUNK_SIZE = 1 << 20  
-MAX_DEPTH = 64  
-
-
-
+HASH_CHUNK_SIZE = 1 << 20
+MAX_DEPTH = 64
 
 
 def _file_hash(path: Path) -> str:
@@ -45,9 +39,7 @@ def _collect_files(root: Path):
             continue
         for entry in entries:
             try:
-                
                 if entry.is_symlink():
-                    
                     continue
                 if entry.is_dir(follow_symlinks=False):
                     if entry.name in SKIP_DIR_NAMES:
@@ -64,33 +56,22 @@ def _collect_files(root: Path):
 def folder_signature(root: Path):
     root = root.resolve()
 
-    
     files = _collect_files(root)
 
-    
-    
-    
-    
-    
     if not files:
         return None
 
-    
     direct_files = [(rel, abs_) for rel, abs_ in files if "/" not in rel]
 
-    
-    
     if not direct_files:
         return None
 
-    
     rel_paths = sorted(rel for rel, _ in files)
     struct_h = xxhash.xxh64()
     for rp in rel_paths:
         struct_h.update(rp.encode("utf-8"))
         struct_h.update(b"\x00")
 
-    
     content_h = xxhash.xxh64()
     for rel, abs_path in sorted(files, key=lambda x: x[0]):
         try:
@@ -108,9 +89,6 @@ def folder_signature(root: Path):
         content_h.hexdigest(),
         str(root),
     )
-
-
-
 
 
 def find_all_folders(start: Path):
@@ -139,9 +117,6 @@ def find_all_folders(start: Path):
     return folders
 
 
-
-
-
 def main():
     start = Path.cwd()
     print(f"Scanning: {start}")
@@ -152,22 +127,17 @@ def main():
 
     results = []
 
-    
     with Pool(processes=NUM_WORKERS) as pool:
         async_results = [pool.apply_async(folder_signature, (f,)) for f in folders]
         for ar in async_results:
             try:
                 res = ar.get()
             except Exception as e:
-                
                 print(f"[warn] worker error: {e}", file=sys.stderr)
                 continue
             if res is not None:
                 results.append(res)
 
-    
-    
-    
     groups = defaultdict(list)
     for name, struct_h, content_h, path in results:
         groups[(struct_h, content_h)].append(path)

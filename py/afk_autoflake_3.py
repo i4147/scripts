@@ -28,7 +28,6 @@ def check_or_fix_imports(path, autofix=False):
             if autofix:
                 print(f"Successfully removed unused imports from `{path}`.")
             else:
-                
                 output = (result.stdout or "") + (result.stderr or "")
                 for line in output.splitlines():
                     if line.strip():

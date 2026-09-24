@@ -8,17 +8,13 @@ import brotli
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import zstandard as zstd  
-import lz4.frame  
-import py7zr  
+import zstandard as zstd
+import lz4.frame
+import py7zr
 
 
-
-CHUNK = 1024 * 1024  
-XZ_PRESET_9 = 9  
-
-
-
+CHUNK = 1024 * 1024
+XZ_PRESET_9 = 9
 
 
 def human_bytes(n: int) -> str:
@@ -41,9 +37,8 @@ def dir_files_total_bytes(p: Path) -> int:
 
 
 def decode_filename_to_tar_path(src: Path) -> Path:
-    
-    
-    return Path(str(src)[: -len("." + src.suffixes[-1])])  
+
+    return Path(str(src)[: -len("." + src.suffixes[-1])])
 
 
 def tar_stem_and_codec(p: Path) -> tuple[str, str] | None:
@@ -69,9 +64,6 @@ def safe_unlink(path: Path) -> None:
             path.unlink()
     except Exception:
         pass
-
-
-
 
 
 def open_tar_bytes_reader(src: Path):
@@ -116,8 +108,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                     f_out.write(chunk)
 
     elif codec == "br":
-        
-        
         dec = brotli.Decompressor()
         with src.open("rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -151,8 +141,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
                 f_out.write(chunk)
 
     elif codec == "bz2":
-        
-        
         compressor = bz2.BZ2Compressor(compresslevel=9)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -191,8 +179,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
                     zw.write(chunk)
 
     elif codec == "br":
-        
-        
         compressor = brotli.Compressor(quality=11)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -224,32 +210,24 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
         raise ValueError(f"Unsupported codec for tar bytes encoding: {codec}")
 
 
-
-
-
-
-
 def convert_tar7z_via_py7zr(src: Path, dst: Path) -> None:
-    
-    
-    
+
     import tempfile
 
     tmpdir = Path(tempfile.mkdtemp(prefix="tar7z_conv_"))
     try:
-        tar_path = tmpdir / (src.stem + ".tar")  
+        tar_path = tmpdir / (src.stem + ".tar")
         with py7zr.SevenZipFile(src, mode="r") as z:
             z.extractall(path=tmpdir)
-        
+
         extracted = next(tmpdir.glob("*.tar"), None)
         if extracted is None:
-            
             files = [p for p in tmpdir.rglob("*") if p.is_file()]
             if not files:
                 raise RuntimeError("No files extracted from .tar.7z")
             extracted = files[0]
         tmp_tar = extracted
-        
+
         codec = dst.suffixes[-1].lower()
         write_compressed_tar_bytes_from_tar(tmp_tar, dst, codec)
     finally:
@@ -266,11 +244,7 @@ def shutil_rmtree_quiet(p: Path) -> None:
         pass
 
 
-
-
 SUPPORTED = {"gz", "zst", "xz", "bz2", "lz4", "br", "7z"}
-
-
 
 
 def convert_one_task(src_str: str, dst_codec: str) -> tuple[str, str, bool, str, int]:
@@ -286,15 +260,10 @@ def convert_one_task(src_str: str, dst_codec: str) -> tuple[str, str, bool, str,
     if dst.exists():
         return (src.name, dst.name, True, f"skipped (exists): {dst.name}", 0)
 
-    
-    
-    
     tmp_tar = Path(f".__tmp_tar_conv_{os.getpid()}_{stem}.tar")
 
     try:
-        
         if src_codec == "7z":
-            
             import tempfile
 
             tmpdir = Path(tempfile.mkdtemp(prefix="tar7z_dec_"))
@@ -313,15 +282,12 @@ def convert_one_task(src_str: str, dst_codec: str) -> tuple[str, str, bool, str,
         else:
             write_tar_bytes_with_decoder_to_file(src, tmp_tar, src_codec)
 
-        
         if dst_codec == "7z":
-            
             with py7zr.SevenZipFile(dst, mode="w") as z:
                 z.write(tmp_tar, arcname=tmp_tar.name)
         else:
             write_compressed_tar_bytes_from_tar(tmp_tar, dst, dst_codec)
 
-        
         src.unlink()
         return (src.name, dst.name, True, f"converted -> {dst.name} (removed original)", 0)
     except Exception as e:
@@ -346,7 +312,7 @@ def shutil_copyfile_quiet(src: Path, dst: Path) -> None:
 
 
 def guess_target_codecs(src_codec: str) -> list[str]:
-    
+
     order = ["gz", "zst", "xz", "bz2", "7z", "lz4", "br"]
     return [c for c in order if c != src_codec]
 
@@ -359,7 +325,7 @@ def main() -> None:
         for p in cwd.glob("*.tar.*")
         if len(p.suffixes) >= 2 and p.suffixes[-2] == ".tar" or p.name.endswith(".tar." + p.suffixes[-1])
     ]
-    
+
     tar_inputs = []
     for p in cwd.iterdir():
         if not p.is_file():
@@ -381,8 +347,6 @@ def main() -> None:
     max_workers = max(1, min(os.cpu_count() or 1, len(tar_inputs)))
     results = []
 
-    
-    
     target_set = {"gz", "zst", "bz2", "lz4", "7z", "br", "xz"}
 
     tasks = []
@@ -391,7 +355,6 @@ def main() -> None:
         for src in tar_inputs:
             _, src_codec = tar_stem_and_codec(src)
             for dst_codec in sorted(target_set - {src_codec}):
-                
                 futures.append(ex.submit(convert_one_task, str(src), dst_codec))
         for f in as_completed(futures):
             results.append(f.result())

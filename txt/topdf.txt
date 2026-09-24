@@ -1,0 +1,244 @@
+# filename: cairosvg2pdf.py
+import cairosvg;from dh import cprint,fsz,get_files,gsz
+def a(j):j=g(j)
+    try:c=j.with_suffix('.pdf');cairosvg.svg2pdf(url=str(j),write_to=str(c))
+    except:return
+def i():k=g.cwd();d=gsz(k);h=l.argv[1:];e=[g(f) for f in h] if h else get_files(k,ext=['.svg'])
+    for f in e:a(f)
+    b=d-gsz(k);cprint(f'space saved :{fsz(b)}','cyan')
+if __name__=='__main__':raise SystemExit(i())
+# filename: chm2pdf.py
+import chm.chm as pychm;from weasyprint import HTML
+class m(x):def __init__(self):super().__init__();self.content=[];self.in_body=False;self.skip_tags={'script','style','meta','link','iframe'};self.current_skip_tag=None
+    def j(self,aa,N):if aa in self.skip_tags:self.current_skip_tag=aa
+        elif aa=='body':self.in_body=True
+        elif not self.current_skip_tag and self.in_body:E=''.join((f' {k}="{v}"' for k,v in N if k!='href' and k!='src'));self.content.append(f'<{aa}{E}>')
+    def p(self,aa):if aa==self.current_skip_tag:self.current_skip_tag=None
+        elif aa=='body':self.in_body=False
+        elif not self.current_skip_tag and self.in_body:self.content.append(f'</{aa}>')
+    def u(self,U):if not self.current_skip_tag and self.in_body:self.content.append(U)
+    def h(self,aa,N):if aa not in self.skip_tags and self.in_body:E=''.join((f' {k}="{v}"' for k,v in N if k!='href' and k!='src'));self.content.append(f'<{aa}{E}/>')
+    def t(self):return ''.join(self.content)
+def c(H):try:Y=pychm.CHMFile()
+        if not Y.LoadCHM(str(H)):raise Exception(f'Failed to load CHM file:{H}')
+        ab=Y.GetTopicsTree()
+        if not ab:o=Y.GetDefaultTopic()
+            if o:return d(Y,o)
+            P=Y.GetAllFiles();z=[f for f in P if f.lower().endswith(('.html','.htm'))]
+            if z:return a(Y,z)
+            raise Exception('No HTML content found in CHM file')
+        return b(Y,ab)
+    except Exception as e:raise Exception(f'Error extracting HTML from CHM:{e}')
+    finally:if 'chm' in locals():Y.CloseCHM()
+def d(Y,D):try:K=Y.RetrieveObject(Y.ResolveObject(D))
+        if isinstance(K,bytes):K=K.decode('utf-8',errors='ignore')
+        return y(K)
+    except Exception as e:print(f'Warning:Could not extract topic {D}:{e}');return ''
+def a(Y,M):n=['<!DOCTYPE html><html><head><meta charset="utf-8"><style>body { font-family:Arial,sans-serif; line-height:1.6; margin:2em; }img { max-width:100%; }h1,h2,h3,h4 { color:#333; }pre { background-color:#f5f5f5; padding:1em; border-radius:4px; }code { background-color:#f5f5f5; padding:0.2em 0.4em; border-radius:3px; }</style></head><body>']
+    for S in M:try:K=Y.RetrieveObject(Y.ResolveObject(S))
+            if isinstance(K,bytes):K=K.decode('utf-8',errors='ignore')
+            J=y(K)
+            if J:n.append(J);n.append('<hr style="border:1px solid #ccc; margin:20px 0;">')
+        except Exception as e:print(f'Warning:Could not extract topic {S}:{e}')
+    n.append('</body></html>');return ''.join(n)
+def b(Y,ab):A=['<!DOCTYPE html><html><head><meta charset="utf-8"><style>body { font-family:Arial,sans-serif; line-height:1.6; margin:2em; }img { max-width:100%; }h1,h2,h3,h4 { color:#333; }pre { background-color:#f5f5f5; padding:1em; border-radius:4px; }code { background-color:#f5f5f5; padding:0.2em 0.4em; border-radius:3px; }</style></head><body>']
+    def i(X,Q=0):if hasattr(X,'GetTitle') and hasattr(X,'GetLocal'):R=X.GetTitle();C=X.GetLocal()
+            if R and C:q=min(Q+1,6);A.append(f'<h{q}>{V.escape(R)}</h{q}>')
+                try:K=Y.RetrieveObject(Y.ResolveObject(C))
+                    if isinstance(K,bytes):K=K.decode('utf-8',errors='ignore')
+                    J=y(K)
+                    if J:A.append(J)
+                except Exception as e:print(f'Warning:Could not extract topic {C}:{e}')
+                A.append('<hr style="border:1px solid #ccc; margin:20px 0;">')
+        if hasattr(X,'GetChildren'):for O in X.GetChildren():i(O,Q+1)
+    if isinstance(ab,list):for S in ab:i(S)
+    else:i(ab)
+    A.append('</body></html>');return ''.join(A)
+def y(s):if not s:return ''
+    s=re.sub('<script[^>]*>.*?</script>','',s,flags=re.DOTALL|re.IGNORECASE);s=re.sub('<style[^>]*>.*?</style>','',s,flags=re.DOTALL|re.IGNORECASE);L=m()
+    try:L.feed(s);r=L.get_content();r=re.sub('\\n\\s*\\n','\n\n',r);return r.strip()
+    except Exception as e:print(f'Warning:HTML parsing failed:{e}');return s
+def g(B,w):print(f'Converting {B} to {w}...');print('Extracting HTML content from CHM...');s=c(B)
+    if not s:raise Exception('No content extracted from CHM file')
+    with I.NamedTemporaryFile(mode='w',suffix='.html',delete=False,encoding='utf-8') as G:F=f"""<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<style>\n    @page {{\n        size:A4;\n        margin:2cm;\n        @bottom-center {{\n            content:counter(page);\n            font-size:10px;\n            color:\n        }}\n    }}\n    body {{\n        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\n        line-height:1.6;\n        font-size:11pt;\n        color:\n        max-width:100%;\n    }}\n    h1 {{\n        font-size:24pt;\n        color:\n        border-bottom:2px solid\n        padding-bottom:10px;\n        margin-top:30px;\n    }}\n    h2 {{\n        font-size:20pt;\n        color:\n        border-bottom:1px solid\n        padding-bottom:8px;\n        margin-top:25px;\n    }}\n    h3 {{\n        font-size:16pt;\n        color:\n        margin-top:20px;\n    }}\n    h4 {{\n        font-size:14pt;\n        color:\n        margin-top:15px;\n    }}\n    img {{\n        max-width:100%;\n        height:auto;\n        margin:10px 0;\n    }}\n    pre {{\n        background-color:\n        border:1px solid\n        border-radius:4px;\n        padding:15px;\n        overflow-x:auto;\n        font-family:'Courier New',monospace;\n        font-size:9pt;\n        line-height:1.4;\n    }}\n    code {{\n        background-color:\n        padding:2px 4px;\n        border-radius:3px;\n        font-family:'Courier New',monospace;\n        font-size:9pt;\n    }}\n    table {{\n        border-collapse:collapse;\n        width:100%;\n        margin:15px 0;\n    }}\n    th,td {{\n        border:1px solid\n        padding:8px;\n        text-align:left;\n    }}\n    th {{\n        background-color:\n        font-weight:bold;\n    }}\n    a {{\n        color:\n        text-decoration:none;\n    }}\n    blockquote {{\n        border-left:4px solid\n        margin:15px 0;\n        padding:10px 20px;\n        background-color:\n    }}\n    hr {{\n        border:none;\n        border-top:1px solid\n        margin:20px 0;\n    }}\n</style>\n</head>\n<body>\n{s}\n</body>\n</html>""";G.write(F);l=G.name
+    try:print('Converting HTML to PDF using WeasyPrint...');HTML(filename=l).write_pdf(w);print(f'PDF successfully created:{w}')
+    finally:if os.path.exists(l):os.unlink(l)
+def W():if len(Z.argv)!=2:print('Usage:python chm_to_pdf.py<input_file.chm>');print('Example:python chm_to_pdf.py documentation.chm');Z.exit(1)
+    B=T(Z.argv[1])
+    if not B.exists():print(f"Error:Input file '{B}' does not exist");Z.exit(1)
+    if B.suffix.lower()!='.chm':print(f"Error:Input file '{B}' is not a CHM file");Z.exit(1)
+    w=B.with_suffix('.pdf')
+    try:g(B,w)
+    except Exception as e:print(f'Error during conversion:{e}');Z.exit(1)
+if __name__=='__main__':W()
+# filename: chm2pdf_reportlab.py
+import chm;from reportlab.lib.enums import TA_CENTER;from reportlab.lib.pagesizes import letter;from reportlab.lib.styles import ParagraphStyle,getSampleStyleSheet;from reportlab.lib.units import inch;from reportlab.platypus import PageBreak,Paragraph,SimpleDocTemplate,Spacer
+class q:def __init__(self,r,d):self.chm_file=r;self.output_file=d;self.chm_obj=None;self.content=[]
+    def s(self):try:self.chm_obj=chm.CHMFile(str(self.chm_file));print(f'Successfully opened:{self.chm_file}');return True
+        except Exception as e:print(f'Error opening CHM file:{e}');return False
+    def a(self,H):try:D=self.chm_obj.get_obj(H)
+            if D:try:c=D.decode('utf-8',errors='ignore');return self.clean_html(c)
+                except:return '[Binary or encoded content]'
+            return ''
+        except Exception as e:print(f'Error extracting {H}:{e}');return ''
+    def j(self,c):c=M.sub('<script[^>]*>.*?</script>','',c,flags=M.DOTALL|M.IGNORECASE);c=M.sub('<style[^>]*>.*?</style>','',c,flags=M.DOTALL|M.IGNORECASE);c=c.replace('<br>','\n').replace('<br/>','\n').replace('<br/>','\n');c=c.replace('</p>','\n\n').replace('<p>','');c=c.replace('</h1>','\n\n').replace('<h1>','');c=c.replace('</h2>','\n\n').replace('<h2>','');c=c.replace('</h3>','\n\n').replace('<h3>','');c=c.replace('</h4>','\n\n').replace('<h4>','');c=c.replace('</li>','\n').replace('<li>','• ');c=c.replace('</div>','\n').replace('<div>','');c=c.replace('</span>','').replace('<span>','');c=c.replace('&nbsp;',' ');c=c.replace('&amp;','&');c=c.replace('&lt;','<');c=c.replace('&gt;','>');c=c.replace('&quot;','"');c=M.sub('<[^>]+>','',c);c=M.sub('\\n\\s*\\n','\n\n',c);c=c.strip();return c
+    def v(self):h=[]
+        try:if hasattr(self.chm_obj,'get_toc'):L=self.chm_obj.get_toc()
+                if L:return self.parse_toc(L)
+            for H in ['#SYSTEM','#TOPICS','#STRINGS','#URLTBL']:try:D=self.chm_obj.get_obj(H)
+                    if D:print(f'Found {H}');I=D.decode('utf-8',errors='ignore');u=M.findall('[\\w\\s\\-\\.]+\\.html?',I,M.IGNORECASE)
+                        if u:h.extend(u)
+                except:pass
+            if not h:print('Scanning for HTML files...')
+                for H in self.chm_obj.list():if H.endswith(('.html','.htm')):h.append(H)
+            return sorted(set(h))
+        except Exception as e:print(f'Error getting TOC:{e}');return []
+    def p(self,y):u=[]
+        if isinstance(y,list):for E in y:if isinstance(E,dict):if 'path' in E:u.append(E['path'])
+                    if 'children' in E:u.extend(self.parse_toc(E['children']))
+                elif isinstance(E,str):u.append(E)
+        return u
+    def b(self):if not self.open_chm():return False
+        print('Extracting content from CHM file...');h=self.get_toc()
+        if not h:print('No content found in CHM file.');return False
+        print(f'Found {len(h)} pages.')
+        try:J=SimpleDocTemplate(str(self.output_file),pagesize=letter,rightMargin=72,leftMargin=72,topMargin=72,bottomMargin=72);z=getSampleStyleSheet();B=[];g=ParagraphStyle('CustomTitle',parent=z['Heading1'],fontSize=24,textColor='darkblue',alignment=TA_CENTER,spaceAfter=30);B.append(Paragraph(f'<b>{self.chm_file.stem}</b>',g));B.append(Spacer(1,0.25*inch));l=0
+            for i,A in enumerate(h):try:t=self.extract_html_content(A)
+                    if t:if i>0:B.append(PageBreak())
+                        w=C(A).stem.replace('_',' ').replace('-',' ')
+                        if w:B.append(Paragraph(f'<b>{w}</b>',z['Heading2']));B.append(Spacer(1,0.1*inch))
+                        m=t.split('\n\n')
+                        for G in m:if G.strip():o=G.replace('\n',' ').strip()
+                                try:B.append(Paragraph(o,z['Normal']));B.append(Spacer(1,0.05*inch))
+                                except:B.append(Paragraph(o[:1000],z['Normal']))
+                        l+=1;print(f'Processed:{A}')
+                except Exception as e:print(f'Error processing {A}:{e}');continue
+            if not B:print('No content extracted to create PDF.');return False
+            print(f'Building PDF with {l} pages...');J.build(B);print(f'PDF created successfully:{self.output_file}');return True
+        except Exception as e:print(f'Error creating PDF:{e}');return False
+def F():if len(K.argv)!=2:print('Usage:python chm_to_pdf.py<chm_file>');print('Example:python chm_to_pdf.py document.chm');K.exit(1)
+    k=C(K.argv[1])
+    if not k.exists():print(f"Error:File '{k}' not found.");K.exit(1)
+    if not k.suffix.lower()=='.chm':print(f"Warning:'{k}' may not be a CHM file.")
+    f=k.with_suffix('.pdf');n=q(k,f);x=n.convert_to_pdf()
+    if x:print(f'Conversion complete:{f}')
+    else:print('Conversion failed.');K.exit(1)
+if __name__=='__main__':F()
+# filename: compile_precise.py
+def a(k):q=p(k)
+    if not q.exists():print(f"⚠️  Warning:'{k}' not found in current directory.");print(f'   WeasyPrint will fall back to default system typography for this style.');return ''
+    g=q.read_bytes();f=n.b64encode(g).decode('utf-8');return f
+def c():print('Parsing typography file tree...');m=a('Inter-Regular.ttf');j=a('Inter-Bold.ttf');i=a('Inter-Italic.ttf');o=a('Inter-BoldItalic.ttf');l=a('JetBrainsMono-Regular.ttf');d=[]
+    if m:d.append(f"@font-face {{\n    font-family:'Inter';\n    font-style:normal;\n    font-weight:400;\n    src:url(data:font/truetype;charset=utf-8;base64,{m}) format('truetype');\n}}")
+    if j:d.append(f"@font-face {{\n    font-family:'Inter';\n    font-style:normal;\n    font-weight:700;\n    src:url(data:font/truetype;charset=utf-8;base64,{j}) format('truetype');\n}}")
+    if i:d.append(f"@font-face {{\n    font-family:'Inter';\n    font-style:italic;\n    font-weight:400;\n    src:url(data:font/truetype;charset=utf-8;base64,{i}) format('truetype');\n}}")
+    if o:d.append(f"@font-face {{\n    font-family:'Inter';\n    font-style:italic;\n    font-weight:700;\n    src:url(data:font/truetype;charset=utf-8;base64,{o}) format('truetype');\n}}")
+    if l:d.append(f"@font-face {{\n    font-family:'JetBrains Mono';\n    font-style:normal;\n    font-weight:400;\n    src:url(data:font/truetype;charset=utf-8;base64,{l}) format('truetype');\n}}")
+    b='\n\n'.join(d);e=f"""/*==========================================================================\n   1. PRECISION FONT REGISTRATION (AUTOMATICALLY INLINED)\n==========================================================================*/\n{b}\n/*Global Reset&Base Typography*/\nhtml,body {{\n    margin:0;\n    padding:0;\n    font-family:'Inter',-apple-system,sans-serif;\n    font-size:10.5pt;\n    font-weight:400;\n    font-style:normal;\n    line-height:1.6;\n    color:\n-webkit-print-color-adjust:exact;\n}}\n/*Headlines:Bold and Bigger*/\nh1,h2,h3,h4 {{\n    font-family:'Inter',sans-serif;\n    font-weight:700;\n    font-style:normal;\n    color:\n    margin-top:0;\n    page-break-after:avoid;\n    break-after:avoid;\n}}\nh1 {{\n    font-size:26pt;\n    line-height:1.15;\n    margin-bottom:20pt;\n    letter-spacing:-0.02em;\n}}\nh2 {{\n    font-size:18pt;\n    line-height:1.25;\n    margin-top:24pt;\n    margin-bottom:12pt;\n    border-bottom:0.75pt solid\n    padding-bottom:6pt;\n}}\nh3 {{\n    font-size:14pt;\n    line-height:1.35;\n    margin-top:18pt;\n    margin-bottom:8pt;\n}}\np {{ margin-top:0; margin-bottom:10pt; text-align:justify; }}\n/*Code Snippets:Monospace*/\ncode,pre,kbd,samp {{\n    font-family:'JetBrains Mono',monospace;\n    font-size:9pt;\n    direction:ltr;\n    text-align:left;\n    white-space:pre-wrap;\n    word-break:normal;\n}}\npre {{\n    background-color:\n    border:0.5pt solid\n    border-radius:4px;\n    padding:10pt 12pt;\n    margin:12pt 0;\n    page-break-inside:avoid;\n    break-inside:avoid;\n}}\np code {{\n    background-color:\n    padding:2pt 4pt;\n    border-radius:3px;\n    color:\n}}\n/*Variant Styling Rules*/\nem,i {{\n    font-style:italic;\n    font-weight:400;\n}}\nstrong,b {{\n    font-weight:700;\n    font-style:normal;\n}}\nstrong em,em strong,b i,i b {{\n    font-weight:700;\n    font-style:italic;\n}}\n/*==========================================================================\n   2. CSS PAGED MEDIA (WEASYPRINT CORE)\n==========================================================================*/\n@page {{\n    size:A4 portrait;\n    margin:25mm 20mm 20mm 20mm;\n    @top-left {{\n        content:"Official Document Title";\n        font-family:'Inter',sans-serif;\n        font-size:8.5pt;\n        color:\n        border-bottom:0.5pt solid\n        padding-bottom:4pt;\n        vertical-align:bottom;\n    }}\n    @top-right {{\n        content:"Confidential";\n        font-family:'Inter',sans-serif;\n        font-weight:700;\n        font-size:8.5pt;\n        color:\n        border-bottom:0.5pt solid\n        padding-bottom:4pt;\n        vertical-align:bottom;\n    }}\n    @bottom-left {{\n        content:"Generated Document";\n        font-family:'Inter',sans-serif;\n        font-size:8pt;\n        color:\n    }}\n    @bottom-right {{\n        content:"Page " counter(page) " of " counter(pages);\n        font-family:'Inter',sans-serif;\n        font-size:8.5pt;\n        color:\n    }}\n}}\n@page :first {{\n    margin-top:20mm;\n    @top-left {{ content:normal; border-bottom:none; }}\n    @top-right {{ content:normal; border-bottom:none; }}\n}}\n/*==========================================================================\n   3. STRUCTURAL COMPONENTS\n==========================================================================*/\n.page-break {{\n    page-break-before:always;\n    break-before:always;\n}}\ntable {{\n    width:100%;\n    border-collapse:collapse;\n    margin-bottom:16pt;\n    page-break-inside:auto;\n}}\ntr {{\n    page-break-inside:avoid;\n    break-inside:avoid;\n}}\nthead {{ display:table-header-group; }}\nth {{\n    background-color:\n    color:\n    font-weight:700;\n    text-align:left;\n    padding:8pt 10pt;\n    font-size:9.5pt;\n    border-bottom:2pt solid\n}}\ntd {{\n    padding:8pt 10pt;\n    border-bottom:1px solid\n    font-size:9.5pt;\n    vertical-align:top;\n}}\n""";h='print-style.css';p(h).write_text(e,encoding='utf-8');print(f'\n🎉 Process Complete! Output saved to:{h}')
+if __name__=='__main__':c()
+# filename: dic2pdf.py
+from weasyprint import HTML;d='dictionary.txt';c='dictionary.pdf';b='custom.ttf'
+def a(h):try:n,g=h.strip().split('\t',1)
+    except ValueError:return None
+    g=g.replace('<br/>','<br>');g=o.sub('</?[CFINEË]+[^>]*>','',g);g=o.sub('<x [^>]*>','<span>',g);g=g.replace('</x>','</span>');g=o.sub('<Ë M="[^"]+" ?/?>','',g);return f'\n<html>\n<body>\n<div class="entry">\n<h1 class="word">{n}</h1>\n<div class="definition">{g}</div>\n</div>\n</body>\n</html>\n    '
+def m():with open(d,encoding='utf-8') as f:i=f.readlines()
+    j=[]
+    for l in i:k=a(l)
+        if k:j.append(k)
+    e=f"""\n<html>\n<head>\n<style>\n                @font-face {{\n                    font-family:"CustomFont";\n                    src:url('{b}');\n                }}\n                body {{\n                    font-family:"CustomFont",sans-serif;\n                    font-size:16px;\n                }}\n                .entry {{\n                    page-break-after:always;\n                    padding:30px;\n                }}\n                .word {{\n                    margin-top:0;\n                    color:\n                }}\n                .definition {{\n                    margin-top:10px;\n                    line-height:1.5;\n                }}\n</style>\n</head>\n<body>\n    """
+    for p in j:e+=p
+    e+='</body></html>';HTML(string=e).write_pdf(c);print('PDF created:',c)
+if __name__=='__main__':raise SystemExit(m())
+# filename: html2pdf.py
+from weasyprint import CSS,HTML
+def e(g,b=None,d='/sdcard/_static/css/markdown.css',c=None):h=''
+    if b:h=b.read_text(encoding='utf8')
+    j=HTML(string=h,c=c);k=[]
+    if d:k.append(CSS(filename=d))
+    j.write_pdf(g,stylesheets=k)
+if __name__=='__main__':a=i(l.argv[1]);f=a.with_suffix('.pdf');e(g=f,b=a)
+# filename: md2pdf.py
+from markdown2 import markdown,markdown_path;from weasyprint import CSS,HTML
+def k(f,b=None,i=None,d='/sdcard/_static/css/markdown.css',c=None):g='';j=['cuddled-lists','tables']
+    if i:g=markdown_path(i,j=j)
+    elif b:g=markdown(b,j=j)
+    if not len(g):n='Input markdown seems empty';raise a(n)
+    l=HTML(string=g,c=c);m=[]
+    if d:m.append(CSS(filename=d))
+    l.write_pdf(f,stylesheets=m)
+if __name__=='__main__':h=o.argv[1];e=h.replace('.md','.pdf');k(f=e,i=h)
+# filename: md2pdf2.py
+from markdown2 import markdown_path;from pygments import highlight;from pygments.formatters import HtmlFormatter;from pygments.lexers import TextLexer,get_lexer_by_name;from weasyprint import CSS,HTML
+class b(Exception):pass
+f='\n<nav class="toc">\n<h1>Contents</h1>\n<ul></ul>\n</nav>\n'
+def a(s):e=HtmlFormatter(cssclass='highlight');c=x.compile('<pre><code class="language-(\\w+)">(.*?)</code></pre>',x.DOTALL)
+    def u(q):t=q.group(1);r=q.group(2);r=r.replace('&lt;','<').replace('&gt;','>').replace('&amp;','&')
+        try:p=get_lexer_by_name(t)
+        except Exception:p=TextLexer()
+        return highlight(r,p,e)
+    return c.sub(u,s)
+def o(k,m,h=None,g=None):n=['header-ids','fenced-code-blocks','tables','cuddled-lists'];s=markdown_path(m,n=n)
+    if not s.strip():raise b(v)
+    s=a(s);s=f+s;i=HTML(string=s,g=g);d=[]
+    if h:d.append(CSS(filename=h))
+    i.write_pdf(k,d=d)
+if __name__=='__main__':l=w.argv[1];j=l.replace('.md','.pdf');o(k=j,m=l,h='/sdcard/_static/css/book.css',g='.')
+# filename: md_to_pdf.py
+import markdown;import weasyprint;c='\n/*==========================================================================\n   1. PAGE SETUP&PAGED MEDIA\n==========================================================================*/\n@page {\n    size:A4;\n    margin:20mm;\n    @bottom-right {\n        content:"Page " counter(page) " of " counter(pages);\n        font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;\n        font-size:9pt;\n        color:\n    }\n}\nh1,h2,h3,h4,h5,h6 { page-break-after:avoid; break-after:avoid; }\nblockquote,pre,table,figure { page-break-inside:avoid; break-inside:avoid; }\nul,ol { page-break-inside:auto; }\nli { page-break-inside:avoid; break-inside:avoid; }\n/*==========================================================================\n   2. TYPOGRAPHY&BASE STYLES\n==========================================================================*/\nhtml,body {\n    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;\n    font-size:11pt;\n    line-height:1.6;\n    color:\n}\np {\n    margin-top:0;\n    margin-bottom:1.2em;\n    text-align:justify;\n}\nh1 {\n    font-size:24pt;\n    margin-top:0;\n    margin-bottom:15pt;\n    color:\n    border-bottom:2px solid\n    padding-bottom:5pt;\n}\nh2 {\n    font-size:18pt;\n    margin-top:24pt;\n    margin-bottom:12pt;\n    color:\n    border-bottom:1px solid\n    padding-bottom:3pt;\n}\nh3 {\n    font-size:14pt;\n    margin-top:18pt;\n    margin-bottom:8pt;\n    color:\n}\n/*==========================================================================\n   3. INLINE ELEMENTS&DECORATIONS\n==========================================================================*/\na { color:\na[href^="http"]:after {\n    content:" (" attr(href) ")";\n    font-size:9pt;\n    color:\n}\nstrong { color:\ncode {\n    font-family:"Courier New",Courier,monospace;\n    font-size:10pt;\n    background-color:\n    padding:2px 4px;\n    border-radius:3px;\n    color:\n}\nblockquote {\n    margin:1.5em 0;\n    padding:0.5em 15px;\n    border-left:4px solid\n    color:\n    background-color:\n    font-style:italic;\n}\n/*==========================================================================\n   4. CODE BLOCKS (Markdown ``` )\n==========================================================================*/\npre {\n    background-color:\n    border:1px solid\n    border-radius:4px;\n    padding:12px;\n    margin:1.5em 0;\n    overflow:hidden;\n}\npre code {\n    background-color:transparent;\n    padding:0;\n    border-radius:0;\n    color:\n    font-size:9.5pt;\n    white-space:pre-wrap;\n}\n/*==========================================================================\n   5. TABLES&LISTS\n==========================================================================*/\ntable {\n    width:100%;\n    border-collapse:collapse;\n    margin:20px 0;\n    font-size:10.5pt;\n}\nth,td {\n    border:1px solid\n    padding:8px 12px;\n    text-align:left;\n}\nth {\n    background-color:\n    font-weight:bold;\n    color:\n}\ntr:nth-child(even) { background-color:\nul,ol { margin-top:0; margin-bottom:1.5em; padding-left:24px; }\nli { margin-bottom:0.4em; }\n/*==========================================================================\n   6. IMAGES/FIGURES\n==========================================================================*/\nimg {\n    max-width:100%;\n    height:auto;\n    display:block;\n    margin:20px auto;\n    border-radius:4px;\n}\n'
+def a(b):d=l(b)
+    if not d.exists():print(f"❌ Error:The file '{b}' does not exist.");m.exit(1)
+    if d.suffix.lower() not in ('.md','.markdown'):print(f"⚠️  Warning:'{b}' does not have a standard Markdown extension.")
+    g=d.with_suffix('.pdf');print(f'📖 Reading:{d.name}')
+    try:f=d.read_text(encoding='utf-8')
+    except Exception as e:print(f'❌ Error reading file:{e}');m.exit(1)
+    print('🛠️  Converting Markdown to HTML...');i=markdown.markdown(f,extensions=['extra','codehilite']);h=f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>{d.stem}</title>\n</head>\n<body>\n    {i}\n</body>\n</html>';print('🚀 Compiling PDF with WeasyPrint...')
+    try:j=weasyprint.HTML(string=h,base_url=str(d.parent));k=weasyprint.CSS(string=c);j.write_pdf(target=g,stylesheets=[k]);print(f'✅ Success! PDF saved beside markdown file at:\n   👉 {g.resolve()}')
+    except Exception as e:print(f'❌ WeasyPrint Compilation Error:{e}');m.exit(1)
+if __name__=='__main__':if len(m.argv)<2:print('❌ Usage Error:Please provide an input Markdown file path.');print('   Example:python md_to_pdf.py instructions.md');m.exit(1)
+    a(m.argv[1])
+# filename: md_to_pdf2.py
+import markdown;import weasyprint;c='\n/*==========================================================================\n   0. LOCAL FONTS CONFIGURATION\n==========================================================================*/\n@font-face {\n    font-family:"LocalInter";\n    src:url("fonts/Inter-Regular.ttf");\n    font-weight:normal;\n    font-style:normal;\n}\n@font-face {\n    font-family:"LocalInter";\n    src:url("fonts/Inter-Bold.ttf");\n    font-weight:bold;\n    font-style:normal;\n}\n@font-face {\n    font-family:"LocalMono";\n    src:url("fonts/JetBrainsMono-Regular.ttf");\n    font-weight:normal;\n    font-style:normal;\n}\n/*==========================================================================\n   1. PAGE SETUP&PAGED MEDIA\n==========================================================================*/\n@page {\n    size:A4;\n    margin:20mm;\n    @bottom-right {\n        content:"Page " counter(page) " of " counter(pages);\n        font-family:"LocalInter",sans-serif;\n        font-size:9pt;\n        color:\n    }\n}\nh1,h2,h3,h4,h5,h6 { page-break-after:avoid; break-after:avoid; }\nblockquote,pre,table,figure { page-break-inside:avoid; break-inside:avoid; }\nul,ol { page-break-inside:auto; }\nli { page-break-inside:avoid; break-inside:avoid; }\n/*==========================================================================\n   2. TYPOGRAPHY&BASE STYLES\n==========================================================================*/\nhtml,body {\n    font-family:"LocalInter",sans-serif;\n    font-size:11pt;\n    line-height:1.6;\n    color:\n}\np {\n    margin-top:0;\n    margin-bottom:1.2em;\n    text-align:justify;\n}\nh1 {\n    font-size:24pt;\n    margin-top:0;\n    margin-bottom:15pt;\n    color:\n    border-bottom:2px solid\n    padding-bottom:5pt;\n}\nh2 {\n    font-size:18pt;\n    margin-top:24pt;\n    margin-bottom:12pt;\n    color:\n    border-bottom:1px solid\n    padding-bottom:3pt;\n}\nh3 {\n    font-size:14pt;\n    margin-top:18pt;\n    margin-bottom:8pt;\n    color:\n}\n/*==========================================================================\n   3. INLINE ELEMENTS&DECORATIONS\n==========================================================================*/\na { color:\na[href^="http"]:after {\n    content:" (" attr(href) ")";\n    font-size:9pt;\n    color:\n}\nstrong { color:\ncode {\n    font-family:"LocalMono",monospace;\n    font-size:9.5pt;\n    background-color:\n    padding:2px 4px;\n    border-radius:3px;\n    color:\n}\nblockquote {\n    margin:1.5em 0;\n    padding:0.5em 15px;\n    border-left:4px solid\n    color:\n    background-color:\n    font-style:italic;\n}\n/*==========================================================================\n   4. CODE BLOCKS (Markdown ``` )\n==========================================================================*/\npre {\n    background-color:\n    border:1px solid\n    border-radius:4px;\n    padding:12px;\n    margin:1.5em 0;\n    overflow:hidden;\n}\npre code {\n    background-color:transparent;\n    padding:0;\n    border-radius:0;\n    color:\n    font-family:"LocalMono",monospace;\n    font-size:9pt;\n    white-space:pre-wrap;\n}\n/*==========================================================================\n   5. TABLES&LISTS\n==========================================================================*/\ntable {\n    width:100%;\n    border-collapse:collapse;\n    margin:20px 0;\n    font-size:10.5pt;\n}\nth,td {\n    border:1px solid\n    padding:8px 12px;\n    text-align:left;\n}\nth {\n    background-color:\n    font-weight:bold;\n    color:\n}\ntr:nth-child(even) { background-color:\nul,ol { margin-top:0; margin-bottom:1.5em; padding-left:24px; }\nli { margin-bottom:0.4em; }\n/*==========================================================================\n   6. IMAGES/FIGURES\n==========================================================================*/\nimg {\n    max-width:100%;\n    height:auto;\n    display:block;\n    margin:20px auto;\n    border-radius:4px;\n}\n'
+def a(b):d=l(b)
+    if not d.exists():print(f"❌ Error:The file '{b}' does not exist.");m.exit(1)
+    g=d.with_suffix('.pdf');print(f'📖 Reading:{d.name}');f=d.read_text(encoding='utf-8');print('🛠️  Converting Markdown to HTML...');i=markdown.markdown(f,extensions=['extra','codehilite']);h=f'<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>{d.stem}</title>\n</head>\n<body>\n    {i}\n</body>\n</html>';print('🚀 Compiling PDF with WeasyPrint using local fonts...')
+    try:j=weasyprint.HTML(string=h,base_url=str(d.parent));k=weasyprint.CSS(string=c);j.write_pdf(target=g,stylesheets=[k]);print(f'✅ Success! PDF generated at:\n   👉 {g.resolve()}')
+    except Exception as e:print(f'❌ WeasyPrint Error:{e}');m.exit(1)
+if __name__=='__main__':if len(m.argv)<2:print('❌ Usage Error:Provide an input Markdown file.');m.exit(1)
+    a(m.argv[1])
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

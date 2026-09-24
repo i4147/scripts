@@ -1,4 +1,3 @@
-
 import ast
 import re
 import sys
@@ -25,7 +24,6 @@ PRESERVE_PATTERNS: Final[tuple[str, ...]] = (
 
 @dataclass(slots=True)
 class FileProcessingResult:
-
     file_path: Path
     was_modified: bool
     removed_count: int
@@ -34,7 +32,6 @@ class FileProcessingResult:
 
 
 class CommentRemover:
-
     __slots__ = ("preserve_regex",)
 
     def __init__(self) -> None:

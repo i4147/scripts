@@ -13,7 +13,6 @@ def get_hash(p):
         return None
 
 
-
 system = {}
 for f in Path("/system/bin").iterdir():
     if f.is_file() or f.is_symlink():

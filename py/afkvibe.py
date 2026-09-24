@@ -1,4 +1,3 @@
-
 import argparse
 import ast
 import os
@@ -46,7 +45,6 @@ def get_used_names(source):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             used.add(node.id)
         elif isinstance(node, ast.Attribute):
-            
             if isinstance(node.value, ast.Name):
                 used.add(node.value.id)
     return used
@@ -64,7 +62,7 @@ def find_unused_imports(source):
                 unused.append(imp)
         elif imp["type"] == "from":
             if imp["name"] == "*":
-                continue  
+                continue
             name = imp["asname"] if imp["asname"] else imp["name"].split(".")[0]
             if name not in used_names:
                 unused.append(imp)

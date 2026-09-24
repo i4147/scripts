@@ -1,4 +1,3 @@
-
 import re
 import sys
 from pathlib import Path
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcessResult:
-
     file_path: Path
     success: bool
     original_lines: int
@@ -25,14 +23,10 @@ class ProcessResult:
 
 
 class CommentRemover:
-
-    
     STRING_PATTERN = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')"""
 
-    
     SINGLE_COMMENT_PATTERN = r"//.*?(?=\n|$)"
 
-    
     MULTI_COMMENT_PATTERN = r"/\*.*?\*/"
 
     def __init__(self):
@@ -59,29 +53,23 @@ class CommentRemover:
         return text
 
     def remove_comments(self, text: str) -> Tuple[str, int]:
-        
+
         protected_text, protected_strings = self._protect_strings(text)
 
-        
         single_count = len(self.single_comment_regex.findall(protected_text))
         multi_count = len(self.multi_comment_regex.findall(protected_text))
         total_comments = single_count + multi_count
 
-        
         protected_text = self.single_comment_regex.sub("", protected_text)
 
-        
         protected_text = self.multi_comment_regex.sub("", protected_text)
 
-        
         lines = protected_text.split("\n")
         cleaned_lines = []
         for line in lines:
-            
             stripped = line.rstrip()
             cleaned_lines.append(stripped)
 
-        
         final_lines = []
         prev_empty = False
         for line in cleaned_lines:
@@ -95,26 +83,21 @@ class CommentRemover:
 
         protected_text = "\n".join(final_lines)
 
-        
         cleaned_text = self._restore_strings(protected_text, protected_strings)
 
         return cleaned_text, total_comments
 
     def process_file(self, file_path: Path) -> ProcessResult:
         try:
-            
             original_content = file_path.read_text(encoding="utf-8")
             original_lines = len(original_content.split("\n"))
 
-            
             cleaned_content, comments_removed = self.remove_comments(original_content)
             final_lines = len(cleaned_content.split("\n"))
 
-            
             backup_path = file_path.with_suffix(file_path.suffix + ".bak")
             backup_path.write_text(original_content, encoding="utf-8")
 
-            
             file_path.write_text(cleaned_content, encoding="utf-8")
 
             return ProcessResult(
@@ -213,7 +196,6 @@ def main(
         logger.error(f"Root directory not found: {root_path}")
         return 1
 
-    
     logger.info(f"Scanning for C/C++ files in {root_path}...")
     source_files = find_source_files(root_path)
 
@@ -226,9 +208,9 @@ def main(
 
     if dry_run:
         logger.info("DRY RUN MODE: No files will be modified")
-        
+
         remover = CommentRemover()
-        for file_path in source_files[:3]:  
+        for file_path in source_files[:3]:
             try:
                 content = file_path.read_text(encoding="utf-8")
                 cleaned, comments = remover.remove_comments(content)
@@ -237,14 +219,11 @@ def main(
                 logger.error(f"  {file_path.name}: {e}")
         return 0
 
-    
     logger.info(f"Using {num_workers or cpu_count()} workers for parallel processing")
     results = process_files_parallel(source_files, num_workers)
 
-    
     print_summary(results)
 
-    
     if not keep_backups:
         logger.info("Removing backup files...")
         backup_count = 0
@@ -256,7 +235,6 @@ def main(
                     backup_count += 1
         logger.info(f"Removed {backup_count} backup files")
 
-    
     failed = [r for r in results if not r.success]
     return 1 if failed else 0
 

@@ -23,7 +23,6 @@ def create_github_repo(repo_name, description: str = "", private: bool = False):
         raise Exception(f"GitHub API error: {response.json().get('message')}")
 
 
-
 try:
     repo_url = create_github_repo(repo_name="my-awesome-project", description="Created with Python!", private=False)
     print(f"✅ Repo created: {repo_url}")

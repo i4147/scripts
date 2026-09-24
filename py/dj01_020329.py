@@ -56,35 +56,30 @@ def main() -> None:
     removed_count = 0
 
     for path in cwd.rglob("*"):
-        
         if should_skip(path):
             continue
 
         loname = path.name.lower()
         rel_path = path.relative_to(cwd)
 
-        
         if loname in JUNK_FILES:
             remove_it(path)
             print(f"{rel_path} removed.")
             removed_count += 1
             continue
 
-        
         if path.is_file() and any(loname.endswith(ext) for ext in JUNK_EXTENSIONS):
             remove_it(path)
             print(rel_path)
             removed_count += 1
             continue
 
-        
         if path.is_dir() and loname == "licenses" and "dist-info" in path.parent.name:
             remove_it(path)
             print(rel_path)
             removed_count += 1
             continue
 
-        
         if any(junk in loname for junk in JUNK_FILES):
             if REMOVE_MODE:
                 remove_it(path)

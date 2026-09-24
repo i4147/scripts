@@ -26,18 +26,16 @@ def bech32_decode(bech):
             return None, None
         data.append(CHARSET.index(c))
 
-    
     acc = 0
     bits = 0
     ret = bytearray()
-    for value in data[:-6]:  
+    for value in data[:-6]:
         acc = (acc << 5) | value
         bits += 5
         while bits >= 8:
             bits -= 8
             ret.append((acc >> bits) & 0xFF)
     return hrp, bytes(ret)
-
 
 
 def b64_encode(data: bytes) -> str:
@@ -51,23 +49,19 @@ def b64_decode(data: str) -> bytes:
     return base64.b64decode(data)
 
 
-
 def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
-    
+
     hrp, pub_bytes = bech32_decode(recipient_str)
     if hrp != "age" or len(pub_bytes) != 32:
         raise ValueError("Invalid age public key format.")
     recipient_key = x25519.X25519PublicKey.from_public_bytes(pub_bytes)
 
-    
     ephemeral_share = x25519.X25519PrivateKey.generate()
     ephemeral_pub_bytes = ephemeral_share.public_key().public_bytes_raw()
     file_key = os.urandom(16)
 
-    
     shared_secret = ephemeral_share.exchange(recipient_key)
 
-    
     salt = ephemeral_pub_bytes + pub_bytes
     hkdf = HKDF(
         algorithm=SHA256(),
@@ -77,11 +71,9 @@ def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
     )
     wrap_key = hkdf.derive(shared_secret)
 
-    
     cipher = ChaCha20Poly1305(wrap_key)
     encrypted_file_key = cipher.encrypt(b"\x00" * 12, file_key, b"")
 
-    
     ephemeral_b64 = b64_encode(ephemeral_pub_bytes)
     enc_file_key_b64 = b64_encode(encrypted_file_key)
 
@@ -89,7 +81,6 @@ def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
     header += f"-> X25519 {ephemeral_b64}\n{enc_file_key_b64}\n"
     header += "---"
 
-    
     hkdf_mac = HKDF(
         algorithm=SHA256(),
         length=32,
@@ -102,10 +93,8 @@ def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
     h.update(header.encode("utf-8"))
     header_mac = h.finalize()
 
-    
     full_header = header.encode("utf-8") + b" " + b64_encode(header_mac).encode("utf-8") + b"\n"
 
-    
     stream_nonce = os.urandom(16)
     hkdf_payload = HKDF(
         algorithm=SHA256(),
@@ -115,12 +104,10 @@ def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
     )
     payload_key = hkdf_payload.derive(file_key)
 
-    
     chunk_size = 64 * 1024
     encrypted_payload = bytearray()
 
-    
-    nonce_structure = struct.pack(">Q", 0) + b"\x01"  
+    nonce_structure = struct.pack(">Q", 0) + b"\x01"
     cipher_payload = ChaCha20Poly1305(payload_key)
     encrypted_chunk = cipher_payload.encrypt(nonce_structure, payload, b"")
     encrypted_payload.extend(encrypted_chunk)
@@ -129,34 +116,29 @@ def encrypt_age(recipient_str: str, payload: bytes) -> bytes:
 
 
 def decrypt_age(identity_priv_hex: str, encrypted_bytes: bytes) -> bytes:
-    
+
     lines = encrypted_bytes.split(b"\n")
     if lines[0] != b"age-encryption.org/v1":
         raise ValueError("Unsupported or invalid format protocol.")
 
-    
     header_end_idx = 0
     for idx, line in enumerate(lines):
         if line.startswith(b"---"):
             header_end_idx = idx
             break
 
-    
     header_body = b"\n".join(lines[:header_end_idx]) + b"\n---"
     mac_line = lines[header_end_idx].split(b" ")
     provided_mac = b64_decode(mac_line[1].decode("utf-8"))
 
-    
     stanza_info = lines[1].decode("utf-8").split(" ")
     ephemeral_pub_bytes = b64_decode(stanza_info[2])
     encrypted_file_key = b64_decode(lines[2].decode("utf-8"))
 
-    
     priv_bytes = bytes.fromhex(identity_priv_hex)
     identity_key = x25519.X25519PrivateKey.from_private_bytes(priv_bytes)
     pub_bytes = identity_key.public_key().public_bytes_raw()
 
-    
     ephemeral_pub_obj = x25519.X25519PublicKey.from_public_bytes(ephemeral_pub_bytes)
     shared_secret = identity_key.exchange(ephemeral_pub_obj)
 
@@ -169,11 +151,9 @@ def decrypt_age(identity_priv_hex: str, encrypted_bytes: bytes) -> bytes:
     )
     wrap_key = hkdf.derive(shared_secret)
 
-    
     cipher = ChaCha20Poly1305(wrap_key)
     file_key = cipher.decrypt(b"\x00" * 12, encrypted_file_key, b"")
 
-    
     hkdf_mac = HKDF(
         algorithm=SHA256(),
         length=32,
@@ -185,13 +165,10 @@ def decrypt_age(identity_priv_hex: str, encrypted_bytes: bytes) -> bytes:
     h.update(header_body)
     h.verify(provided_mac)
 
-    
-    
     payload_start = len(header_body) + 1 + len(mac_line[1]) + 2
     stream_nonce = encrypted_bytes[payload_start : payload_start + 16]
     ciphertext_body = encrypted_bytes[payload_start + 16 :]
 
-    
     hkdf_payload = HKDF(
         algorithm=SHA256(),
         length=32,
@@ -200,7 +177,6 @@ def decrypt_age(identity_priv_hex: str, encrypted_bytes: bytes) -> bytes:
     )
     payload_key = hkdf_payload.derive(file_key)
 
-    
     nonce_structure = struct.pack(">Q", 0) + b"\x01"
     cipher_payload = ChaCha20Poly1305(payload_key)
     decrypted_payload = cipher_payload.decrypt(nonce_structure, ciphertext_body, b"")
@@ -208,22 +184,17 @@ def decrypt_age(identity_priv_hex: str, encrypted_bytes: bytes) -> bytes:
     return decrypted_payload
 
 
-
 if __name__ == "__main__":
-    
-    
     priv_hex = "2b41315b8109bfda10174c67db1a1343714b62f6b8b15d03a116bc92d0ff124d"
     pub_bech32 = "age1ant79mvdh6scg398szwskr9w76vdyw33y49p68t603pqp3sk6u8sntk69w"
 
     secret_message = b"This is a port payload verifying the age specification works smoothly!"
     print(f"Original Text: {secret_message.decode()}\n")
 
-    
     encrypted_packet = encrypt_age(pub_bech32, secret_message)
     print("--- ENCRYPTED FILE OUTPUT STREAM ---")
     print(encrypted_packet[:250].decode("utf-8", errors="replace") + "...\n")
 
-    
     recovered_message = decrypt_age(priv_hex, encrypted_packet)
     print(f"Decrypted Result Match: {recovered_message == secret_message}")
     print(f"Recovered Content: {recovered_message.decode()}")

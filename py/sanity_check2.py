@@ -29,7 +29,6 @@ def should_ignore_file(file_path: Path, ignore_patterns: list[str]) -> bool:
     if file_path.suffix == ".pyc":
         return True
 
-    
     name = file_path.name
     for pattern in ignore_patterns:
         if fnmatch(name, pattern):
@@ -62,7 +61,6 @@ def check_package_dependencies(dist, installed_map: dict[str, str]) -> list[str]
         return broken_deps
 
     for req_str in dist.requires:
-        
         dep_name = req_str.split(";")[0].strip()
         for op in ["<", ">", "=", "!", "~"]:
             if op in dep_name:
@@ -93,7 +91,6 @@ def main():
         pkg_version = dist.version
         origin_path = getattr(dist, "_path", "Unknown Environment Space")
 
-        
         missing_files = check_package_files(dist, args.ignore)
         missing_deps = check_package_dependencies(dist, installed_map)
 
@@ -118,16 +115,14 @@ def main():
 
             print("-" * 60)
 
-    
     if unique_missing_deps:
         req_file = Path("requirements.txt")
-        
+
         with open(req_file, "w", encoding="utf-8") as f:
             for dep in sorted(unique_missing_deps):
                 f.write(f"{dep}\n")
         logging.info(f"📝 Saved {len(unique_missing_deps)} unique missing dependencies to: {req_file.resolve()}")
 
-    
     logging.info("=== SCAN SUMMARY ===")
     logging.info(f"Total packages evaluated: {len(distributions)}")
     logging.info(f"Packages with missing files: {corrupted_packages_count}")

@@ -132,6 +132,3 @@ def tokenize_text(text: str) -> list[str]:
         subwords = WORD_PATTERN.findall(identifier)
         tokens.extend(subwords if subwords else [identifier])
     return tokens
-
-
-

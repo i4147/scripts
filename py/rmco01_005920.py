@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import ast
@@ -18,7 +17,6 @@ except Exception:
 
 
 class DocstringStripper(ast.NodeTransformer):
-
     def _maybe_strip_first_docstring(self, node: ast.AST) -> ast.AST:
         body = getattr(node, "body", None)
         if not body:
@@ -29,7 +27,6 @@ class DocstringStripper(ast.NodeTransformer):
             and isinstance(getattr(first, "value", None), ast.Constant)
             and isinstance(first.value.value, str)
         ):
-            
             body.pop(0)
             if not body:
                 body.append(ast.Pass())
@@ -56,17 +53,14 @@ def extract_prefix_comments_and_shebang(source: str) -> Tuple[str, str]:
     for i, line in enumerate(lines):
         stripped = line.strip()
 
-        
         if i == 0 and line.startswith("#!"):
             prefix_lines.append(line)
             continue
 
-        
         if stripped == "":
             if prefix_lines:
                 prefix_lines.append(line)
             else:
-                
                 continue
             continue
 
@@ -82,10 +76,9 @@ def extract_prefix_comments_and_shebang(source: str) -> Tuple[str, str]:
             ):
                 prefix_lines.append(line)
                 continue
-            
+
             continue
 
-        
         break
 
     prefix = "".join(prefix_lines)
@@ -111,7 +104,6 @@ def collect_preserved_inline_comments(source: str) -> Dict[int, List[str]]:
                 ):
                     comments_by_line.setdefault(start_row, []).append(tok_string)
     except tokenize.TokenError:
-        
         return {}
     return comments_by_line
 
@@ -121,35 +113,32 @@ def reattach_inline_comments(new_source: str, preserved_comments: Dict[int, List
         return new_source
 
     new_lines = new_source.splitlines()
-    
-    
+
     max_line = len(new_lines)
     used_comments = set()
 
     for orig_line_no in sorted(preserved_comments):
         for comment in preserved_comments[orig_line_no]:
-            target_line_idx = orig_line_no - 1  
+            target_line_idx = orig_line_no - 1
             if 0 <= target_line_idx < max_line:
                 line = new_lines[target_line_idx]
                 if comment in line:
                     used_comments.add((orig_line_no, comment))
                     continue
-                
+
                 if line.rstrip() == "":
                     new_lines[target_line_idx] = comment
                 else:
                     new_lines[target_line_idx] = line + "  " + comment
                 used_comments.add((orig_line_no, comment))
             else:
-                
                 continue
 
-    
     for orig_line_no in sorted(preserved_comments):
         for comment in preserved_comments[orig_line_no]:
             if (orig_line_no, comment) in used_comments:
                 continue
-            
+
             new_lines.append(comment)
             used_comments.add((orig_line_no, comment))
 
@@ -167,34 +156,27 @@ def process_file(path: Path) -> Tuple[str, bool, Optional[str]]:
     if not original.strip():
         return str(path), False, None
 
-    
     preserved_inline_comments = collect_preserved_inline_comments(original)
 
-    
     prefix, _ = extract_prefix_comments_and_shebang(original)
 
-    
     try:
         tree = ast.parse(original)
     except SyntaxError as exc:
         return str(path), False, f"syntax-error-original: {exc}"
 
-    
     stripper = DocstringStripper()
     new_tree = stripper.visit(tree)
     ast.fix_missing_locations(new_tree)
 
     try:
-        
         new_source_body = astor.to_source(new_tree)
     except Exception as exc:
         return str(path), False, f"unparse-failed: {exc}"
 
-    
     if not new_source_body.endswith("\n"):
         new_source_body = new_source_body + "\n"
 
-    
     if prefix:
         if not prefix.endswith("\n"):
             prefix = prefix + "\n"
@@ -202,24 +184,19 @@ def process_file(path: Path) -> Tuple[str, bool, Optional[str]]:
     else:
         new_source = new_source_body
 
-    
     new_source = reattach_inline_comments(new_source, preserved_inline_comments)
 
-    
     if not new_source.endswith("\n"):
         new_source = new_source + "\n"
 
-    
     try:
         ast.parse(new_source)
     except SyntaxError as exc:
         return str(path), False, f"syntax-error-transformed: {exc}"
 
-    
     if new_source == original:
         return str(path), False, None
 
-    
     try:
         with open(path, "w", encoding=encoding, newline="\n") as f:
             f.write(new_source)

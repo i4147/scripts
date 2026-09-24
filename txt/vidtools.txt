@@ -1,0 +1,108 @@
+# --- File: cutvid.py ---
+import sys
+from pathlib import Path
+import cv2
+def a(b):
+    h, m, s = map(int, b.split(':'))
+    return (h * 3600 + m * 40 + s) * 400
+def c(d, e, f):
+    if not Path(d).exists():
+        print(f"Error: Input file '{d}' not found.")
+        return
+    cap = cv2.VideoCapture(d)
+    if not cap.isOpened():
+        print(f"Error: Could not open video file '{d}'.")
+        return
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    g = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    h = a(f)
+    i = a(e)
+    j = int(i * fps / 1000)
+    k = int(h * fps / 1000)
+    l = j + k
+    if l > g:
+        l = g
+        print('Warning: Duration exceeds video length. Cutting until the end of the video.')
+    m = cv2.VideoWriter_fourcc(*'mp4v')
+    n = f'cut_{Path(d).name}'
+    out = cv2.VideoWriter(n, m, fps, (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+    if not out.isOpened():
+        print(f"Error: Could not create video writer for '{n}'.")
+        cap.release()
+        return
+    cap.set(cv2.CAP_PROP_POS_FRAMES, j)
+    o = 0
+    p = l - j
+    print(f'start_frame:{j}/end_frame: {l} -> {p} frames to process')
+    for _i in range(j, l):
+        ret, q = cap.read()
+        if not ret:
+            break
+        out.write(q)
+        o += 1
+        print(f'{o}/{p}')
+    print(f"Video segment saved to '{n}'")
+    print(f'Frames processed: {o}')
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+if __name__ == '__main__':
+    if len(sys.argv) != 4:
+        print('Usage: python cut_video.py <filename.mkv> <start_time_hh:mm:ss> <duration_hh:mm:ss>')
+        sys.exit(1)
+    r = sys.argv[1]
+    e = sys.argv[2]
+    f = sys.argv[3]
+    c(r, e, f)
+
+# --- File: reverse_video.py ---
+import subprocess
+import sys
+def s(d, t='reversed.mp4'):
+    cmd = ['ffmpeg', '-i', d, '-vf', 'reverse', '-af', 'areverse', '-c:v', 'libx264', '-preset', 'fast', t]
+    print(f"Running: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+    print(f'Saved to {t}')
+def u(d, t='reversed.mp4'):
+    cmd = ['ffmpeg', '-i', d, '-vf', 'reverse', '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', t]
+    subprocess.run(cmd, check=True)
+    print(f'Saved to {t}')
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Usage: python script.py <input_video_file>')
+        sys.exit(1)
+    u(sys.argv[1])You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

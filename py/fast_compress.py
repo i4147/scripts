@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 from pathlib import Path
@@ -10,7 +9,6 @@ import json
 
 
 SKIP_EXTENSIONS_COMPRESS = {
-    
     ".xz",
     ".gz",
     ".7z",
@@ -26,7 +24,6 @@ SKIP_EXTENSIONS_COMPRESS = {
     ".tar",
     ".tgz",
     ".tbz2",
-    
     ".jpg",
     ".jpeg",
     ".png",
@@ -40,7 +37,6 @@ SKIP_EXTENSIONS_COMPRESS = {
     ".heic",
     ".heif",
     ".avif",
-    
     ".mp4",
     ".mkv",
     ".avi",
@@ -55,7 +51,6 @@ SKIP_EXTENSIONS_COMPRESS = {
     ".ogv",
     ".ts",
     ".m2ts",
-    
     ".mp3",
     ".wav",
     ".flac",
@@ -67,7 +62,6 @@ SKIP_EXTENSIONS_COMPRESS = {
     ".mid",
     ".midi",
     ".aiff",
-    
     ".pdf",
     ".docx",
     ".pptx",
@@ -79,7 +73,6 @@ SKIP_EXTENSIONS_COMPRESS = {
     ".mobi",
     ".azw",
     ".azw3",
-    
     ".exe",
     ".dll",
     ".so",
@@ -107,17 +100,16 @@ SKIP_DIRS = {
     "venv",
     "env",
     "node_modules",
-    ".egg-info",  
+    ".egg-info",
     "dist",
     "build",
 }
 
 
 SKIP_DIR_PATTERNS = [
-    "*.egg-info",  
-    "*.dist-info",  
+    "*.egg-info",
+    "*.dist-info",
 ]
-
 
 
 class SpaceStats:
@@ -141,11 +133,10 @@ class SpaceStats:
 
 
 def should_skip_directory(dir_name: str) -> bool:
-    
+
     if dir_name in SKIP_DIRS:
         return True
 
-    
     for pattern in SKIP_DIR_PATTERNS:
         if fnmatch.fnmatch(dir_name, pattern):
             return True
@@ -155,14 +146,12 @@ def should_skip_directory(dir_name: str) -> bool:
 
 def is_editable_package_dir(root_path: Path) -> bool:
     try:
-        
         for item in root_path.iterdir():
             if item.is_dir() and item.name.endswith(".egg-info"):
-                
                 egg_info_path = item / "SOURCES.txt"
                 if egg_info_path.exists():
                     return True
-                
+
                 direct_url = item / "direct_url.json"
                 if direct_url.exists():
                     try:
@@ -187,29 +176,22 @@ def get_files(directory: Path, compress: bool):
     skipped_dirs = 0
     skipped_media = 0
 
-    
     for root, dirs, file_names in directory.walk():
         root_path = Path(root)
 
-        
         if ".git" in root_path.parts:
             continue
 
-        
         dirs_to_remove = []
         for dir_name in dirs:
             if should_skip_directory(dir_name):
                 dirs_to_remove.append(dir_name)
                 skipped_dirs += 1
 
-        
         for dir_name in dirs_to_remove:
             dirs.remove(dir_name)
 
-        
         if is_editable_package_dir(root_path):
-            
-            
             dirs.clear()
             skipped_editable += 1
             continue
@@ -219,21 +201,18 @@ def get_files(directory: Path, compress: bool):
         for file_name in file_names:
             file_path = root_path / file_name
 
-            
             if file_path.is_symlink():
                 skipped_symlinks += 1
                 continue
 
-            
             if ".egg-info" in str(file_path) or ".dist-info" in str(file_path):
                 skipped_extensions += 1
                 continue
 
             if compress:
-                
                 if file_path.suffix.lower() in SKIP_EXTENSIONS_COMPRESS:
                     skipped_extensions += 1
-                    
+
                     if file_path.suffix.lower() in {
                         ".jpg",
                         ".jpeg",
@@ -288,7 +267,6 @@ def get_files(directory: Path, compress: bool):
                         skipped_media += 1
                     continue
             else:
-                
                 if file_path.suffix not in VALID_DECOMPRESS_EXTENSIONS:
                     skipped_extensions += 1
                     continue
@@ -319,16 +297,12 @@ def compress_file(
     stats: SpaceStats = None,
 ):
     try:
-        
         original_size = input_path.stat().st_size
 
-        
         compressor = zstd.ZstdCompressor(level=level, threads=threads)
 
-        
         with open(input_path, "rb") as infile:
             with open(output_path, "wb") as outfile:
-                
                 reader = compressor.stream_reader(infile)
                 while True:
                     chunk = reader.read(8192)
@@ -336,21 +310,17 @@ def compress_file(
                         break
                     outfile.write(chunk)
 
-        
         compressed_size = output_path.stat().st_size
 
-        
         if stats:
             stats.add(original_size, compressed_size)
 
-        
         if remove_original:
             input_path.unlink()
 
         return True, input_path, output_path, original_size, compressed_size
 
     except Exception as e:
-        
         if output_path.exists():
             try:
                 output_path.unlink()
@@ -363,16 +333,12 @@ def decompress_file(
     input_path: Path, output_path: Path, threads: int = 4, remove_original: bool = False, stats: SpaceStats = None
 ):
     try:
-        
         compressed_size = input_path.stat().st_size
 
-        
         decompressor = zstd.ZstdDecompressor()
 
-        
         with open(input_path, "rb") as infile:
             with open(output_path, "wb") as outfile:
-                
                 reader = decompressor.stream_reader(infile)
                 while True:
                     chunk = reader.read(8192)
@@ -380,17 +346,14 @@ def decompress_file(
                         break
                     outfile.write(chunk)
 
-        
         decompressed_size = output_path.stat().st_size
 
-        
         if remove_original:
             input_path.unlink()
 
         return True, input_path, output_path, decompressed_size, compressed_size
 
     except Exception as e:
-        
         if output_path.exists():
             try:
                 output_path.unlink()
@@ -418,14 +381,13 @@ def process_files(files, compress: bool, level: int = 3, threads: int = 4, remov
     print(f"Remove original files: {'Yes' if remove_original else 'No'}")
     print("-" * 60)
 
-    
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = {}
 
         for file_path in files:
             if compress:
                 output_path = file_path.with_suffix(file_path.suffix + ".zst")
-                
+
                 if output_path.exists():
                     print(f"⚠️  Skipping {file_path.name} - output already exists")
                     skipped += 1
@@ -433,10 +395,8 @@ def process_files(files, compress: bool, level: int = 3, threads: int = 4, remov
                     continue
                 future = executor.submit(compress_file, file_path, output_path, level, threads, remove_original, stats)
             else:
-                
                 output_path = file_path.with_suffix("")
 
-                
                 if output_path.exists():
                     print(f"⚠️  Skipping {file_path.name} - output already exists")
                     skipped += 1
@@ -447,7 +407,6 @@ def process_files(files, compress: bool, level: int = 3, threads: int = 4, remov
 
             futures[future] = (file_path, output_path)
 
-        
         for future in as_completed(futures):
             result = future.result()
             if compress:
@@ -457,7 +416,6 @@ def process_files(files, compress: bool, level: int = 3, threads: int = 4, remov
 
             completed += 1
 
-            
             progress = int((completed / total) * 50)
             bar = "█" * progress + "░" * (50 - progress)
             print(f"\rProgress: [{bar}] {completed}/{total} files", end="", flush=True)
@@ -467,7 +425,6 @@ def process_files(files, compress: bool, level: int = 3, threads: int = 4, remov
 
     print("\n" + "-" * 60)
 
-    
     if compress and total > 0:
         saved, ratio, percent_saved = stats.get_savings()
         print(f"\n📊 Compression Statistics:")
@@ -507,17 +464,14 @@ def main():
 
     args = parser.parse_args()
 
-    
     if not args.compress and not args.decompress:
         args.compress = True
         print("No action specified, defaulting to compression mode")
 
-    
     if args.compress and (args.level < 1 or args.level > 22):
         print("Error: Compression level must be between 1 and 22")
         sys.exit(1)
 
-    
     base_dir = Path(args.dir).resolve()
     if not base_dir.exists():
         print(f"Error: Directory '{base_dir}' does not exist")
@@ -527,7 +481,6 @@ def main():
         print(f"Error: '{base_dir}' is not a directory")
         sys.exit(1)
 
-    
     remove_original = not args.keep
 
     print(f"Working directory: {base_dir}")
@@ -537,7 +490,6 @@ def main():
         print(f"Compression level: {args.level}")
     print(f"Keep original files: {'Yes' if args.keep else 'No'}")
 
-    
     print("\nScanning directory tree...")
     files = get_files(base_dir, args.compress)
 
@@ -545,7 +497,6 @@ def main():
         print("No files to process.")
         return
 
-    
     process_files(files, args.compress, args.level, args.threads, remove_original)
 
 

@@ -71,7 +71,6 @@ def main():
     print("🔐 File Hash Comparison Tool")
     print("=" * 60)
 
-    
     system_hashes = get_system_bin_hashes()
 
     if not system_hashes:
@@ -79,10 +78,8 @@ def main():
         print("💡 Try running with root if needed: sudo python3 script.py")
         return
 
-    
     matches = check_current_directory(system_hashes)
 
-    
     print("\n" + "=" * 60)
     print("📊 SUMMARY")
     print("=" * 60)

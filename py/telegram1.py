@@ -9,27 +9,20 @@ from telethon.errors.rpcerrorlist import FloodWaitError
 from telethon.tl.types import DocumentAttributeFilename
 
 
+API_ID = 123456
+API_HASH = "0123456789abcdef0123456789abcdef"
+SESSION_NAME = "tg_zip_download"
+PHONE_NUMBER = "+1234567890"
 
 
-API_ID = 123456  
-API_HASH = "0123456789abcdef0123456789abcdef"  
-SESSION_NAME = "tg_zip_download"  
-PHONE_NUMBER = "+1234567890"  
+TARGET_CHANNEL = "my_telegram_channel"
 
 
-
-
-
-TARGET_CHANNEL = "my_telegram_channel"  
-
-
-DOWNLOAD_DIR = "downloads_from_telegram"  
-
-
+DOWNLOAD_DIR = "downloads_from_telegram"
 
 
 async def main():
-    
+
     Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
     client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
@@ -64,7 +57,7 @@ async def main():
     print(f"Starting download of .zip files from channel '{entity.title}' to folder '{DOWNLOAD_DIR}'...")
 
     total_downloaded = 0
-    async for message in client.iter_messages(entity, reverse=True):  
+    async for message in client.iter_messages(entity, reverse=True):
         if message.document:
             for attr in message.document.attributes:
                 if isinstance(attr, DocumentAttributeFilename) and attr.file_name.lower().endswith(".zip"):
@@ -77,14 +70,13 @@ async def main():
 
                     print(f"Downloading: {file_name}")
                     try:
-                        
                         await client.download_media(message, file=file_path)
                         total_downloaded += 1
                         print(f"Successfully downloaded: {file_name}")
                     except FloodWaitError as e:
                         print(f"Rate limit hit. Waiting {e.seconds} seconds...")
                         await asyncio.sleep(e.seconds)
-                        
+
                         await client.download_media(message, file=file_path)
                         total_downloaded += 1
                         print(f"Successfully downloaded: {file_name}")

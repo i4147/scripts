@@ -1,4 +1,3 @@
-
 from PIL.ImageFile import ImageFile
 import argparse
 import sys
@@ -9,7 +8,6 @@ from PIL import Image
 def resize_image(img: ImageFile, terminal_width: int, terminal_height: int, max_width=None, max_height=None):
     orig_width, orig_height = img.size
 
-    
     if max_width and max_height:
         target_width = min(max_width, terminal_width)
         target_height = min(max_height, terminal_height)
@@ -17,7 +15,6 @@ def resize_image(img: ImageFile, terminal_width: int, terminal_height: int, max_
         target_width = terminal_width
         target_height = terminal_height
 
-    
     aspect = orig_height / orig_width
     new_width = target_width
     new_height = int(target_width * aspect)
@@ -46,7 +43,6 @@ def image_to_ansi(img) -> str:
             line.append(f"{rgb_to_ansi(r, g, b)}██")
         output_lines.append("".join(line))
 
-    
     output = "\n".join(output_lines) + "\033[0m"
     return output
 
@@ -55,7 +51,6 @@ def image_to_ansi_blocks(img) -> str:
     img = img.convert("RGB")
     width, height = img.size
 
-    
     if height % 2 != 0:
         img = img.crop((0, 0, width, height - 1))
         height -= 1
@@ -65,11 +60,9 @@ def image_to_ansi_blocks(img) -> str:
     for y in range(0, height, 2):
         line = []
         for x in range(width):
-            
             r1, g1, b1 = img.getpixel((x, y))
             r2, g2, b2 = img.getpixel((x, y + 1))
 
-            
             line.append(f"\033[38;2;{r1};{g1};{b1}m\033[48;2;{r2};{g2};{b2}m▀")
 
         output_lines.append("".join(line))
@@ -88,20 +81,15 @@ def get_terminal_size() -> tuple[int, int]:
 
 def catimg(image_path, width=None, height=None, use_half_blocks=True) -> None:
     try:
-        
         img = Image.open(image_path)
 
-        
         term_width, term_height = get_terminal_size()
 
-        
         if use_half_blocks:
             term_height *= 2
 
-        
         img = resize_image(img, term_width, term_height, width, height)
 
-        
         if use_half_blocks:
             output = image_to_ansi_blocks(img)
         else:

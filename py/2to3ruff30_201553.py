@@ -1,4 +1,3 @@
-
 import subprocess
 import sys
 import os
@@ -8,13 +7,12 @@ from pathlib import Path
 def convert_print_statements(file_or_dir, preview=False, dry_run=False):
     target = str(file_or_dir)
 
-    
     cmd = [
         "ruff",
         "check",
         "--fix",
         "--select",
-        "UP010",  
+        "UP010",
         target,
     ]
 
@@ -22,15 +20,13 @@ def convert_print_statements(file_or_dir, preview=False, dry_run=False):
         cmd.append("--preview")
 
     if dry_run:
-        cmd.append("--diff")  
+        cmd.append("--diff")
         print(f"🔍 DRY RUN - Showing changes for: {target}\n")
         print("=" * 60)
 
     try:
-        
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
-        
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -66,7 +62,7 @@ def convert_with_alternative_rules(file_or_dir, dry_run=False):
         "check",
         "--fix",
         "--select",
-        "T201",  
+        "T201",
         target,
     ]
 
@@ -107,12 +103,10 @@ def main():
 
     args = parser.parse_args()
 
-    
     if not os.path.exists(args.path):
         print(f"❌ Path not found: {args.path}")
         sys.exit(1)
 
-    
     if os.path.isdir(args.path) and args.recursive:
         python_files = list(Path(args.path).rglob("*.py"))
         if not python_files:
@@ -138,7 +132,6 @@ def main():
         print(f"✅ Processed {success_count}/{len(python_files)} files successfully")
 
     else:
-        
         if args.alternative:
             convert_with_alternative_rules(args.path, args.dry_run)
         else:

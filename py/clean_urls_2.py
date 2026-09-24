@@ -23,6 +23,3 @@ with open("urls.txt", "w") as fo:
     fo.writelines(f"{k}\n" for k in seen)
 with open("gitlinks.txt", "a") as fg:
     fg.write("".join(gl))
-
-
-

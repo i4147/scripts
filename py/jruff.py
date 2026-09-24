@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -47,7 +46,6 @@ def process_file(file_path: Path, indent: int = 2, compact: bool = False) -> str
     except OSError as error:
         raise OSError(f"Cannot read {file_path}: {error}") from error
 
-    
     if isinstance(data, dict) and all(isinstance(value, list) for value in data.values()):
         return format_dictionary_of_lists(data, indent)
 

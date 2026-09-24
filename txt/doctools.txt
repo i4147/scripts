@@ -1,0 +1,219 @@
+# filename: export_chat.py
+def a(c,b='exported'):b=j(b);b.mkdir(exist_ok=True);k=l.loads(j(c).read_text(encoding='utf-8'))
+    for i,g in enumerate(k):h=g.get('title',f'chat_{i}');d=b/f'{h}.md'
+        with d.open('w',encoding='utf-8') as f:f.write(f'# {h}\n\n')
+            for n in g.get('messages',[]):m=n.get('author',{}).get('role','unknown');e=n.get('content',{}).get('parts',[''])[0];f.write(f'## {m.capitalize()}\n\n');f.write(e);f.write('\n\n---\n\n')
+if __name__=='__main__':a('conversations.json')
+# filename: info2md.py
+from loguru import logger;h=8;a=u.compile('\\.info(-\\d+)?$')
+def b(g):p=g.name;f=a.sub('',p);i=g.parent/f'{f}.md'
+    if i.exists():k=1
+        while (g.parent/f'{f}_{k}.md').exists():k+=1
+        i=g.parent/f'{f}_{k}.md'
+    j=s(['info',str(g)],capture_output=True,text=True)
+    if j.returncode==0:i.write_text(j.stdout);g.unlink();print(f'Converted {g.name}->{i.name}')
+    else:logger.error(f'Failed to convert {g.name} (exit {j.returncode}):{j.stderr.strip()}')
+def n():q=l.cwd();e=list(q.glob('*.info*'))
+    if not e:print('No .info files found.');return 0
+    print(f'Converting {len(e)} .info file(s) with {h} workers.')
+    with m(processes=h) as o:c=[o.apply_async(b,(g,)) for g in e]
+        for d in c:try:d.get()
+            except Exception as exc:logger.exception(f'Worker raised an exception:{r}')
+    return 0
+if __name__=='__main__':t.exit(n())
+# filename: man2md.py
+def c(h):try:with r(h).open(encoding='utf-8',errors='ignore') as f:return f.read()
+    except FileNotFoundError:B.exit(f'Error:file {h} not found')
+def a(l):p=l.splitlines();k=[];b=False;d=None
+    for v in p:if v.startswith('.TH'):continue
+        if v.startswith('.SH'):n=v[3:].strip();k.append(f'# {n.title()}');continue
+        if v.startswith('.SS'):g=v[3:].strip();k.append(f'## {g.title()}');continue
+        v=D.sub('\\.B\\s+(.+)','**\\1**',v);v=D.sub('\\.I\\s+(.+)','*\\1*',v)
+        if v.startswith('.BR'):q=v.split(maxsplit=1)
+            if len(q)>1:o=q[1].split('"');e=[]
+                for i,t in enumerate(o):if not t.strip():continue
+                    if i%2==0:e.append(f'**{t.strip()}**')
+                    else:e.append(t.strip())
+                k.append(' '.join(e));continue
+        if v.startswith('.IR'):q=v.split(maxsplit=1)
+            if len(q)>1:o=q[1].split('"');e=[]
+                for i,t in enumerate(o):if not t.strip():continue
+                    if i%2==0:e.append(f'*{t.strip()}*')
+                    else:e.append(t.strip())
+                k.append(' '.join(e));continue
+        if v.startswith('.PP'):k.append('');continue
+        if v.startswith('.IP'):q=v.split(maxsplit=2)
+            if len(q)>=2 and q[1].isdigit():z=q[1];u=q[2] if len(q)>2 else '';k.append(f'{z}. {u}');continue
+            if len(q)>=2:u=q[1] if len(q)>1 else '';x=q[2] if len(q)>2 else '';k.append(f'-{u} {x}'.strip());continue
+        if v.startswith('.TP'):d=True;continue
+        if d:y=v.strip();d=False;k.append(f'-{y}:');continue
+        if v.startswith(('.nf','.RS','.EX')):if not b:k.append('```sh');b=True
+            continue
+        if v.startswith(('.fi','.RE','.EE')):if b:k.append('```');b=False
+            continue
+        if v.startswith('.'):continue
+        if D.match('^\\s*\\$',v) or D.match('^\\s*(ls|cat|grep|echo|pwd|cd|mkdir|rm|touch|man)\\b',v):if not b:k.append('```sh');b=True
+            k.append(v);continue
+        if b:k.append('```');b=False
+        v=D.sub('\\b(ls|cat|grep|echo|pwd|cd|mkdir|rm|touch|man)\\b','`\\1`',v);k.append(v)
+    if b:k.append('```')
+    return '\n'.join(k)
+def w():if len(B.argv)!=2:print('Usage:python man2md.py<manfile>');B.exit(1)
+    h=B.argv[1];A=c(h);j=a(A);s,_=C.path.splitext(h);m=s+'.md';r(m).write_text(j,encoding='utf-8');print(f'Converted {h} → {m}')
+if __name__=='__main__':raise SystemExit(w())
+# filename: md2html.py
+import markdown;from bs4 import BeautifulSoup
+def i(n):w=BeautifulSoup(n,'html.parser');m={'h1':'text-4xl font-bold mt-4 mb-2','h2':'text-4xl font-semibold mt-4 mb-2','h3':'text-2xl font-medium mt-4 mb-2','h4':'text-xl font-medium mt-4 mb-2','p':'text-base leading-relaxed mt-2 mb-4','code':'bg-gray-100 p-1 rounded-md','pre':'bg-gray-900 text-white p-4 rounded-md overflow-x-auto'}
+    for A,h in m.items():for r in w.find_all(A):g=r.get('class',[]);o=h.split();d=list(set(g+o));r['class']=d
+    return str(w)
+def a(x):x=C.sub('\\\\\\[(.*?)\\\\\\]','<div class="latex-displayr">\x01</div>',x,flags=C.DOTALL);return C.sub('\\\\\\((.*?)\\\\\\)','<span class="latex-inliner">\x01</span>',x,flags=C.DOTALL)
+def b(v):with u(v).open(encoding='utf-8',errors='ignore') as f:return f.read()
+def e(s):if not s:raise ValueError(y)
+    l=b(s);l=a(l);q=u(s).name.replace('.md','');j=B.path.join('/sdcard/tmp',f'{q}.html');c=s.replace('.md','.html');n=markdown.markdown(l,ext=['md_in_html','fenced_code','codehilite','toc','attr_list','tables']);n=i(n);k=f'\n<!DOCTYPE html>\n<html lang="en" class="scroll-smooth bg-gray-50 text-gray-900 antialiased">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title>{q}</title>\n<link rel="stylesheet" href="/sdcard/_static/katex/tailwind.min.css">\n<link rel="stylesheet" href="/sdcard/_static/katex/custom.css">\n<link rel="stylesheet" href="/sdcard/_static/katex/katex.min.css">\n<script src="/sdcard/_static/katex/tex.js"></script>\n<script src="/sdcard/_static/katex/auto-render.min.js"></script>\n<script src="/sdcard/_static/katex/katex.min.js"></script>\n</head>\n<body for="html-export" class="min-h-screen flex flex-col justify-between">\n<main class="flex-1">\n<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 prose prose-lg prose-slate">\n                    {n}\n</div>\n</main>\n</body>\n</html>\n    ';u(j).write_text(k,encoding='utf-8');t.copy(j,c);return c
+if __name__=='__main__':s=z.argv[1];p=e(s);print(f'Output saved in {p}')
+# filename: mk_html.py
+from loguru import logger;l='--no-toc-backlinks--strip-comments--language en--date';m={'.rst','.txt','.md'};o=re.compile('\\[([^\\]]+)\\]\\(([^)]+)\\)');i=re.compile('^(#{1,6})\\s+(.+)$',re.MULTILINE);b=re.compile('```(\\w+)?\\n(.*?)```',re.DOTALL);v=8
+def g():t=[U.cwd()/'doc'/'rest2html.py',U.cwd()/'rest2html.py',U(ai.prefix)/'doc'/'rest2html.py']
+    for ab in t:if ab.exists():return ab
+    return None
+def k(N):def p(T):S=len(T.group(1));ad=T.group(2).strip()
+        if S==1:return f"{'='*len(ad)}\n{ad}\n{'='*len(ad)}"
+        if S==2:return f"{ad}\n{'-'*len(ad)}"
+        X='~^+'[min(S-3,2)];return f'{ad}\n{X*len(ad)}'
+    N=i.sub(p,N);N=o.sub('`\\1<\\2>`_',N)
+    def j(T):K=T.group(1);Y=T.group(2).strip();J='\n'.join(('    '+Z for Z in Y.split('\n')))
+        if K:return f'.. code-block::{K}\n\n{J}\n'
+        return f'::\n\n{J}\n'
+    N=b.sub(j,N);N=re.sub('\\*\\*(.+?)\\*\\*','**\\1**',N);N=re.sub('\\*(.+?)\\*','*\\1*',N);N=re.sub('`([^`]+)`','``\\1``',N);N=re.sub('^---$','-------',N,flags=re.MULTILINE);N=re.sub('^\\*','-',N,flags=re.MULTILINE);return N
+def d(ab,u=None):try:F=ab.with_suffix('.html')
+        if F.exists() and F.stat().st_mtime>ab.stat().st_mtime:return F
+        N=ab.read_text(encoding='utf-8');y=False;G=None
+        if ab.suffix.lower()=='.md':N=k(N);G=ab.with_suffix('.rst');G.write_text(N,encoding='utf-8');ab=G;y=True
+        af=[ai.executable,'-m','docutils.__main__',str(ab),str(F)]
+        if u:af.extend(['--stylesheet',u,'--link-stylesheet'])
+        try:D.run(af,check=True,capture_output=True,ad=True,timeout=30)
+        except (D.CalledProcessError,FileNotFoundError):q=g()
+            if q:af=[ai.executable,str(q)]+l.split()
+                if u:af.extend(['--stylesheet',u,'--link-stylesheet'])
+                af.extend([str(ab),str(F)]);D.run(af,check=True,capture_output=True,ad=True,timeout=30)
+            else:raise RuntimeError('No RST to HTML converter found')
+        if y and G is not None and G.exists():G.unlink()
+        return F
+    except Exception as e:logger.error(f'Error converting {ab}:{e}');return None
+def a(s):if not s or not s.exists():return 'style.css'
+    with open(s,'rb') as f:ag=f.read()
+    I=O.sha256(ag).hexdigest()[:32];return f'style_{I}.css'
+def z(W):ab,u=W;F=d(ab,u);return (ab,F)
+def c(M=None):if M is None:M=U.cwd()
+    A=[]
+    for ah in m:A.extend(M.rglob(f'*{ah}'))
+    return A
+def n(M=None,B=None):if M is None:M=U.cwd()
+    M=U(M).resolve();s=M/'style.css';u=None
+    if s.exists():h=a(s);r=M/h
+        if not r.exists():R.copy(s,r)
+        u=h
+    A=c(M)
+    if not A:print(f'No source files found in {M}');return
+    print(f'Found {len(A)} files to convert');E=0;P=0;C=[(fp,u) for fp in A]
+    with V(processes=v) as ac:w=[ac.apply_async(z,(ae,)) for ae in C];ac.close();ac.join()
+        for x in w:try:L,F=x.get()
+                if F:E+=1;print(f'Converted:{L.relative_to(M)}->{F.relative_to(M)}')
+                else:P+=1
+            except Exception as e:P+=1;logger.error(f'Error processing file:{e}')
+    print(f'\nConversion complete:{E} converted,{P} errors')
+def aa():Q=H.ArgumentParser(description='Convert all .rst,.txt,and .md files to HTML recursively');Q.add_argument('directory',nargs='?',default='.',help='Root directory to process (default:current directory)');Q.add_argument('--force',action='store_true',help='Force re-conversion even if HTML is newer');W=Q.parse_args();M=U(W.directory).resolve()
+    if not M.exists():logger.error(f"Error:Directory '{M}' does not exist");return 1
+    n(M,None);return 0
+if __name__=='__main__':raise SystemExit(aa())
+# filename: mobi2html.py
+import mobi;c=l.argv[1];i,k=mobi.extract(c);print(f'Extracted to:{k}')
+with open(k,'r',encoding='utf-8') as f:h=f.read()
+e=m.path.splitext(m.path.basename(c))[0];d=m.path.dirname(m.path.abspath(c));b=m.path.join(d,e+'.html')
+if k.lower().endswith('.epub'):a=m.path.dirname(k);g=m.path.join(d,e+'_files')
+    if m.path.exists(g):j.rmtree(g)
+    j.copytree(a,g)
+    with open(b,'w',encoding='utf-8') as f:f.write(h)
+else:with open(b,'w',encoding='utf-8') as f:f.write(h)
+print(f'HTML saved to:{b}');j.rmtree(i,ignore_errors=True)
+# filename: pptx2txt.py
+from pptx import Presentation
+def a(c):try:m=Presentation(c)
+    except Exception as e:print(f'Error opening file:{e}');return
+    b=k(c).with_suffix('.txt')
+    with open(b,'w',encoding='utf-8') as f:for d,i in enumerate(m.slides,1):f.write(f"\n{'='*40}\n");f.write(f'Slide {d}\n');f.write(f"{'='*40}\n\n")
+            for h in i.shapes:if hasattr(h,'text') and h.text.strip():f.write(f'{h.text}\n')
+                    if h.has_table:j=h.table
+                        for n in j.rows:g=[]
+                            for l in n.cells:g.append(l.text)
+                            f.write('|'.join(g)+'\n')
+                    f.write('\n')
+    print(f'Text extracted to:{b}')
+if __name__=='__main__':if len(o.argv)<2:print('Usage:python extract_text.py<input.pptx>');o.exit(1)
+    a(o.argv[1])
+# filename: rst2md2.py
+def d(t,n=True,b=False):t=q(t)
+    if not t.exists():print(f'Error:{t} not found');return False
+    if t.suffix.lower()!='.rst':print(f'Skipping {t}:not an .rst file');return False
+    m=t.with_suffix('.md')
+    if n and (not b):f=t.with_suffix('.rst.bak');p.copy2(t,f);print(f'Backup created:{f}')
+    try:g.run(['pandoc','-f','rst','-t','gfm','-o',str(m),str(t)],capture_output=True,text=True,check=True)
+        if b:t.unlink();print(f'Converted and removed original:{t}->{m}')
+        else:print(f'Converted:{t}->{m}')
+        return True
+    except g.CalledProcessError as e:print(f'Error converting {t}:{e.stderr}');return False
+def a(h,n=True,b=False):h=q(h)
+    if not h.exists():print(f'Error:{h} not found');return
+    i=list(h.rglob('*.rst'))
+    if not i:print(f'No .rst files found in {h}');return
+    print(f'Found {len(i)} .rst files');c=0
+    for l in i:if d(l,n,b):c+=1
+    print(f'\nConverted {c}/{len(i)} files')
+def s():o=j.ArgumentParser(description='Convert .rst files to .md using pandoc');o.add_argument('paths',nargs='+',help='Files or directories to convert');o.add_argument('-r','--recursive',action='store_true',help='Process directories recursively');o.add_argument('--no-backup',action='store_true',help='Do not create backup files');o.add_argument('--remove-original',action='store_true',help='Remove original .rst files');r=o.parse_args()
+    try:g.run(['pandoc','--version'],capture_output=True,check=True)
+    except (g.CalledProcessError,FileNotFoundError):print('Error:pandoc is not installed. Install it with:');print('-Termux:pkg install pandoc');print('-Ubuntu/Debian:sudo apt install pandoc');print('-macOS:brew install pandoc');u.exit(1)
+    n=not r.no_backup
+    for t in r.paths:k=q(t)
+        if k.is_dir():if r.recursive:a(k,n,r.remove_original)
+            else:print(f'Skipping directory {t}. Use-r for recursive processing.')
+        elif k.is_file():d(k,n,r.remove_original)
+        else:print(f'Error:{t} is not valid')
+if __name__=='__main__':raise SystemExit(s())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

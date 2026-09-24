@@ -1,0 +1,291 @@
+# filename: filter_latest_version.py
+def c(I):b='/([^/]+)-(\\d+\\.\\d+\\.\\d+)-py3-none-android_24_([^/]+)\\.whl';h='/([^/]+)-(\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)-cp\\d+-cp\\d+-linux_([^/]+)\\.whl';z=J.search(b,I)
+    if z:q=z.group(1);t=tuple(map(int,z.group(2).split('.')));B=z.group(3);return (q,'android',t,B,I)
+    z=J.search(h,I)
+    if z:q=z.group(1);t=tuple(map(int,z.group(2).split('.')));B=z.group(3);p=J.search('python3\\.(\\d+)',I);e=p.group(1) if p else 'unknown';return (q,e,t,B,I)
+    return None
+def g(B):d=['armeabi_v7a','armv7l','linux_arm','arm'];return any((r in B.lower() for r in d))
+def a(l=None):F=[]
+    if l and A(l).exists():with open(l) as f:F=[D.strip() for D in f if D.strip()]
+    elif len(H.argv)>1:if A(H.argv[1]).exists():with open(H.argv[1]) as f:F=[D.strip() for D in f if D.strip()]
+        else:F=H.argv[1:]
+    else:F=[D.strip() for D in H.stdin if D.strip()]
+    o=i(dict)
+    for I in F:v=c(I)
+        if v:q,k,t,B,I=v
+            if g(B):G=(q,k)
+                if B not in o[G] or t>o[G][B][0]:o[G][B]=(t,I)
+    print('-'*40);print('LATEST ARMv7 (armeabi_v7a/armv7l/linux_arm) WHEELS');print('-'*40);s=[]
+    for (q,k),u in sorted(o.items()):for B,(t,I) in u.items():j='.'.join(map(str,t));print(f'\n📦 {q} (Python {k})');print(f'   Arch:{B}');print(f'   Version:{j}');print(f'   URL:{I}');s.append({'package':q,'python_version':k,'arch':B,'version':j,'url':I})
+    print('\n'+'='*40);print(f'SUMMARY:Found {len(s)} ARMv7 wheel(s)');print('-'*40)
+    for x in s:print(f"{x['package']}=={x['version']} (Python {x['python_version']})")
+    return s
+def E():w=m.ArgumentParser(description='Find latest ARMv7 wheels from URL list',epilog='Example:python3 filter_armv7.py urls.txt');w.add_argument('input',nargs='?',default=None,help='Input file with URLs (one per line)');w.add_argument('--output','-o',help='Output file to save URLs (one per line)');w.add_argument('--download',action='store_true',help='Generate download script');C=w.parse_args();s=a(C.input)
+    if C.output:with open(C.output,'w') as f:f.writelines((f"{x['url']}\n" for x in s))
+        print(f'\n✓ URLs saved to {C.output}')
+    if C.download:y='#!/bin/bash\n\n'
+        for x in s:n=x['url'].split('/')[-1];y+=f"echo 'Downloading {n}...'\n";y+=f"wget {x['url']}\n\n"
+        with open('download_armv7.sh','w') as f:f.write(y)
+        print('\n✓ Download script created:download_armv7.sh');print('  Run:chmod+x download_armv7.sh&&./download_armv7.sh')
+if __name__=='__main__':raise SystemExit(E())
+# filename: keep_latest_version.py
+from dh import get_files;from loguru import logger;from packaging import version as pkg_version;C=8;l=('.whl','.metadata');k=('.tar.gz','.tgz');s=('.deb',);r=('.whl','.metadata','.deb','.tar.gz','.tgz');G=tuple[str,str,af];D=tuple[str,af];K=dict[str,list[D]]
+def c(S):if S.endswith('.whl'):ai=S[:-4]
+    elif S.endswith('.metadata'):ai=S[:-9]
+    else:return None
+    ae=ai.split('-')
+    if len(ae)<5:return None
+    v=[];B=[];z=False
+    for i,aj in enumerate(ae):if not z and (re.match('^\\d',aj) or aj.lower() in ['v','ver','version']):z=True;B.append(aj)
+        elif not z:v.append(aj)
+        else:q=len(ae)-i
+            if q<=3:break
+            B.append(aj)
+    if v and B:U='-'.join(v);Y='-'.join(B);return (U,Y)
+    return None
+def b(S):ai=S
+    if S.endswith('.tar.gz'):ai=S[:-7]
+    elif S.endswith('.tgz'):ai=S[:-4]
+    else:return None
+    ae=ai.split('-')
+    for i,aj in enumerate(ae):if re.match('^\\d',aj):U='-'.join(ae[:i]);Y='-'.join(ae[i:]);Y=re.sub('\\.(tar|tgz)$','',Y)
+            if U and Y:return (U,Y)
+    return None
+def j(S):ae=S.split('_')
+    if len(ae)>=2:U=ae[0];Y=ae[1];return (U,Y)
+    return None
+def m(am,an):try:v1=pkg_version.parse(am);v2=pkg_version.parse(an)
+        if v1<v2:return-1
+        if v1>v2:return 1
+        return 0
+    except Exception:if am<an:return-1
+        if am>an:return 1
+        return 0
+def F(ak,Q):try:S=ak.name
+        if Q=='wheel' and S.endswith(l):aa=c(S)
+            if aa:U,Y=aa;return (U,Y,ak)
+        elif Q=='targz' and S.endswith(k):aa=b(S)
+            if aa:U,Y=aa;return (U,Y,ak)
+        elif Q=='deb' and S.endswith(s):aa=j(S)
+            if aa:U,Y=aa;return (U,Y,ak)
+    except Exception as e:logger.error(f'Error processing {ak}:{e}')
+    return None
+def d(ak):if ak.suffix in {'.whl','.metadata'}:return 'wheel'
+    if ak.suffix=='.deb':return 'deb'
+    if ak.suffix=='.gz' and ak.stem.endswith('.tar') or ak.suffix=='.tgz':return 'targz'
+    return None
+def t(ak):Q=d(ak)
+    if Q is None:return None
+    return F(ak,Q)
+def f(Q,O):if O or Q=='all':return r
+    if Q=='wheel':return l
+    if Q=='deb':return s
+    if Q=='targz':return k
+    return l
+def w(P,Q,O=False):T=H(list);L=f(Q,O);n=get_files(P,ext=L);M=list(n);print(f'Found {len(M)} files to process...')
+    if not M:return T
+    with p.Pool(processes=C) as al:y=[(al.apply_async(t,(ak,)),ak) for ak in M]
+        for E,ak in y:try:ac=E.get()
+            except Exception as e:logger.error(f'Error processing {ak}:{e}');continue
+            if ac:U,Y,J=ac;T[U].append((Y,J))
+    return T
+def g(W):if not W:return None
+    Z=W[0]
+    for Y,ak in W[1:]:if m(Y,Z[0])>0:Z=(Y,ak)
+    return Z
+def a(T,X=False):A=0;o=0
+    for U,W in T.items():if len(W)<=1:o+=len(W);continue
+        Z=g(W)
+        if Z is None:continue
+        u,I=Z;print(f'Package:{U}');print(f'  Latest version:{u}-{I.name}');print(f'  Total versions found:{len(W)}')
+        for Y,ak in W:if ak==I:continue
+            if X:print(f'  Would delete:{Y}-{ak.name}')
+            else:try:ak.unlink();print(f'  Deleted:{Y}-{ak.name}');A+=1
+                except Exception as e:logger.error(f'  Error deleting {ak.name}:{e}')
+        o+=1
+    return (A,o)
+def h():ab=R.ArgumentParser(description='Detect and keep only the latest version of package files.',formatter_class=R.RawDescriptionHelpFormatter,epilog='\nExamples:\n%(prog)s-w                # Clean wheel files only\n%(prog)s-d                # Clean deb files only\n%(prog)s-t                # Clean tar.gz files only\n%(prog)s-a                # Clean all package types\n%(prog)s-t--dry-run      # Preview what would be deleted\n');ad=ab.add_mutually_exclusive_group();ad.add_argument('-d','--deb',action='store_true',help='Check .deb files');ad.add_argument('-w','--wheel',action='store_true',help='Check .whl files');ad.add_argument('-t','--targz',action='store_true',help='Check .tar.gz and .tgz files');ad.add_argument('-a','--all',action='store_true',help='Check all package types (.whl,.deb,.tar.gz,.tgz)');ab.add_argument('--dry-run',action='store_true',help='Simulate deletion without actually removing files');ab.add_argument('--dir',type=str,default='.',help='Directory to scan (default:current directory)');ab.add_argument('--verbose',action='store_true',help='Show detailed information about each file');return ab
+def ah():ab=h();ag=ab.parse_args()
+    if not (ag.deb or ag.wheel or ag.targz or ag.all):ag.wheel=True
+    V=af(ag.dir).resolve()
+    if not V.exists():logger.error(f"Directory '{V}' does not exist");return 1
+    if ag.all:Q='all'
+    elif ag.deb:Q='deb'
+    elif ag.wheel:Q='wheel'
+    elif ag.targz:Q='targz'
+    else:Q='wheel'
+    print(f'Scanning directory:{V}');print(f'File type:{Q}')
+    if ag.dry_run:print('DRY RUN MODE-No files will be deleted')
+    print('-'*40);T=w(V,Q,ag.all)
+    if not T:print('No matching package files found.');return 0
+    x=sum((len(W) for W in T.values()));print(f'\nFound {len(T)} package(s) with {x} total version(s):')
+    if ag.verbose:for U,W in T.items():print(f'\n  {U}:{len(W)} version(s)')
+            for Y,ak in W:print(f'-{Y}:{ak.name}')
+    else:for U,W in T.items():print(f'  {U}:{len(W)} version(s)')
+    print('\n'+'='*40);A,N=a(T,ag.dry_run);print('\n'+'='*40)
+    if A==0:print('No files to delete. All packages have only one version.')
+    elif ag.dry_run:print(f'Dry run complete. Would delete {A} file(s),keep {N} file(s).')
+    else:print(f'Cleanup complete. Deleted {A} file(s),kept {N} file(s).')
+    return 0
+if __name__=='__main__':ao.exit(ah())
+# filename: keep_latest_version_metadata.py
+from loguru import logger;from packaging.version import InvalidVersion,Version;t=8;c=100;k=Version('0.0.0');j=re.compile('^(.+?)-(\\d[\\d._]*[a-zA-Z]*[\\d]*)$');g=re.compile('[-_.]+');o=tuple[Version,ad];E=dict[str,list[o]]
+def n(aj):ai=aj.stem;ab=j.match(ai)
+    if not ab:logger.warning(f'Could not parse version from {aj.name}');return (ai.lower(),k,aj)
+    O=ab.group(1);D=ab.group(2);d=D.replace('_','.')
+    try:T=Version(d)
+    except InvalidVersion:logger.warning(f"Invalid version '{D}' in {aj.name}");T=k
+    return (O.lower(),T,aj)
+def a(ai):return g.sub('-',ai).lower()
+def b(J):if not J.exists():raise FileNotFoundError(f'Directory not found:{J}')
+    return list(J.glob('*.metadata'))
+def f(aa):N=C(list)
+    for aj in aa:O,T,aj=n(aj);m=a(O);N[m].append((T,aj))
+    return dict(N)
+def h(s):if len(s)<=1:return []
+    A=sorted(s,key=lambda x:x[0],reverse=True);U=A[0];z=A[1:];print(f'  Keeping:{U[1].name} (v{U[0]})')
+    for T,aj in z:print(f'  Removing:{aj.name} (v{T})')
+    return [aj for L,aj in z]
+def r(S):V=C(list)
+    for X in S:for O,P in X.items():V[O].extend(P)
+    return dict(V)
+def w(ac,R=True,F=None):for aj in ac:if R:print(f'  [DRY RUN] Would delete:{aj.name}')
+        elif F is not None:B=F/aj.name;Y.move(str(aj),str(B));print(f'  Moved to backup:{aj.name}')
+        else:aj.unlink();print(f'  Deleted:{aj.name}')
+def H(ag=None):W=M.ArgumentParser(description='Remove old versions of Python package metadata files');W.add_argument('directory',nargs='?',default='.',help='Directory containing metadata files (default:current directory)');W.add_argument('--dry-run',action='store_true',help='Show what would be deleted without actually deleting');W.add_argument('--backup-dir',type=str,help='Move old files to backup directory instead of deleting');W.add_argument('--batch-size',type=int,default=c,help=f'Number of files to process per batch (default:{c})');return W.parse_args(ag)
+def ah(ag=None):af=H(ag);y=ad(af.directory)
+    if not y.exists():logger.error(f"Directory '{y}' does not exist");return 1
+    F=None
+    if af.backup_dir:F=ad(af.backup_dir)
+        if not af.dry_run:F.mkdir(parents=True,exist_ok=True)
+    print(f'Scanning directory:{y}');I=b(y);print(f'Found {len(I)} metadata files')
+    if not I:print('No metadata files found');return 0
+    G=max(1,af.batch_size);Q=[I[i:i+G] for i in range(0,len(I),G)];print(f'Processing {len(Q)} batches using {t} workers...');q=[]
+    with ae(processes=t) as ak:p=[ak.apply_async(f,(Z,)) for Z in Q]
+        for al,v in enumerate(p):try:X=v.get();q.append(X);print(f'  Batch {al+1}/{len(Q)} completed')
+            except Exception as e:logger.exception(f'  Error processing batch {al+1}:{e}')
+    print('Merging results...');u=r(q);print(f'Processing {len(u)} unique packages...');l=[]
+    for O,P in sorted(u.items()):if len(P)>1:print(f'Package:{O} ({len(P)} versions)');K=h(P);l.extend(K)
+    print('='*40);print('Summary:');print(f'  Total metadata files:{len(I)}');print(f'  Unique packages:{len(u)}');print(f'  Files to remove:{len(l)}')
+    if l:print('='*40);print(f'Removing {len(l)} old version files...');w(l,R=af.dry_run,F=F)
+        if af.dry_run:print('This was a dry run. Use without--dry-run to actually delete files.')
+    else:print('No duplicate versions found. All packages have single versions.')
+    return 0
+if __name__=='__main__':am.exit(ah())
+# filename: klv.py
+from loguru import logger;from packaging import version as pkg_version;v=8;j='.whl';o='.deb'
+def c(D):V=D[:-4];P=V.split('-')
+    if len(P)<5:return None
+    m=[];s=[];q=False
+    for i,W in enumerate(P):if not q and (re.match('^\\d',W) or W.lower() in ['v','ver','version']):q=True;s.append(W)
+        elif not q:m.append(W)
+        else:k=len(P)-i
+            if k<=3:break
+            s.append(W)
+    if m and s:F='-'.join(m);J='-'.join(s);return (F,J)
+    return None
+def f(D):V=D[:-4];P=V.split('_')
+    if len(P)>=2:F=P[0];J=P[1];return (F,J)
+    return None
+def g(aa,ab):try:v1=pkg_version.parse(aa);v2=pkg_version.parse(ab)
+        if v1<v2:return-1
+        if v1>v2:return 1
+        return 0
+    except Exception:if aa<ab:return-1
+        if aa>ab:return 1
+        return 0
+def u(X,B):try:D=X.name
+        if B=='wheel' and D.endswith(j):L=c(D)
+            if L:F,J=L;return (F,J,X)
+        elif B=='deb' and D.endswith(o):L=f(D)
+            if L:F,J=L;return (F,J,X)
+    except Exception as e:logger.error(f'Error processing {X}:{e}')
+    return None
+def a(T):X,B=T;return u(X,B)
+def n(A,B,z=False):E=w(list);y=[]
+    if z:y=[j,o]
+    elif B=='wheel':y=[j]
+    elif B=='deb':y=[o]
+    h=[]
+    for ac in y:h.extend(A.rglob(f'*{ac}'))
+    print(f'Found {len(h)} files to process...');Q=[]
+    for X in h:if X.suffix==j:Q.append((X,'wheel'))
+        elif X.suffix==o:Q.append((X,'deb'))
+    with S(processes=v) as Y:p=[Y.apply_async(a,(Z,)) for Z in Q]
+        for t in p:N=t.get()
+            if N:F,J,X=N;E[F].append((J,X))
+    return E
+def d(H):if not H:return None
+    K=H[0]
+    for J,X in H[1:]:if g(J,K[0])>0:K=(J,X)
+    return K
+def b(E,I=False):r=0
+    for F,H in E.items():if len(H)<=1:continue
+        K=d(H)
+        if K is None:continue
+        l,x=K;print(f'\nPackage:{F}');print(f'  Latest version:{l}-{x.name}');print(f'  Total versions found:{len(H)}')
+        for J,X in H:if X==x:continue
+            if I:print(f'  Would delete:{J}-{X.name}')
+            else:try:X.unlink();print(f'  Deleted:{J}-{X.name}');r+=1
+                except Exception as e:logger.error(f'  Error deleting {X.name}:{e}')
+    return r
+def U():M=C.ArgumentParser(description='Detect and keep only the latest version of package files.',formatter_class=C.RawDescriptionHelpFormatter);O=M.add_mutually_exclusive_group();O.add_argument('-d','--deb',action='store_true',help='Check .deb files');O.add_argument('-w','--wheel',action='store_true',help='Check .whl files');O.add_argument('-a','--all',action='store_true',help='Check all package types (.whl and .deb)');M.add_argument('--dry-run',action='store_true',help='Simulate deletion without actually removing files');M.add_argument('--dir',type=str,default='.',help='Directory to scan (default:current directory)');M.add_argument('--verbose',action='store_true',help='Show detailed information about each file');T=M.parse_args()
+    if not (T.deb or T.wheel or T.all):T.wheel=True
+    G=R(T.dir).resolve()
+    if not G.exists():logger.error(f"Error:Directory '{G}' does not exist");return 1
+    if T.all:B='all'
+    elif T.deb:B='deb'
+    else:B='wheel'
+    print(f'Scanning directory:{G}');print(f'File type:{B}')
+    if T.dry_run:print('DRY RUN MODE-No files will be deleted')
+    print('-'*40);E=n(G,B,T.all)
+    if not E:print('No matching package files found.');return 0
+    print(f'\nFound {len(E)} package(s):')
+    for F,H in E.items():print(f'  {F}:{len(H)} version(s)')
+        if T.verbose and len(H)>1:for J,X in H:print(f'-{J}:{X.name}')
+    print('\n'+'='*40);r=b(E,T.dry_run);print('\n'+'='*40)
+    if r==0:print('No files to delete. All packages have only one version.')
+    elif T.dry_run:print(f'Dry run complete. Would delete {r} file(s).')
+    else:print(f'Cleanup complete. Deleted {r} file(s).')
+    return 0
+if __name__=='__main__':ad.exit(U())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

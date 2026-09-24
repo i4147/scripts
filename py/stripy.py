@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import ast
@@ -7,11 +6,6 @@ from pathlib import Path
 from typing import Sequence
 
 import libcst as cst
-
-
-
-
-
 
 
 def _pass_stmt() -> cst.SimpleStatementLine:
@@ -58,16 +52,9 @@ def _strip_suite(body: cst.BaseSuite, ensure_body: bool = True) -> cst.BaseSuite
     return body
 
 
-
-
-
-
-
 class StripTransformer(cst.CSTTransformer):
-    
-
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        
+
         return updated_node.with_changes(body=_strip_first_docstring(updated_node.body, ensure_body=False))
 
     def _strip_func(self, updated_node):
@@ -88,8 +75,6 @@ class StripTransformer(cst.CSTTransformer):
             return updated_node
         return updated_node.with_changes(body=new_body)
 
-    
-
     def leave_TrailingWhitespace(self, original_node, updated_node):
         if updated_node.comment is not None:
             return updated_node.with_changes(comment=None)
@@ -99,11 +84,6 @@ class StripTransformer(cst.CSTTransformer):
         if updated_node.comment is not None:
             return updated_node.with_changes(comment=None)
         return updated_node
-
-
-
-
-
 
 
 def process_file(path: Path) -> bool:
@@ -123,7 +103,6 @@ def process_file(path: Path) -> bool:
     if new_code == source:
         return False
 
-    
     try:
         ast.parse(new_code)
     except SyntaxError as exc:
@@ -143,11 +122,6 @@ def process_file(path: Path) -> bool:
 
     path.write_text(new_code, encoding="utf-8")
     return True
-
-
-
-
-
 
 
 def main() -> int:

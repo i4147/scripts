@@ -1,4 +1,3 @@
-
 import sys
 import json
 from pathlib import Path
@@ -12,18 +11,15 @@ import importlib.util
 def get_site_packages_dirs() -> List[Path]:
     site_dirs = []
 
-    
     import site
 
     for path in site.getsitepackages():
         site_dirs.append(Path(path))
 
-    
     user_site = site.getusersitepackages()
     if user_site:
         site_dirs.append(Path(user_site))
 
-    
     common_paths = [
         Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages",
         Path(sys.prefix)
@@ -37,72 +33,56 @@ def get_site_packages_dirs() -> List[Path]:
         if path.exists() and path not in site_dirs:
             site_dirs.append(path)
 
-    
     return [d for d in site_dirs if d.exists() and d.is_dir()]
 
 
 def is_pure_python_package(package_path: Path) -> bool:
     try:
-        
         binary_extensions = {".so", ".pyd", ".dll", ".dylib"}
 
-        
         for item in package_path.rglob("*"):
             if item.is_file():
-                
                 if item.suffix.lower() in binary_extensions:
                     return False
 
-                
                 if item.suffix == ".pyc" and item.stem.endswith("_c"):
-                    
                     return False
 
-            
             if item.is_file() and item.suffix == ".pth":
-                
                 pass
 
-        
         parent = package_path.parent
         for dist_info in parent.glob(f"{package_path.name}*.dist-info"):
-            
             record_file = dist_info / "RECORD"
             if record_file.exists():
                 content = record_file.read_text(encoding="utf-8", errors="ignore")
                 if any(ext in content for ext in binary_extensions):
                     return False
 
-            
             installer_file = dist_info / "INSTALLER"
             if installer_file.exists():
-                
                 pass
 
-        
         for egg_info in parent.glob(f"{package_path.name}*.egg-info"):
-            
             native_file = egg_info / "native_libs.txt"
             if native_file.exists():
                 return False
 
-        
         return True
 
     except Exception as e:
-        
         return True
 
 
 def get_package_name(package_path: Path) -> str:
-    
+
     name = package_path.name
-    
+
     if name.endswith(".dist-info"):
         name = name[:-10]
     elif name.endswith(".egg-info"):
         name = name[:-9]
-    
+
     import re
 
     name = re.sub(r"-\d+\.\d+\.\d+.*$", "", name)
@@ -119,10 +99,8 @@ def scan_package(package_path: Path) -> Dict[str, any]:
     }
 
     try:
-        
         has_entry_points = False
 
-        
         parent = package_path.parent
         pkg_name = get_package_name(package_path)
 
@@ -133,7 +111,6 @@ def scan_package(package_path: Path) -> Dict[str, any]:
                 has_entry_points = True
                 break
 
-        
         if not has_entry_points:
             egg_info_paths = list(parent.glob(f"{pkg_name}*.egg-info"))
             for egg_info in egg_info_paths:
@@ -142,7 +119,6 @@ def scan_package(package_path: Path) -> Dict[str, any]:
                     has_entry_points = True
                     break
 
-        
         if not has_entry_points:
             entry_points = package_path / "entry_points.txt"
             if entry_points.exists():
@@ -150,7 +126,6 @@ def scan_package(package_path: Path) -> Dict[str, any]:
 
         result["has_entry_points"] = has_entry_points
 
-        
         if not has_entry_points:
             result["is_pure_python"] = is_pure_python_package(package_path)
 
@@ -165,14 +140,11 @@ def find_packages_without_entry_points(site_dir: Path) -> Tuple[List[str], List[
     non_pure_packages = []
 
     try:
-        
         for item in site_dir.iterdir():
             if item.is_dir():
-                
                 if item.name.startswith("_") or item.name.startswith("."):
                     continue
 
-                
                 init_file = item / "__init__.py"
                 is_package = init_file.exists() or item.suffix in [".dist-info", ".egg-info"]
 
@@ -216,7 +188,6 @@ def main():
 
     args = parser.parse_args()
 
-    
     site_dirs = get_site_packages_dirs()
 
     if not site_dirs:
@@ -227,7 +198,6 @@ def main():
         print(f"Found site directories: {[str(d) for d in site_dirs]}")
         print(f"Python version: {sys.version}")
 
-    
     num_processes = args.processes or cpu_count()
 
     if args.verbose:
@@ -237,15 +207,12 @@ def main():
     all_nonpure_packages = []
 
     with Pool(processes=num_processes) as pool:
-        
         results = pool.map(find_packages_without_entry_points, site_dirs)
 
-        
         for pure_pkgs, nonpure_pkgs in results:
             all_pure_packages.extend(pure_pkgs)
             all_nonpure_packages.extend(nonpure_pkgs)
 
-    
     seen_pure = set()
     unique_pure = []
     for pkg in all_pure_packages:
@@ -260,17 +227,13 @@ def main():
             seen_nonpure.add(pkg)
             unique_nonpure.append(pkg)
 
-    
     unique_pure.sort()
     unique_nonpure.sort()
 
-    
     pure_output = args.pure_output
     nonpure_output = args.nonpure_output
 
-    
     if args.output:
-        
         combined = {
             "timestamp": datetime.now().isoformat(),
             "site_directories": [str(d) for d in site_dirs],
@@ -283,7 +246,6 @@ def main():
         if args.json:
             Path(args.output).write_text(json.dumps(combined, indent=2))
         else:
-            
             lines = []
             lines.append(f"Total pure Python packages: {len(unique_pure)}")
             lines.append(f"Total non-pure packages: {len(unique_nonpure)}")
@@ -299,9 +261,6 @@ def main():
             print(f"Combined results written to {args.output}")
 
     else:
-        
-
-        
         if args.json:
             pure_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -313,7 +272,6 @@ def main():
         else:
             Path(pure_output).write_text("\n".join(unique_pure))
 
-        
         if args.json:
             nonpure_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -325,7 +283,6 @@ def main():
         else:
             Path(nonpure_output).write_text("\n".join(unique_nonpure))
 
-    
     print(f"=== SUMMARY ===")
     print(f"Pure Python packages without entry_points.txt: {len(unique_pure)}")
     print(f"Non-pure packages without entry_points.txt: {len(unique_nonpure)}")

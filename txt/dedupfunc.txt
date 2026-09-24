@@ -1,0 +1,641 @@
+# --- File: dedupfunc.py ---
+import argparse
+import ast
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+class a:
+    def __init__(self, b, c, d, e):
+        self.name = b
+        self.body = self._normalize_body(c)
+        self.original_body = c
+        self.lineno = d
+        self.node = e
+    @staticmethod
+    def f(c):
+        g = []
+        for h in c.split('\n'):
+            i = re.sub('(?<![\\"\\\'])#.*$', '', h)
+            g.append(i)
+        c = '\n'.join(g)
+        g = [h.strip() for h in c.split('\n') if h.strip()]
+        return '\n'.join(g)
+class j(ast.NodeVisitor):
+    def __init__(self):
+        self.functions = []
+        self.source_lines = []
+    def k(self, e):
+        l = e.body[0].lineno - 1
+        m = e.body[-1].end_lineno
+        n = self.source_lines[l:m]
+        o = '\n'.join(n)
+        p = a(name=e.name, body=o, lineno=e.lineno, node=e)
+        self.functions.append(p)
+        self.generic_visit(e)
+    def q(self, r):
+        with open(r, encoding='utf-8') as f:
+            s = f.read()
+            self.source_lines = s.splitlines()
+        try:
+            t = ast.parse(s)
+            self.visit(t)
+        except SyntaxError as e:
+            print(f'Syntax error in file: {e}')
+            return {}
+        u = defaultdict(list)
+        for v in self.functions:
+            u[v.body].append(v)
+        return {c: w for c, w in u.items() if len(w) > 1}
+class x:
+    def __init__(self, r):
+        self.path = Path(r)
+        self.content = None
+        self.lines = None
+    def y(self, p):
+        e = p.node
+        z = e.end_lineno if hasattr(e, 'end_lineno') else e.lineno
+        if e.decorator_list:
+            a1 = e.decorator_list[0].lineno
+        else:
+            a1 = e.lineno
+        return (a1, z)
+    def b1(self, p):
+        a1, z = self._get_function_lines(p)
+        return '\n'.join(self.lines[a1 - 1:z])
+    def c1(self, u, d1):
+        with open(self.path, encoding='utf-8') as f:
+            self.content = f.read()
+            self.lines = self.content.splitlines()
+        e1 = set()
+        f1 = []
+        for c, w in u.items():
+            g1 = d1.get(c, 0)
+            for i, v in enumerate(w):
+                if i != g1:
+                    a1, z = self._get_function_lines(v)
+                    for h1 in range(a1 - 1, z):
+                        e1.add(h1)
+                    f1.append(v)
+        i1 = []
+        for i, h in enumerate(self.lines):
+            if i not in e1:
+                i1.append(h)
+        try:
+            with open(self.path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(i1))
+            return True
+        except Exception as e:
+            print(f'Error writing to file: {e}')
+            return False
+    def j1(self):
+        k1 = self.path.with_suffix(self.path.suffix + '.backup')
+        with open(self.path, encoding='utf-8') as src, open(k1, 'w', encoding='utf-8') as dst:
+            dst.write(src.read())
+        return str(k1)
+def l1(u):
+    if not u:
+        print('No duplicate functions found!')
+        return False
+    print('\n' + '=' * 40)
+    print('DUPLICATE FUNCTIONS FOUND')
+    print('-' * 40)
+    for idx, (c, w) in enumerate(u.items(), 1):
+        print(f'\nGroup {idx}:')
+        print(f'  Body hash: {hash(c)}')
+        print(f'  {len(w)} functions with identical body:')
+        for i, v in enumerate(w, 1):
+            print(f"    {i}. '{v.name}' (line {v.lineno})")
+        m1 = c[:150] + '...' if len(c) > 150 else c
+        print(f'\n  Body preview:\n{m1}')
+        print('-' * 40)
+    return True
+def n1(u):
+    o1 = {}
+    for c, w in u.items():
+        print(f'\nGroup with {len(w)} duplicate functions:')
+        for i, v in enumerate(w):
+            print(f"  [{i}] Keep '{v.name}' (line {v.lineno})")
+        while True:
+            try:
+                p1 = input(f'Which function to keep? [0-{len(w) - 1}]: ')
+                q1 = int(p1)
+                if 0 <= q1 < len(w):
+                    o1[c] = q1
+                    break
+                else:
+                    print(f'Please enter a number between 0 and {len(w) - 1}')
+            except ValueError:
+                print('Please enter a valid number')
+    return o1
+def r1():
+    s1 = argparse.ArgumentParser(description='Find and optionally remove duplicate functions in Python files')
+    s1.add_argument('file', help='Python file to analyze')
+    s1.add_argument('-r', '--remove', action='store_true', help='Remove duplicate functions with user confirmation')
+    s1.add_argument('--backup', action='store_true', help='Create a backup before removing (implies -r)')
+    t1 = s1.parse_args()
+    r = t1.file
+    if not Path(r).exists():
+        print(f"Error: File '{r}' not found")
+        sys.exit(1)
+    if not r.endswith('.py'):
+        print(f"Warning: File '{r}' does not have .py extension")
+        u1 = input('Continue anyway? (y/N): ')
+        if u1.lower() != 'y':
+            sys.exit(0)
+    print(f'Analyzing {r}...')
+    v1 = j()
+    w1 = v1.analyze_file(r)
+    if not l1(w1):
+        sys.exit(0)
+    if t1.remove or t1.backup:
+        x1 = x(r)
+        if t1.backup:
+            k1 = x1.backup_file()
+            print(f'\nBackup created at: {k1}')
+        print('\n' + '=' * 40)
+        print('SELECT FUNCTIONS TO KEEP')
+        print('-' * 40)
+        o1 = n1(w1)
+        print('\n' + '=' * 40)
+        y1 = input('Proceed with removing duplicate functions? (y/N): ')
+        if y1.lower() == 'y':
+            if x1.remove_duplicates(w1, o1):
+                print('✓ Duplicate functions removed successfully!')
+            else:
+                print('✗ Failed to remove duplicates')
+                sys.exit(1)
+        else:
+            print('Operation cancelled')
+            sys.exit(0)
+    else:
+        print('\nUse -r or --remove to remove duplicates with user confirmation')
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+# --- File: dup_detector.py ---
+import argparse
+import ast
+import hashlib
+import json
+import multiprocessing
+import os
+import sys
+from collections import defaultdict
+try:
+    import ssdeep
+    from rapidfuzz import fuzz
+except ImportError:
+    print('Please install dependencies: pip install ssdeep rapidfuzz')
+    sys.exit(1)
+def z1(a2):
+    b2 = []
+    for c2, _, d2 in os.walk(a2):
+        for f in d2:
+            if f.endswith('.py') and f != 'utils.py':
+                b2.append(os.path.join(c2, f))
+    return b2
+def e2(r):
+    try:
+        with open(r, 'r', encoding='utf-8') as f:
+            f2 = f.read()
+        t = ast.parse(f2)
+    except (SyntaxError, UnicodeDecodeError):
+        return []
+    g2 = []
+    for e in t.body:
+        h2 = None
+        b = None
+        i2 = None
+        if isinstance(e, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            h2 = 'function'
+            b = e.name
+        elif isinstance(e, ast.ClassDef):
+            h2 = 'class'
+            b = e.name
+        elif isinstance(e, ast.Assign):
+            if len(e.targets) == 1 and isinstance(e.targets[0], ast.Name):
+                h2 = 'constant'
+                b = e.targets[0].id
+        elif isinstance(e, ast.AnnAssign) and isinstance(e.target, ast.Name):
+            h2 = 'constant'
+            b = e.target.id
+        if h2 and b:
+            i2 = ast.unparse(e)
+            j2 = hashlib.sha256(i2.encode('utf-8')).hexdigest()
+            g2.append({'object_type': h2, 'object_name': b, 'source_code': i2, 'reference_file': r, 'content_hash': j2, 'start_line': e.lineno, 'end_line': e.end_lineno, 'ssdeep_hash': ssdeep.hash(i2)})
+    return g2
+def k2(r):
+    return e2(r)
+def l2(m2, n2='exact_duplicates.json'):
+    o2 = defaultdict(list)
+    for obj in m2:
+        o2[obj['content_hash']].append(obj)
+    p2 = []
+    for j2, q2 in o2.items():
+        r2 = len(q2)
+        if r2 <= 1:
+            continue
+        for obj in q2:
+            p2.append({'object_type': obj['object_type'], 'object_name': obj['object_name'], 'source_code': obj['source_code'], 'reference_file': obj['reference_file'], 'content_hash': j2, 'occurrence_count': r2, 'start_line': obj['start_line'], 'end_line': obj['end_line']})
+    p2.sort(key=lambda obj: (-obj['occurrence_count'], obj['object_type'], obj['object_name'], obj['reference_file']))
+    def s2(r, t2):
+        with open(r, 'w', encoding='utf-8') as u2:
+            json.dump(t2, u2, indent=4)
+    s2(n2, p2)
+    v2 = {'function': 'function_duplicates.json', 'class': 'class_duplicates.json', 'constant': 'constant_duplicates.json'}
+    for w2, r in v2.items():
+        x2 = [obj for obj in p2 if obj['object_type'] == w2]
+        s2(r, x2)
+        print(f'[+] Saved {len(x2)} {w2} duplicate instances to {r}')
+    print(f'[+] Saved {len(p2)} exact duplicate instances to {n2}')
+    return o2
+def y2(o2):
+    z2 = 'utils.py'
+    a3 = ''
+    if os.path.exists(z2):
+        with open(z2, 'r', encoding='utf-8') as f:
+            a3 = f.read()
+    b3 = defaultdict(set)
+    for q2 in o2.values():
+        if len(q2) > 5:
+            c3 = q2[0]
+            a3 += f"\n\n# Moved from {c3['reference_file']}\n{c3['source_code']}\n"
+            for obj in q2:
+                b3[obj['reference_file']].add(obj['object_name'])
+    with open(z2, 'w', encoding='utf-8') as f:
+        f.write(a3)
+    print(f'[+] Created/Updated {z2}')
+    for r, d3 in b3.items():
+        with open(r, 'r', encoding='utf-8') as f:
+            g = f.readlines()
+        e3 = [obj for q2 in o2.values() if len(q2) > 5 for obj in q2 if obj['reference_file'] == r]
+        e3.sort(key=lambda x: x['start_line'], reverse=True)
+        for obj in e3:
+            f3 = obj['start_line'] - 1
+            g3 = obj['end_line']
+            del g[f3:g3]
+        h3 = -1
+        for i, h in enumerate(g):
+            i3 = h.strip()
+            if i3.startswith(('import ', 'from ')):
+                h3 = i
+        j3 = h3 + 1
+        for b in sorted(d3):
+            g.insert(j3, f'from utils import {b}\n')
+            j3 += 1
+        with open(r, 'w', encoding='utf-8') as f:
+            f.writelines(g)
+    print(f'[+] Refactored {len(b3)} files.')
+def k3(m2, n2='fuzzy_duplicates.json'):
+    l3 = []
+    n = len(m2)
+    print('[*] Calculating fuzzy similarities (this may take a while for large codebases)...')
+    for i in range(n):
+        for j in range(i + 1, n):
+            m3 = m2[i]
+            n3 = m2[j]
+            if m3['content_hash'] == n3['content_hash']:
+                continue
+            o3 = ssdeep.compare(m3['ssdeep_hash'], n3['ssdeep_hash'])
+            if o3 > 0:
+                p3 = fuzz.ratio(m3['source_code'], n3['source_code'])
+                if p3 > 50.0:
+                    l3.append({'object_1': {'type': m3['object_type'], 'name': m3['object_name'], 'file': m3['reference_file'], 'source_code': m3['source_code']}, 'object_2': {'type': n3['object_type'], 'name': n3['object_name'], 'file': n3['reference_file'], 'source_code': n3['source_code']}, 'similarity_percentage': round(p3, 2), 'ssdeep_score': o3})
+    with open(n2, 'w', encoding='utf-8') as f:
+        json.dump(l3, f, indent=4)
+    print(f'[+] Saved {len(l3)} fuzzy duplicate pairs to {n2}')
+def r1():
+    s1 = argparse.ArgumentParser(description='Detect and refactor duplicate Python objects.')
+    s1.add_argument('-r', '--refactor', action='store_true', help='Move duplicates with >5 appearances to utils.py and update imports.')
+    s1.add_argument('-f', '--fuzzy', action='store_true', help='Generate a report for objects with >50% similarity using ssdeep and rapidfuzz.')
+    t1 = s1.parse_args()
+    print('[*] Discovering Python files...')
+    b2 = z1('.')
+    print(f'[*] Found {len(b2)} files. Starting parallel extraction...')
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as q3:
+        r3 = q3.map(k2, b2)
+    m2 = [obj for s3 in r3 for obj in s3]
+    print(f'[*] Extracted {len(m2)} total objects.')
+    o2 = l2(m2)
+    if t1.refactor:
+        print('[*] Refactoring duplicates with >5 appearances...')
+        y2(o2)
+    if t1.fuzzy:
+        k3(m2)
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
+    r1()
+
+# --- File: find_dup_func_class_const.py ---
+import argparse
+import ast
+import concurrent.futures
+import os
+import sys
+from collections import defaultdict
+from pathlib import Path
+def t3(r):
+    u3 = {}
+    try:
+        f2 = r.read_text(encoding='utf-8')
+        t = ast.parse(f2, filename=str(r))
+    except Exception:
+        return {}
+    for e in t.body:
+        if isinstance(e, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            v3 = ('function', e.name, ast.unparse(e))
+            u3[v3] = {'name': e.name, 'type': 'function', 'node': e}
+        elif isinstance(e, ast.ClassDef):
+            v3 = ('class', e.name, ast.unparse(e))
+            u3[v3] = {'name': e.name, 'type': 'class', 'node': e}
+        elif isinstance(e, ast.Assign):
+            if len(e.targets) == 1 and isinstance(e.targets[0], ast.Name):
+                b = e.targets[0].id
+                v3 = ('constant', b, ast.unparse(e))
+                u3[v3] = {'name': b, 'type': 'constant', 'node': e}
+    return {v3: (str(r), t2) for v3, t2 in u3.items()}
+def w3(x3, y3, h2, z3):
+    r = Path(x3)
+    f2 = r.read_text(encoding='utf-8')
+    t = ast.parse(f2, filename=str(r))
+    a4 = []
+    b4 = False
+    for e in t.body:
+        if h2 in ('function', 'class') and isinstance(e, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if e.name == y3 and ast.unparse(e) == z3:
+                b4 = True
+                continue
+        elif h2 == 'constant' and isinstance(e, ast.Assign):
+            if len(e.targets) == 1 and isinstance(e.targets[0], ast.Name):
+                if e.targets[0].id == y3 and ast.unparse(e) == z3:
+                    b4 = True
+                    continue
+        a4.append(e)
+    if not b4:
+        return f2
+    c4 = ast.ImportFrom(module='dh', names=[ast.alias(name=y3, asname=None)], level=0)
+    a4.insert(0, c4)
+    t.body = a4
+    d4 = ast.unparse(t)
+    ast.parse(d4)
+    return d4
+def r1():
+    s1 = argparse.ArgumentParser(description='Recursively find and consolidate duplicate functions, classes, and constants.')
+    s1.add_argument('-m', '--move', action='store_true', help='Consolidate duplicate code blocks into dh.py and update files with required imports.')
+    t1 = s1.parse_args()
+    e4 = Path('.')
+    f4 = e4 / 'dh.py'
+    g4 = Path(__file__).resolve()
+    b2 = [f for f in e4.rglob('*.py') if f.resolve() != g4 and f.resolve() != f4.resolve()]
+    if not b2:
+        print('🔍 No Python files found to scan.')
+        return
+    print(f'🔍 Scanning {len(b2)} files concurrently...')
+    h4 = defaultdict(list)
+    i4 = os.cpu_count() or 1
+    with concurrent.futures.ProcessPoolExecutor(max_workers=i4) as j4:
+        k4 = {j4.submit(t3, f): f for f in b2}
+        for l4 in concurrent.futures.as_completed(k4):
+            m4 = l4.result()
+            for v3, (x3, t2) in m4.items():
+                h4[v3].append((x3, t2))
+    w1 = {k: v for k, v in h4.items() if len(v) > 1}
+    if not w1:
+        print('🎉 Success! No repeated functions, classes, or constants were detected.')
+        return
+    print(f'⚠️  Detected {len(w1)} repeated structural definitions:\n')
+    n4 = []
+    o4 = defaultdict(list)
+    for (h2, y3, p4), q4 in w1.items():
+        r4 = [occ[0] for occ in q4]
+        print(f"[{h2.upper()}] '{y3}' is repeated in {len(r4)} files:")
+        for f in r4:
+            print(f'   -> {f}')
+        print()
+        if t1.move:
+            n4.append(p4)
+            for s4, _ in q4:
+                o4[s4].append((y3, h2, p4))
+    if t1.move:
+        print('🛠️  Processing Consolidation (-m flag active)...')
+        t4 = ''
+        if f4.exists():
+            t4 = f4.read_text(encoding='utf-8')
+        u4 = t4 + '\n\n' + '\n\n'.join(n4)
+        try:
+            ast.parse(u4)
+            f4.write_text(u4, encoding='utf-8')
+            print(f'✅ Extracted duplicate definitions safely written to: {f4}')
+        except Exception as e:
+            print(f'❌ Aborted: Merged definitions inside dh.py failed AST parsing logic: {e}')
+            sys.exit(1)
+        v4 = 0
+        for w4, g2 in o4.items():
+            try:
+                x4 = Path(w4)
+                y4 = x4.read_text(encoding='utf-8')
+                for y3, h2, p4 in g2:
+                    y4 = w3(w4, y3, h2, p4)
+                x4.write_text(y4, encoding='utf-8')
+                print(f'✅ In-place code updated & verified: {w4}')
+                v4 += 1
+            except Exception as e:
+                print(f'❌ Failed to parse or modify file safely {w4}: {e}. Skipping structural changes.')
+        print(f'\n📊 Refactor complete. Adjusted and verified {v4} files.')
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+# --- File: remove_duplicate_functions.py ---
+import argparse
+import ast
+import hashlib
+import sys
+from collections.abc import Sequence
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Optional
+from loguru import logger
+z4 = 8
+def a5(g, f3, g3):
+    n = list(g[f3:g3])
+    if not n:
+        return ''
+    i3 = [h for h in n if h.strip()]
+    if not i3:
+        return ''
+    b5 = min((len(h) - len(h.lstrip()) for h in i3))
+    return '\n'.join((h[b5:] if h.strip() else '' for h in n))
+def c5(r, d5):
+    try:
+        g = r.read_text().splitlines(keepends=True)
+    except Exception:
+        return None
+    a1 = d5.lineno - 1
+    z = d5.end_lineno if d5.end_lineno is not None else a1 + 1
+    e5 = g[a1:z]
+    l = 0
+    for i, h in enumerate(e5):
+        if ':' in h and (not h.strip().startswith('@')):
+            l = i + 1
+            break
+    sig = ast.dump(d5.args)
+    if d5.returns:
+        sig += ast.dump(d5.returns)
+    c = a5(e5, l, len(e5))
+    s = f'{sig}\n{c}'
+    return hashlib.md5(s.encode()).hexdigest()
+def f5(r):
+    try:
+        t = ast.parse(r.read_text(), filename=str(r))
+    except SyntaxError:
+        return None
+    except Exception:
+        return None
+    g5 = {}
+    for e in ast.iter_child_nodes(t):
+        if isinstance(e, ast.FunctionDef):
+            j2 = c5(r, e)
+            if j2:
+                g5[e.name] = {'name': e.name, 'hash': j2, 'lineno': e.lineno, 'end_lineno': e.end_lineno}
+    return g5
+def h5(i5, j5, k5=False):
+    w = f5(i5)
+    if w is None or not w:
+        return {'file': i5, 'status': 'skipped', 'duplicates': []}
+    w1 = []
+    for l5, p in w.items():
+        if p['hash'] in j5:
+            w1.append({'name': l5, 'lineno': p['lineno'], 'end_lineno': p['end_lineno'], 'ref_name': j5[p['hash']]})
+    if not w1:
+        return {'file': i5, 'status': 'ok', 'duplicates': []}
+    if k5:
+        try:
+            g = i5.read_text().splitlines(keepends=True)
+            w1.sort(key=lambda x: x['lineno'], reverse=True)
+            b4 = []
+            for dup in w1:
+                m5 = dup['lineno'] - 1
+                end = dup['end_lineno']
+                while m5 > 0 and (g[m5 - 1].strip().startswith('@') or g[m5 - 1].strip() == ''):
+                    m5 -= 1
+                del g[m5:end]
+                b4.append(dup['name'])
+            i5.write_text(''.join(g))
+            return {'file': i5, 'status': 'updated', 'duplicates': b4}
+        except Exception as e:
+            return {'file': i5, 'status': 'error', 'error': str(e), 'duplicates': []}
+    return {'file': i5, 'status': 'found', 'duplicates': w1}
+def n5(o5):
+    b2 = set()
+    if not o5:
+        b2.update(Path('.').rglob('*.py'))
+    else:
+        for p5 in o5:
+            r = Path(p5)
+            if r.is_file() and r.suffix == '.py':
+                b2.add(r)
+            elif r.is_dir():
+                b2.update(r.rglob('*.py'))
+    return sorted(b2)
+def q5(r5=None):
+    s1 = argparse.ArgumentParser(description='Remove duplicate functions from Python files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='Examples:\n  %(prog)s ref.py module.py\n  %(prog)s ref.py src/\n  %(prog)s ref.py  # scan current dir\n  %(prog)s -a ref.py target.py  # actually remove')
+    s1.add_argument('reference', help='Reference file (functions to keep)')
+    s1.add_argument('inputs', nargs='*', help='Target files/directories (default: .)')
+    s1.add_argument('-a', '--apply', action='store_true', help='Apply changes (default: dry-run)')
+    return s1.parse_args(r5)
+def r1(r5=None):
+    t1 = q5(r5)
+    s5 = Path(t1.reference)
+    if not s5.exists():
+        logger.error(f'❌ Reference file not found: {s5}')
+        return 1
+    if s5.suffix != '.py':
+        logger.error('❌ Reference must be a .py file')
+        return 1
+    print(f'📖 Analyzing reference: {s5}')
+    t5 = f5(s5)
+    if t5 is None:
+        logger.error('❌ Failed to parse reference file')
+        return 1
+    if not t5:
+        logger.warning('⚠️  No functions found in reference')
+        return 1
+    j5 = {u5['hash']: u5['name'] for u5 in t5.values()}
+    print(f'  Found {len(j5)} functions')
+    v5 = n5(t1.inputs)
+    v5 = [f for f in v5 if f != s5]
+    if not v5:
+        logger.warning('⚠️  No target files found')
+        return 0
+    w5 = 'applying' if t1.apply else 'scanning'
+    print(f'\n🔍 {w5} {len(v5)} file(s)...')
+    print('-' * 40)
+    x5 = 0
+    y5 = 0
+    with Pool(processes=z4) as q3:
+        z5 = [q3.apply_async(h5, (f, j5, t1.apply)) for f in v5]
+        for a6 in z5:
+            b6 = a6.get()
+            c6 = b6['status']
+            if c6 == 'skipped':
+                print(f"⊘  {b6['file']}")
+            elif c6 == 'ok':
+                print(f"✅ {b6['file']}")
+            elif c6 == 'found':
+                x5 += len(b6['duplicates'])
+                d6 = ', '.join((d['name'] for d in b6['duplicates']))
+                logger.warning(f"⚠️  {b6['file']}: {d6}")
+            elif c6 == 'updated':
+                y5 += len(b6['duplicates'])
+                d6 = ', '.join(b6['duplicates'])
+                print(f"✂️  {b6['file']}: removed {d6}")
+            elif c6 == 'error':
+                logger.error(f"❌ {b6['file']}: {b6['error']}")
+    print('-' * 40)
+    if t1.apply:
+        print(f'✅ Removed {y5} duplicate(s)')
+    else:
+        print(f'ℹ️  Found {x5} duplicate function(s)')
+        print('   Run with -a/--apply to remove')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(r1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

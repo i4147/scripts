@@ -1,4 +1,3 @@
-
 import ast
 import sys
 import time
@@ -19,7 +18,6 @@ except ImportError:
 
 @dataclass(slots=True, frozen=True)
 class FileProcessingResult:
-
     file_path: Path
     was_modified: bool
     removed_count: int
@@ -28,7 +26,6 @@ class FileProcessingResult:
 
 
 class DocstringRemover(ast.NodeTransformer):
-
     __slots__ = ("removed_count",)
 
     def __init__(self) -> None:

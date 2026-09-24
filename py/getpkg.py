@@ -14,14 +14,13 @@ MIRRORS = [
 
 RETRY_COUNT = 3
 TIMEOUT = 30
-CHUNK_THRESHOLD = 5 * 1024 * 1024  
+CHUNK_THRESHOLD = 5 * 1024 * 1024
 
 
 def fetch_pypi_metadata(pkg_name: str) -> dict:
     import urllib.request
     import urllib.error
 
-    
     clean_name = pkg_name.split("==")[0].split(">=")[0].split("<=")[0].strip()
 
     for mirror in MIRRORS:
@@ -43,7 +42,6 @@ def fetch_pypi_metadata(pkg_name: str) -> dict:
 def select_best_release_file(metadata: dict, target_version: str = None) -> dict:
     releases = metadata.get("releases", {})
 
-    
     version = target_version or metadata.get("info", {}).get("version")
     if not version or version not in releases:
         raise ValueError(f"Version '{version}' not found in package metadata.")
@@ -54,14 +52,10 @@ def select_best_release_file(metadata: dict, target_version: str = None) -> dict
     for file_info in files:
         filename = file_info["filename"].lower()
 
-        
         if "darwin" in filename or "win32" in filename or "win_amd64" in filename or "win_" in filename:
             continue
 
-        
-        
         if filename.endswith(".whl"):
-            
             if "none-any" not in filename:
                 continue
 
@@ -70,7 +64,6 @@ def select_best_release_file(metadata: dict, target_version: str = None) -> dict
     if not valid_files:
         raise RuntimeError(f"No suitable source or neutral wheel release files found for version {version}.")
 
-    
     sdist_files = [f for f in valid_files if f["filename"].endswith(".tar.gz")]
     if sdist_files:
         return sdist_files[0]
@@ -154,7 +147,6 @@ def main():
         print("Usage: python script.py <pkg1> [pkg2==1.0.0 ...] [--backend=pycurl|requests|aria2c]")
         sys.exit(1)
 
-    
     args = sys.argv[1:]
     backend = "pycurl"
 
@@ -174,7 +166,6 @@ def main():
     for pkg_spec in packages:
         print(f"\n---> Processing package specifier: {pkg_spec}")
 
-        
         if "==" in pkg_spec:
             pkg_name, target_ver = pkg_spec.split("==", 1)
         else:

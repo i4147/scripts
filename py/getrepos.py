@@ -1,5 +1,3 @@
-
-
 import json
 import sys
 import time
@@ -21,7 +19,6 @@ def countdown(timeout: int) -> None:
 def get_repos(username: str, timeout: int = 20) -> list:
     url = f"https://api.github.com/users/{username}/repos"
 
-    
     countdown_thread = threading.Thread(target=countdown, args=(timeout,), daemon=True)
     countdown_thread.start()
 

@@ -1,16 +1,11 @@
-
-
-
 def pattern_1_right_triangle():
     for i in range(1, 6):
         print("* " * i)
 
 
-
 def pattern_2_inverted_triangle():
     for i in range(5, 0, -1):
         print("* " * i)
-
 
 
 def pattern_3_pyramid():
@@ -19,12 +14,10 @@ def pattern_3_pyramid():
         print("  " * (n - i) + "* " * i)
 
 
-
 def pattern_4_inverted_pyramid():
     n = 5
     for i in range(n, 0, -1):
         print("  " * (n - i) + "* " * i)
-
 
 
 def pattern_5_diamond():
@@ -35,7 +28,6 @@ def pattern_5_diamond():
         print("  " * (n - i) + "* " * i)
 
 
-
 def pattern_6_number_triangle():
     for i in range(1, 6):
         for j in range(1, i + 1):
@@ -43,11 +35,9 @@ def pattern_6_number_triangle():
         print()
 
 
-
 def pattern_7_same_number_triangle():
     for i in range(1, 6):
         print((str(i) + " ") * i)
-
 
 
 def pattern_8_alphabet_triangle():
@@ -57,7 +47,6 @@ def pattern_8_alphabet_triangle():
         print()
 
 
-
 def pattern_9_floyds_triangle():
     n = 1
     for i in range(1, 6):
@@ -65,7 +54,6 @@ def pattern_9_floyds_triangle():
             print(n, end=" ")
             n += 1
         print()
-
 
 
 def pattern_10_pascals_triangle():
@@ -79,7 +67,6 @@ def pattern_10_pascals_triangle():
         print()
 
 
-
 def pattern_11_hollow_square():
     n = 5
     for i in range(n):
@@ -89,7 +76,6 @@ def pattern_11_hollow_square():
             else:
                 print(" ", end=" ")
         print()
-
 
 
 def pattern_12_hollow_triangle():
@@ -103,13 +89,11 @@ def pattern_12_hollow_triangle():
         print()
 
 
-
 def pattern_13_reversed_alphabet_triangle():
     for i in range(69, 64, -1):
         for j in range(69, i - 1, -1):
             print(chr(j), end=" ")
         print()
-
 
 
 def pattern_14_checkerboard():
@@ -118,9 +102,6 @@ def pattern_14_checkerboard():
         for j in range(n):
             print("\u25a0" if (i + j) % 2 == 0 else "\u25a1", end=" ")
         print()
-
-
-
 
 
 PATTERNS = [

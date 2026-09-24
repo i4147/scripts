@@ -1,0 +1,22 @@
+# ./step1.dh
+./llama-cli -m llama-2-7b-chat.Q4_K_M.gguf -p "سلام، من یک دستیار هوشمند هستم. لطفاً یک شعر کوتاه درباره هوش مصنوعی بگو:" -n 128
+
+# ./step2.sh
+ollama run llama3
+ollama run mistral
+
+# step 3
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+model_name = "mistralai/Mistral-7B-Instruct-v0.2"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+prompt = "سلام، یک داستان کوتاه ترسناک بنویس."
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
+
+
+

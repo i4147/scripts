@@ -4,8 +4,8 @@ import os.path
 import subprocess
 import sys
 import typing
-import xonsh.dirstack  
-import xonsh.environ  
+import xonsh.dirstack
+import xonsh.environ
 
 
 def __zoxide_bin() -> str:
@@ -16,7 +16,7 @@ def __zoxide_bin() -> str:
 
 
 def __zoxide_env() -> dict[str, str]:
-    return builtins.__xonsh__.env.detype()  
+    return builtins.__xonsh__.env.detype()
 
 
 def __zoxide_pwd() -> str:
@@ -63,8 +63,8 @@ def __zoxide_errhandler(
 
 if "__zoxide_hook" not in globals():
 
-    @builtins.events.on_chdir  
-    @builtins.events.on_post_prompt  
+    @builtins.events.on_chdir
+    @builtins.events.on_post_prompt
     def __zoxide_hook(**_kwargs: typing.Any) -> None:
         pwd = __zoxide_pwd()
         zoxide = __zoxide_bin()
@@ -114,5 +114,5 @@ def __zoxide_zi(args: list[str]) -> None:
     __zoxide_cd(result)
 
 
-builtins.aliases[""] = __zoxide_z  
-builtins.aliases["i"] = __zoxide_zi  
+builtins.aliases[""] = __zoxide_z
+builtins.aliases["i"] = __zoxide_zi

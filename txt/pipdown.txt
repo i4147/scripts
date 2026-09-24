@@ -1,0 +1,782 @@
+import httpx;import packaging.requirements;from httpx._config import DEFAULT_LIMITS;from httpx._content import IteratorByteStream;from packaging.requirements import Requirement;from packaging.specifiers import InvalidSpecifier,SpecifierSet;from packaging.tags import Tag,compatible_tags,cpython_tags,generic_tags,interpreter_name,interpreter_version,mac_platforms;from packaging.utils import BuildTag,InvalidWheelFilename,NormalizedName,canonicalize_name,parse_wheel_filename;from packaging.version import InvalidVersion,Version;from packaging.version import parse as parse_version
+try:except ImportError:iy=None;bn=None
+try:import keyring
+except ImportError:keyring=None
+try:from requests import Session as RequestsSession,adapters;from requests.models import PreparedRequest,Response as RequestsResponse;from requests.auth import HTTPBasicAuth as RequestsHTTPBasicAuth;from requests import HTTPError as RequestsHTTPError;aw=True
+except ModuleNotFoundError:aw=False
+gK=jV.platform=='win32';aT=False;ct=False;bq='.whl';bL=('.tar.bz2','.tbz');cr=('.tar.xz','.txz','.tlz','.tar.lz','.tar.lzma');bR=('.zip',bq);bO=('.tar.gz','.tgz','.tar');au=bR+bL+bO+cr;ek=('git','hg','svn','bzr');aW=('sha1','sha224','sha384','sha256','sha512','md5');w=('text/html','application/vnd.pypi.simple.v1+html','application/vnd.pypi.simple.v1+json');bo=8192;aj=5;A=[('https','*','*'),('wss','*','*'),('*','localhost','*'),('*','127.0.0.0/8','*'),('*','::1/128','*'),('file','*','*')];ef=(httpx.HTTPError,)
+if aw:ef+=(RequestsHTTPError,)
+hH=hb.getLogger(__name__);T=gJ('T');_V=gJ('_V',bound='type[VersionControl]');fL=tuple[str,str];eW=fM[tuple[str,fM[str]]]
+if cq:from httpx._types import CertTypes,TimeoutTypes;dv=jU.SSLContext|bool|str
+    class hr(eY):class aS(fN):def __call__(self,jj,ff,iE):...
+    class bP(fN):def __call__(self,gc,ff,iE):...
+else:hr=dict
+def dN(iA):return {k:v[0] for k,v in bJ.parse_qs(iA).items()}
+def r(jY):if '://' not in jY:jY='ssh://'+jY;hM=gB(jY)
+        if ':' in hM.netloc:hK,_,eN=hM.netloc.rpartition(':');jp=f'/{eN}{hM.path}';jY=bJ.urlunparse(hM._replace(hK=hK,jp=jp))
+    return jY
+def dp(jm):return jm.split('[',1)[0]
+def L(hK,hU='https'):if hK.count(':')>=2 and '@' not in hK and ('[' not in hK):hK=f'[{hK}]'
+    return f'{hU}://{hK}'
+def dk(hK):jZ=L(hK);hM=gB(jZ);return (hM.hostname or '',hM.port)
+def dZ(jZ):assert jZ.startswith('file:'),f'You can only turn file:urls into filenames (not {jZ!r})';_,hK,jp,_,_=gC(jZ)
+    if not hK or hK=='localhost':hK=''
+    elif gK:hK='\\\\'+hK
+    else:raise ValueError(f'non-local file URIs are not supported on this platform:{jZ!r}')
+    jp=dr(hK+jp)
+    if gK and (not hK) and (len(jp)>=3) and (jp[0]=='/') and jp[1].isalpha() and (jp[2:4] in (':',':/')):jp=jp[1:]
+    return iI(jp)
+def bD(jm):jJ=gz(jm)[1].lower();return jJ in au
+def F(hK):iO,gd,jb=hK.rpartition('@')
+    if not gd:return (None,jb)
+    jB,gf,gr=iO.partition(':');return ((hn(jB),hn(gr) if gf else None),jb)
+@fy(maxsize=128)
+def at(jZ):hM=gB(jZ);iO,hK=F(hM.netloc)
+    if iO is None:return (None,jZ)
+    return (iO,bJ.urlunparse(hM._replace(hK=hK)))
+@fy(maxsize=128)
+def cW(jh,iB):return hn(jh).rstrip('/')==hn(iB).rstrip('/')
+def cY(jp):if not jp.is_absolute():return str(jp)
+    try:gu=jp.absolute().relative_to(iI.cwd())
+    except ValueError:return str(jp)
+    else:return str(gu)
+def gz(jp):iP,jJ=os.path.splitext(jp)
+    if iP.lower().endswith('.tar'):jJ=iP[-4:]+jJ;iP=iP[:-4]
+    return (iP,jJ)
+def dE(jw):try:gh=int(jw)
+    except (TypeError,ValueError):return 'size unknown'
+    if gh>1000000:return f'{gh/1000.0/1000:.1f} MB'
+    if gh>10000:return f'{int(gh/1000)} kB'
+    if gh>1000:return f'{gh/1000.0:.1f} kB'
+    return f'{int(gh)} bytes'
+def aF(gj,fV,hk=lambda _:1):ff=0
+    for jf in gj:try:yield jf
+        finally:ff+=hk(jf);fV(ff)
+def cV(*m):if not m:return ''
+    m=tuple(map(os.fspath,m));s1=min(m);s2=max(m)
+    for i,c in enumerate(s1):if c!=s2[i]:return s1[:i]
+    return s1
+def cd(jZ):global ct
+    if iy is None:return None
+    gg=httpx.URL(jZ).host
+    try:cB=iy(os.getenv('NETRC'))
+    except FileNotFoundError:return None
+    except (bn,OSError) as e:if not ct:hH.warning("Couldn't parse netrc because of%s:%s",type(e).__name__,e);ct=True
+        return None
+    je=cB.authenticators(gg)
+    if je is None:return None
+    return (je[0],je[2])
+def aZ(iY,gN):jT=gX.signature(iY);return gN in jT.parameters
+W=re.compile('(==|!=|<=|>=|<|>)(\\s*)([^,;\\s)]*)');@fy
+def ab(fE):def dd(iw):gp,_,ho=iw.groups()
+        if gp in ('==','!='):return iw.group(0)
+        if '.*' in ho:gF.warn('.*suffix can only be used with `==` or `!=` operators',FutureWarning,stacklevel=4);ho=ho.replace('.*','.0')
+            if gp in ('<','<='):gp='<'
+            elif gp in ('>','>='):gp='>='
+        elif '+' in ho:gF.warn('Local version label can only be used with `==` or `!=` operators',FutureWarning,stacklevel=4);ho=ho.split('+')[0]
+        return f'{gp}{ho}'
+    return W.sub(dd,fE)
+class cP(fP[T]):def __init__(self,iT):self._inner=iT
+    def __iter__(self):self._inner,jz=fx.tee(self._inner);return jz
+    def __len__(self):i=0
+        for _ in self:i+=1
+        return i
+    def __bool__(self):for _ in self:return True
+        return False
+    def __getitem__(self,ir):if ir<0:raise IndexError('Negative indices are not supported')
+        for i,jf in enumerate(self):if i==ir:return jf
+        raise IndexError('Index out of range')
+class fO(fN):@property
+    def gQ(self):...
+    def jg(self):...
+    def eJ(self,eq=None):...
+    @property
+    def cK(self):...
+    def bj(self):...
+class gH(fN):def jK(self,jZ,*,gW=None):...
+    def ja(self,jZ,*,gW=None):...
+    def ez(self,jZ,*,gW=None):...
+    def __hash__(self):...
+    def aq(self):...
+class bM(IteratorByteStream):def ih(self):self._stream.close()
+class aV(httpx.BaseTransport):def cf(self,hi):jj=iH(str(hi.url));jp=jj.file_path
+        if hi.method!='GET':return httpx.Response(status_code=405)
+        try:iD=os.stat(jp)
+        except OSError as exc:return httpx.Response(status_code=404,text=f'{type(jI).__name__}:{jI}')
+        else:gn=ik.utils.formatdate(iD.st_mtime,usegmt=True);cX=fz.guess_type(jp)[0] or 'text/plain';gW={'Content-Type':cX,'Content-Length':str(iD.st_size),'Last-Modified':gn};return httpx.Response(status_code=200,gW=gW,stream=bM(jp.open('rb')))
+def N(self):return self._uri_reference.scheme or self._uri_reference.host
+httpx.URL.is_absolute_url=property(N)
+class ei(httpx.Client):def __init__(self,*,cN=(),ia=True,iR=None,ip=True,iq=False,hG=DEFAULT_LIMITS,fH=True,hm=10.0,**hF):self._trusted_host_ports=set();aD=httpx.HTTPTransport(ia=False,iR=iR,ip=ip,iq=iq,hG=hG,fH=fH);hJ={'file://':aV()}
+        for jb in cN:gg,jq=dk(jb);self._trusted_host_ports.add((gg,jq));hJ[f'all://{jb}']=aD
+        hJ.update(hF.pop('mounts',{}));super().__init__(ia=ia,iR=iR,ip=ip,iq=iq,hG=hG,fH=fH,hm=hm,hJ=hJ,**hF)
+    def ez(self,jZ,*,gW=None):return self.stream('GET',jZ,gW=gW)
+    def aq(self):yield from A
+        for jb,jq in self._trusted_host_ports:yield ('*',jb,'*' if jq is None else str(jq))
+class fQ(ValueError):pass
+class bp(fQ):pass
+class du(RuntimeError):pass
+class aH(du):def __init__(self,jj,ga,hs):self.link=jj;self.expected=ga;self.actual=hs
+    def bf(self,jm):ga=self.expected[jm];hs=self.actual[jm];bw=f'Expected({jm}):';cy=f'  Actual({jm}):';jR='\n'+' '*len(bw);return f'{bw}{jR.join(ga)}\n{cy}{hs}'
+    def __str__(self):return f'Hash mismatch for {self.link.redacted}:\n'+'\n'.join((self.format_hash_item(jm) for jm in sorted(self.expected)))
+@dc.dataclass
+class iH:es=None;ec=None;bG=None;aB=None;hC=None;dX=None;ka=dc.field(init=False,default=None)
+    def __post_init__(self):ds=tuple((f'{hT}+' for hT in ek))
+        if self.url.startswith(ds):self.vcs,_,jZ=self.url.partition('+');self.normalized=f'{self.vcs}+{r(jZ)}'
+        else:self.normalized=self.url
+    def gO(self):return {'url':self.redacted,'comes_from':self.comes_from,'yank_reason':self.yank_reason,'requires_python':self.requires_python,'metadata':self.dist_info_link.url_without_fragment if self.dist_info_link else None}
+    def __ident(self):return (self.normalized,self.yank_reason,self.requires_python)
+    @bv
+    def hM(self):return gB(self.normalized)
+    def __repr__(self):return f'<Link {self.redacted} (from {self.comes_from})>'
+    def __hash__(self):return hash(self.__ident())
+    def __eq__(self,__o):return isinstance(__o,iH) and self.__ident()==__o.__ident()
+    @classmethod
+    def fq(cls,fk):jZ=hg.Path(fk).as_uri();return cls(jZ)
+    @property
+    def gY(self):return self.parsed.scheme=='file'
+    @property
+    def fk(self):return dZ(self.url_without_fragment)
+    @property
+    def hE(self):return self.vcs is not None
+    @property
+    def gc(self):jp=self.parsed.path.rsplit('@',1)[0];return os.path.basename(hn(jp))
+    @property
+    def cb(self):if self.dist_info_metadata:return type(self)(f'{self.url_without_fragment}.metadata',self.comes_from)
+        return None
+    @property
+    def gi(self):return self.filename.endswith('.whl')
+    @bv
+    def ai(self):return self.parsed._replace(fragment='').geturl()
+    @property
+    def dq(self):return self._fragment_dict.get('subdirectory')
+    @property
+    def bT(self):return dN(self.parsed.fragment)
+    @property
+    def gs(self):_,gd,jb=self.parsed.netloc.rpartition('@')
+        if not gd:return self.url_without_fragment
+        hK=f'***{gd}{jb}';return self.parsed._replace(hK=hK,fragment='').geturl()
+    def eQ(self):return at(self.normalized)
+    @property
+    def ft(self):return next((jm for jm in aW if jm in self._fragment_dict),None)
+    @property
+    def hash(self):if not self.hash_name:return None
+        return self._fragment_dict.get(self.hash_name)
+    @property
+    def fw(self):return self.yank_reason is not None
+    @property
+    def dH(self):if self.hashes:return {jm:[iF] for jm,iF in self.hashes.items()}
+        if self.hash_name:return {self.hash_name:[iQ(str,self.hash)]}
+        return None
+class eg:def __init__(self,hV,gs):self.secret=hV;self.redacted=gs
+    def __str__(self):return self.redacted
+    def __repr__(self):return f'<URL {str(self)!r}>'
+class bQ(jD.ABC):def __init__(self,fK=0):self.verbosity=fK
+    def dQ(self,jF,jG=None,fi=None,eL=True,dU=False,aa=()):jH=None
+        if fi:jH=dict(os.environ,**fi)
+        try:jF=[self.name,*jF];dD=eR.list2cmdline(map(str,jF));hH.debug('Running command%s',dD);hS=eR.run([v.secret if isinstance(v,eg) else v for v in jF],jG=str(jG) if jG else None,ic=True,stdout=eR.PIPE,stderr=eR.DEVNULL if dU else eR.STDOUT,jH=jH,text=True)
+        except eR.CalledProcessError as e:if e.returncode in aa:if eL:hH.debug(e.stdout.rstrip())
+                return eR.CompletedProcess(e.args,e.returncode,e.stdout)
+            raise du(e.output) from None
+        except FileNotFoundError:hH.debug(f"Cannot find `{self.name}`,PATH={os.environ.get('PATH')}");jM=f"Unable to find executable `{self.name}`,make sure it's installed in PATH.";raise FileNotFoundError(jM) from None
+        else:if eL:hH.debug(hS.stdout.rstrip())
+            return hS
+    def V(self,jr):ij,_=os.path.splitdrive(jr);return jr.startswith(os.path.sep) or bool(ij)
+    def z(self,jj):hM=jj.parsed;hU=hM.scheme.rsplit('+',1)[-1];hK,jB,gr=self.get_netloc_and_auth(hM.netloc,hU)
+        if gr is not None:gr=eg(gr,'***')
+        dn={'scheme':hM.scheme.rsplit('+',1)[-1],'netloc':hK,'fragment':''}
+        if '@' not in hM.path:jQ=None
+        else:jp,_,jQ=hM.path.rpartition('@')
+            if not jQ:raise fQ(f'The url {jj.redacted!r} has an empty revision (after @). You should specify a revision or remove the @ from the URL.')
+            dn['path']=jp
+        iM=self.make_auth_args(jB,iQ(eg,gr));jZ=hM._replace(**dn).geturl();eE=eg(jZ,iH(jZ).redacted);return (eE,jQ,iM)
+    def il(self,jj,gl):jZ,jQ,iM=self.get_url_and_rev_options(jj)
+        if not gl.exists():return self.fetch_new(gl,jZ,jQ,iM)
+        if not self.is_repository_dir(gl) or not cW(jZ.secret,self.get_remote_url(gl)):if not self.is_repository_dir(gl):hH.debug(f'{gl} is not a repository directory,removing it.')
+            else:eP=self.get_remote_url(gl);hH.debug(f'{gl} is a repository directory,but the remote url {eP!r} does not match the url {jZ!r}.')
+            hW.rmtree(gl);return self.fetch_new(gl,jZ,jQ,iM)
+        if self.is_commit_hash_equal(gl,jQ):hH.debug('Repository%s is already up-to-date',gl);return
+        self.update(gl,jQ,iM)
+    @jD.abstractmethod
+    def fj(self,gl,jZ,jQ,iM):...
+    @jD.abstractmethod
+    def hZ(self,gl,jQ,iM):...
+    @jD.abstractmethod
+    def ce(self,gl):...
+    @jD.abstractmethod
+    def dg(self,gl):...
+    def P(self,gl,jj):return False
+    def df(self,jQ):return [jQ] if jQ is not None else []
+    def af(self,gl,jQ):return False
+    def aQ(self,gl):return gl.joinpath(self.dir_name).exists()
+    def ao(self,hK,hU):return (hK,None,None)
+    def ch(self,jB,gr):return []
+class el:def __init__(self):self._registry={}
+    def gt(self,ka):self._registry[ka.name]=ka;return ka
+    def cm(self):self._registry.clear()
+    def dF(self,jm,fK=0):try:return self._registry[jm](fK=fK)
+        except KeyError:raise bp(jm) from None
+ea=el();@ea.register
+class jC(bQ):jm='git';fY='.git';ed=re.compile('^[a-fA-F0-9]{40}$');@staticmethod
+    def bE(jS):return bool(jC.HASH_REGEX.match(jS))
+    def bA(self):hS=self.run_command(['version'],dU=True,eL=False);hL=hS.stdout.strip();iw=re.match('git version (\\d+)\\.(\\d+)(?:\\.(\\d+))?',hL)
+        if not iw:raise du(f'Failed to get git version:{hL}')
+        return tuple((int(jo) for jo in iw.groups()))
+    def fj(self,gl,jZ,jQ,iM):dP=f' (revision:{jQ})' if jQ else '';hH.info('Cloning%s%s to%s',jZ,dP,cY(gl));jH=None
+        if self.verbosity<=0:im=('--quiet',);jH={'GIT_TERMINAL_PROMPT':'0'}
+        elif self.verbosity==1:im=()
+        else:im=('--verbose','--progress')
+        if self.get_git_version()>=(2,17):self.run_command(['clone','--filter=blob:none',*im,jZ,str(gl)],fi=jH)
+        else:self.run_command(['clone',*im,jZ,str(gl)],fi=jH)
+        if jQ is not None:if self._should_fetch(gl,jQ):self.run_command(['fetch','-q',jZ,jQ],jG=gl);gy=self._resolve_revision(gl,'FETCH_HEAD')
+            else:gy=self._resolve_revision(gl,jQ)
+        else:gy=self.get_revision(gl)
+        hH.info('Resolved%s to commit%s',jZ,gy);self.run_command(['reset','--hard','-q',gy],jG=gl);self._update_submodules(gl)
+    def aA(self,gl):if not gl.joinpath('.gitmodules').exists():return
+        self.run_command(['submodule','update','--init','-q','--recursive'],jG=gl)
+    def cx(self,iU,jQ):if jQ.startswith('refs/'):return True
+        if not self.looks_like_hash(jQ):return False
+        if self.has_commit(iU,jQ):return False
+        return True
+    def eC(self,gl,jQ):try:self.run_command(['rev-parse','-q','--verify',f'sha^{jQ}'],jG=gl)
+        except du:return False
+        else:return True
+    def hZ(self,gl,jQ,iM):self.run_command(['fetch','-q','--tags'],jG=gl)
+        if jQ is not None:if self._should_fetch(gl,jQ):jZ=self.get_remote_url(gl);self.run_command(['fetch','-q',jZ,jQ],jG=gl);gw=self._resolve_revision(gl,'FETCH_HEAD')
+            else:gw=self._resolve_revision(gl,jQ)
+        else:try:gw=self._resolve_revision(gl,'origin/HEAD')
+            except du:gw=self._resolve_revision(gl,'HEAD')
+        hH.info('Updating%s to commit%s',cY(gl),gw);self.run_command(['reset','--hard','-q',gw],jG=gl)
+    def ce(self,gl):hS=self.run_command(['config','--get-regexp','remote\\..*\\.url'],aa=(1,),jG=gl,dU=True,eL=False);hh=hS.stdout.splitlines()
+        try:de=hh[0]
+        except IndexError:raise du(f'Remote not found for {cY(gl)}') from None
+        for hR in hh:if hR.startswith('remote.origin.url '):de=hR;break
+        jZ=de.split(' ')[1];return self._git_remote_to_pip_url(jZ.strip())
+    def D(self,jZ):if '://' in jZ:return jZ
+        if os.path.exists(jZ):return iI(os.path.abspath(jZ)).as_uri()
+        return r(jZ)
+    def aL(self,gl,jQ):if jQ is None:bk=['HEAD']
+        else:bk=[jQ,f'origin/{jQ}']
+        eK=RuntimeError()
+        for fe in bk:try:hS=self.run_command(['rev-parse','--quiet','--verify',f'{fe}^{{commit}}'],jG=gl,dU=True,eL=False)
+            except du as e:eK=e;continue
+            return hS.stdout.strip()
+        hH.error('Unable to resolve:%s',jQ);raise eK
+    def dg(self,gl):return self._resolve_revision(gl,None)
+    def af(self,gl,jQ):return jQ is not None and self.get_revision(gl)==jQ
+    def P(self,gl,jj):_,jQ,_=self.get_url_and_rev_options(jj)
+        if jQ is None:return False
+        return self.is_commit_hash_equal(gl,jQ)
+@ea.register
+class eX(bQ):jm='hg';fY='.hg'
+    def fj(self,gl,jZ,jQ,iM):dP=f' (revision:{jQ})' if jQ else '';hH.info('Cloning hg%s%s to%s',jZ,dP,cY(gl))
+        if self.verbosity<=0:im=('--quiet',)
+        elif self.verbosity==1:im=()
+        elif self.verbosity==2:im=('--verbose',)
+        else:im=('--verbose','--debug')
+        self.run_command(['clone','--noupdate',*im,jZ,str(gl)]);self.run_command(['update',*im,*self.get_rev_args(jQ)],jG=gl)
+    def hZ(self,gl,jQ,iM):self.run_command(['pull','-q'],jG=gl);fW=['update','-q',*self.get_rev_args(jQ)];self.run_command(fW,jG=gl)
+    def dg(self,gl):bc=self.run_command(['parents','--template={node}'],eL=False,dU=True,jG=gl).stdout.strip();return bc
+    def ce(self,gl):jZ=self.run_command(['showconfig','paths.default'],eL=False,dU=True,jG=gl).stdout.strip()
+        if self._is_local_repository(jZ):jZ=iI(jZ).as_uri()
+        return jZ.strip()
+@ea.register
+class hq(bQ):jm='bzr';fY='.bzr'
+    def df(self,jQ):return ['-r',jQ] if jQ is not None else []
+    def fj(self,gl,jZ,jQ,iM):dP=f' (revision:{jQ})' if jQ else '';hH.info('Checking out%s%s to%s',jZ,dP,cY(gl))
+        if self.verbosity<=0:iX='--quiet'
+        elif self.verbosity==1:iX=''
+        else:iX=f"-{'v'*self.verbosity}"
+        fW=['branch',iX,*self.get_rev_args(jQ),jZ,str(gl)];self.run_command(fW)
+    def hZ(self,gl,jQ,iM):self.run_command(['pull','-q',*self.get_rev_args(jQ)],jG=gl)
+    def ce(self,gl):jA=self.run_command(['info'],eL=False,dU=True,jG=gl).stdout
+        for ji in jA.splitlines():ji=ji.strip()
+            for x in ('checkout of branch:','parent branch:'):if ji.startswith(x):jr=ji.split(x)[1]
+                    if self._is_local_repository(jr):return iI(jr).as_uri()
+                    return jr
+        raise du(f'Remote not found for {cY(gl)}')
+    def dg(self,gl):gy=self.run_command(['revno'],eL=False,dU=True,jG=gl).stdout;return gy.splitlines()[-1]
+    def z(self,jj):eE,jQ,iM=super().get_url_and_rev_options(jj)
+        if eE.secret.startswith('ssh://'):eE.secret=f'bzr+{eE.secret}';eE.redacted=f'bzr+{eE.redacted}'
+        return (eE,jQ,iM)
+bs=re.compile('url="([^"]+)"');dx=re.compile('committed-rev="(\\d+)"');Y=re.compile('\\s*revision="(\\d+)"');Z=re.compile('<url>(.*)</url>')
+def aE(jp):for dl in ('pyproject.toml','setup.py'):if (jp/dl).exists():return True
+    return False
+@ea.register
+class ej(bQ):jm='svn';fY='.svn'
+    def ao(self,hK,hU):if hU=='ssh':return (hK,None,None)
+        fI,hK=F(hK)
+        if not fI:return (hK,None,None)
+        return (hK,fI[0],fI[1])
+    def df(self,jQ):return ['-r',jQ] if jQ is not None else []
+    def ch(self,jB,gr):iM=[]
+        if jB is not None:iM.extend(['--username',jB])
+        if gr is not None:iM.extend(['--password',gr])
+        return iM
+    def fj(self,gl,jZ,jQ,iM):dP=f' (revision:{jQ})' if jQ else '';hH.info('Checking out%s%s to%s',jZ,dP,cY(gl))
+        if self.verbosity<=0:iX='--quiet'
+        else:iX=''
+        fW=['checkout',iX,'--non-interactive',*self.get_rev_args(jQ),jZ,str(gl)];self.run_command(fW)
+    def hZ(self,gl,jQ,iM):fW=['update','--non-interactive',*self.get_rev_args(jQ),str(gl)];self.run_command(fW)
+    def ce(self,gl):cI=gl
+        while not aE(gl):cG=gl;gl=gl.parent
+            if gl==cG:raise du(f'Could not find Python project for directory {cI} (tried all parent directories)')
+        jZ,_=self._get_svn_url_rev(gl)
+        if jZ is None:raise du(f'Remote not found for {gl}')
+        return jZ
+    def dg(self,gl):gy=0
+        for iP,iV,_ in os.walk(gl):if self.dir_name not in iV:iV[:]=[];continue
+            iV.remove(self.dir_name);eu=os.path.join(iP,self.dir_name,'entries')
+            if not os.path.exists(eu):continue
+            hy,gk=self._get_svn_url_rev(iI(iP))
+            if iI(iP)==gl:assert hy is not None;iP=hy+'/'
+            elif not hy or not hy.startswith(iP):iV[:]=[];continue
+            gy=max(gy,gk)
+        return str(gy)
+    def ba(self,gl):da=os.path.join(gl,self.dir_name,'entries')
+        if os.path.exists(da):with open(da) as f:iT=f.read()
+        else:iT=''
+        jZ=None
+        if iT.startswith('8') or iT.startswith('9') or iT.startswith('10'):gR=list(map(str.splitlines,iT.split('\n\x0c\n')));del gR[0][0];jZ=gR[0][3];jt=[int(d[9]) for d in gR if len(d)>9 and d[9]]+[0]
+        elif iT.startswith('<?xml'):iw=bs.search(iT)
+            if not iw:raise ValueError(f'Badly formatted data:{iT!r}')
+            jZ=iw.group(1);jt=[int(m.group(1)) for m in dx.finditer(iT)]+[0]
+        else:try:kb=self.run_command(['info','--xml',str(gl)],eL=False,dU=True).stdout;iw=Z.search(kb);assert iw is not None;jZ=iw.group(1);jt=[int(m.group(1)) for m in Y.finditer(kb)]
+            except du:jZ,jt=(None,[])
+        if jt:jQ=max(jt)
+        else:jQ=0
+        return (jZ,jQ)
+cu=re.compile('(.+)_(\\d+)_(\\d+)_(.+)')
+def Q(dt):return ''.join(map(str,dt[:2]))
+def bU(iL):iw=cu.match(iL)
+    if iw:jm,iv,ix,dy=iw.groups();dL=(int(iv),int(ix));hu=['{}_{}'.format(jm,iL[len('macosx_'):]) for iL in mac_platforms(dL,dy)]
+    else:hu=[iL]
+    return hu
+def h(iL):hu=[iL];dA,fR,dB=iL.partition('_')
+    if dA=='manylinux2014':if dB in {'i686','x86_64'}:hu.append('manylinux2010'+fR+dB);hu.append('manylinux1'+fR+dB)
+    elif dA=='manylinux2010':hu.append('manylinux1'+fR+dB)
+    return hu
+def J(iL):dA,*_=iL.partition('_')
+    if iL.startswith('macosx'):hu=bU(iL)
+    elif dA in ['manylinux2014','manylinux2010']:hu=h(iL)
+    else:hu=[iL]
+    return hu
+def q(fB):if not fB:return None
+    jv=set();hS=[]
+    for p in fB:if p in jv:continue
+        fb=[c for c in J(p) if c not in jv];jv.update(fb);hS.extend(fb)
+    return hS
+def al(ho):if len(ho)>1:return (int(ho[0]),int(ho[1:]))
+    return (int(ho[0]),)
+def y(cg=None,ho=None):if cg is None:cg=interpreter_name()
+    if ho is None:ho=interpreter_version()
+    return f'{cg}{ho}'
+def cF(ho=None,fB=None,jd=None,iJ=None):fF=[];ci=None
+    if ho is not None:ci=al(ho)
+    dI=y(jd,ho);fB=q(fB);eI=(jd or interpreter_name())=='cp'
+    if eI:fF.extend(cpython_tags(ci=ci,iJ=iJ,fB=fB))
+    else:fF.extend(generic_tags(dI=dI,iJ=iJ,fB=fB))
+    fF.extend(compatible_tags(ci=ci,dI=dI,fB=fB));return fF
+def O(fE):return any((s.operator in ('==','===') for s in fE))
+def l(fZ,bZ):for i,c in enumerate(fZ):if canonicalize_name(fZ[:i])==bZ and c in {'-','_'}:return fZ[i+1:]
+    return None
+class aI(ValueError):pass
+@dc.dataclass
+class cQ:hP=None;iJ=None;jd=None;fB=None
+    def __post_init__(self):self._valid_tags=None
+    def ck(self):if self._valid_tags is None:if self.py_ver is None:eO=None
+            else:eO=''.join(map(str,self.py_ver[:2]))
+            self._valid_tags=cF(eO,self.platforms,self.impl,self.abis)
+        return self._valid_tags
+@dc.dataclass(frozen=True)
+class gI:jj=dc.field(repr=False)
+    def gO(self):return {'name':self.name,'version':self.version,'link':self.link.as_json()}
+@dc.dataclass(frozen=True)
+class cn:dM=dc.field(default_factory=set);fA=dc.field(default_factory=set)
+    def an(self,bZ):bt={'binary','source'}
+        if bZ in self.only_binary:bt.discard('source')
+        elif bZ in self.no_binary:bt.discard('binary')
+        elif ':all:' in self.only_binary:bt.discard('source')
+        elif ':all:' in self.no_binary:bt.discard('binary')
+        return bt
+    def cT(self,jj,dm):bt=self.get_allowed_formats(canonicalize_name(dm))
+        if jj.is_wheel and 'binary' not in bt:raise aI(f'binary wheel is not allowed for {dm}')
+        if not jj.is_wheel and 'source' not in bt:raise aI(f'source distribution is not allowed for {dm}')
+@dc.dataclass
+class eU:cM=dc.field(default_factory=cQ);ae=False;cS=False;cc=dc.field(default_factory=cn);aC=None
+    def __post_init__(self):self._canonical_name=canonicalize_name(self.package_name)
+    def cU(self,jj):if jj.yank_reason is not None and (not self.allow_yanked):ec=f'due to {jj.yank_reason}' if jj.yank_reason else '';raise aI(f'Yanked {ec}')
+    def aN(self,jj):if self.exclude_newer_than is not None:if jj.upload_time is None:raise aI('Upload time is not available but exclude_newer_than is set')
+            if jj.upload_time>self.exclude_newer_than:raise aI(f'Upload time is newer than {self.exclude_newer_than}')
+    def M(self,jj):if not self.ignore_compatibility and jj.requires_python:hP=self.target_python.py_ver or jV.version_info[:2];eO='.'.join((str(v) for v in hP))
+            try:bG=SpecifierSet(ab(jj.requires_python))
+            except InvalidSpecifier as e:raise aI(f'Invalid requires-python:{jj.requires_python}') from e
+            if not bG.contains(eO,True):raise aI("The target python version({}) doesn't match the requires-python specifier {}".format(eO,jj.requires_python))
+    def aG(self,jy):if self.ignore_compatibility:return True
+        return not jy.isdisjoint(self.target_python.supported_tags())
+    def bb(self,gc):if self.ignore_compatibility:return
+        jy=parse_wheel_filename(gc)[-1]
+        if not self.validate_wheel_tag(jy):raise aI(f'The wheel tags in {gc} are not compatible')
+    def cD(self,jj):try:self.format_control.check_format(jj,self.package_name);self.check_yanked(jj);self.check_upload_time(jj);self.check_requires_python(jj);ho=None
+            if jj.is_wheel:try:eS=parse_wheel_filename(jj.filename)
+                except (InvalidWheelFilename,InvalidVersion) as e:raise aI(str(e)) from None
+                if self._canonical_name!=eS[0]:raise aI(f"The package name doesn't match {eS[0]}")
+                self.check_wheel_tags(jj.filename);ho=str(eS[1])
+            else:if jj._fragment_dict.get('egg'):fZ=dp(jj._fragment_dict['egg'])
+                else:fZ,jJ=gz(jj.filename)
+                    if not jJ:raise aI(f'Not a file:{jj.filename}')
+                    if jJ not in au:raise aI(f'Unsupported archive format:{jj.filename}')
+                bN=os.getenv('UNEARTH_LOOSE_FILENAME','false').lower() in ('1','true')
+                if bN:ho=l(fZ,self._canonical_name)
+                    if ho is None:raise aI(f'Missing version in the filename:{fZ}')
+                else:bx,dG,ho=fZ.rpartition('-')
+                    if not dG:raise aI(f'Missing version in the filename:{fZ}')
+                    if canonicalize_name(bx)!=self._canonical_name:raise aI(f"The package name doesn't match {fZ},set env var UNEARTH_LOOSE_FILENAME=1 to allow legacy filename.")
+                try:Version(ho)
+                except InvalidVersion:raise aI(f'Invalid version in the filename {fZ}:{ho}') from None
+        except aI as e:hH.debug('Skipping link%s:%s',jj,e);return None
+        return gI(jm=self.package_name,ho=ho,jj=jj)
+def be(hf,dO,aM=None):if dO.name and canonicalize_name(hf.name)!=canonicalize_name(dO.name):hH.debug("Skipping package%s:name doesn't match%s",hf,dO.name);return False
+    if hf.version and (not dO.specifier.contains(hf.version,prereleases=aM)):hH.debug("Skipping package%s:version doesn't match%s",hf,dO.specifier);return False
+    return True
+def eZ(jj,ft,hj):hB=gV.new(ft)
+    with hj.get_stream(jj.normalized) as js:for ig in js.iter_bytes(eq=8192):hB.update(ig)
+    hx=hB.hexdigest()
+    if not jj.hashes:jj.hashes={}
+    jj.hashes[ft]=hx;return hx
+def bK(hf,hC,hj):if not hC:return True
+    jj=hf.link;dK=jj.hash_option
+    if dK:for ft,bY in hC.items():if ft in dK:eA=dK[ft][0]
+                if eA not in bY:return False
+                return True
+    ft,bY=next(iter(hC.items()));eA=eZ(jj,ft,hj);return eA in bY
+class aU(Exception):pass
+class eV(eh):class bm(ee):def __init__(self):super().__init__();self.base_url=None;self.anchors=[]
+    def bB(self,jW,ib):if jW=='base' and self.base_url is None:fU=dict(ib).get('href')
+            if fU is not None:self.base_url=fU
+        elif jW=='a':self.anchors.append(dict(ib))
+def S(gL,hs):return gL=='*' or gL==hs
+def bh(gS,gl):_,_,hU=gl.parsed.scheme.rpartition('+');jb,jq=(gl.parsed.hostname or '',gl.parsed.port)
+    for cL,dS,dT in gS.iter_secure_origins():if not S(cL,hU):continue
+        try:iK=fv.ip_address(jb);he=fv.ip_network(dS)
+        except ValueError:if not S(dS,jb):continue
+        else:if iK not in he:continue
+        if not S(dT,'*' if jq is None else str(jq)):continue
+        return True
+    hH.warning('Skipping%s for not being trusted,please add it to `trusted_hosts` list',gl.redacted);return False
+def bF(jn):hN=bm();hN.feed(jn.content.decode(jn.encoding or 'utf-8'));fU=hN.base_url or jn.link.url_without_fragment
+    for ht in hN.anchors:jc=ht.get('href')
+        if jc is None:continue
+        jZ=bJ.urljoin(fU,jc);bG=ht.get('data-requires-python');ec=ht.get('data-yanked');cH=ht.get('data-core-metadata',ht.get('data-dist-info-metadata'));aB=None
+        if cH:ft,ge,eD=cH.partition('=')
+            if ge:aB={ft:eD}
+            else:aB=True
+        yield iH(jZ,fU,ec=ec,bG=bG,aB=aB)
+def ar(jn):iT=jg.loads(jn.content);fU=jn.link.url_without_fragment
+    for iW in iT.get('files',[]):jZ=iW.get('url')
+        if not jZ:continue
+        jZ=bJ.urljoin(fU,jZ);bG=iW.get('requires-python');ec=iW.get('yanked') or None;aB=iW.get('core-metadata',iW.get('data-dist-info-metadata'));hC=iW.get('hashes');bI=iW.get('upload-time');dX=None
+        if bI:dX=fX.fromisoformat(bI.replace('Z','+00:00'))
+        yield iH(jZ,fU,ec=ec,bG=bG,aB=aB,hC=hC,dX=dX)
+def cs(gb):return fz.guess_type(gb,strict=False)[0]=='text/html'
+def az(hj,gl,gW=None):if bD(gl.filename):C(hj,gl)
+    js=hj.get(gl.normalized,gW={'Accept':','.join(['application/vnd.pypi.simple.v1+json','application/vnd.pypi.simple.v1+html; q=0.1','text/html; q=0.01']),**(gW or {})});aK(js);n(js);return js
+def C(hj,gl):if gl.parsed.scheme not in {'http','https'}:raise aU('NotHTTP:the file looks like an archive but its content-type cannot be checked by a HEAD request.')
+    js=hj.head(gl.url);aK(js);n(js)
+def aK(js):if hasattr(js,'reason'):hQ=js.reason
+    else:hQ=js.reason_phrase
+    if isinstance(hQ,bytes):try:hQ=hQ.decode('utf-8')
+        except UnicodeDecodeError:hQ=hQ.decode('iso-8859-1')
+    if 400<=js.status_code<500:raise aU(f'Client Error({js.status_code}):{hQ}')
+    if 500<=js.status_code<600:raise aU(f'Server Error({js.status_code}):{hQ}')
+def n(js):cX=js.headers.get('Content-Type','Unknown');ca=cX.lower()
+    if ca.startswith(w):return
+    raise aU(f"Content-Type unsupported:{cX}. The only supported are {','.join(w)}.")
+def ev(hj,gl,gW=None):if gl.is_vcs:raise aU('It is a VCS link.')
+    js=az(hj,gl,gW);ey=getattr(js,'from_cache',False);eo=' (from cache)' if ey else '';hH.debug('Fetching HTML page%s%s',gl.redacted,eo);return eV(iH(str(js.url)),js.content,js.encoding,js.headers['Content-Type'])
+def o(hj,gl,gW=None):if not bh(hj,gl):return []
+    try:jn=ev(hj,gl,gW)
+    except aU as e:hH.warning('Failed to collect links from%s:%s',gl.redacted,e);return []
+    else:ca=jn.content_type.lower()
+        if ca.startswith('application/vnd.pypi.simple.v1+json'):return ar(jn)
+        return bF(jn)
+def j(hj,gl,hz=False,gW=None):hH.debug('Collecting links from%s',gl.redacted)
+    if gl.is_file:jp=gl.file_path
+        if jp.is_dir():if hz:for ie in jp.iterdir():gb=ie.as_uri()
+                    if cs(gb):yield from o(hj,iH(gb),gW)
+                    else:yield iH(gb)
+            else:eG=iH(jp.joinpath('index.html').as_uri());yield from o(hj,eG,gW)
+        elif cs(str(jp)):yield from o(hj,gl,gW)
+        else:yield gl
+    else:if bh(hj,gl) and (not gl.is_vcs):yield gl
+        yield from o(hj,gl)
+class ak(metaclass=jD.ABCMeta):@jD.abstractmethod
+    def cE(self,jZ,gD):...
+    @jD.abstractmethod
+    def cj(self,jZ,gD,gr):...
+    @jD.abstractmethod
+    def bd(self,jZ,gD):...
+class H(ak):def __init__(self):self.keyring=keyring
+    def cE(self,jZ,gD):if hasattr(self.keyring,'get_credential'):hH.debug('Getting credentials from keyring for url:%s',jZ);iS=self.keyring.get_credential(jZ,gD)
+            if iS is not None:return (iS.username,iS.password)
+        if gD is None:gD='__token__'
+        hH.debug('Getting password from keyring for:%s@%s',gD,jZ);gr=self.keyring.get_password(jZ,gD)
+        if gr:return (gD,gr)
+        return None
+    def cj(self,jZ,gD,gr):self.keyring.set_password(jZ,gD,gr)
+    def bd(self,jZ,gD):self.keyring.delete_password(jZ,gD)
+class av(ak):def __init__(self,jF):self.keyring=jF
+    def cE(self,jZ,gD):hH.debug('Getting credentials from keyring CLI for url:%s',jZ);iS=self._get_secret(jZ,gD or '',jl='creds')
+        if iS is not None:gD,gr=iS.splitlines();return (gD,gr)
+        if gD is None:gD='__token__'
+        hH.debug('Getting password from keyring CLI for%s@%s',gD,jZ);gr=self._get_secret(jZ,gD)
+        if gr is not None:return (gD,gr)
+        return None
+    def cj(self,jZ,gD,gr):return self._set_password(jZ,gD,gr)
+    def bd(self,jZ,gD):jF=[self.keyring,'del',jZ,gD];jH=dict(os.environ,PYTHONIOENCODING='utf-8');eR.run(jF,jH=jH,ic=True)
+    def dw(self,do,gD,jl='password'):jF=[self.keyring,f'--mode={jl}','get',do,gD];jH=dict(os.environ,PYTHONIOENCODING='utf-8');jP=eR.run(jF,stdin=eR.DEVNULL,capture_output=True,jH=jH)
+        if jP.returncode:return None
+        return jP.stdout.decode('utf-8').strip(os.linesep)
+    def cv(self,do,gD,gr):if self.keyring is None:return None
+        jF=[self.keyring,'set',do,gD];hD=(gr+os.linesep).encode('utf-8');jH=dict(os.environ,PYTHONIOENCODING='utf-8');eR.run(jF,input=hD,jH=jH,ic=True)
+def ad():if aT:return None
+    try:return H()
+    except ImportError:pass
+    except Exception as exc:hH.warning('Importing keyring failed:%s,trying to find a keyring executable.',jI)
+    dJ=hW.which('keyring')
+    if dJ is not None:return av(dJ)
+    return None
+def bg(jZ,gD):if not jZ:return None
+    bi=ad()
+    if bi is None:return None
+    try:return bi.get_auth_info(jZ,gD)
+    except Exception as exc:hH.warning('Keyring is skipped due to an exception:%s',str(jI));global aT;aT=True;return None
+class R(httpx.Auth):def __init__(self,fD=True,eH=()):self.prompting=fD;self.index_urls=list(eH);self._cached_passwords={};self._credentials_to_save=None
+    def t(self,jZ):if not jZ or not self.index_urls:return (None,None)
+        hY=gC(jZ.rstrip('/')+'/');ep=[]
+        for ir in self.index_urls:ir=ir.rstrip('/')+'/';iO,dY=at(ir);hM=gC(dY)
+            if hM==hY:return (iO,ir)
+            if hY.netloc==hM.netloc:ep.append(gC(ir))
+        if not ep:return (None,None)
+        en=max(ep,key=lambda x:cV(x.path,hY.path).rfind('/'));ir=en.geturl();return (at(ir)[0],ir)
+    def U(self,dh,*,dz=True,cA=False):iO,jZ=at(dh);hK=gB(jZ).netloc;gD,gr=(None,None)
+        if iO:gD,gr=iO
+            if gr is not None:hH.debug('Found credentials in url for%s',hK);return iQ(fL,iO)
+        if aZ(self._get_auth_from_index_url,'netloc'):eF,fu=self._get_auth_from_index_url(hK)
+        else:eF,fu=self._get_auth_from_index_url(jZ)
+        if fu:hH.debug('Found index url%s',fu)
+            if eF is not None:if eF[1] is not None:hH.debug('Found credentials in index url for%s',hK);return iQ(fL,eF)
+                if gD is None:gD=eF[0]
+        if dz:eM=cd(dh)
+            if eM:hH.debug('Found credentials in netrc for%s',hK);return iQ(fL,eM)
+        if cA:gZ=bg(fu,gD) or bg(hK,gD)
+            if gZ:hH.debug('Found credentials in keyring for%s',hK);return gZ
+        return (gD,gr)
+    def u(self,dh):_,jZ=at(dh);hK=gB(jZ).netloc;gD,gr=self._get_new_credentials(dh,dz=True,cA=False)
+        if (gD is None or gr is None) and hK in self._cached_passwords:un,pw=self._cached_passwords[hK]
+            if gD is None or gD==un:gD,gr=(un,pw)
+        if gD is not None or gr is not None:self._cached_passwords[hK]=(gD or '',gr or '')
+        return (jZ,gD,gr)
+    def __call__(self,jO):if not aw:raise RuntimeError('requests is required for PreparedRequest support')
+        jZ,gD,gr=self._get_url_and_credentials(iQ(str,jO.url));jO.url=jZ
+        if gD is not None and gr is not None:jO=RequestsHTTPBasicAuth(gD,gr)(jO)
+        jO.register_hook('response',self.handle_401);return jO
+    def fc(self,hi):jZ,gD,gr=self._get_url_and_credentials(str(hi.url));hi.url=httpx.URL(jZ)
+        if gD is not None and gr is not None:em=httpx.BasicAuth(gD,gr);hi=next(em.auth_flow(hi))
+        gx=(yield hi)
+        if gx.status_code!=401:return
+        gD,gr=self._get_new_credentials(jZ,dz=False,cA=True);ju=False;hK=gx.url.netloc.decode()
+        if gr is None:if not self.prompting:return
+            if aZ(self._prompt_for_password,'username'):gD,gr,ju=self._prompt_for_password(hK,gD)
+            else:gD,gr,ju=self._prompt_for_password(hK)
+        self._credentials_to_save=None
+        if gD is not None and gr is not None:self._cached_passwords[hK]=(gD,gr)
+            if ju and self._should_save_password_to_keyring():self._credentials_to_save=(hK,gD,gr)
+        em=httpx.BasicAuth(gD or '',gr or '');hi=next(em.auth_flow(hi));gx=(yield hi);self.warn_on_401(gx)
+        if self._credentials_to_save:self.save_credentials(gx)
+    def X(self,hK,gD=None):if gD is None:gD=input(f'User for {hK}:');iO=bg(hK,gD)
+            if iO and iO[0] is not None and (iO[1] is not None):return (*iO,False)
+        else:hH.info('Username:%s',gD)
+        if not gD:return (None,None,False)
+        gr=gT.getpass('Password:');return (gD,gr,True)
+    def b(self):if ad() is None:return False
+        return input('Save credentials to keyring [y/N]:')=='y'
+    def eB(self,js,**hF):if not aw:return js
+        if js.status_code!=401:return js
+        hM=gB(iQ(str,js.url));gD,gr=self._get_new_credentials(js.url,dz=False,cA=True);ju=False
+        if gr is None:if not self.prompting:return js
+            if aZ(self._prompt_for_password,'username'):gD,gr,ju=self._prompt_for_password(hM.netloc,gD)
+            else:gD,gr,ju=self._prompt_for_password(hM.netloc)
+        self._credentials_to_save=None
+        if gD is not None and gr is not None:self._cached_passwords[hM.netloc]=(gD,gr)
+            if ju and self._should_save_password_to_keyring():self._credentials_to_save=(hM.netloc,gD,gr)
+        js.content;js.raw.release_conn();jO=RequestsHTTPBasicAuth(gD or '',gr or '')(js.request);jO.register_hook('response',self.warn_on_401)
+        if self._credentials_to_save:jO.register_hook('response',self.save_credentials)
+        go=js.connection.send(jO,**hF);go.history.append(js);return go
+    def eb(self,js,**hF):if js.status_code==401:hH.warning('%s Error,Credentials not correct for%s',js.status_code,js.request.url)
+    def bl(self,js,**hF):bi=ad();assert bi is not None,'should never reach here without keyring';ii=self._credentials_to_save;self._credentials_to_save=None
+        if ii and js.status_code<400:try:hH.info('Saving credentials to keyring');bi.save_auth_info(*ii)
+            except Exception:hH.exception('Failed to save credentials')
+def E(jj,ff,iE):pass
+def ag(gc,ff,iE):pass
+def a(jp):os.chmod(jp,511&~os.umask(0)|73)
+def G(je):jl=je.external_attr>>16;return bool(jl and jx.S_ISREG(jl) and jl&73)
+def ap(fg,jp):try:iI(jp).relative_to(fg)
+    except ValueError:return False
+    return True
+def aR(jp):jp=jp.lstrip('/').lstrip('\\')
+    if '/' in jp and ('\\' in jp and jp.find('/')<jp.find('\\') or '\\' not in jp):return jp.split('/',1)
+    if '\\' in jp:return jp.split('\\',1)
+    return [jp,'']
+def bC(iz):cC=None
+    for jp in iz:hO,_=aR(jp)
+        if not hO:return False
+        if cC is None:cC=hO
+        elif hO!=cC:return False
+    return True
+class co:def __init__(self,di,hC):if hC is not None:hC={k:sorted(iF) for k,iF in hC.items()}
+        self.allowed=hC;self.package_link=di;self.got={}
+        if hC is not None:for jm in hC:try:self.got[jm]=gV.new(jm)
+                except (TypeError,ValueError):raise du(f'Unknown hash name:{jm!r}') from None
+    def hZ(self,ig):for hB in self.got.values():hB.update(ig)
+    def gE(self):if not self.allowed:return
+        iZ={}
+        for jm,fs in self.allowed.items():jL=self.got[jm].hexdigest()
+            if jL in fs:return
+            iZ[jm]=jL
+        raise aH(self.package_link,self.allowed,iZ)
+    def cO(self,jp):with jp.open('rb') as f:for ig in iter(lambda:f.read(bo),b''):self.update(ig)
+        self.validate()
+def aJ(jp,hC):if not jp.is_file():return False
+    try:co(iH.from_path(jp),hC).validate_path(jp)
+    except aH:hH.debug("File exists at%s,but the hashes don't match",jp);jp.unlink();return False
+    hH.debug('The file is already downloaded:%s',jp);return True
+def bW(gc,gl,gv):os.makedirs(gl,exist_ok=True);iG=open(gc,'rb')
+    with hp.ZipFile(iG,allowZip64=True) as zip:ha=bC(zip.namelist());fV=fr.partial(gv,gc,iE=len(zip.infolist()))
+        for je in aF(zip.infolist(),fV):jm=je.filename;fn=jm
+            if ha:fn=aR(jm)[1]
+            fn=os.path.join(gl,fn);dir=os.path.dirname(fn)
+            if not ap(gl,fn):hd=f'The zip file ({gc}) has a file ({fn}) trying to install outside target directory ({gl})';raise du(hd)
+            if fn.endswith('/') or fn.endswith('\\'):os.makedirs(fn,exist_ok=True)
+            else:os.makedirs(dir,exist_ok=True)
+                with zip.open(jm) as fp,open(fn,'wb') as hw:hW.copyfileobj(fp,hw)
+                if G(je):a(fn)
+def bV(gc,gl,gv):os.makedirs(gl,exist_ok=True);gm=str(gc).lower()
+    if gm.endswith('.gz') or gm.endswith('.tgz'):jl='r:gz'
+    elif gm.endswith(bL):jl='r:bz2'
+    elif gm.endswith(cr):jl='r:xz'
+    elif gm.endswith('.tar'):jl='r'
+    else:hH.warning('Cannot determine compression type for file%s',gc);jl='r:*'
+    with hl.open(gc,jl,encoding='utf-8') as jX:ha=bC([hI.name for hI in jX.getmembers()]);fV=fr.partial(gv,gc,iE=len(jX.getmembers()))
+        for hI in aF(jX.getmembers(),fV):fn=hI.name
+            if ha:fn=aR(fn)[1]
+            jp=os.path.join(gl,fn)
+            if not ap(gl,jp):hd=f'The tar file ({gc}) has a file ({jp}) trying to install outside target directory ({gl})';raise du(hd)
+            if hI.isdir():os.makedirs(jp,exist_ok=True)
+            elif hI.issym():try:jX._extract_member(hI,jp)
+                except Exception as exc:hH.warning('In the tar file%s the member%s is invalid:%s',gc,hI.name,jI);continue
+            else:try:fp=jX.extractfile(hI)
+                except (KeyError,AttributeError) as exc:hH.warning('In the tar file%s the member%s is invalid:%s',gc,hI.name,jI);continue
+                os.makedirs(os.path.dirname(jp),exist_ok=True);assert fp is not None
+                with open(jp,'wb') as hw:hW.copyfileobj(fp,hw)
+                fp.close();jX.utime(hI,jp)
+                if hI.mode&73:a(jp)
+def cl(gM,iU,gv=ag):cX=fz.guess_type(str(gM))[0]
+    if cX=='application/zip' or hp.is_zipfile(gM) or gM.suffix.lower() in bR:bW(gM,iU,gv=gv)
+    elif cX=='application/x-gzip' or hl.is_tarfile(gM) or gM.suffix.lower() in bO+cr+bL:bV(gM,iU,gv=gv)
+    else:raise du(f'Unknown archive type:{gM.name}')
+def dW(hj,jj,cZ,gl,hC=None,fK=0,aO=E,bH=ag):gl.parent.mkdir(parents=True,exist_ok=True)
+    if jj.is_vcs:gP=ea.get_backend(iQ(str,jj.vcs),fK=fK);aO(jj,0,1);gP.fetch(jj,gl);aO(jj,1,1);return gl
+    fJ=co(jj,hC)
+    if jj.is_file:if jj.file_path.is_dir():hH.info('The file%s is a local directory,use it directly',cY(jj.file_path));return jj.file_path
+        fT=jj.file_path;fJ.validate_path(fT)
+    else:fT=cZ/jj.filename
+        if not aJ(fT,hC):with hj.get_stream(jj.normalized) as js:try:js.raise_for_status()
+                except ef as e:raise du(f'Download failed:{e}') from None
+                try:iE=int(js.headers['Content-Length'])
+                except (KeyError,ValueError,TypeError):iE=None
+                if getattr(js,'from_cache',False):hH.info('Using cached%s',jj)
+                else:jw=dE(js.headers.get('Content-Length',''));hH.info('Downloading%s (%s)',jj,jw)
+                with fT.open('wb') as f:fV=fr.partial(aO,jj,iE=iE)
+                    for ig in aF(js.iter_bytes(eq=bo),fV,hk=len):if ig:fJ.update(ig);f.write(ig)
+            fJ.validate()
+    if jj.is_wheel:if jj.is_file:return fT
+        dV=gl/jj.filename
+        if dV!=fT:os.replace(fT,dV)
+        return dV
+    cl(fT,gl,gv=bH);return gl
+class eT(eh):def I(hj):if not aw:return
+    if isinstance(hj,RequestsSession):gF.warn('The legacy requests.Session is used,which is deprecated and will be removed in the next release. Please use `httpx.Client` instead.',DeprecationWarning,stacklevel=2)
+class cp:def __init__(self,hj=None,*,eH=(),ew=(),cN=(),cM=None,ae=False,fA=(),dM=(),cJ=(),ah=False,fK=0,aC=None):self.sources=[]
+        for jZ in eH:self.add_index_url(jZ)
+        for jZ in ew:self.add_find_links(jZ)
+        if not self.sources:self.add_index_url('https://pypi.org/simple/')
+        self.target_python=cM or cQ();self.ignore_compatibility=ae;self.no_binary={canonicalize_name(jm) for jm in fA};self.only_binary={canonicalize_name(jm) for jm in dM};self.prefer_binary={canonicalize_name(jm) for jm in cJ};self.trusted_hosts=cN;I(hj);self._session=hj;self.respect_source_order=ah;self.verbosity=fK;self.exclude_newer_than=aC;self.headers={};self._tag_priorities={jW:i for i,jW in enumerate(self.target_python.supported_tags())}
+    @property
+    def hj(self):if self._session is None:eH=[hX['url'] for hX in self.sources if hX['type']=='index'];hj=ei(cN=self.trusted_hosts);hj.auth=R(eH=eH);hv.register(hj.close);self._session=hj
+        return self._session
+    def cz(self,jZ):self.sources.append({'url':jZ,'type':'index'})
+    def bX(self,jZ):self.sources.append({'url':jZ,'type':'find_links'})
+    def bu(self,dj,cS=False):cc=cn(fA=self.no_binary,dM=self.only_binary);return eU(dj=dj,cM=self.target_python,ae=self.ignore_compatibility,cS=cS,cc=cc,aC=self.exclude_newer_than)
+    def B(self,fu,dj):jZ=fC.join(fu,canonicalize_name(dj))+'/';return self._build_find_link(jZ)
+    def aX(self,fm):if os.path.exists(fm):return iH.from_path(os.path.abspath(fm))
+        if '://' in fm:return iH(fm)
+        raise ValueError(f'Invalid find link or non-existing path:{fm}')
+    def br(self,iu,fh):return filter(None,map(fh.evaluate_link,iu))
+    def ay(self,gq,dO,aM=None):fh=fr.partial(be,dO=dO,aM=aM);ex,dR=fx.tee(gq);ic,it=fx.tee(filter(fh,ex))
+        if next(ic,None) is None and aM is None:fh=fr.partial(be,dO=dO,aM=True);it=filter(fh,dR)
+        return it
+    def aY(self,gq,hC):fh=fr.partial(bK,hC=hC,hj=self.session);return filter(fh,gq)
+    def fa(self,hf):jj=hf.link;jN=len(self._tag_priorities)+1;fd=();cJ=False
+        if jj.is_wheel:*_,fd,fl=parse_wheel_filename(jj.filename);jN=min((self._tag_priorities.get(jW,jN-1) for jW in fl),default=jN-1)
+            if canonicalize_name(hf.name) in self.prefer_binary or ':all:' in self.prefer_binary:cJ=True
+        return (-int(jj.is_yanked),int(cJ),parse_version(hf.version) if hf.version is not None else 0,-jN,fd)
+    def bS(self,dj,cS=False):fh=self.build_evaluator(dj,cS)
+        def bz(hX):if hX['type']=='index':jj=self._build_index_page_link(hX['url'],dj);hS=self._evaluate_links(j(self.session,jj,gW=self.headers),fh)
+            else:jj=self._build_find_link(hX['url']);hS=self._evaluate_links(j(self.session,jj,hz=True,gW=self.headers),fh)
+            if self.respect_source_order:return sorted(hS,key=self._sort_key,reverse=True)
+            return hS
+        cR=fx.chain.from_iterable(map(bz,self.sources))
+        if self.respect_source_order:return cR
+        return sorted(cR,key=self._sort_key,reverse=True)
+    def aP(self,dj,cS=False,hC=None):return cP(self._evaluate_hashes(self._find_packages(dj,cS),hC=hC or {}))
+    def g(self,dO,cS=None):if cS is None:cS=O(dO.specifier)
+        if dO.url:yield gI(dO.name,None,jj=iH(dO.url))
+        else:yield from self._find_packages(dO.name,cS)
+    def db(self,dO,cS=None,aM=None,hC=None):if isinstance(dO,str):dO=packaging.requirements.Requirement(dO)
+        return cP(self._evaluate_hashes(self._evaluate_packages(self._find_packages_from_requirement(dO,cS),dO,aM),hC=hC or {}))
+    def by(self,dO,cS=None,aM=None,hC=None):if isinstance(dO,str):dO=packaging.requirements.Requirement(dO)
+        gq=self._find_packages_from_requirement(dO,cS);ex,dR=fx.tee(gq);ep=cP(ex);K=cP(self._evaluate_hashes(self._evaluate_packages(dR,dO,aM),hC=hC or {}));en=next(iter(K),None);return eT(en,K,ep)
+    def am(self,jj,gl,cZ=None,hC=None,aO=E,bH=ag):if hC is None:hC=jj.hash_option
+        with et.ExitStack() as iC:if cZ is None:cZ=iC.enter_context(ax(hO='unearth-download-'))
+            iW=dW(self.session,jj,hg.Path(cZ),hg.Path(gl),hC,fK=self.verbosity,aO=aO,bH=bH)
+        return iW.joinpath(jj.subdirectory) if jj.subdirectory else iW
+@dc.dataclass(frozen=True)
+class gG:def cw(fK):hH=hb.getLogger('unearth');hH.setLevel(hb.DEBUG if fK else hb.WARNING);gU=hb.StreamHandler();gU.setLevel(hb.DEBUG);fo=hb.Formatter('%(levelname)s:%(message)s');gU.setFormatter(fo);hH.addHandler(gU)
+def dC(jE):return jE.split(',')
+def fG(jE):return tuple((int(i) for i in jE.split('.') if i.isdigit()))
+def er():hN=fS.ArgumentParser(description='Find and download packages from a PEP 508 requirement string.');hN.add_argument('requirement',type=Requirement,help="A PEP 508 requirement string,e.g. 'requests>=2.18.4'.");hN.add_argument('--verbose','-v',action='store_true',help='Enable verbose logging.');hN.add_argument('--index-url','-i',metavar='URL',iU='index_urls',action='append',help='(Multiple)(PEP 503)Simple Index URLs.');hN.add_argument('--find-link','-f',iU='find_links',metavar='LOCATION',action='append',help='(Multiple)URLs or locations to find links from.');hN.add_argument('--trusted-host',iU='trusted_hosts',metavar='HOST',action='append',help='(Multiple)Trusted hosts that should skip the verification.');hN.add_argument('--no-binary',action='store_true',help='Exclude binary packages from the results.');hN.add_argument('--only-binary',action='store_true',help='Only include binary packages in the results.');hN.add_argument('--prefer-binary',action='store_true',help='Prefer binary packages even if sdist candidates of newer versions exist.');hN.add_argument('--all',action='store_true',help='Return all applicable versions.');hN.add_argument('--link-only','-L',action='store_true',help='Only return links instead of a JSON object.');hN.add_argument('--download','-d',nargs='?',const='.',metavar='DIR',help='Download the package(s) to DIR.');io=hN.add_argument_group('Target Python options');io.add_argument('--python-version','--py',iU='py_ver',type=fG,help='Target Python version. e.g. 3.11.0');io.add_argument('--abis',type=dC,help='Comma-separated list of ABIs. e.g. cp39,cp310');io.add_argument('--implementation','--impl',iU='impl',help='Python implementation. e.g. cp,pp,jy,ip');io.add_argument('--platforms',type=dC,help='Comma-separated list of platforms. e.g. win_amd64,linux_x86_64');return hN
+def ac(iU,jj):if jj.is_wheel:return iU
+    gc=jj.filename.rsplit('@',1)[0];fn,_=gz(gc);return os.path.join(iU,fn)
+def jk(iN=None):hN=er();iM=gG(**vars(hN.parse_args(iN)));cw(iM.verbose);jm=iM.requirement.name;cM=cQ(iM.py_ver,iM.abis,iM.impl,iM.platforms);hA=cp(eH=iM.index_urls or [],ew=iM.find_links or [],cN=iM.trusted_hosts or [],cM=cM,fA=[jm] if iM.no_binary else [],dM=[jm] if iM.only_binary else [],cJ=[jm] if iM.prefer_binary else [],fK=int(iM.verbose));hc=list(hA.find_matches(iM.requirement))
+    if not hc:print('No matches are found.',iW=jV.stderr);jV.exit(1)
+    if not iM.all:hc=hc[:1]
+    hS=[]
+    if iM.download:os.makedirs(iM.download,exist_ok=True)
+    with gA.TemporaryDirectory('unearth-download-') as cZ:for iw in hc:iT=iw.as_json()
+            if iM.download is not None:iU=ac(iM.download,iw.link);iT['local_path']=hA.download_and_unpack(iw.link,iU,cZ).as_posix()
+            hS.append(iT)
+    if iM.link_only:for jf in hS:print(jf['link']['url'])
+            if 'local_path' in jf:print('==>',jf['local_path'])
+    else:print(jg.dumps(hS[0] if len(hS)==1 else hS,indent=2))
+__all__=['BestMatch','HashMismatchError','Link','Package','PackageFinder','Source','TargetPython','URLError','UnpackError','VCSBackendError','vcs_support']
+if __name__=='__main__':jV.exit(jk())
+You are a senior Python developer
+- drop any windows or darwin support related code
+- target env=linux(termux)
+- target python version = py3.12
+- the script just prints latest versions data as json
+ i want the default behavior to download it
+- remove any other unnecessary code (simplify)
+- code is compressed for llm, so u can freely change var,... names
+- return full working, refactored and annotated code
+

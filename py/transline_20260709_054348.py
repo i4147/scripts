@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from deep_translator import GoogleTranslator
 from tenacity import (
@@ -17,16 +16,14 @@ from datetime import datetime
 from dh import mpf_async, get_nobinary
 
 
-DELAY_BETWEEN_LINES = 0.01  
-DELAY_BETWEEN_FILES = 1.0  
-MAX_RETRIES = 5  
+DELAY_BETWEEN_LINES = 0.01
+DELAY_BETWEEN_FILES = 1.0
+MAX_RETRIES = 5
 PROGRESS_SAVE_EVERY = 10
-
 
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger(__name__)
-
 
 
 _interrupted = False
@@ -41,24 +38,20 @@ def _sigint_handler(sig, frame):
 signal.signal(signal.SIGINT, _sigint_handler)
 
 
-
 _CHINESE_RANGES = (
-    (0x3400, 0x4DBF),  
-    (0x4E00, 0x9FFF),  
-    (0xF900, 0xFAFF),  
-    (0x20000, 0x2A6DF),  
-    (0x2A700, 0x2B73F),  
-    (0x2B740, 0x2B81F),  
-    (0x2B820, 0x2CEAF),  
-    (0x2CEB0, 0x2EBEF),  
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0x20000, 0x2A6DF),
+    (0x2A700, 0x2B73F),
+    (0x2B740, 0x2B81F),
+    (0x2B820, 0x2CEAF),
+    (0x2CEB0, 0x2EBEF),
 )
 
 
 def has_chinese(text: str) -> bool:
     return any(lo <= ord(ch) <= hi for ch in text for lo, hi in _CHINESE_RANGES)
-
-
-
 
 
 def read_text(path: Path) -> tuple[str, str]:
@@ -68,9 +61,6 @@ def read_text(path: Path) -> tuple[str, str]:
         except (UnicodeDecodeError, LookupError):
             continue
     return path.read_bytes().decode("utf-8", errors="replace"), "utf-8"
-
-
-
 
 
 class RateLimitError(Exception):
@@ -116,9 +106,6 @@ def translate_safe(text: str) -> tuple[str, bool]:
         return text, False
 
 
-
-
-
 def _progress_path(file_path: Path) -> Path:
     return file_path.with_suffix(file_path.suffix + ".xlprogress")
 
@@ -160,9 +147,6 @@ def drop_progress(file_path: Path) -> None:
             pass
 
 
-
-
-
 def process_file(path: Path) -> bool:
     global _interrupted
 
@@ -183,7 +167,6 @@ def process_file(path: Path) -> bool:
 
     print(f"   🔍 {len(chinese_indices)} line(s) to translate")
 
-    
     done: dict[int, str] = load_progress(path)
     remaining = [i for i in chinese_indices if i not in done]
     total = len(chinese_indices)
@@ -201,7 +184,7 @@ def process_file(path: Path) -> bool:
             done[idx] = translated
             status = "✓"
         else:
-            done[idx] = original  
+            done[idx] = original
             status = "✗"
 
         completed = len(done)
@@ -210,24 +193,20 @@ def process_file(path: Path) -> bool:
             f"{original[:30].strip()!r} → {translated[:30].strip()!r}"
         )
 
-        
         if completed % PROGRESS_SAVE_EVERY == 0:
             save_progress(path, done, len(lines))
 
-        
         if count < len(remaining):
             time.sleep(DELAY_BETWEEN_LINES)
 
-    
     out_lines = []
     for i, line in enumerate(lines):
         if i in done:
-            eol = line[len(line.rstrip("\r\n")) :]  
+            eol = line[len(line.rstrip("\r\n")) :]
             out_lines.append(done[i] + eol)
         else:
             out_lines.append(line)
 
-    
     tmp = path.with_suffix(path.suffix + ".xltmp")
     try:
         tmp.write_text("".join(out_lines), encoding=enc, errors="replace")
@@ -244,9 +223,6 @@ def process_file(path: Path) -> bool:
     failed = sum(1 for i in chinese_indices if has_chinese(done.get(i, "")))
     print(f"   ✅ Done — {total - failed}/{total} lines translated successfully")
     return True
-
-
-
 
 
 def main():

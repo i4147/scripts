@@ -1,4 +1,3 @@
-
 import re
 import sys
 import shutil
@@ -42,15 +41,14 @@ except ImportError:
         return previous_row[-1]
 
 
-
 SKIP_PATTERNS = [
     r"^https?://",
     r"^ftp://",
-    r"^file://",  
-    r"^[a-f0-9]{32,}$",  
-    r"^[A-Z_]+$",  
-    r"^[a-z][a-z0-9_]*$",  
-    r"^[a-z][A-Za-z0-9]*$",  
+    r"^file://",
+    r"^[a-f0-9]{32,}$",
+    r"^[A-Z_]+$",
+    r"^[a-z][a-z0-9_]*$",
+    r"^[a-z][A-Za-z0-9]*$",
 ]
 
 
@@ -64,21 +62,17 @@ class TypoFixer:
         self.changes_made = 0
         self.files_processed = 0
 
-        
         self._load_nltk_words()
         if oxford_dict_path and Path(oxford_dict_path).exists():
             self._load_oxford_dict(oxford_dict_path)
 
-        
         self._add_code_keywords()
 
-        
         self.skip_regex = re.compile("|".join(SKIP_PATTERNS), re.IGNORECASE)
 
     def _load_nltk_words(self) -> None:
         if NLTK_AVAILABLE:
             try:
-                
                 import nltk
 
                 try:
@@ -106,7 +100,6 @@ class TypoFixer:
 
     def _add_code_keywords(self) -> None:
         code_keywords = {
-            
             "def",
             "class",
             "import",
@@ -135,7 +128,6 @@ class TypoFixer:
             "not",
             "is",
             "in",
-            
             "function",
             "var",
             "let",
@@ -156,7 +148,6 @@ class TypoFixer:
             "style",
             "font",
             "color",
-            
             "true",
             "false",
             "null",
@@ -169,32 +160,26 @@ class TypoFixer:
         if not word or len(word) < 2:
             return True
 
-        
         if self.skip_regex.match(word):
             return True
 
-        
         if word.isupper() and len(word) <= 5:
             return True
 
-        
         return word.lower() in self.valid_words
 
     def suggest_correction(self, word: str) -> str:
         if self.is_valid_word(word):
             return word
 
-        
         original_word = word
         word_lower = word.lower()
 
-        
         candidates = get_close_matches(word_lower, self.valid_words, n=1, cutoff=0.8)
 
         if candidates:
             correction = candidates[0]
 
-            
             if original_word.isupper():
                 return correction.upper()
             elif original_word[0].isupper() and original_word[1:].islower():
@@ -202,11 +187,10 @@ class TypoFixer:
             else:
                 return correction
 
-        return original_word  
+        return original_word
 
     def fix_text(self, text: str) -> Tuple[str, int]:
-        
-        
+
         word_pattern = re.compile(r"\b([a-zA-Z]+(?:[-\'][a-zA-Z]+)*)\b")
 
         changes = 0
@@ -215,7 +199,6 @@ class TypoFixer:
             nonlocal changes
             word = match.group(1)
 
-            
             if len(word) <= 2:
                 return match.group(0)
 
@@ -237,18 +220,15 @@ class TypoFixer:
             print(f"  Skipping {filepath}: {e}", file=sys.stderr)
             return False
 
-        
         if "\0" in original:
             return False
 
         fixed, changes = self.fix_text(original)
 
         if changes > 0 and not self.preview:
-            
             backup = filepath.with_suffix(filepath.suffix + ".bak")
             shutil.copy2(filepath, backup)
 
-            
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(fixed)
             print(f"  Fixed {changes} typo(s) in {filepath}", file=sys.stderr)

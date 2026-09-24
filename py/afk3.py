@@ -144,7 +144,6 @@ def cleanup_imports(input_lines):
     used_tokens = used_symbols(input_lines)
     imports, splats = gather_imports(input_lines)
 
-    
     original_imports = deepcopy(imports)
     original_splats = deepcopy(splats)
 
@@ -152,7 +151,6 @@ def cleanup_imports(input_lines):
     for module in list(imports.keys()):
         cull_unused(used_tokens, imports[module])
 
-    
     removed = set()
     for module in original_imports:
         for imp in original_imports[module]:

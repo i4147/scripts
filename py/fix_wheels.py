@@ -8,14 +8,11 @@ from concurrent.futures import ProcessPoolExecutor
 def _process_one(whl_path: str) -> str:
     path = Path(whl_path)
 
-    
     if not path.is_file():
         return f"SKIP {path.name} (not a file)"
 
     target_name = path.name
 
-    
-    
     import zipfile
 
     try:
@@ -24,7 +21,6 @@ def _process_one(whl_path: str) -> str:
             if target_name not in members:
                 return f"KEEP {path.name}"
 
-            
             tmp_path = path.with_suffix(path.suffix + ".tmp")
 
             with (
@@ -34,7 +30,7 @@ def _process_one(whl_path: str) -> str:
                 for info in src.infolist():
                     if info.filename == target_name:
                         continue
-                    
+
                     dst.writestr(info, src.read(info.filename))
 
         os.replace(tmp_path, path)
@@ -54,7 +50,6 @@ def main() -> None:
     with ProcessPoolExecutor(max_workers=workers) as ex:
         results = list(ex.map(_process_one, (str(p) for p in whls)))
 
-    
     for r in results:
         print(r)
 

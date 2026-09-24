@@ -1,4 +1,3 @@
-
 import sys
 import json
 import time
@@ -7,7 +6,7 @@ from tqdm import tqdm
 
 
 def translate_words(input_file, output_file):
-    
+
     with open(input_file, "r", encoding="utf-8") as f:
         words = [line.strip() for line in f if line.strip()]
 
@@ -16,7 +15,6 @@ def translate_words(input_file, output_file):
     translator = GoogleTranslator(source="en", target="fa")
     translations = {}
 
-    
     for word in tqdm(words, desc="Translating"):
         try:
             translated = translator.translate(word)
@@ -24,12 +22,10 @@ def translate_words(input_file, output_file):
         except Exception as e:
             print(f"\nError translating '{word}': {e}")
             translations[word] = None
-            time.sleep(1)  
+            time.sleep(1)
 
-        
         time.sleep(0.05)
 
-    
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(translations, f, ensure_ascii=False, indent=2)
 

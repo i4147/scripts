@@ -1,4 +1,3 @@
-
 import importlib.metadata
 import logging
 import sys
@@ -13,16 +12,12 @@ logging.basicConfig(
 def check_package_files(dist) -> list[str]:
     missing_files = []
 
-    
     if dist.files is None:
-        
         return missing_files
 
     for package_file in dist.files:
-        
         file_path = Path(dist.locate_file(package_file))
 
-        
         if file_path.suffix == ".pyc":
             continue
 
@@ -39,11 +34,8 @@ def check_package_dependencies(dist, installed_map: dict[str, str]) -> list[str]
         return broken_deps
 
     for req_str in dist.requires:
-        
-        
         dep_name = req_str.split(";")[0].strip()
 
-        
         for op in ["<", ">", "=", "!", "~"]:
             if op in dep_name:
                 dep_name = dep_name.split(op)[0].strip()
@@ -51,7 +43,6 @@ def check_package_dependencies(dist, installed_map: dict[str, str]) -> list[str]
         if not dep_name:
             continue
 
-        
         if dep_name.lower() not in installed_map:
             broken_deps.append(req_str)
 
@@ -61,10 +52,8 @@ def check_package_dependencies(dist, installed_map: dict[str, str]) -> list[str]
 def main():
     logging.info("Starting site-packages verification scan...\n")
 
-    
     distributions = list(importlib.metadata.distributions())
 
-    
     installed_map = {d.metadata["Name"].lower(): d.version for d in distributions}
 
     corrupted_packages_count = 0
@@ -74,16 +63,12 @@ def main():
         pkg_name = dist.metadata["Name"]
         pkg_version = dist.version
 
-        
         origin_path = getattr(dist, "_path", "Unknown Environment Space")
 
-        
         missing_files = check_package_files(dist)
 
-        
         missing_deps = check_package_dependencies(dist, installed_map)
 
-        
         if missing_files or missing_deps:
             print(f"📦 PACKAGE: {pkg_name} ({pkg_version})")
             print(f"   Location Target: {origin_path}")
@@ -91,7 +76,7 @@ def main():
             if missing_files:
                 corrupted_packages_count += 1
                 print(f"   ❌ Missing Files ({len(missing_files)}):")
-                
+
                 for f in missing_files[:5]:
                     print(f"      - {f}")
                 if len(missing_files) > 5:
@@ -105,7 +90,6 @@ def main():
 
             print("-" * 60)
 
-    
     logging.info("=== SCAN SUMMARY ===")
     logging.info(f"Total packages evaluated: {len(distributions)}")
     logging.info(f"Packages with missing files: {corrupted_packages_count}")

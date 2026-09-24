@@ -7,7 +7,6 @@ import re
 
 
 class SyntaxHighlighter:
-
     PATTERNS = {
         "python": {
             "keywords": r"\b(def|class|import|from|return|if|else|elif|for|while|try|except|finally|with|as|lambda|and|or|not|is|None|True|False)\b",
@@ -44,7 +43,7 @@ class SyntaxHighlighter:
 
     @classmethod
     def highlight(cls, text_widget: Text, language: str = "python") -> None:
-        
+
         for tag in text_widget.tag_names():
             if tag.startswith("hl_"):
                 text_widget.tag_delete(tag)
@@ -66,7 +65,6 @@ class SyntaxHighlighter:
 
 
 class MultiCursor:
-
     def __init__(self, text_widget) -> None:
         self.text_widget = text_widget
         self.cursors = []
@@ -84,18 +82,16 @@ class MultiCursor:
             self.update_display()
 
     def update_display(self) -> None:
-        
+
         for mark in self.text_widget.mark_names():
             if mark.startswith("cursor_"):
                 self.text_widget.mark_unset(mark)
 
-        
         for i, cursor_pos in enumerate(self.cursors):
             mark_name = f"cursor_{i}"
             self.text_widget.mark_set(mark_name, cursor_pos)
             self.text_widget.mark_gravity(mark_name, tk.RIGHT)
 
-            
             self.text_widget.tag_delete(f"cursor_tag_{i}")
             self.text_widget.tag_add(f"cursor_tag_{i}", cursor_pos, f"{cursor_pos} + 1 char")
             self.text_widget.tag_configure(f"cursor_tag_{i}", background="#FF6B6B", foreground="white")
@@ -104,7 +100,6 @@ class MultiCursor:
         if not self.cursors:
             return
 
-        
         sorted_cursors = sorted(self.cursors, key=lambda x: int(x.split(".")[0]), reverse=True)
 
         for cursor in sorted_cursors:
@@ -115,7 +110,6 @@ class MultiCursor:
 
 
 class CommandPalette:
-
     def __init__(self, parent, editor) -> None:
         self.parent = parent
         self.editor = editor
@@ -144,7 +138,6 @@ class CommandPalette:
         self.window.geometry("400x300")
         self.window.configure(bg="#2D2D2D")
 
-        
         search_label = tk.Label(self.window, text=">", bg="#2D2D2D", fg="#FFFFFF", font=("Consolas", 12))
         search_label.pack(pady=(10, 0))
 
@@ -162,7 +155,6 @@ class CommandPalette:
         self.search_entry.pack(fill=tk.X, padx=10, pady=5)
         self.search_entry.focus()
 
-        
         self.listbox = tk.Listbox(
             self.window, bg="#3E3E3E", fg="#FFFFFF", font=("Consolas", 11), selectbackground="#FF6B6B"
         )
@@ -195,14 +187,12 @@ class CommandPalette:
 
 
 class MiniMap:
-
     def __init__(self, parent, text_widget) -> None:
         self.text_widget = text_widget
         self.canvas = tk.Canvas(parent, width=50, bg="#1E1E1E", highlightthickness=0)
         self.canvas.pack(side=tk.RIGHT, fill=tk.Y)
         self.update_minimap()
 
-        
         self.canvas.bind("<Button-1>", self.jump_to_position)
 
     def update_minimap(self) -> None:
@@ -227,7 +217,6 @@ class MiniMap:
             y1 = i * line_height
             y2 = (i + 1) * line_height
 
-            
             if line.strip().startswith("#"):
                 color = "#4A4A4A"
             elif line.strip().startswith(("def ", "class ")):
@@ -239,7 +228,6 @@ class MiniMap:
 
             self.canvas.create_rectangle(0, y1, 50, y2, fill=color, outline="")
 
-        
         first_line = int(self.text_widget.index("@0,0").split(".")[0])
         last_line = int(self.text_widget.index("@0,{0}".format(self.text_widget.winfo_height())).split(".")[0])
 
@@ -261,7 +249,6 @@ class MiniMap:
 
 
 class SublimeTextEditor:
-
     def __init__(self, root) -> None:
         self.root = root
         self.root.title("Sublime Text Clone")
@@ -282,20 +269,16 @@ class SublimeTextEditor:
         self.command_palette = CommandPalette(root, self)
         self.minimap = None
 
-        
         self.bind_shortcuts()
 
-        
         self.root.after(100, self.create_minimap)
 
-        
         self.new_file()
 
     def setup_menu(self) -> None:
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
-        
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="New", command=self.new_file, accelerator="Ctrl+N")
@@ -305,7 +288,6 @@ class SublimeTextEditor:
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit, accelerator="Ctrl+Q")
 
-        
         edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Edit", menu=edit_menu)
         edit_menu.add_command(label="Find", command=self.find_text, accelerator="Ctrl+F")
@@ -314,7 +296,6 @@ class SublimeTextEditor:
         edit_menu.add_command(label="Toggle Line Numbers", command=self.toggle_line_numbers)
         edit_menu.add_command(label="Multi Cursor Mode", command=self.multi_cursor_mode_toggle)
 
-        
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
         view_menu.add_command(label="Command Palette", command=self.command_palette.show, accelerator="Ctrl+Shift+P")
@@ -349,7 +330,6 @@ class SublimeTextEditor:
             )
             btn.pack(side=tk.LEFT, padx=2, pady=2)
 
-            
             self.create_tooltip(btn, tooltip)
 
     def create_tooltip(self, widget: Button, text: str) -> None:
@@ -371,11 +351,10 @@ class SublimeTextEditor:
         widget.bind("<Enter>", show_tooltip)
 
     def setup_editor(self) -> None:
-        
+
         self.editor_frame = tk.Frame(self.root, bg="#2D2D2D")
         self.editor_frame.pack(fill=tk.BOTH, expand=True)
 
-        
         self.line_numbers = tk.Text(
             self.editor_frame,
             width=5,
@@ -390,7 +369,6 @@ class SublimeTextEditor:
         )
         self.line_numbers.pack(side=tk.LEFT, fill=tk.Y)
 
-        
         text_frame = tk.Frame(self.editor_frame)
         text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -419,7 +397,6 @@ class SublimeTextEditor:
         self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        
         self.text_area.bind("<KeyRelease>", self.on_text_change)
         self.text_area.bind("<MouseWheel>", self.on_scroll)
         self.text_area.bind("<Control-Button-1>", self.on_control_click)
@@ -441,7 +418,6 @@ class SublimeTextEditor:
         )
         self.syntax_label.pack(side=tk.RIGHT, padx=5)
 
-        
         self.text_area.bind("<KeyRelease>", self.update_cursor_position)
         self.text_area.bind("<ButtonRelease>", self.update_cursor_position)
 
@@ -479,7 +455,6 @@ class SublimeTextEditor:
         self.line_numbers.insert("1.0", line_numbers_str)
         self.line_numbers.configure(state="disabled")
 
-        
         self.line_numbers.yview_moveto(self.text_area.yview()[0])
 
     def on_text_change(self, event=None) -> None:

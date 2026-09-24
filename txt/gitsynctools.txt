@@ -1,0 +1,275 @@
+# filename: agagc.py
+import requests;from dotenv import load_dotenv;from git import InvalidGitRepositoryError,Repo
+def g():G=w.ArgumentParser(o='Commit and push all files to git repository');G.add_argument('-c','--create',action='store_true',help="Create remote repository on GitHub if it doesn't exist");G.add_argument('-r','--remote-name',default='origin',help='Remote name to use (default:origin)');return G.parse_args()
+def j():z=K.home()/'.env'
+    if z.exists():load_dotenv(z)
+    else:return None
+    J=S.getenv('GITHUB_TOKEN') or S.getenv('GH_TOKEN') or S.getenv('GIT_TOKEN');return J
+def b(v,o='new git repo',D=False):J=j();B={'Authorization':f'token {J}','Accept':'application/vnd.github.v3+json'};M={'name':v,'description':o,'private':D,'auto_init':True};A=requests.post('https://api.github.com/user/repos',json=M,B=B)
+    if A.status_code==201:return A.json()['html_url']
+    raise Exception(f"GitHub API error:{A.json().get('message')}")
+def a(J):try:B={'Authorization':f'token {J}','Accept':'application/vnd.github.v3+json'};A=requests.get('https://api.github.com/user',B=B)
+        if A.status_code==200:return A.json()['login']
+        print(f'Failed to get GitHub username:{A.status_code}');return None
+    except Exception as e:print(f'Error getting GitHub username:{e}');return None
+def n():y=K.cwd().name;y=T.sub('[^\\w\\-\\.]','-',y);return y.lower()
+def d(O,J,q,c):f=None
+    try:if q in [r.name for r in O.remotes]:f=O.remote(q)
+            try:list(f.urls);print(f"Remote '{q}' already configured:{f.url}");return True
+            except Exception:print(f"⚠️ Remote '{q}' has invalid URL,removing...");O.delete_remote(f);f=None
+    except Exception:pass
+    v=n()
+    if not c:return False
+    s=False
+    try:o='Repository description';u=b(v,o,s);print(f"Adding remote '{q}':{u}");O.create_remote(q,u);return True
+    except Exception as e:print(f'❌ Failed to create repository:{e}');return False
+def l(O,J=None):if not J:return
+    try:for H in O.remotes:for R in H.urls:if 'github.com' in R:if '@github.com' in R:print('Remote URL already has authentication');return
+                    if R.startswith('https://'):C=R.replace('https://',f'https://oauth2:{J}@');H.set_url(C);print('✅ Updated remote URL with token authentication');return
+                    if R.startswith('git@github.com:'):print('Using SSH authentication (no token needed)');return
+    except Exception as e:print(f'Could not update remote URL:{e}')
+def k(O,q,J=j()):try:if q not in [r.name for r in O.remotes]:print(f"❌ Remote '{q}' not configured. Skipping push.");return
+        H=O.remote(q)
+        try:i=O.active_branch.name
+        except TypeError:print('In detached HEAD state. Skipping push.');return
+        print(f"\n📤 Pushing to remote '{q}'...")
+        if J:l(O,J)
+        try:p=H.push(refspec=f'{i}:{i}',set_upstream=True)
+        except Exception as e:if 'no upstream branch' in str(e):print('Setting upstream and pushing...');O.git.push('--set-upstream',q,i);p=[]
+            else:raise
+        E=False
+        if p:for I in p:if hasattr(I,'flags') and I.flags&I.ERROR:print(f'❌ Push failed:{I.summary}',file=Q.stderr)
+                    if '403' in I.summary or '401' in I.summary:print('🔐 Authentication failed. Check your GitHub token.',file=Q.stderr)
+                    return
+                if hasattr(I,'flags') and I.flags&I.UP_TO_DATE:print('✅ Remote is already up to date.');E=True
+                elif hasattr(I,'flags') and I.flags&I.FAST_FORWARD:print(f'✅ Successfully pushed to {q}/{i}');E=True
+                else:print('✅ Push successful');E=True
+        else:E=True;print(f'✅ Successfully pushed to {q}/{i}')
+        if E:print('\n🎉 All done! Changes are now on GitHub.')
+    except Exception as e:print(f'❌ Push failed:{e}',file=Q.stderr);print('Commit was successful,but push failed. You can push manually later.')
+def N():L=g();J=j();P=K.cwd();O=None
+    try:O=Repo(P,search_parent_directories=True);print(f'Found existing git repository at {O.git_dir}')
+    except InvalidGitRepositoryError:O=Repo.init(P);print('✅ Repository initialized.')
+    if not O.remotes or L.create:if d(O,J,L.remote_name,L.create):print('✅ Remote repository configured')
+        elif not L.create:pass
+    if not O.is_dirty(untracked_files=True):print('\n📝 No changes to commit.')
+        if O.remotes:try:i=O.active_branch;q=L.remote_name
+                if q in [r.name for r in O.remotes]:O.remote(q)
+                    try:t=f'refs/remotes/{q}/{i.name}'
+                        if t in O.refs:m=O.refs[t].commit
+                            if i.commit!=m:print('Found unpushed commits. Pushing...');k(O,q,J)
+                            else:print('✅ Remote is up to date.')
+                        else:print("Remote branch doesn't exist. Pushing...");k(O,q,J)
+                    except Exception as e:print(f'Remote exists but check failed:{e}');k(O,q,J)
+                else:print(f"Remote '{q}' not found.")
+            except Exception as e:print(f'Push check failed:{e}')
+        return
+    print('\n📦 Changes detected. Adding all files...');O.git.add('--all');h=x.now().strftime('%Y-%m-%d%H:%M:%S')
+    try:F=O.index.commit(h);print(f'✅ Committed with message:"{h}"');print(f'Commit hash:{F.hexsha[:7]}')
+    except Exception as e:print(f'❌ Commit failed:{e}',file=Q.stderr);Q.exit(1)
+    if O.remotes and L.remote_name in [r.name for r in O.remotes]:k(O,L.remote_name,J)
+    elif O.remotes:print(f"\n⚠️ Remote '{L.remote_name}' not found. Available remotes:{[r.name for r in O.remotes]}");print('Changes committed locally only.')
+    else:print('\n⚠️ No remote configured. Changes committed locally only.')
+        if L.create:print('Use--create flag to create and push to GitHub.')
+if __name__=='__main__':raise SystemExit(N())
+# filename: gagc.py
+from git import Repo
+def b():try:d=Repo(e.getcwd())
+    except:d=Repo.init(e.getcwd())
+    d.index.add('*')
+    if d.index.diff('HEAD'):a=c.now().strftime('%Y-%m-%d%H:%M:%S');d.index.commit(a);print(f'Committed:{a}')
+    else:print('No changes to commit')
+if __name__=='__main__':b()
+# filename: gitpush.py
+def v(u):try:k.check_call(u,shell=True);return True
+    except k.CalledProcessError:return False
+def i():return v('git rev-parse--is-inside-work-tree>/dev/null 2>&1')
+def b():g=p('.gitignore');c=p.home()/'.gitignore_global'
+    if g.exists():print('.gitignore already exists.');return
+    if c.exists():print('Copying global .gitignore_global to local .gitignore...');n.copy(c,g)
+    else:print('No local .gitignore and no ~/.gitignore_global found. Skipping.')
+def a():m=[]
+    for t,_,o in w.walk('.'):for f in o:if '.' in f:continue
+            s=w.path.join(t,f)
+            try:with p(s).open(encoding='utf-8',errors='ignore') as q:j=q.readline().strip()
+                    if j.startswith('#!') and 'python' in j.lower():m.append(s)
+            except (OSError,UnicodeDecodeError):continue
+    return m
+def r():if not i():print('Not inside a Git repository. Doing nothing.');return
+    b();h=[]
+    for t,_,o in w.walk('.'):h.extend((w.path.join(t,f) for f in o if f.endswith('.py')))
+    h.extend(a())
+    if not h:print('No Python files found.');return
+    print('Formatting Python files with black:')
+    for f in h:print('->',f)
+        if not v(f'black {f}'):print(f'Black failed for {f}.');return
+    print('Running git add .')
+    if not v('git add .'):print('git add failed.');return
+    d=l.now().strftime('%Y-%m-%d%H:%M:%S');print(f'Committing with message:{d}');e=v(f'git commit-m "{d}"')
+    if not e:print('Nothing to commit or commit failed.');return
+    print('Pushing changes...')
+    if not v('git push'):print('git push failed.');return
+    print('Done!')
+if __name__=='__main__':raise SystemExit(r())
+# filename: gp.py
+from git import GitCommandError,InvalidGitRepositoryError,Repo
+def a():c=i.home()/'.gitignore';b=i('.gitignore')
+    if b.exists():return
+    try:j=c.read_text(encoding='utf-8');b.write_text(j,encoding='utf-8')
+    except Exception as e:return
+def k():try:l=Repo('.',search_parent_directories=True)
+    except InvalidGitRepositoryError:print('Error:Not a git repository.',file=n.stderr);n.exit(1)
+    except Exception as e:print(f'Error accessing repository:{e}',file=n.stderr);n.exit(1)
+    a()
+    try:l.git.add(A=True);m=f.now().strftime('%Y-%m-%d%H:%M:%S');d=f'Auto-commit at {m}';l.index.commit(d)
+        if l.head.is_detached:print('Error:Could not detect current branch (detached HEAD?).',file=n.stderr);n.exit(1)
+        g=l.active_branch.name;h=l.remote('origin');h.push(g);print(f'Pushed to origin/{g} with message:{d}')
+    except GitCommandError as e:print(f'Git command error:{e}',file=n.stderr);n.exit(e.status or 1)
+    except Exception as e:print(f'Unexpected error:{e}',file=n.stderr);n.exit(1)
+if __name__=='__main__':raise SystemExit(k())
+# filename: gp2.py
+from dotenv import load_dotenv;from git import Repo,exc as GitExc;load_dotenv(o.home()/'.env');b='unforgivenii147'
+def c():try:return Repo('.')
+    except GitExc.InvalidGitRepositoryError:print('Not inside a Git repository.',file=s.stderr);s.exit(1)
+def a():f=o.home()/'.gitignore';d=o('.gitignore')
+    if not f.exists():print('~/.gitignore does not exist. Create it first if needed.');return
+    if d.exists():return
+    try:d.symlink_to(f);print(f'Symlinked {f}->{d}')
+    except Exception as e:print(f'Failed to create symlink:{e}',file=s.stderr);s.exit(1)
+def p():q=c();a();q.git.add('--all');r=i.now().strftime('%Y-%m-%d%H:%M:%S');h=f'Auto-commit at {r}'
+    try:q.git.commit('-m',h)
+    except GitExc.GitCommandError:print('Nothing to commit (no changes).',file=s.stderr);s.exit(0)
+    n=t.getenv('GITHUB_TOKEN')
+    if not n:print('GITHUB_TOKEN not found in ~/.env',file=s.stderr);s.exit(1)
+    m=q.remote('origin');k=m.url;g=False
+    try:l=q.active_branch.name
+        if k.startswith('https://github.com/'):j=k.replace('https://github.com/',f'https://{b}:{n}@github.com/');m.set_url(j);g=True
+        print(f'Pushing to origin/{l}...');m.push(refspec=f'{l}:{l}');print(f'Pushed to origin/{l} with message:{h}')
+    except GitExc.GitCommandError as e:print(f'Push failed:{e}',file=s.stderr);s.exit(1)
+    finally:if g:m.set_url(k)
+if __name__=='__main__':raise SystemExit(p())
+# filename: gp3.py
+from dotenv import load_dotenv;from git import Repo,exc as GitExc;from github import Github,GithubException;load_dotenv(I.home()/'.env');h='unforgivenii147'
+def i():try:return Repo('.')
+    except GitExc.InvalidGitRepositoryError:print('Not inside a Git repository.',file=O.stderr);O.exit(1)
+def a():l=I.home()/'.gitignore';j=I('.gitignore')
+    if not l.exists():print('~/.gitignore does not exist. Create it first if needed.');return
+    if j.exists():return
+    try:j.symlink_to(l);print(f'Symlinked {l}->{j}')
+    except Exception as e:print(f'Failed to create symlink:{e}',file=O.stderr);O.exit(1)
+def d(P):z=['https://github\\.com/([^/]+)/([^/]+?)(?:\\.git)?$','git@github\\.com:([^/]+)/([^/]+?)(?:\\.git)?$']
+    for C in z:G=R.match(C,P)
+        if G:return (G.group(1),G.group(2))
+    return None
+def b(L,n):q=I.cwd();w=q.name
+    try:E=Github(n);M=E.get_user()
+        try:m=M.get_repo(w);print(f"Remote repository '{w}' already exists on GitHub.");L.create_remote('origin',m.clone_url);return False
+        except GithubException:print(f"Creating remote repository '{w}' on GitHub...");y=M.create_repo(name=w,private=False,auto_init=False);L.create_remote('origin',y.clone_url);print(f"Added remote 'origin':{y.clone_url}");return True
+    except Exception as e:print(f'Failed to create remote repository:{e}',file=O.stderr);O.exit(1)
+def c(L,n):try:F=L.remote('origin');t=F.url
+    except GitExc.NoSuchPathError:print("No remote 'origin' found.",file=O.stderr);return False
+    v=d(t)
+    if not v:print(f'Could not parse remote URL:{t}',file=O.stderr);return False
+    p,w=v
+    if p.lower()==h.lower():print(f'Remote origin is already from your account ({h}).');return False
+    try:E=Github(n);M=E.get_user()
+        try:J=M.get_repo(w);print(f'Fork already exists:{J.full_name}');L.remote('origin').set_url(J.clone_url);print(f"Updated remote 'origin' to:{J.clone_url}");return False
+        except GithubException:print(f'Forking {p}/{w} to {h}...');r=E.get_repo(f'{p}/{w}');J=M.create_fork(r);print(f'Created fork:{J.full_name}');L.remote('origin').set_url(J.clone_url);print(f"Updated remote 'origin' to:{J.clone_url}");return True
+    except Exception as e:print(f'Failed to fork repository:{e}',file=O.stderr);O.exit(1)
+def f(L,n):try:L.remote('origin')
+    except GitExc.NoSuchPathError:return b(L,n)
+    try:F=L.remote('origin')
+        if 'github.com' in F.url:return c(L,n)
+    except Exception:pass
+    return False
+def K():L=i();a();H=Q.getenv('GITHUB_TOKEN')
+    if not H:print('GITHUB_TOKEN not found in ~/.env',file=O.stderr);O.exit(1)
+    g=f(L,H);L.git.add('--all');N=x.now().strftime('%Y-%m-%d%H:%M:%S');s=f'Auto-commit at {N}';k=False
+    try:L.git.commit('-m',s);k=True
+    except GitExc.GitCommandError as e:if 'nothing to commit' in str(e).lower():print('No changes to commit.')
+        else:print(f'Commit failed:{e}',file=O.stderr);O.exit(1)
+    F=L.remote('origin');B=F.url;o=False
+    try:D=L.active_branch.name
+        if B.startswith('https://github.com/'):A=B.replace('https://github.com/',f'https://{h}:{H}@github.com/');F.set_url(A);o=True
+        elif B.startswith('git@github.com:'):u=B.replace('git@github.com:','https://github.com/');A=u.replace('https://github.com/',f'https://{h}:{H}@github.com/');F.set_url(A);o=True
+        print(f'Pushing to origin/{D}...')
+        if g:L.git.push('--set-upstream','origin',D)
+        else:F.push(refspec=f'{D}:{D}')
+        if k:print(f'Pushed to origin/{D} with message:{s}')
+        else:print(f'Pushed current state to origin/{D}')
+    except GitExc.GitCommandError as e:print(f'Push failed:{e}',file=O.stderr);O.exit(1)
+    finally:if o:F.set_url(B)
+if __name__=='__main__':raise SystemExit(K())
+# filename: pullforkpush.py
+import git;from dotenv import load_dotenv;from github import Github,GithubException
+def a():p=v.home()/'.env'
+    if not p.exists():raise FileNotFoundError(f'Could not find .env file at {p}')
+    load_dotenv(dotenv_path=p);u=z.getenv('GITHUB_TOKEN')
+    if not u:raise ValueError('GITHUB_TOKEN not found in ~/.env')
+    return (Github(u),u)
+def c(y):try:k=y.remotes.origin.url;k=k.removesuffix('.git')
+        if 'github.com' in k:t=k.split('github.com')[-1].strip('/:').split('/')
+            if len(t)>=2:return (t[0],t[1])
+    except (AttributeError,IndexError):pass
+    raise ValueError("Could not parse a valid GitHub remote URL from 'origin'.")
+def x():try:n=z.getcwd();j=git.Repo(n,search_parent_directories=True);g,u=a();d=g.get_user();h=d.login;l,o=c(j);print(f'[*] Local repo detected:{l}/{o}');print(f'[*] Authenticated as GitHub user:{h}');print('[*] Fetching updates from remote...');s=j.remotes.origin;s.fetch();b=j.active_branch
+        if not b.tracking_branch():print(f"[!] Active branch '{b.name}' has no upstream tracking branch. Setting to origin/{b.name}");b.set_tracking_branch(s.refs[b.name])
+        print(f"[*] Pulling latest changes into '{b.name}'...");s.pull()
+        if l.lower()==h.lower():print('[+] You are the owner of this repository. Preparing to push local changes...')
+            if j.is_dirty(untracked_files=True):print('[-] Found uncommitted local changes. Please commit them before pushing.');return
+            print(f"[*] Pushing '{b.name}' to origin...");w=s.push()
+            if w[0].flags&git.remote.PushInfo.ERROR:print(f'[-] Push failed:{w[0].summary}')
+            else:print('[+] Successfully synced and pushed updates to your repository!')
+        else:print('[*] You are not the owner. Checking for fork status...');i=g.get_repo(f'{l}/{o}')
+            try:r=d.get_repo(o);print(f'[+] Existing fork found:{r.full_name}')
+            except GithubException as e:if e.status==404:print(f'[*] Creating a fork of {l}/{o} on your account...');r=d.create_fork(i);print(f'[+] Fork created successfully:{r.full_name}')
+                else:raise
+            q=f'https://{h}:{u}@github.com/{h}/{o}.git'
+            if 'fork' in j.remotes:f=j.remotes.fork;f.set_url(q)
+            else:print("[*] Adding 'fork' remote to local configuration...");f=j.create_remote('fork',q)
+            print(f"[*] Pushing '{b.name}' to your fork...");m=f.push(refspec=f'{b.name}:{b.name}')
+            if m[0].flags&git.remote.PushInfo.ERROR:print(f'[-] Push to fork failed:{m[0].summary}')
+            else:print('[+] Successfully pulled upstream updates and pushed your work to your fork!')
+    except git.InvalidGitRepositoryError:print('[-] Error:Current directory is not inside a valid Git repository.')
+    except Exception as e:print(f'[-] An error occurred:{e}')
+if __name__=='__main__':raise SystemExit(x())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

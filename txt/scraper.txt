@@ -1,0 +1,1348 @@
+# --- File: cforyou.py ---
+import contextlib
+import json
+import re
+import time
+from pathlib import Path
+import requests
+from dh import cprint, get_installed_packages
+from packaging.version import Version
+a = 8
+b = 15
+c = '/sdcard/c4u.json'
+def d(e):
+    url = f'https://mirror-pypi.runflare.com/{e}'
+    try:
+        f = requests.get(url, timeout=b)
+        f.raise_for_status()
+        g = f.text
+    except:
+        return None
+    h = re.compile(f'{re.escape(e)}-([0-9][A-Za-z0-9\\.\\-_]*)\\.(?:whl|tar\\.gz|zip)', re.IGNORECASE)
+    i = []
+    for j in h.finditer(g):
+        k = j.group(1)
+        with contextlib.suppress(BaseException):
+            i.append(Version(k))
+    l = str(max(i)) if i else None
+    if l is not None:
+        print(f'{e}:{l}')
+    return l
+def m():
+    if Path(c).exists():
+        try:
+            with Path(c).open(encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            cprint(f"Warning: Corrupted results file '{c}'. Starting fresh.", 'red')
+            return {}
+    return {}
+def n(o):
+    with Path(c).open('w', encoding='utf-8') as f:
+        json.dump(o, f, indent=4)
+if __name__ == '__main__':
+    p = time.time()
+    q = get_installed_packages()
+    r = len(q)
+    cprint(f'Found {r} installed packages.', 'blue')
+    s = m()
+    t = {}
+    u = []
+    for e, v in q.items():
+        if e in s:
+            w = s[e]
+            if w.get('latest_version') and w.get('latest_version') == 'null':
+                u.append((e, v))
+                continue
+            if w.get('installed_version') == v:
+                t[e] = w
+                continue
+        u.append((e, v))
+    cprint(f'Will check {len(u)} packages.', 'blue')
+    x = []
+    for i, (e, v) in enumerate(u):
+        y = d(e)
+        t[e] = {'installed_version': v, 'latest_version': y, 'checked_at': time.strftime('%Y-%m-%d %H:%M:%S')}
+        if y:
+            try:
+                z = Version(v)
+                a1 = Version(y)
+                if z < a1:
+                    x.append((e, v, y))
+                    cprint(f'[{i + 1}/{len(u)}] {e}: {v} -> {y} (Updatable!)', 'green')
+                else:
+                    cprint(f'[{i + 1}/{len(u)}] {e}: {v} (Latest: {y})', 'white')
+            except Exception as ver_err:
+                cprint(f"[{i + 1}/{len(u)}] {e}: Could not parse versions '{v}' or '{y}': {ver_err}", 'yellow')
+        else:
+            cprint(f'[{i + 1}/{len(u)}] {e}: Could not get latest version from PyPI.', 'yellow')
+        if (i + 1) % 10 == 0 or i + 1 == len(u):
+            n(t)
+            cprint('Results saved periodically.', 'blue')
+    cprint('\n--- Summary of Updatable Packages ---', 'blue')
+    if x:
+        for pkg, z, a1 in x:
+            cprint(f'{pkg}: {z} -> {a1}', 'magenta')
+        cprint(f"\nTo update these packages, you can use: pip install --upgrade {' '.join([p[0] for p in x])}", 'yellow')
+    else:
+        cprint('All installed packages are up to date or could not be checked.', 'green')
+    b1 = time.time()
+    cprint(f'\nFinished in {b1 - p:.2f} seconds.', 'blue')
+
+# --- File: checksite.py ---
+import random
+import string
+import sys
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+from loguru import logger
+logger.remove()
+logger.add('check_modules.log', level='DEBUG', format='{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {message}', encoding='utf-8', backtrace=True, diagnose=True)
+logger.add(sys.stderr, level='INFO', format='<level>{level:<8}</level> | {message}')
+def c1():
+    import site
+    d1 = []
+    for p in site.getsitepackages():
+        pp = Path(p)
+        if pp.is_dir():
+            d1.append(pp)
+    try:
+        us = Path(site.getusersitepackages())
+        if us.is_dir():
+            d1.append(us)
+    except Exception:
+        pass
+    return d1
+def e1(f1):
+    for g1 in f1:
+        logger.debug(f'Scanning {g1}')
+        yield from g1.rglob('*.py')
+def h1(i1):
+    j1 = ''.join((random.choice(string.ascii_letters) for _ in range(20)))
+    try:
+        SourceFileLoader(j1, str(i1)).load_module()
+        logger.success(f'OK   {i1}')
+        return True
+    except Exception:
+        logger.error(f'FAIL {i1}')
+        logger.opt(exception=True).debug('Traceback:')
+        return False
+if __name__ == '__main__':
+    k1 = sys.argv[1:]
+    if k1:
+        l1 = [Path(a) for a in k1]
+    else:
+        f1 = c1()
+        if not f1:
+            logger.error('No site-packages directories found.')
+            sys.exit(2)
+        print(f'Site-packages roots: {[str(r) for r in f1]}')
+        l1 = list(e1(f1))
+    print(f'Checking {len(l1)} file(s)...')
+    m1 = False
+    ok = 0
+    n1 = 0
+    for f in l1:
+        if not f.is_file() or f.suffix != '.py':
+            logger.debug(f'Skip (not a .py file): {f}')
+            continue
+        if h1(f):
+            ok += 1
+        else:
+            m1 = True
+            n1 += 1
+    print(f'Done. OK={ok} FAIL={n1} TOTAL={ok + n1}')
+    sys.exit(1 if m1 else 0)
+
+# --- File: coc_link.py ---
+import time
+from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+def o1(p1='links.txt'):
+    try:
+        with open(p1) as i1:
+            q1 = [r1.strip() for r1 in i1 if r1.strip()]
+        return q1
+    except FileNotFoundError:
+        print(f'Error: {p1} not found. Please create a {p1} with website URLs.')
+        return []
+def s1(t1, u1=10):
+    v1 = []
+    try:
+        w1 = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        f = requests.get(t1, headers=w1, timeout=u1)
+        f.raise_for_status()
+        x1 = BeautifulSoup(f.content, 'html.parser')
+        y1 = x1.find_all('a', href=True)
+        for z1 in y1:
+            a2 = z1.get('href')
+            b2 = z1.get_text(strip=True).lower()
+            if any((c2 in b2.lower() or c2 in a2.lower() for c2 in ['th18', 'town hall 18', 'townhall 18', 'th-18'])):
+                d2 = urljoin(t1, a2)
+                if d2 not in v1:
+                    v1.append({'url': d2, 'title': b2 if b2 else 'TH18 Base', 'source': t1})
+        print(f'✓ Found {len(v1)} TH18 bases from {t1}')
+    except requests.exceptions.RequestException as e:
+        print(f'✗ Error fetching {t1}: {e!s}')
+    return v1
+def e2(f2, g2='th18_bases.html'):
+    h2 = '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Clash of Clans TH18 Base Links</title>\n    <style>\n        * {\n            margin: 0;\n            padding: 0;\n            box-sizing: border-box;\n        }\n        \n        body {\n            font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;\n            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n            min-height: 100vh;\n            padding: 20px;\n        }\n        \n        .container {\n            max-width: 1000px;\n            margin: 0 auto;\n            background: white;\n            border-radius: 10px;\n            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);\n            padding: 30px;\n        }\n        \n        h1 {\n            color: #333;\n            margin-bottom: 10px;\n            text-align: center;\n        }\n        \n        .info {\n            text-align: center;\n            color: #666;\n            margin-bottom: 30px;\n            font-size: 14px;\n        }\n        \n        .stats {\n            display: flex;\n            justify-content: center;\n            gap: 30px;\n            margin-bottom: 30px;\n            flex-wrap: wrap;\n        }\n        \n        .stat {\n            text-align: center;\n        }\n        \n        .stat-number {\n            font-size: 28px;\n            font-weight: bold;\n            color: #667eea;\n        }\n        \n        .stat-label {\n            color: #999;\n            font-size: 12px;\n            text-transform: uppercase;\n            margin-top: 5px;\n        }\n        \n        .bases-grid {\n            display: grid;\n            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));\n            gap: 20px;\n        }\n        \n        .base-card {\n            background: #f8f9fa;\n            border-left: 4px solid #667eea;\n            border-radius: 5px;\n            padding: 15px;\n            transition: all 0.3s ease;\n        }\n        \n        .base-card:hover {\n            background: #fff;\n            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);\n            transform: translateY(-2px);\n        }\n        \n        .base-title {\n            font-weight: bold;\n            color: #333;\n            margin-bottom: 10px;\n            word-break: break-word;\n        }\n        \n        .base-link {\n            display: inline-block;\n            background: #667eea;\n            color: white;\n            padding: 10px 15px;\n            border-radius: 5px;\n            text-decoration: none;\n            font-size: 14px;\n            margin-bottom: 10px;\n            transition: background 0.3s ease;\n            word-break: break-all;\n        }\n        \n        .base-link:hover {\n            background: #764ba2;\n        }\n        \n        .base-source {\n            font-size: 12px;\n            color: #999;\n            margin-top: 10px;\n            word-break: break-word;\n        }\n        \n        .empty {\n            text-align: center;\n            padding: 40px;\n            color: #999;\n        }\n        \n        .footer {\n            text-align: center;\n            margin-top: 30px;\n            padding-top: 20px;\n            border-top: 1px solid #eee;\n            font-size: 12px;\n            color: #999;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">\n        <h1>🏰 Clash of Clans TH18 Base Links</h1>\n        <p class="info">Extracted and compiled base links from various sources</p>\n        \n        <div class="stats">\n            <div class="stat">\n                <div class="stat-number">' + str(len(f2)) + '</div>\n                <div class="stat-label">Total Bases</div>\n            </div>\n            <div class="stat">\n                <div class="stat-number">' + str(len({i2['source'] for i2 in f2})) + '</div>\n                <div class="stat-label">Sources</div>\n            </div>\n        </div>\n        \n        <div class="bases-grid">\n'
+    if f2:
+        for i, i2 in enumerate(f2, 1):
+            h2 += f'''            <div class="base-card">\n                <div class="base-title">Base #{i}: {i2['title']}</div>\n                <a href="{i2['url']}" class="base-link" target="_blank">🔗 Open Base</a>\n                <div class="base-source"><strong>Source:</strong> {i2['source']}</div>\n            </div>\n'''
+    else:
+        h2 += '            <div class="empty">\n                <p>No TH18 bases found. Make sure your links.txt contains valid URLs and the websites have TH18 bases.</p>\n            </div>\n'
+    h2 += '        </div>\n        \n        <div class="footer">\n            <p>Generated automatically | Clash of Clans Base Scraper</p>\n        </div>\n    </div>\n</body>\n</html>\n'
+    with open(g2, 'w', encoding='utf-8') as f:
+        f.write(h2)
+    print(f'\n✓ HTML file saved as {g2}')
+def j2():
+    print('-' * 40)
+    print('Clash of Clans TH18 Base Link Extractor')
+    print('-' * 40)
+    k2 = o1('links.txt')
+    if not k2:
+        return
+    print(f'\nFound {len(k2)} websites to scrape...\n')
+    l2 = []
+    for i, m2 in enumerate(k2, 1):
+        print(f'[{i}/{len(k2)}] Scraping {m2}...')
+        if not m2.startswith(('http://', 'https://')):
+            m2 = 'https://' + m2
+        n2 = s1(m2)
+        l2.extend(n2)
+        time.sleep(1)
+    print(f'\nTotal TH18 bases found: {len(l2)}')
+    e2(l2)
+    print("\nDone! Open 'th18_bases.html' in your browser to view the results.")
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: coclink.py ---
+import os
+import re
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from dotenv import load_dotenv
+from googleapiclient.discovery import Resource, build
+load_dotenv()
+o2 = os.getenv('YOUTUBE_API_KEY')
+p2 = {'Blueprint_CoC': 'UCQJJGSWnPUCb8uKV_MoJeOA', 'iTzu': 'UCLKKvlo0yK8OgWvjCiZQ3sA', 'Clash_Champs': 'UC_mD8S6pWpSstY3mXJ9nEqw'}
+def q2(r2, s2):
+    t2 = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    u2 = []
+    v2 = r2.search().list(part='snippet', channelId=s2, publishedAfter=t2, maxResults=50, order='date', type='video')
+    while v2:
+        f = v2.execute()
+        for w2 in f.get('items', []):
+            x2 = w2['id']['videoId']
+            y2 = r2.videos().list(part='snippet', id=x2).execute()
+            z2 = y2['items'][0]['snippet']
+            u2.append({'title': z2['title'], 'description': z2['description'], 'url': f'https://www.youtube.com/watch?v={x2}'})
+        v2 = r2.search().list_next(v2, f)
+        if len(u2) > 100:
+            break
+    return u2
+def a3(b3):
+    c3 = '(https?://link\\.clashofclans\\.com/[^\\s]+)'
+    q1 = re.findall(c3, b3)
+    return [l for l in q1 if 'TH18' in l.upper() or 'TH18' in b3.upper()]
+def d3(e3, f3):
+    g3 = datetime.now().strftime('%d-%m-%Y')
+    h3 = Path(f'output/{g3}_{e3}')
+    h3.mkdir(exist_ok=True, parents=True)
+    i3 = h3 / 'bases.html'
+    h2 = f'\n    <html>\n    <head>\n        <title>{e3} TH18 Bases</title>\n        <style>\n            body {{ font-family: sans-serif; padding: 20px; background:\n            .card {{ background: white; margin-bottom: 15px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}\n            a {{ color:\n            .vid-ref {{ font-size: 0.9em; color:\n        </style>\n    </head>\n    <body>\n        <h1>TH18 Bases from {e3} (Last 30 Days)</h1>\n    '
+    for w2 in f3:
+        h2 += f'''\n        <div class="card">\n            <h3>{w2['title']}</h3>\n            <p class="vid-ref">Source: <a href="{w2['video_url']}" target="_blank">Watch Video</a></p>\n            <ul>\n        '''
+        for z1 in w2['links']:
+            h2 += f'<li><a href="{z1}">Get Base Layout</a></li>'
+        h2 += '</ul></div>'
+    h2 += '</body></html>'
+    i3.write_text(h2, encoding='utf-8')
+    print(f'Generated: {i3}')
+def j2():
+    if not o2:
+        print('Error: API_KEY not found in .env file.')
+        return
+    r2 = build('youtube', 'v3', developerKey=o2)
+    for j3, cid in p2.items():
+        print(f'Processing {j3}...')
+        k3 = q2(r2, cid)
+        o = []
+        for v in k3:
+            q1 = a3(v['description'])
+            if q1:
+                o.append({'title': v['title'], 'video_url': v['url'], 'links': list(set(q1))})
+        if o:
+            d3(j3, o)
+        else:
+            print(f'No TH18 links found for {j3}.')
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: crawler.py ---
+import json
+import os
+import re
+from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+from dh import cprint
+l3 = 'https://dls2.aparatchi-dlcenter.top/DonyayeSerial/'
+m3 = 'movies.txt'
+n3 = 'crawler_state.json'
+o3 = 300
+p3 = set()
+q3 = []
+def r3(s3):
+    if not s3 or s3.strip() == '-':
+        return None
+    j = re.search('([\\d.]+)\\s*([KMG]?)i?B?', s3.strip())
+    if j:
+        t3 = float(j.group(1))
+        u3 = j.group(2).upper()
+        if u3 == 'G':
+            return t3 * 1024
+        elif u3 == 'M':
+            return t3
+        elif u3 == 'K':
+            return t3 / 1024
+        else:
+            return t3 / 1024 / 1024
+    return None
+def v3(p1, w3):
+    if not p1:
+        return False
+    if not (p1.lower().endswith('.mkv') or p1.lower().endswith('.mp4')):
+        return False
+    if not ('480p' in p1.lower() or '720p' in p1.lower()):
+        return False
+    if w3 is None or w3 >= o3:
+        return False
+    cprint(f'{p1} {w3:.2f} MB')
+    return True
+def x3():
+    y3 = {'visited': list(p3), 'found_movies': q3}
+    with open(n3, 'w', encoding='utf-8') as f:
+        json.dump(y3, f, indent=2)
+def z3():
+    global visited, found_movies
+    if os.path.exists(n3):
+        try:
+            with open(n3, 'r', encoding='utf-8') as f:
+                y3 = json.load(f)
+                p3 = set(y3.get('visited', []))
+                q3 = y3.get('found_movies', [])
+                print(f'📂 Loaded previous state: {len(p3)} visited, {len(q3)} movies found')
+                return True
+        except Exception as e:
+            print(f'⚠️ Error loading state: {e}')
+    return False
+def a4(url):
+    if url not in q3:
+        q3.append(url)
+        with open(m3, 'a', encoding='utf-8') as f:
+            f.write(url + '\n')
+def b4(url, c4=0):
+    if url in p3:
+        return
+    if 'movie' in url.lower():
+        return
+    print(f"{'  ' * c4}Crawling: {url}")
+    p3.add(url)
+    try:
+        f = requests.get(url, timeout=15)
+        f.raise_for_status()
+    except Exception as e:
+        print(f'❌ Failed to access {url}: {e}')
+        return
+    x1 = BeautifulSoup(f.text, 'html.parser')
+    d4 = x1.find_all('tr')
+    if not d4:
+        d4 = x1.select('table tbody tr')
+    for row in d4:
+        e4 = row.find_all('td')
+        if len(e4) < 3:
+            continue
+        f4 = e4[0]
+        g4 = f4.find('a')
+        if not g4:
+            continue
+        j3 = g4.text.strip()
+        a2 = g4.get('href')
+        if not a2:
+            continue
+        h4 = e4[2].text.strip() if len(e4) > 2 else ''
+        w3 = r3(h4)
+        i4 = urljoin(url, a2)
+        if 'Parent directory' in j3 or 'Parent Directory' in j3:
+            continue
+        if a2.endswith('/'):
+            b4(i4, c4 + 1)
+        elif v3(j3, w3):
+            print(f'✅ Found: {i4} ({w3:.2f} MB)')
+            a4(i4)
+            x3()
+def j2():
+    global found_movies
+    print('🎬 Movie Crawler with Resume Support')
+    print('=' * 40)
+    j4 = z3()
+    if not j4 and os.path.exists(m3):
+        try:
+            with open(m3, 'r', encoding='utf-8') as f:
+                k4 = [r1.strip() for r1 in f if r1.strip()]
+                q3 = k4
+                print(f'📂 Loaded {len(q3)} movies from {m3}')
+        except Exception as e:
+            print(f'⚠️ Could not load existing movie file: {e}')
+    print('\n🔍 Starting crawl...')
+    try:
+        b4(l3)
+    except KeyboardInterrupt:
+        print('\n⏹️ Interrupted by user. Saving state...')
+        x3()
+        print('💾 State saved. Run again to resume.')
+        return
+    x3()
+    print(f'\n✅ Done. {len(q3)} movies saved to {m3}')
+    if q3:
+        print('\n📋 First 5 movies found:')
+        for url in q3[:5]:
+            print(f'  • {url}')
+        if len(q3) > 5:
+            print(f'  ... and {len(q3) - 5} more')
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: download_images.py ---
+import argparse
+import hashlib
+import multiprocessing as mp
+from collections import deque
+from io import BytesIO
+from pathlib import Path
+from urllib.parse import urldefrag, urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+from PIL import Image
+l4 = 300
+m4 = 400
+m3 = Path('img_urls.txt')
+n4 = Path('images')
+def o4(url):
+    url, p4 = urldefrag(url)
+    return url.rstrip('/') if urlparse(url).path else url
+def q4(url):
+    return urlparse(url).scheme in {'http', 'https'}
+def r4(x1, s4):
+    t4 = set()
+    for u4 in x1.find_all('img'):
+        for v4 in ('src', 'data-src', 'data-lazy-src', 'data-original', 'data-image'):
+            t3 = u4.get(v4)
+            if t3:
+                w4 = o4(urljoin(s4, t3.strip()))
+                if q4(w4):
+                    t4.add(w4)
+        x4 = u4.get('srcset')
+        if x4:
+            for y4 in x4.split(','):
+                w4 = y4.strip().split(' ')[0]
+                if w4:
+                    w4 = o4(urljoin(s4, w4))
+                    if q4(w4):
+                        t4.add(w4)
+    return t4
+def z4(x1, s4, a5):
+    q1 = set()
+    for b5 in x1.find_all('a', href=True):
+        z1 = o4(urljoin(s4, b5['href']))
+        if q4(z1) and urlparse(z1).netloc == a5:
+            q1.add(z1)
+    return q1
+def c5(w4):
+    try:
+        f = requests.get(w4, timeout=20, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*'})
+        f.raise_for_status()
+        if not f.headers.get('Content-Type', '').startswith('image/'):
+            return None
+        with Image.open(BytesIO(f.content)) as u4:
+            d5, e5 = u4.size
+        if d5 > l4 and e5 > m4:
+            return (w4, d5, e5)
+    except Exception:
+        pass
+    return None
+def f5(w4):
+    g5 = urlparse(w4)
+    h5 = Path(g5.path).name or 'image'
+    i5 = Path(h5).suffix.lower()
+    if not i5:
+        i5 = '.img'
+    j5 = Path(h5).stem or 'image'
+    k5 = hashlib.sha256(w4.encode()).hexdigest()[:12]
+    return f'{j5}_{k5}{i5}'
+def l5(w2):
+    w4, m5, n5 = w2
+    n4.mkdir(exist_ok=True)
+    o5 = n4 / f5(w4)
+    try:
+        f = requests.get(w4, timeout=30, headers={'User-Agent': 'Mozilla/5.0'})
+        f.raise_for_status()
+        o5.write_bytes(f.content)
+        return str(o5)
+    except Exception:
+        return None
+def p5(q5, r5, s5, t5):
+    q5 = o4(q5)
+    a5 = urlparse(q5).netloc
+    u5 = requests.Session()
+    u5.headers.update({'User-Agent': 'Mozilla/5.0'})
+    v5 = deque([q5])
+    w5 = set()
+    x5 = set()
+    y5 = []
+    z5 = max(1, mp.cpu_count() - 1)
+    with mp.Pool(processes=z5) as a6:
+        while v5 and len(w5) < r5:
+            s4 = v5.popleft()
+            if s4 in w5:
+                continue
+            w5.add(s4)
+            print(f'Scanning: {s4}', flush=True)
+            try:
+                f = u5.get(s4, timeout=20)
+                f.raise_for_status()
+            except requests.RequestException as error:
+                print(f'Could not scan page: {error}')
+                continue
+            if 'text/html' not in f.headers.get('Content-Type', ''):
+                continue
+            x1 = BeautifulSoup(f.text, 'html.parser')
+            b6 = r4(x1, s4) - x5
+            x5.update(b6)
+            o = a6.map(c5, b6)
+            for c6 in o:
+                if c6 is not None:
+                    y5.append(c6)
+            for z1 in z4(x1, s4, a5):
+                if z1 not in w5:
+                    v5.append(z1)
+        if s5:
+            with m3.open('w', encoding='utf-8') as i1:
+                for w4, d5, e5 in y5:
+                    print(f'{d5}x{e5} {w4}')
+                    i1.write(f'{w4}\n')
+            print(f'Saved URLs to {m3}')
+        if t5:
+            d6 = a6.map(l5, y5)
+            e6 = [i3 for i3 in d6 if i3 is not None]
+            print(f'Downloaded {len(e6)} image(s) to {n4}/')
+    print(f'Scanned {len(w5)} page(s), checked {len(x5)} image(s), found {len(y5)} matching image(s).')
+def j2():
+    f6 = argparse.ArgumentParser(description='Find, print, save, and download large website images.')
+    f6.add_argument('url', help='Starting URL, for example https://example.com')
+    f6.add_argument('-p', '--print', action='store_true', dest='print_urls', help='Print matching URLs and save them to img_urls.txt')
+    f6.add_argument('-d', '--download', action='store_true', dest='download_images', help='Download matching images into the images/ directory')
+    f6.add_argument('--max-pages', type=int, default=100, help='Maximum same-site pages to scan; default: 100')
+    k1 = f6.parse_args()
+    if not q4(k1.url):
+        f6.error('URL must start with http:// or https://')
+    if not k1.print_urls and (not k1.download_images):
+        f6.error('Use -p, -d, or both')
+    if k1.max_pages < 1:
+        f6.error('--max-pages must be at least 1')
+    p5(start_url=k1.url, max_pages=k1.max_pages, print_urls=k1.print_urls, download_images=k1.download_images)
+if __name__ == '__main__':
+    mp.freeze_support()
+    j2()
+
+# --- File: ex_video_link.py ---
+import json
+import re
+import sys
+from pathlib import Path
+import requests
+from bs4 import BeautifulSoup
+def g6(h6):
+    w1 = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        f = requests.get(h6, headers=w1, timeout=10)
+        f.raise_for_status()
+    except requests.RequestException as e:
+        return {'error': f'Failed to fetch URL: {e}'}
+    x1 = BeautifulSoup(f.content, 'html.parser')
+    i6 = None
+    for j6 in x1.find_all('script', {'type': 'application/json'}):
+        try:
+            k6 = json.loads(j6.string)
+            if 'config' in k6:
+                i6 = k6['config']
+                break
+        except json.JSONDecodeError:
+            continue
+    x2 = None
+    l6 = re.search('zzztube\\.com/(\\d+)', h6)
+    if l6:
+        x2 = l6.group(1)
+    m6 = x1.find('meta', {'property': 'og:video'})
+    if m6:
+        n6 = m6.get('content', '')
+        if 'zzztube' in n6:
+            o6 = re.search('/(\\d+)', n6)
+            if o6:
+                x2 = o6.group(1)
+    p6 = None
+    q6 = x1.find('meta', {'property': 'og:title'})
+    if q6:
+        p6 = q6.get('content')
+    r6 = x1.find('iframe', {'src': re.compile('zzztube')})
+    s6 = r6.get('src') if r6 else None
+    t6 = f'https://zzztube.com/{x2}' if x2 else None
+    return {'video_id': x2, 'title': p6, 'playable_url': t6, 'iframe_src': s6, 'direct_url': f'https://player.zzztube.com/video/{x2}' if x2 else None}
+def u6(o, g2='zzztube_links.json'):
+    v6 = Path(g2)
+    with open(v6, 'w', encoding='utf-8') as f:
+        json.dump(o, f, indent=2, ensure_ascii=False)
+    return v6
+if __name__ == '__main__':
+    w6 = sys.argv[1:]
+    x6 = []
+    for url in w6:
+        print(f'\n📹 Processing: {url}')
+        c6 = g6(url)
+        x6.append(c6)
+        if 'error' in c6:
+            print(f"❌ {c6['error']}")
+        else:
+            print(f"✅ Video ID: {c6['video_id']}")
+            print(f"📝 Title: {c6['title']}")
+            print(f"🔗 Playable URL: {c6['playable_url']}")
+            print(f"▶️  Player URL: {c6['direct_url']}")
+    y6 = u6(x6)
+    print(f'\n💾 Results saved to: {y6.absolute()}')
+
+# --- File: findlinks.py ---
+import sys
+import time
+from collections import deque
+from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
+import requests
+from bs4 import BeautifulSoup
+def z6(rp, url):
+    try:
+        return rp.can_fetch('*', url)
+    except Exception:
+        return True
+def a7(q5, r5, b7, ext):
+    g5 = urlparse(q5)
+    if not g5.scheme:
+        q5 = 'https://' + q5.lstrip('/')
+        g5 = urlparse(url)
+    c7 = g5.netloc
+    rp = RobotFileParser()
+    d7 = urljoin(q5, '/robots.txt')
+    try:
+        rp.set_url(d7)
+        rp.read()
+        print(f'✅ Loaded robots.txt: {d7}')
+    except Exception as e:
+        print(f'⚠️  Could not load robots.txt ({e}). Proceeding with caution.')
+        rp = None
+    p3 = set()
+    e7 = set()
+    f7 = deque([q5])
+    w1 = {'User-Agent': 'EXT-Crawler/1.0 (non-commercial; see --help)'}
+    while f7 and len(p3) < r5:
+        url = f7.popleft()
+        if url in p3:
+            continue
+        if rp and (not z6(rp, url)):
+            print(f'🚫 Skipping (robots.txt): {url}')
+            continue
+        p3.add(url)
+        try:
+            print(f'🔍 Checking: {url}')
+            g7 = requests.get(url, headers=w1, timeout=10)
+            g7.raise_for_status()
+            h7 = g7.headers.get('Content-Type', '').lower()
+            if ext in h7:
+                e7.add(url)
+                print(f'  📄 (via Content-Type): {url}')
+                continue
+            if 'html' not in h7 and (not url.lower().endswith(('.html', '.htm'))):
+                continue
+            x1 = BeautifulSoup(g7.content, 'html.parser')
+            for a in x1.find_all('a', href=True):
+                a2 = a['href'].strip()
+                i4 = urljoin(url, a2)
+                if not i4.startswith(('http://', 'https://')):
+                    continue
+                if urlparse(i4).netloc != c7:
+                    continue
+                if i4.lower().endswith(ext):
+                    e7.add(i4)
+                    print(f'  📄found {ext} (via link): {i4}')
+                elif i4 not in p3:
+                    if not any((i4.lower().endswith(i7) for i7 in ('.jpg', '.jpeg', '.png', '.gif', '.css', '.js'))):
+                        f7.append(i4)
+        except requests.RequestException as e:
+            print(f'  ⚠️  Request error: {e}')
+        except Exception as e:
+            print(f'  ⚠️  Unexpected error: {e}')
+        time.sleep(b7)
+    return sorted(e7)
+def j7(w6, p1='urls.txt'):
+    with open(p1, 'w', encoding='utf-8') as f:
+        f.writelines((url + '\n' for url in w6))
+    print(f"\n✅ Saved {len(w6)} URLs to '{p1}'")
+def j2():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    q5 = sys.argv[1]
+    ext = sys.argv[2]
+    r5 = 1000
+    b7 = 1.0
+    k7 = a7(q5, r5, b7, ext)
+    j7(k7)
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: findpdflinks.py ---
+import sys
+import time
+from collections import deque
+from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
+import requests
+from bs4 import BeautifulSoup
+def z6(rp, url):
+    try:
+        return rp.can_fetch('*', url)
+    except Exception:
+        return True
+def l7(q5, r5=100, b7=1.0):
+    g5 = urlparse(q5)
+    if not g5.scheme:
+        q5 = 'https://' + q5.lstrip('/')
+        g5 = urlparse(url)
+    c7 = g5.netloc
+    rp = RobotFileParser()
+    d7 = urljoin(q5, '/robots.txt')
+    try:
+        rp.set_url(d7)
+        rp.read()
+        print(f'✅ Loaded robots.txt: {d7}')
+    except Exception as e:
+        print(f'⚠️  Could not load robots.txt ({e}). Proceeding with caution.')
+        rp = None
+    p3 = set()
+    m7 = set()
+    f7 = deque([q5])
+    w1 = {'User-Agent': 'PDF-Crawler/1.0 (non-commercial; see --help)'}
+    while f7 and len(p3) < r5:
+        url = f7.popleft()
+        if url in p3:
+            continue
+        if rp and (not z6(rp, url)):
+            print(f'🚫 Skipping (robots.txt): {url}')
+            continue
+        p3.add(url)
+        try:
+            print(f'🔍 Checking: {url}')
+            g7 = requests.get(url, headers=w1, timeout=10)
+            g7.raise_for_status()
+            h7 = g7.headers.get('Content-Type', '').lower()
+            if 'pdf' in h7:
+                m7.add(url)
+                print(f'  📄 PDF (via Content-Type): {url}')
+                continue
+            if 'html' not in h7 and (not url.lower().endswith(('.html', '.htm'))):
+                continue
+            x1 = BeautifulSoup(g7.content, 'html.parser')
+            for a in x1.find_all('a', href=True):
+                a2 = a['href'].strip()
+                i4 = urljoin(url, a2)
+                if not i4.startswith(('http://', 'https://')):
+                    continue
+                if urlparse(i4).netloc != c7:
+                    continue
+                if i4.lower().endswith('.pdf'):
+                    m7.add(i4)
+                    print(f'  📄 PDF (via link): {i4}')
+                elif i4 not in p3:
+                    if not any((i4.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.gif', '.css', '.js'))):
+                        f7.append(i4)
+        except requests.RequestException as e:
+            print(f'  ⚠️  Request error: {e}')
+        except Exception as e:
+            print(f'  ⚠️  Unexpected error: {e}')
+        time.sleep(b7)
+    return sorted(m7)
+def j7(w6, p1='urls.txt'):
+    with open(p1, 'w', encoding='utf-8') as f:
+        f.writelines((url + '\n' for url in w6))
+    print(f"\n✅ Saved {len(w6)} PDF URLs to '{p1}'")
+def j2():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    q5 = sys.argv[1]
+    r5 = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+    b7 = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
+    if b7 < 0.1:
+        print('⚠️  Delay too low (<0.1s). Setting to 0.1s for safety.')
+        b7 = 0.1
+    print(f'🔍 Starting crawl at: {q5}')
+    print(f'   Max pages: {r5}, Delay: {b7}s\n')
+    m7 = l7(q5, r5, b7)
+    j7(m7)
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: gcli.py ---
+import sys
+from googlesearch import search
+if __name__ == '__main__':
+    tts = sys.argv[1]
+    for c6 in search(tts):
+        print(c6)
+
+# --- File: get_websize.py ---
+import argparse
+import sys
+from collections import defaultdict
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+n7 = {'link': ['href'], 'script': ['src'], 'img': ['src', 'srcset'], 'source': ['src', 'srcset'], 'video': ['src', 'poster'], 'audio': ['src'], 'iframe': ['src'], 'embed': ['src'], 'object': ['data']}
+def o7(p7, t3):
+    w6 = []
+    for q7 in t3.split(','):
+        url = q7.strip().split(' ')[0]
+        if url:
+            w6.append(urljoin(p7, url))
+    return w6
+def r7(u5, url):
+    try:
+        g7 = u5.get(url, stream=True, timeout=15, allow_redirects=True)
+        s7 = 0
+        for t7 in g7.iter_content(chunk_size=8192):
+            s7 += len(t7)
+        return (s7, g7.headers.get('content-type', '').split(';')[0])
+    except requests.RequestException as e:
+        print(f'  ! Failed: {url} ({e})', file=sys.stderr)
+        return None
+def u7(u5, url):
+    try:
+        g7 = u5.get(url, timeout=15)
+        g7.raise_for_status()
+    except requests.RequestException as e:
+        print(f'  ! Could not fetch HTML {url}: {e}', file=sys.stderr)
+        return []
+    h7 = g7.headers.get('content-type', '')
+    if 'html' not in h7:
+        return []
+    x1 = BeautifulSoup(g7.text, 'html.parser')
+    w6 = set()
+    for v7, w7 in n7.items():
+        for tag in x1.find_all(v7):
+            for x7 in w7:
+                t3 = tag.get(x7)
+                if not t3:
+                    continue
+                if x7 == 'srcset':
+                    for u in o7(url, t3):
+                        w6.add(u)
+                else:
+                    w6.add(urljoin(url, t3))
+    return list(w6)
+def y7(z7):
+    for u3 in ['B', 'KB', 'MB', 'GB']:
+        if z7 < 1024:
+            return f'{z7:.2f} {u3}'
+        z7 /= 1024
+    return f'{z7:.2f} TB'
+def j2():
+    f6 = argparse.ArgumentParser(description='Measure total download size of a website.')
+    f6.add_argument('url', help='Starting URL, e.g. https://docs.astral.sh/ty/')
+    f6.add_argument('--crawl', action='store_true', help='Follow same-domain links and measure each page (slower).')
+    f6.add_argument('--max-pages', type=int, default=50, help='Max pages to crawl when --crawl is used (default: 50).')
+    f6.add_argument('--user-agent', default='Mozilla/5.0 (size-checker)', help='User-Agent string to send.')
+    k1 = f6.parse_args()
+    u5 = requests.Session()
+    u5.headers['User-Agent'] = k1.user_agent
+    a8 = k1.url
+    b8 = urlparse(a8).netloc
+    c8 = set()
+    v5 = [a8]
+    w5 = set()
+    d8 = 0
+    e8 = 0
+    f8 = defaultdict(int)
+    g8 = 0
+    while v5:
+        h8 = v5.pop(0)
+        if h8 in w5:
+            continue
+        w5.add(h8)
+        if k1.crawl and len(w5) > k1.max_pages:
+            break
+        print(f'\n>> Page: {h8}')
+        try:
+            g7 = u5.get(h8, timeout=15)
+            g7.raise_for_status()
+            i8 = len(g7.content)
+            d8 += i8
+            e8 += i8
+            f8['text/html'] += i8
+            print(f'   HTML: {y7(i8)}')
+        except requests.RequestException as e:
+            print(f'   ! Failed: {e}', file=sys.stderr)
+            continue
+        x1 = BeautifulSoup(g7.text, 'html.parser')
+        for v7, w7 in n7.items():
+            for tag in x1.find_all(v7):
+                for x7 in w7:
+                    t3 = tag.get(x7)
+                    if not t3:
+                        continue
+                    w6 = o7(h8, t3) if x7 == 'srcset' else [urljoin(h8, t3)]
+                    for u in w6:
+                        if u in c8:
+                            continue
+                        c8.add(u)
+                        c6 = r7(u5, u)
+                        if c6 is None:
+                            continue
+                        s7, j8 = c6
+                        d8 += s7
+                        f8[j8 or 'unknown'] += s7
+                        g8 += 1
+        if k1.crawl:
+            for a in x1.find_all('a', href=True):
+                z1 = urljoin(h8, a['href'])
+                p = urlparse(z1)
+                if p.netloc == b8 and p.scheme in ('http', 'https'):
+                    k8 = p._replace(fragment='').geturl()
+                    if k8 not in w5:
+                        v5.append(k8)
+    print('\n' + '=' * 60)
+    print(f'Pages visited:      {len(w5)}')
+    print(f'Sub-resources:      {g8}')
+    print(f'HTML total:         {y7(e8)}')
+    print(f'TOTAL DOWNLOAD:     {y7(d8)}')
+    print('=' * 60)
+    print('\nBreakdown by content-type:')
+    for j8, s7 in sorted(f8.items(), key=lambda x: -x[1]):
+        print(f'  {j8:<30} {y7(s7):>12}')
+if __name__ == '__main__':
+    j2()
+
+# --- File: saveimages.py ---
+import argparse
+import os
+from pathlib import Path
+from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+def l5(url, l8):
+    try:
+        f = requests.get(url, stream=True, timeout=5)
+        f.raise_for_status()
+        p1 = os.path.join(l8, Path(url).name)
+        with Path(p1).open('wb') as f:
+            f.writelines(f.iter_content(1024))
+        print(f'Downloaded: {p1}')
+    except Exception as e:
+        print(f'Failed to download {url}: {e}')
+def m8(url, l8):
+    try:
+        f = requests.get(url, timeout=5)
+        f.raise_for_status()
+        x1 = BeautifulSoup(f.text, 'html.parser')
+        n8 = x1.find_all('img')
+        if not Path(l8).exists():
+            Path(l8).mkdir(parents=True)
+        for img in n8:
+            o8 = img.get('src')
+            if o8:
+                o8 = urljoin(url, o8)
+                l5(o8, l8)
+    except Exception as e:
+        print(f'Error: {e}')
+if __name__ == '__main__':
+    f6 = argparse.ArgumentParser(description='Extract images from a URL and save them to an output directory.')
+    f6.add_argument('url', type=str, help='URL to extract images from')
+    f6.add_argument('output_dir', default='output', type=str, help='Output directory to save images')
+    k1 = f6.parse_args()
+    m8(k1.url, k1.output_dir)
+
+# --- File: scrap_site.py ---
+import re
+from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+l3 = 'https://dls2.aparatchi-dlcenter.top/DonyayeSerial/'
+m3 = 'movies.txt'
+o3 = 300
+p3 = set()
+q3 = []
+def r3(s3):
+    j = re.search('([\\d.]+)\\s*Mi?B', s3)
+    if j:
+        return float(j.group(1))
+    return None
+def v3(p1, w3):
+    if not p1.lower().endswith('.mkv'):
+        return False
+    if not ('480p' in p1.lower() or '720p' in p1.lower()):
+        return False
+    return not (w3 is None or w3 >= o3)
+def p8(x1, s4):
+    q8 = []
+    d4 = x1.find_all('tr')
+    for row in d4:
+        e4 = row.find_all('td')
+        if len(e4) < 3:
+            continue
+        g4 = e4[0].find('a')
+        if not g4:
+            continue
+        j3 = g4.text.strip()
+        a2 = g4.get('href')
+        h4 = e4[1].text.strip()
+        i4 = urljoin(s4, a2)
+        if 'Parent directory' in j3:
+            continue
+        if a2.endswith('/'):
+            b4(i4)
+        else:
+            w3 = r3(h4)
+            if v3(j3, w3):
+                print(f'  ✓ Found in table: {i4} ({w3} MB)')
+                q8.append(i4)
+    r8 = x1.find_all('textarea', class_='value')
+    for s8 in r8:
+        t8 = s8.text.strip()
+        if t8:
+            print(f'  📋 Found textarea with {len(t8.splitlines())} links')
+            for r1 in t8.splitlines():
+                r1 = r1.strip()
+                if r1.endswith('.mkv') and ('480p' in r1.lower() or '720p' in r1.lower()):
+                    print(f'  ✓ Found in textarea: {r1}')
+                    q8.append(r1)
+    u8 = x1.find_all('p', style=lambda t3: t3 and 'text-align: center' in t3)
+    for v8 in u8:
+        q1 = v8.find_all('a', href=True)
+        for z1 in q1:
+            a2 = z1.get('href')
+            if a2 and a2.endswith('.mkv') and ('480p' in a2.lower() or '720p' in a2.lower()):
+                print(f'  ✓ Found in p tag: {a2}')
+                q8.append(a2)
+    return q8
+def b4(url):
+    if url in p3:
+        return
+    print(f'\n🔍 Crawling: {url}')
+    p3.add(url)
+    if 'movie' in url:
+        return
+    try:
+        f = requests.get(url, timeout=10)
+        f.raise_for_status()
+        print(f'  📡 Status: {f.status_code}')
+    except Exception as e:
+        print(f'  ❌ Failed to access {url}: {e}')
+        return
+    x1 = BeautifulSoup(f.text, 'html.parser')
+    q8 = p8(x1, url)
+    for z1 in q8:
+        if z1 not in q3:
+            q3.append(z1)
+            print(f'  ✅ Added to list: {z1}')
+if __name__ == '__main__':
+    print('🚀 Starting crawler...')
+    print(f'📁 Base URL: {l3}')
+    print(f'📊 Max size: {o3} MB')
+    print(f'💾 Output file: {m3}')
+    print('-' * 40)
+    b4(l3)
+    print('\n' + '=' * 40)
+    print('✅ Crawling complete!')
+    print(f'📈 Total unique movies found: {len(q3)}')
+    with open(m3, 'w', encoding='utf-8') as f:
+        f.writelines((w8 + '\n' for w8 in q3))
+    print(f'💾 Movies saved to: {m3}')
+    if q3:
+        print('\n📋 All found movies:')
+        for i, w8 in enumerate(q3, 1):
+            print(f'  {i}. {w8}')
+    else:
+        print('\n⚠️ No movies found matching the criteria!')
+
+# --- File: scrapr.py ---
+import argparse
+import json
+import re
+import signal
+from multiprocessing import Manager, Pool
+from pathlib import Path
+from typing import Any
+from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+from loguru import logger
+x8 = 'https://sr.moviesho.com/Series/'
+n3 = Path('crawler_state.json')
+y8 = Path('movies.txt')
+z8 = Path('movies.json')
+a9 = 8
+b9 = False
+def c9(sig, d9):
+    global stop_flag
+    logger.warning('⚠️  Interrupt received! Saving progress...')
+    b9 = True
+signal.signal(signal.SIGINT, c9)
+def r3(s3):
+    j = re.search('([\\d.]+)\\s*Mi?B', s3)
+    if j:
+        return float(j.group(1))
+    return None
+def e9(p1):
+    f9 = p1.lower()
+    if '480p' in f9:
+        return '480'
+    if '720p' in f9:
+        return '720'
+    return None
+def g9(url):
+    try:
+        w1 = {'User-Agent': 'Mozilla/5.0'}
+        f = requests.get(url, headers=w1, timeout=10)
+        f.raise_for_status()
+        return f.text
+    except Exception as exc:
+        logger.debug(f'Failed to fetch {url}: {exc}')
+        return None
+def h9(url, i9):
+    o = []
+    j9 = []
+    g = g9(url)
+    if not g:
+        return (o, j9)
+    x1 = BeautifulSoup(g, 'html.parser')
+    d4 = x1.find_all('tr')
+    for row in d4:
+        e4 = row.find_all('td')
+        if len(e4) < 3:
+            continue
+        g4 = e4[0].find('a')
+        if not g4:
+            continue
+        j3 = g4.text.strip()
+        a2 = g4.get('href')
+        if not a2:
+            continue
+        h4 = e4[1].text.strip()
+        if 'Parent directory' in j3:
+            continue
+        i4 = urljoin(url, a2)
+        if a2.endswith('/'):
+            j9.append(i4)
+            continue
+        if not j3.lower().endswith('.mkv'):
+            continue
+        k9 = e9(j3)
+        if k9 not in ('480', '720'):
+            continue
+        w3 = r3(h4)
+        if w3 is None or w3 > i9:
+            continue
+        o.append({'url': i4, 'quality': k9, 'size_mb': w3})
+    return (o, j9)
+def x3(f7, p3):
+    y3 = {'queue': list(f7), 'visited': list(p3)}
+    with n3.open('w', encoding='utf-8') as f:
+        json.dump(y3, f)
+def z3():
+    if not n3.exists():
+        return (None, None)
+    with n3.open(encoding='utf-8') as f:
+        y3 = json.load(f)
+    return (set(y3['visited']), y3['queue'])
+def l9(o):
+    with y8.open('a', encoding='utf-8') as f:
+        f.writelines((r['url'] + '\n' for r in o))
+    with z8.open('a', encoding='utf-8') as f:
+        f.writelines((json.dumps(r) + '\n' for r in o))
+def j2():
+    global stop_flag
+    f6 = argparse.ArgumentParser()
+    f6.add_argument('-u', '--url', default=x8, help='Base URL to crawl')
+    f6.add_argument('-s', '--size', type=float, default=300, help='Max size in MB (default 300)')
+    k1 = f6.parse_args()
+    i9 = k1.size
+    p7 = k1.url if k1.url.endswith('/') else k1.url + '/'
+    m9 = Manager()
+    p3 = m9.list()
+    f7 = m9.list()
+    n9, o9 = z3()
+    if o9:
+        print('🔁 Resuming previous crawl...')
+        p3[:] = n9 or []
+        f7[:] = o9
+    else:
+        f7.append(p7)
+    print(f'🚀 Using {a9} processes')
+    with Pool(processes=a9) as a6:
+        while f7 and (not b9):
+            p9 = []
+            for _ in range(min(len(f7), a9)):
+                url = f7.pop(0)
+                if url in p3:
+                    continue
+                p3.append(url)
+                q9 = a6.apply_async(h9, (url, i9))
+                p9.append((q9, url))
+            for q9, _ in p9:
+                if b9:
+                    break
+                try:
+                    o, j9 = q9.get()
+                except Exception as exc:
+                    logger.error(f'Worker error: {exc}')
+                    continue
+                if o:
+                    l9(o)
+                    print(f'✅ Found {len(o)} movies')
+                for sub in j9:
+                    if sub not in p3:
+                        f7.append(sub)
+    x3(list(f7), set(p3))
+    if b9:
+        print('💾 Progress saved. Run again to continue.')
+    else:
+        if n3.exists():
+            n3.unlink()
+        print('✅ Crawl completed successfully.')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(j2())
+
+# --- File: search_site.py ---
+import sys
+import time
+from collections import deque
+from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
+import requests
+from bs4 import BeautifulSoup
+if len(sys.argv) < 3:
+    print('Usage: python script.py <site> <keyword>')
+    print('Example: python script.py https://subdl.com shameless')
+    sys.exit(1)
+r9 = sys.argv[1].rstrip('/')
+s9 = sys.argv[2].lower()
+if not r9.startswith(('http://', 'https://')):
+    r9 = 'https://' + r9
+t9 = urlparse(r9).netloc.lower().split(':')[0]
+u9 = {'User-Agent': 'Mozilla/5.0 (compatible; URLCollector/1.0; +https://example.com/bot)'}
+u5 = requests.Session()
+u5.headers.update(u9)
+rp = RobotFileParser()
+rp.set_url(urljoin(r9, '/robots.txt'))
+try:
+    rp.read()
+except Exception:
+    pass
+def v9(url):
+    try:
+        return rp.can_fetch(u9['User-Agent'], url)
+    except Exception:
+        return True
+def w9(url):
+    x9 = urlparse(url).netloc.lower().split(':')[0]
+    return x9 == t9 or x9.endswith('.' + t9)
+def y9(url):
+    p = urlparse(url)
+    return p._replace(fragment='').geturl()
+def b4(z9, r5=3000, b7=0.5):
+    f7 = deque(z9)
+    a10 = set()
+    b10 = set()
+    while f7 and len(a10) < r5:
+        url = y9(f7.popleft())
+        if url in a10 or not v9(url):
+            continue
+        a10.add(url)
+        print('Checking:', url)
+        if s9 in url.lower():
+            b10.add(url)
+        try:
+            r = u5.get(url, timeout=20)
+            r.raise_for_status()
+        except Exception as e:
+            print('Error:', url, e)
+            continue
+        if 'text/html' not in r.headers.get('content-type', ''):
+            continue
+        x1 = BeautifulSoup(r.text, 'html.parser')
+        for a in x1.find_all('a', href=True):
+            c10 = y9(urljoin(url, a['href']))
+            if not w9(c10):
+                continue
+            if s9 in c10.lower():
+                b10.add(c10)
+            if c10 not in a10:
+                f7.append(c10)
+        time.sleep(b7)
+    return b10
+if __name__ == '__main__':
+    z9 = [r9]
+    w6 = b4(z9, max_pages=3000, delay=0.5)
+    d10 = f'{s9}_urls.txt'
+    with open(d10, 'w', encoding='utf-8') as f:
+        f.writelines((u + '\n' for u in sorted(w6)))
+    print(f'Found {len(w6)} URLs')
+    print(f'Saved to {d10}')
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
