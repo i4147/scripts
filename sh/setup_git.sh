@@ -7,7 +7,7 @@
 # EDIT THESE VALUES WITH YOUR INFORMATION
 # ============================================
 
-GIT_USERNAME="unforgivenii147"
+GIT_USERNAME="i4147"
 GIT_EMAIL="adnanonagh@gmail.com"
 GIT_EDITOR="code --wait" # Change to your preferred editor (vim, nano, code, etc.)
 DEFAULT_BRANCH="main"

@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 
+
 def remove_timestamp(filename: str) -> str:
     """
     Remove timestamp pattern like _2026070965435 from end of filename (before extension).
@@ -8,10 +9,11 @@ def remove_timestamp(filename: str) -> str:
     """
     p = Path(filename)
     stem = p.stem
-    new_stem = re.sub(r'_\d{13}$', '', stem)
+    new_stem = re.sub(r"_\d{13}$", "", stem)
     if new_stem != stem:
         return new_stem + p.suffix
     return None  # signal: no change
+
 
 def unique_path(path: Path) -> Path:
     """
@@ -25,7 +27,7 @@ def unique_path(path: Path) -> Path:
     suffix = path.suffix
 
     # If stem already ends with _N, strip it so we don't stack counters
-    base_stem = re.sub(r'_\d+$', '', stem)
+    base_stem = re.sub(r"_\d+$", "", stem)
 
     i = 1
     while True:
@@ -34,9 +36,10 @@ def unique_path(path: Path) -> Path:
             return candidate
         i += 1
 
-def strip_timestamps(root: str = '.'):
+
+def strip_timestamps(root: str = "."):
     root_path = Path(root).resolve()
-    files = [f for f in root_path.rglob('*') if f.is_file()]
+    files = [f for f in root_path.rglob("*") if f.is_file()]
 
     renamed = 0
     renamed_conflict = 0
@@ -64,5 +67,6 @@ def strip_timestamps(root: str = '.'):
 
     print(f"\nDone. Renamed: {renamed}, Renamed w/ conflict: {renamed_conflict}, Skipped: {skipped}")
 
-if __name__ == '__main__':
-    strip_timestamps('.')
+
+if __name__ == "__main__":
+    strip_timestamps(".")

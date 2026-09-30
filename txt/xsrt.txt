@@ -1,0 +1,128 @@
+# filename: ex_srt.py
+import ffmpy
+def a(f):s=ffmpy.FFprobe(inputs={f:None},global_options=['-v','error','-select_streams','s','-show_entries','stream=index:stream_tags=language','-of','json'])
+    try:k,h=s.run(k=True,stderr=True);n=o.loads(k.decode());return n.get('streams',[])
+    except ffmpy.FFExecutableNotFoundError:print('ffmpeg/ffprobe is required but not installed.');r.exit(1)
+    except Exception as e:print(f'Error probing file:{e}');r.exit(1)
+def b(f,c,d):s=ffmpy.FFmpeg(inputs={f:None},outputs={d:f'-map 0:s:{c}'},global_options=['-y'])
+    try:s.run(k=False,stderr=False);return True
+    except Exception as e:print(f'Error:{e}');return False
+def q():if len(r.argv)!=2:print(f'Usage:{r.argv[0]}<video.mkv|video.mp4>');r.exit(1)
+    f=r.argv[1]
+    if not m(f).exists():print(f'File not found:{f}');r.exit(1)
+    j=a(f)
+    if not j:print('No subtitle streams found.');r.exit(0)
+    g=m(f).stem
+    for i,l in enumerate(j):p=l.get('tags',{}).get('language','und');d=f'{g}.sub{i}.{p}.srt';print(f"Extracting subtitle stream {l['index']}->{d}");b(f,i,d)
+    print('Done.')
+if __name__=='__main__':raise SystemExit(q())
+# filename: ex_srt2.py
+import ffmpeg
+def a(d):try:h=ffmpeg.probe(d);b=[g for g in h['streams'] if g['codec_type']=='subtitle']
+        if not b:print('No subtitle streams found.');return
+        f=j(d).stem
+        for i,g in enumerate(b):k=g.get('tags',{}).get('language','und');c=f'{f}.sub{i}.{k}.srt';print(f'Extracting subtitle stream {i}->{c}');ffmpeg.input(d).output(c,map=f'0:s:{i}').overwrite_output().run(quiet=True)
+        print('Done.')
+    except ffmpeg.Error as e:print(f'FFmpeg error:{(e.stderr.decode() if e.stderr else e)}');m.exit(1)
+    except FileNotFoundError:print('ffmpeg is required but not installed.');m.exit(1)
+def l():if len(m.argv)!=2:print(f'Usage:{m.argv[0]}<video.mkv|video.mp4>');m.exit(1)
+    d=m.argv[1];a(d)
+if __name__=='__main__':raise SystemExit(l())
+# filename: exsrt.py
+def e():b=f.argv[1];a=b.replace('.mkv','.srt');d=['ffmpeg','-i',b,'-map','0:s:0',a];c.run(d)
+if __name__=='__main__':raise SystemExit(e())
+# filename: exsrt2.py
+def a(g):try:f.run(['ffmpeg','-version'],check=True,capture_output=True)
+    except FileNotFoundError:raise FileNotFoundError('ffmpeg is required but not installed.')
+    h=g.rsplit('.',1)[0];c=['ffprobe','-v','error','-select_streams','s','-show_entries','stream=index:stream_tags=language','-of','csv=p=0',g];d=f.run(c,capture_output=True,text=True,check=True);m=d.stdout.strip().split('\n')
+    if not m or (len(m)==1 and m[0]==''):print('No subtitle streams found.');return
+    i=0
+    for l in m:j,k=l.split(',')
+        if not k:k='und'
+        b=f'{h}.sub{i}.{k}.srt';print(f'Extracting subtitle stream {j}->{b}');e=['ffmpeg','-y','-i',g,'-map',f'0:s:{i}',b];f.run(e,check=True,capture_output=True);i+=1
+    print('Done.')
+if __name__=='__main__':o=n.argv[1].strip();a(o)
+# filename: exsrt3.py
+import ffmpeg
+def a(l):try:m=ffmpeg.probe(l,select_streams='s');i=[]
+        for r in m.get('streams',[]):print(r)
+            if r.get('codec_type')=='subtitle':j={'index':r.get('index'),'language':r.get('tags',{}).get('language','und'),'title':r.get('tags',{}).get('title'),'forced':r.get('disposition',{}).get('forced',0)==1,'codec_name':r.get('codec_name')};print(j);i.append(j)
+        return i
+    except ffmpeg.Error as e:print(f"Error probing file:{e.stderr.decode('utf8')}");return []
+def w():if len(x.argv)!=2:print(f'Usage:{x.argv[0]}<video.mkv|video.mp4>');x.exit(1)
+    g=x.argv[1];l=u(g)
+    if not l.exists():print(f'File not found:{l}');x.exit(1)
+    o=l.with_suffix('');b=a(g);print(b)
+    if not b:print('No subtitle streams found.');x.exit(0)
+    print(f'Found {len(b)} subtitle streams.')
+    try:d=[]
+        for y,j in enumerate(b):s=j['index'];v=j['language'];t=j['title'];q=j['forced'];k=j['codec_name'];f=[str(o)];f.append(f'sub{s}')
+            if v!='und':f.append(v)
+            if t:n=''.join((c if c.isalnum() else '_' for c in t));f.append(n)
+            if q:f.append('forced')
+            h='.'.join(f)+'.srt';p=u(h);d.append(str(p))
+    except:print(f'Extracting stream index {s} (Lang:{v},Forced:{q},Codec:{k})->{p}')
+if __name__=='__main__':raise SystemExit(w())
+# filename: getsrt.py
+def a(e):if not e.exists():return
+    b=e.with_suffix('.srt');f=['ffmpeg','-i',str(e),'-map','0:s:0','-y',str(b)]
+    try:c.run(f,check=True)
+    except:print('Error')
+if __name__=='__main__':h=d(g.argv[1].strip());a(h)
+# filename: xsub.py
+def y(w):k=d.run(w,check=False,capture_output=True,text=True)
+    if k.returncode!=0:raise RuntimeError(k.stderr.strip())
+    return k.stdout
+def b(f):w=['ffprobe','-v','error','-select_streams','s','-show_entries','stream=index,codec_name:stream_tags=language,title','-of','json',f];return r.loads(y(w)).get('streams',[])
+def a(f,c):c.mkdir(parents=True,exist_ok=True);v=b(f)
+    if not v:print('No embedded subtitle streams found.');return
+    q=f.stem
+    for s in v:x=s['index'];m=s.get('codec_name','sub');t=s.get('tags',{}).get('language','und');n=s.get('tags',{}).get('title','').replace(' ','_');l=f'.{t}'
+        if n:i='srt' if m in {'subrip','srt'} else m
+        h=c/f'{q}{l}.{i}';w=['ffmpeg','-y','-i',str(f),'-map',f'0:s:{v.index(s)}',str(h)]
+        try:y(w);print(f'Extracted:{h}')
+        except RuntimeError as e:print(f'Failed to extract subtitle stream {x}:{e}')
+def u():j=g.ArgumentParser(description='Extract embedded subtitles from a movie file');j.add_argument('movie',help='Path to movie file');j.add_argument('-o','--output',default='subtitles',help='Output directory');p=j.parse_args();f=o(p.movie).resolve();c=o(p.output).resolve()
+    if not f.exists():raise FileNotFoundError(f)
+    a(f,c)
+if __name__=='__main__':raise SystemExit(u())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

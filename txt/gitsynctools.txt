@@ -128,7 +128,7 @@ def k():try:l=Repo('.',search_parent_directories=True)
     except Exception as e:print(f'Unexpected error:{e}',file=n.stderr);n.exit(1)
 if __name__=='__main__':raise SystemExit(k())
 # filename: gp2.py
-from dotenv import load_dotenv;from git import Repo,exc as GitExc;load_dotenv(o.home()/'.env');b='unforgivenii147'
+from dotenv import load_dotenv;from git import Repo,exc as GitExc;load_dotenv(o.home()/'.env');b='i4147'
 def c():try:return Repo('.')
     except GitExc.InvalidGitRepositoryError:print('Not inside a Git repository.',file=s.stderr);s.exit(1)
 def a():f=o.home()/'.gitignore';d=o('.gitignore')
@@ -149,7 +149,7 @@ def p():q=c();a();q.git.add('--all');r=i.now().strftime('%Y-%m-%d%H:%M:%S');h=f'
     finally:if g:m.set_url(k)
 if __name__=='__main__':raise SystemExit(p())
 # filename: gp3.py
-from dotenv import load_dotenv;from git import Repo,exc as GitExc;from github import Github,GithubException;load_dotenv(I.home()/'.env');h='unforgivenii147'
+from dotenv import load_dotenv;from git import Repo,exc as GitExc;from github import Github,GithubException;load_dotenv(I.home()/'.env');h='i4147'
 def i():try:return Repo('.')
     except GitExc.InvalidGitRepositoryError:print('Not inside a Git repository.',file=O.stderr);O.exit(1)
 def a():l=I.home()/'.gitignore';j=I('.gitignore')

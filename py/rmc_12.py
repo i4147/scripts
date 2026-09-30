@@ -771,12 +771,8 @@ def iter_python_files(roots: Iterable[Path]) -> Iterator[Path]:
                         yield root
 
             elif root.is_dir():
-                for directory, directory_names, filenames in root.walk(
-                    on_error=on_error
-                ):
-                    directory_names[:] = [
-                        name for name in directory_names if name not in SKIP_DIRS
-                    ]
+                for directory, directory_names, filenames in root.walk(on_error=on_error):
+                    directory_names[:] = [name for name in directory_names if name not in SKIP_DIRS]
 
                     for filename in filenames:
                         if not filename.endswith(PYTHON_SUFFIXES):
@@ -848,10 +844,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-d",
         "--remove-docstrings",
         action="store_true",
-        help=(
-            "Remove function and class docstrings. The module docstring is "
-            "preserved (unlike --all)."
-        ),
+        help=("Remove function and class docstrings. The module docstring is preserved (unlike --all)."),
     )
 
     parser.add_argument(
@@ -870,9 +863,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         type=Path,
         metavar="PATH",
-        help=(
-            "Python files or directories to process. Defaults to the current directory."
-        ),
+        help=("Python files or directories to process. Defaults to the current directory."),
     )
 
     return parser

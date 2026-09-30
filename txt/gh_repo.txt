@@ -19,7 +19,7 @@ def t():if len(v.argv)<2:print('Usage:python create_repo.py<repo_name>');print('
     else:v.exit(1)
 if __name__=='__main__':raise SystemExit(t())
 # filename: new_repo.py
-import requests;from dotenv import load_dotenv;from git import InvalidGitRepositoryError,Repo;load_dotenv(v.path.expanduser('~/.env'));f='unforgivenii147';h=v.getenv('GITHUB_TOKEN');j=o.cwd().name;m='main'
+import requests;from dotenv import load_dotenv;from git import InvalidGitRepositoryError,Repo;load_dotenv(v.path.expanduser('~/.env'));f='i4147';h=v.getenv('GITHUB_TOKEN');j=o.cwd().name;m='main'
 def c():try:s=Repo(o.cwd());print('Existing git repository found.');return s
     except InvalidGitRepositoryError:print('No git repository found. Creating new one...');s=Repo.init(o.cwd());print('Git repository initialized.');return s
 def d(s):if s.is_dirty(untracked_files=True):s.index.add(['*']);s.index.commit('Update files');print('Changes committed.')
@@ -37,7 +37,7 @@ def r():if not h:print('Error:GITHUB_TOKEN not found in environment variables.')
     except Exception as e:print(f'❌ Error:{e}');t.exit(1)
 if __name__=='__main__':raise SystemExit(r())
 # filename: new_repo2.py
-from dotenv import load_dotenv;from git import InvalidGitRepositoryError,NoSuchPathError,Repo;from github import Github;from github.Auth import Token;q=x.home()/'.env';load_dotenv(q);l='unforgivenii147';i=G.getenv('GITHUB_TOKEN')
+from dotenv import load_dotenv;from git import InvalidGitRepositoryError,NoSuchPathError,Repo;from github import Github;from github.Auth import Token;q=x.home()/'.env';load_dotenv(q);l='i4147';i=G.getenv('GITHUB_TOKEN')
 def j():return G.path.basename(G.getcwd())
 def d():E=x.home()/'.gitignore';C=x.cwd()/'.gitignore'
     if E.exists() and (not C.exists()):v.copy2(E,C);print(f'Copied {E}->{C}')
@@ -94,7 +94,7 @@ def m():i=d();print(f'Repository name:{i}')
     print(f"\n✅ Success! Repository '{i}' is now on GitHub.");print(f'View it at:https://github.com/{i}')
 if __name__=='__main__':raise SystemExit(m())
 # filename: pynewrepo.py
-class l:def __init__(self,C=None):self.cwd=T.cwd();self.repo_name=C or self.cwd.name;self.github_username='unforgivenii147';self.git_email='adnanonagh@gmail.com';self.git_user='unforgivenii147';self.repo_url=f'https://github.com/{self.github_username}/{self.repo_name}.git'
+class l:def __init__(self,C=None):self.cwd=T.cwd();self.repo_name=C or self.cwd.name;self.github_username='i4147';self.git_email='adnanonagh@gmail.com';self.git_user='i4147';self.repo_url=f'https://github.com/{self.github_username}/{self.repo_name}.git'
     def u(self,H,W=None,r=False):try:P=B.run(H,check=False,W=W or self.cwd,r=r,text=True);R=P.stdout.strip() if P.stdout else '';Q=P.stderr.strip() if P.stderr else '';return (P.returncode,R,Q)
         except Exception as e:print(f"Error executing command:{' '.join(H)}");print(f'Exception:{e}');return (1,'',str(e))
     def c(self):A,_,_=self._run_command(['gh','--version'],r=True);return A==0

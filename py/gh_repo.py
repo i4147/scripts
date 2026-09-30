@@ -44,9 +44,9 @@ from typing import Any, Optional, Sequence
 # Defaults (previously hardcoded in the originals)
 # ---------------------------------------------------------------------------
 
-DEFAULT_GITHUB_USERNAME = "unforgivenii147"
+DEFAULT_GITHUB_USERNAME = "i4147"
 DEFAULT_GIT_EMAIL = "adnanonagh@gmail.com"
-DEFAULT_GIT_USER = "unforgivenii147"
+DEFAULT_GIT_USER = "i4147"
 DEFAULT_ENV_FILE = Path.home() / ".env"
 DEFAULT_GLOBAL_GITIGNORE = Path.home() / ".gitignore"
 DEFAULT_DESCRIPTION = "created with python"
