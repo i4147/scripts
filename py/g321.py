@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """Squash the last N git commits into one, guarded by a same-day check.
 
 Usage:

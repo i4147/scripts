@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """
 Safely remove comments, docstrings, type annotations, and excess blank lines
 from Python source files using LibCST.

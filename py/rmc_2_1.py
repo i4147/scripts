@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """strip_comments.py
 
 Safely remove comments, docstrings, type annotations, and repeated blank

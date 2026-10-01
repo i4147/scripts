@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 from __future__ import annotations
 
 import hashlib

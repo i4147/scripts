@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """Write a Python command-line script that automates publishing the current directory as a Git repository to GitHub.
 Design it around an abstract GitBackend class (implemented by a SubprocessBackend using git and gh CLI commands) so operations like checking/initializing a repo, creating a remote GitHub repository, staging and committing changes, detecting the current branch, pushing with upstream tracking, and pulling with rebase on conflicts are all testable and swappable.
 The script should accept command-line arguments (e.g., via argparse) for things like commit message and repository name, print each executed command for transparency, and exit with an error message if any critical git/gh command fails."""

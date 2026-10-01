@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """dupeGuru-style CLI duplicate file finder.
 
 Fast, multiprocessing, hash-based duplicate detection.

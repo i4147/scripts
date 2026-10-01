@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Migrate standard working-tree Git repositories in the current directory.
 
 Requires Git and GitHub CLI (gh) to be installed and authenticated.

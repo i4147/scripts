@@ -1208,7 +1208,7 @@ index 12e4770..0000000
 --- a/afkco.py
 +++ /dev/null
 @@ -1,546 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import ast
@@ -1792,7 +1792,7 @@ index ce1864c..0000000
 --- a/annotate_types.py
 +++ /dev/null
 @@ -1,287 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import argparse
@@ -2137,7 +2137,7 @@ index 0000000..32725b7
 --- /dev/null
 +++ b/archive_convert_codec/convert_gz_xz.py
 @@ -0,0 +1,156 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Recompress .gz archives as .xz and .xz archives as .gz, in place.
 +
 +Replaces gz2xz.py and xz2gz.py, which were 93% identical and both reported a 0-byte
@@ -2315,7 +2315,7 @@ index 0000000..3516b37
 --- /dev/null
 +++ b/archive_create/archive_and_clean.py
 @@ -0,0 +1,176 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Archive a directory and then delete what was archived, to free the space.
 +
 +Merges the two scripts that lived in this folder:
@@ -8940,7 +8940,7 @@ index 567bbec..0000000
 --- a/bcss.py
 +++ /dev/null
 @@ -1,45 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -9313,7 +9313,7 @@ index 752cbbb..0000000
 --- a/ccss.py
 +++ /dev/null
 @@ -1,53 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -9890,7 +9890,7 @@ index 22394ea..0000000
 --- a/clean_wordlist.py
 +++ /dev/null
 @@ -1,66 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import mmap
@@ -9970,7 +9970,7 @@ index e74ca61..0000000
 --- a/clean_wordlist_fast.py
 +++ /dev/null
 @@ -1,45 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import contextlib
@@ -10117,7 +10117,7 @@ index 73fda3c..0000000
 --- a/cleanmd.py
 +++ /dev/null
 @@ -1,293 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import re
@@ -10496,7 +10496,7 @@ index 0000000..3aef96e
 --- /dev/null
 +++ b/cli_wrapper.py
 @@ -0,0 +1,147 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Run a CLI binary through a logging shim: tee its output to a per-run log file.
 +
 +Consolidates feloai.py and wrapper_gh.py, which were the same ~100-line template
@@ -10961,7 +10961,7 @@ index 7764a7d..0000000
 --- a/compile_precise2.py
 +++ /dev/null
 @@ -1,230 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import base64
@@ -11889,7 +11889,7 @@ index f58796e..0000000
 --- a/dduper.py
 +++ /dev/null
 @@ -1,467 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import argparse
@@ -13546,7 +13546,7 @@ index b99b381..0000000
 --- a/ex_class.py
 +++ /dev/null
 @@ -1,47 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -from collections import defaultdict
@@ -13607,7 +13607,7 @@ index 5cd9a18..0000000
 --- a/ex_comments.py
 +++ /dev/null
 @@ -1,47 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -from collections import defaultdict
@@ -13676,7 +13676,7 @@ index 85263a7..0000000
 --- a/ex_ex.py
 +++ /dev/null
 @@ -1,47 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -from collections import defaultdict
@@ -13737,7 +13737,7 @@ index 6468c57..0000000
 --- a/ex_func.py
 +++ /dev/null
 @@ -1,47 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -from collections import defaultdict
@@ -13990,7 +13990,7 @@ index 796265d..0000000
 --- a/extar.py
 +++ /dev/null
 @@ -1,209 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import argparse
@@ -14377,7 +14377,7 @@ index 0000000..49bb66c
 --- /dev/null
 +++ b/extract_python_entities/ex_nodes.py
 @@ -0,0 +1,139 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Extract top-level tree-sitter nodes from Python files into ``output/<folder>/imports.py``.
 +
 +This consolidates four byte-for-byte template scripts that differed *only* in the
@@ -14862,7 +14862,7 @@ index bc62d94..0000000
 --- a/feloai.py
 +++ /dev/null
 @@ -1,102 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import datetime
@@ -15258,7 +15258,7 @@ index 0000000..bd2a6f0
 --- /dev/null
 +++ b/find_files_by_time/files_by_time.py
 @@ -0,0 +1,112 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""List the newest or the oldest entries under a directory, with their timestamps.
 +
 +Replaces newest_files.py and oldest_files.py, which were the same walk sorted in
@@ -15468,7 +15468,7 @@ index e9c8b52..0000000
 --- a/findpdflinks.py
 +++ /dev/null
 @@ -1,109 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -16091,7 +16091,7 @@ index 41329d0..0000000
 --- a/fmt_bash.py
 +++ /dev/null
 @@ -1,53 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -16318,7 +16318,7 @@ index 0000000..a634a99
 --- /dev/null
 +++ b/font_convert/font_convert.py
 @@ -0,0 +1,109 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Convert font files between TTF / OTF / WOFF / WOFF2 using fontTools.
 +
 +This consolidates four template scripts that were ~99% identical and differed
@@ -16517,7 +16517,7 @@ index dc878b5..0000000
 --- a/forfin.py
 +++ /dev/null
 @@ -1,56 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import subprocess
@@ -16691,7 +16691,7 @@ index 1cd1673..0000000
 --- a/fssim.py
 +++ /dev/null
 @@ -1,183 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import csv
@@ -17262,7 +17262,7 @@ index 509af76..0000000
 --- a/gext.py
 +++ /dev/null
 @@ -1,269 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import ast
@@ -18009,7 +18009,7 @@ index 2644524..0000000
 --- a/gtransline.py
 +++ /dev/null
 @@ -1,157 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import argparse
@@ -18180,7 +18180,7 @@ index 9f17690..0000000
 --- a/gz2xz.py
 +++ /dev/null
 @@ -1,82 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import gzip
@@ -18432,7 +18432,7 @@ index 0000000..e6e281a
 --- /dev/null
 +++ b/html_md_convert/html_to_md.py
 @@ -0,0 +1,110 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Convert HTML files to Markdown, keeping only the main article content.
 +
 +readability-lxml extracts the article body first, then one of two converters renders
@@ -18695,7 +18695,7 @@ index b4687d6..0000000
 --- a/html_to_md.py
 +++ /dev/null
 @@ -1,54 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -19115,7 +19115,7 @@ index 22867e6..0000000
 --- a/imz.py
 +++ /dev/null
 @@ -1,536 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import argparse
@@ -19857,7 +19857,7 @@ index c0aba49..0000000
 --- a/jb2.py
 +++ /dev/null
 @@ -1,52 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import json
@@ -19939,7 +19939,7 @@ index ef1dfc4..0000000
 --- a/joincss.py
 +++ /dev/null
 @@ -1,96 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import re
@@ -20237,7 +20237,7 @@ index 0f2831d..0000000
 --- a/l.py
 +++ /dev/null
 @@ -1,40 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import datetime
@@ -20479,7 +20479,7 @@ index 56df0ce..0000000
 --- a/lll.py
 +++ /dev/null
 @@ -1,31 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import datetime
@@ -20592,7 +20592,7 @@ index 0000000..c60637f
 --- /dev/null
 +++ b/ls_dir_listing/l.py
 @@ -0,0 +1,77 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""List files and directories in a folder, newest first, with their age.
 +
 +Usage: l.py [-r|--reverse] [-g|--newest] [N] [DIRECTORY]
@@ -20971,7 +20971,7 @@ index 2553cb4..0000000
 --- a/mendic.py
 +++ /dev/null
 @@ -1,150 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import json
@@ -21127,7 +21127,7 @@ index 0000000..d3d5a41
 --- /dev/null
 +++ b/merge_css_files/merge_css.py
 @@ -0,0 +1,207 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Combine the CSS files of a project into one stylesheet.
 +
 +Merges the two scripts that lived in this folder:
@@ -21412,7 +21412,7 @@ index e68c4ac..0000000
 --- a/mergecss.py
 +++ /dev/null
 @@ -1,8 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -from dh import runcmd
@@ -21474,7 +21474,7 @@ index 7641fe1..0000000
 --- a/mfadic.py
 +++ /dev/null
 @@ -1,140 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import json
@@ -21644,7 +21644,7 @@ index 590d68c..0000000
 --- a/mincss.py
 +++ /dev/null
 @@ -1,44 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -21726,7 +21726,7 @@ index 0000000..7d98817
 --- /dev/null
 +++ b/minify_web_assets/mincss.py
 @@ -0,0 +1,97 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Minify CSS files in place with an external Node.js CLI.
 +
 +Two engines are supported (replaces ccss.py, which was this script driving clean-css
@@ -21917,7 +21917,7 @@ index d0a5fd3..0000000
 --- a/mk_stand.py
 +++ /dev/null
 @@ -1,337 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -"""Standalone HTML/CSS bundler: inline local and remote CSS/JS/images into HTML files by base64-encoding assets and replacing <link>/<script>/<img>/url() references, processing files in parallel with a fixed 8-process pool via multiprocessing.Pool.apply_async, using pathlib for all paths and loguru for logging."""
 -
 -import argparse
@@ -22316,7 +22316,7 @@ index 58b76d5..0000000
 --- a/mkpic.py
 +++ /dev/null
 @@ -1,99 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import compileall
@@ -22429,7 +22429,7 @@ index f1e8caa..0000000
 --- a/mkpyc.py
 +++ /dev/null
 @@ -1,48 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import compileall
@@ -22515,7 +22515,7 @@ index 55e60e6..0000000
 --- a/mkst.py
 +++ /dev/null
 @@ -1,356 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -"""
 -Generate a standalone Python script that bundles HTML and CSS files by embedding
 -local and remote resources (images, stylesheets, scripts, fonts) as base64 data
@@ -23217,7 +23217,7 @@ index e2aee45..0000000
 --- a/newest_files.py
 +++ /dev/null
 @@ -1,41 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -23524,7 +23524,7 @@ index 49e0624..0000000
 --- a/oldest_files.py
 +++ /dev/null
 @@ -1,42 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -23678,7 +23678,7 @@ index b96395c..0000000
 --- a/otf2woff2.py
 +++ /dev/null
 @@ -1,37 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -23987,7 +23987,7 @@ index 0000000..6f1b831
 --- /dev/null
 +++ b/pickle_convert/pickle_convert.py
 @@ -0,0 +1,174 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Unpickle a file to JSON, to raw bytes, or just print it.
 +
 +Merges the three scripts that lived in this folder:
@@ -24444,7 +24444,7 @@ index 7f9dd51..0000000
 --- a/pkl2json.py
 +++ /dev/null
 @@ -1,16 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import json
@@ -24474,7 +24474,7 @@ index d1464be..0000000
 --- a/pkltojson.py
 +++ /dev/null
 @@ -1,79 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import json
@@ -24907,7 +24907,7 @@ index 0000000..febb3bb
 --- /dev/null
 +++ b/pyc_compile_tools/compile_pyc.py
 @@ -0,0 +1,176 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Byte-compile Python files to .pyc, in parallel.
 +
 +Merges the two scripts that lived in this folder:
@@ -25549,7 +25549,7 @@ index 5514f31..0000000
 --- a/qrcode_reader.py
 +++ /dev/null
 @@ -1,53 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -25608,7 +25608,7 @@ index 0000000..bc8bdc0
 --- /dev/null
 +++ b/qrcode_tools/qr_decode.py
 @@ -0,0 +1,111 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Decode QR codes (and, optionally, any other barcode) out of image files.
 +
 +Merges the two scripts that lived in this folder:
@@ -25733,7 +25733,7 @@ index f59a7d9..0000000
 --- a/qrcoder.py
 +++ /dev/null
 @@ -1,47 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import os
@@ -26752,7 +26752,7 @@ index 0000000..fb492df
 --- /dev/null
 +++ b/run_external_formatter/run_formatter.py
 @@ -0,0 +1,180 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Run any external formatter/CLI over a set of files, in parallel.
 +
 +Merges the two scripts that lived in this folder:
@@ -27144,7 +27144,7 @@ index c49c065..7f3f9c8 100755
 --- a/findlinks.py
 +++ b/scrape_site_links/findlinks.py
 @@ -1,4 +1,17 @@
- #!/data/data/com.termux/files/home/.local/bin/python
+ #!/data/data/com.termux/usr/bin/python3.12
 +"""Crawl a site and collect every link whose URL ends with a given extension.
 +
 +robots.txt is respected, pages are queued breadth-first and the crawl stays inside the
@@ -27924,7 +27924,7 @@ index 98333dc..0000000
 --- a/ssdim.py
 +++ /dev/null
 @@ -1,181 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import csv
@@ -28709,7 +28709,7 @@ index ed4db3f..0000000
 --- a/t.me1.py
 +++ /dev/null
 @@ -1,29 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import re
@@ -28768,7 +28768,7 @@ index c11c4d3..0000000
 --- a/tar_folder.py
 +++ /dev/null
 @@ -1,42 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import shutil
@@ -28872,7 +28872,7 @@ index 0000000..47b28ff
 --- /dev/null
 +++ b/telegram_tools/telegram_link_scraper.py
 @@ -0,0 +1,146 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Scrape links out of a Telegram channel's messages.
 +
 +Merges the two scripts that lived in this folder:
@@ -29032,7 +29032,7 @@ index d30930e..0000000
 --- a/telextractor.py
 +++ /dev/null
 @@ -1,38 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import asyncio
@@ -29156,7 +29156,7 @@ index 429b4d6..0000000
 --- a/tgzr.py
 +++ /dev/null
 @@ -1,83 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -"""
 -Create a .tar.gz archive of a directory and then delete the original contents.
 -
@@ -29397,7 +29397,7 @@ index 6d8e262..0000000
 --- a/tomd.py
 +++ /dev/null
 @@ -1,48 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -29691,7 +29691,7 @@ index 0000000..862b9c6
 --- /dev/null
 +++ b/translate_dict_json/mendic.py
 @@ -0,0 +1,215 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Merge a directory of small JSON dictionaries into one sorted dictionary file.
 +
 +Two directions are supported (replaces mfadic.py, the fa->en twin of this script):
@@ -30192,7 +30192,7 @@ index ccea383..0000000
 --- a/ttf2woff2.py
 +++ /dev/null
 @@ -1,36 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -30378,7 +30378,7 @@ index 4ab27e0..0000000
 --- a/upkl.py
 +++ /dev/null
 @@ -1,15 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import pickle as pkl
@@ -30820,7 +30820,7 @@ index e0740f5..0000000
 --- a/woff22woff.py
 +++ /dev/null
 @@ -1,38 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -30872,7 +30872,7 @@ index 438b144..0000000
 --- a/woff2woff2.py
 +++ /dev/null
 @@ -1,38 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys
@@ -30956,7 +30956,7 @@ index 0000000..600ed26
 --- /dev/null
 +++ b/wordlist_clean/wordlist_filter.py
 @@ -0,0 +1,172 @@
-+#!/data/data/com.termux/files/home/.local/bin/python
++#!/data/data/com.termux/usr/bin/python3.12
 +"""Clean a wordlist in place: drop junk lines and pull out near-duplicates.
 +
 +Merges the two scripts that lived in this folder:
@@ -31150,7 +31150,7 @@ index 9d72d3d..0000000
 --- a/wrapper_gh.py
 +++ /dev/null
 @@ -1,108 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import datetime
@@ -31496,7 +31496,7 @@ index cd5f7e3..0000000
 --- a/xz2gz.py
 +++ /dev/null
 @@ -1,84 +0,0 @@
--#!/data/data/com.termux/files/home/.local/bin/python
+-#!/data/data/com.termux/usr/bin/python3.12
 -from __future__ import annotations
 -
 -import sys

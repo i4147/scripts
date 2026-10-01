@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 SHEBANG_PATTERN = re.compile(r"^#!.*python[23]?(?:\.\d+)?(?:[ \t]+.*)?$", re.MULTILINE)
-NEW_SHEBANG12 = "#!/data/data/com.termux/files/home/.local/bin/python"
+NEW_SHEBANG12 = "#!/data/data/com.termux/usr/bin/python3.12"
 NEW_SHEBANG14 = "#!/data/data/com.termux/files/usr/bin/python"
 PYTHON_EXTENSIONS = {".py"}
 COMMON_PYTHON_NAMES = {

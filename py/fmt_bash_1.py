@@ -1,4 +1,3 @@
-#!/data/data/com.termux/files/home/.local/bin/python
 """Format shell scripts under CWD with shfmt -w.
 
 Regenerate this script: collect files via dh.get_files under CWD, keep ``*.sh`` files and extension-less
