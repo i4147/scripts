@@ -1,0 +1,1049 @@
+these are two git helpr0er scripts i use, plz refactor them as one script
+you are allowed rewrite codes vompletely from scratch, remove extra backends like typer, libgit2,dulwich and
+rewrite the functions with your own logic, as long as,we reach out goals, enough (return same results, for same input data)
+#first cods
+#file: gittools.py
+import typer;from rich.console import Console;from rich.table import Table;fV=typer.Typer(add_completion=False,no_args_is_help=True);dx=Console();bz=Console(stderr=True);k='i4147';G='adnanonagh@gmail.com';Q='i4147';P=fb.home()/'.env';i=fb.home()/'.gitignore';v='created with python';aj='main';d='Update files';b='initial';g='initial';ab=['subprocess','gitpython','rest','pygithub','githubpython','dulwich','libgit2'];q=['subprocess','gitpython','libgit2','dulwich','pygithub','gh','typer']
+def ft(gk):dx.print(f'[cyan][INFO][/cyan] {gk}')
+def fQ(gk):bz.print(f'[yellow][WARN][/yellow] {gk}')
+def gc(gk):bz.print(f'[red][ERR][/red] {gk}')
+def ok(gk):dx.print(f'[green]✓[/green] {gk}')
+def aD(fB):gb={}
+    try:with fB.open() as f:for fx in f:fx=fx.strip()
+                if fx and (not fx.startswith('#')):gi,_,fa=fx.partition('=');gb[gi.strip()]=fa.strip()
+    except FileNotFoundError:pass
+    except Exception as exc:gc(f'Error reading {fB}:{gd}')
+    return gb
+def V(cT=None):cT=cT or P;gb=aD(cT);return gb.get('GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN')
+def dS(fX,fZ=None,eA=False):return ch.run(list(fX),fZ=str(fZ) if fZ else None,eA=eA,capture_output=True,fM=True)
+class bL(fR):@aq
+    def bC(self,fB):...
+    @aq
+    def cz(self,fB):...
+    @aq
+    def bu(self,fB,fA,eB):...
+    @aq
+    def dq(self,fB):...
+    @aq
+    def eg(self,fB,dG):...
+    @aq
+    def cY(self,fB):...
+    @aq
+    def az(self,fB,fA='origin'):...
+    @aq
+    def bQ(self,fB,fA,gw):...
+    @aq
+    def aH(self,fB,fA,gw):...
+    @aq
+    def aS(self,fB,fA):...
+    @aq
+    def fE(self,fB,et,ee,bj=True):...
+    @aq
+    def aw(self,fB):...
+    @aq
+    def aT(self,fB,db):...
+class aL(bL):def fe(self,fX,fZ,eA=True):return dS(fX,fZ=fZ,eA=eA)
+    def bC(self,fB):return self._run(['git','rev-parse','--git-dir'],fB,eA=False).returncode==0
+    def cz(self,fB):self._run(['git','init'],fB)
+    def bu(self,fB,fA,eB):self._run(['git','config','user.name',fA],fB,eA=False);self._run(['git','config','user.email',eB],fB,eA=False)
+    def dq(self,fB):self._run(['git','add','-A'],fB)
+    def eg(self,fB,dG):r=self._run(['git','commit','-m',dG],fB,eA=False);return r.returncode==0
+    def cY(self,fB):r=self._run(['git','status','--porcelain'],fB,eA=False);return bool(r.stdout.strip())
+    def az(self,fB,fA='origin'):r=self._run(['git','remote','get-url',fA],fB,eA=False);return r.stdout.strip() if r.returncode==0 and r.stdout.strip() else None
+    def bQ(self,fB,fA,gw):self._run(['git','remote','add',fA,gw],fB)
+    def aH(self,fB,fA,gw):self._run(['git','remote','set-url',fA,gw],fB)
+    def aS(self,fB,fA):self._run(['git','remote','remove',fA],fB,eA=False)
+    def fE(self,fB,et,ee,bj=True):fX=['git','push']
+        if bj:fX.append('-u')
+        fX+=[et,ee];r=self._run(fX,fB,eA=False)
+        if r.returncode!=0:raise RuntimeError(f'Push failed:{r.stderr.strip() or r.stdout.strip()}')
+    def aw(self,fB):r=self._run(['git','branch','--show-current'],fB,eA=False);return r.stdout.strip() or 'main'
+    def aT(self,fB,db):self._run(['git','branch','-M',db],fB,eA=False)
+class aW(bL):def ey(self,fB):from git import InvalidGitRepositoryError,Repo
+        try:return Repo(str(fB))
+        except InvalidGitRepositoryError:return None
+    def bC(self,fB):return self._repo(fB) is not None
+    def cz(self,fB):from git import Repo;Repo.init(str(fB))
+    def bu(self,fB,fA,eB):fG=self._repo(fB)
+        if fG:with fG.config_writer() as cw:cw.set_value('user','name',fA);cw.set_value('user','email',eB)
+    def dq(self,fB):fG=self._repo(fB)
+        if fG:fG.git.add(all=True)
+    def eg(self,fB,dG):fG=self._repo(fB)
+        if not fG or not fG.is_dirty(untracked_files=True):return False
+        fG.index.commit(dG);return True
+    def cY(self,fB):fG=self._repo(fB);return bool(fG and fG.is_dirty(untracked_files=True))
+    def az(self,fB,fA='origin'):fG=self._repo(fB)
+        if not fG:return None
+        try:return fG.remote(fA).url
+        except ValueError:return None
+    def bQ(self,fB,fA,gw):fG=self._repo(fB)
+        if fG:fG.create_remote(fA,gw)
+    def aH(self,fB,fA,gw):fG=self._repo(fB)
+        if fG:et=fG.remote(fA)
+            with et.config_writer as cw:cw.set_value('url',gw)
+    def aS(self,fB,fA):fG=self._repo(fB)
+        if fG:with bY.suppress(Exception):fG.delete_remote(fA)
+    def fE(self,fB,et,ee,bj=True):fG=self._repo(fB)
+        if not fG:raise RuntimeError('Not a git repository')
+        el={'set_upstream':True} if bj else {};fG.remote(et).push(dQ=f'{ee}:{ee}',**el)
+    def aw(self,fB):fG=self._repo(fB)
+        if not fG or fG.head.is_detached:return 'main'
+        return fG.active_branch.name
+    def aT(self,fB,db):fG=self._repo(fB)
+        if fG:fG.git.branch('-M',db)
+class bK(bL):@staticmethod
+    def cJ():try:from dulwich import porcelain;from dulwich.repo import Repo;return (porcelain,Repo)
+        except ImportError as exc:raise SystemExit('dulwich backend requires `pip install dulwich`') from gd
+    def bC(self,fB):_,Repo=self._dulwich()
+        try:Repo(str(fB));return True
+        except Exception:return False
+    def cz(self,fB):porcelain,_=self._dulwich();porcelain.init(str(fB))
+    def bu(self,fB,fA,eB):_,Repo=self._dulwich();fG=Repo(str(fB));fW=fG.get_config();fW.set((b'user',),b'name',fA.encode());fW.set((b'user',),b'email',eB.encode());fW.write_to_path()
+    def dq(self,fB):porcelain,_=self._dulwich();porcelain.add(str(fB))
+    def eg(self,fB,dG):porcelain,Repo=self._dulwich();fG=Repo(str(fB));ew=porcelain.status(fG)
+        if not (ew.untracked or ew.unstaged or ew.staged):return False
+        porcelain.commit(str(fB),dG=dG.encode(),author=None,committer=None);return True
+    def cY(self,fB):porcelain,Repo=self._dulwich();fG=Repo(str(fB));s=porcelain.status(fG);return bool(s.untracked or s.unstaged or s.staged)
+    def az(self,fB,fA='origin'):_,Repo=self._dulwich();fG=Repo(str(fB))
+        try:return fG.get_config().get((b'remote',fA.encode()),b'url').decode()
+        except KeyError:return None
+    def bQ(self,fB,fA,gw):_,Repo=self._dulwich();fG=Repo(str(fB));fW=fG.get_config();fW.set((b'remote',fA.encode()),b'url',gw.encode());fW.set((b'remote',fA.encode()),b'fetch',f'+refs/heads/*:refs/remotes/{fA}/*'.encode());fW.write_to_path()
+    def aH(self,fB,fA,gw):_,Repo=self._dulwich();fG=Repo(str(fB));fW=fG.get_config();fW.set((b'remote',fA.encode()),b'url',gw.encode());fW.write_to_path()
+    def aS(self,fB,fA):_,Repo=self._dulwich();fG=Repo(str(fB));fW=fG.get_config()
+        try:fW.remove_section((b'remote',fA.encode()));fW.write_to_path()
+        except KeyError:pass
+    def fE(self,fB,et,ee,bj=True):porcelain,_=self._dulwich();porcelain.push(str(fB),et,f'refs/heads/{ee}:refs/heads/{ee}')
+    def aw(self,fB):_,Repo=self._dulwich();fG=Repo(str(fB))
+        try:go=fG.refs.read_ref(b'HEAD');er=b'ref:refs/heads/'
+            if go and go.startswith(er):return go[len(er):].decode()
+        except Exception:pass
+        return 'main'
+    def aT(self,fB,db):_,Repo=self._dulwich();fG=Repo(str(fB));dy=self.current_branch(fB)
+        if dy==db:return
+        gs=f'refs/heads/{dy}'.encode();ga=f'refs/heads/{db}'.encode();gq=fG.refs.read_ref(gs)
+        if gq is None:return
+        fG.refs[ga]=gq
+        with bY.suppress(Exception):fG.refs.remove_if_equals(gs,gq)
+        fG.refs.set_symbolic_ref(b'HEAD',ga)
+class cj(bL):@staticmethod
+    def fS():try:import pygit2;return pygit2
+        except ImportError as exc:raise SystemExit('libgit2 backend requires `pip install pygit2`') from gd
+    def ey(self,fB):pg=self._pg()
+        try:return pg.Repository(str(fB))
+        except Exception:return None
+    def bC(self,fB):return self._repo(fB) is not None
+    def cz(self,fB):pg=self._pg();pg.init_repository(str(fB))
+    def bu(self,fB,fA,eB):fG=self._repo(fB)
+        if fG:fG.config['user.name']=fA;fG.config['user.email']=eB
+    def dq(self,fB):fG=self._repo(fB)
+        if fG:fG.index.add_all();fG.index.write()
+    def eg(self,fB,dG):fG=self._repo(fB)
+        if not fG:return False
+        if not fG.status():return False
+        fN=fG.index.write_tree();dL=[fG.head.target] if not fG.head_is_unborn else [];gr=fG.default_signature;fG.create_commit('HEAD',gr,gr,dG,fN,dL);return True
+    def cY(self,fB):fG=self._repo(fB);return bool(fG and fG.status())
+    def az(self,fB,fA='origin'):fG=self._repo(fB)
+        if not fG:return None
+        try:return fG.remotes[fA].url
+        except KeyError:return None
+    def bQ(self,fB,fA,gw):fG=self._repo(fB)
+        if fG:try:fG.remotes.create(fA,gw)
+            except Exception:fG.remotes[fA].url=gw
+    def aH(self,fB,fA,gw):fG=self._repo(fB)
+        if fG:try:fG.remotes[fA].url=gw
+            except KeyError:fG.remotes.create(fA,gw)
+    def aS(self,fB,fA):fG=self._repo(fB)
+        if fG:with bY.suppress(Exception):fG.remotes.delete(fA)
+    def fE(self,fB,et,ee,bj=True):raise NotImplementedError("push via pygit2 requires credential callbacks; use 'subprocess' backend")
+    def aw(self,fB):fG=self._repo(fB)
+        if not fG:return 'main'
+        try:return fG.head.shorthand
+        except Exception:return 'main'
+    def aT(self,fB,db):fG=self._repo(fB)
+        if not fG:return
+        dy=self.current_branch(fB)
+        if dy==db:return
+        ee=fG.branches.get(dy)
+        if ee:ee.rename(db)
+class aJ(fR):@aq
+    def bH(self,eP,fA):...
+    @aq
+    def bv(self,fA,bx='',dP=False,cm=False,eP=None):...
+class bl(aJ):def __init__(self,dn=None):self.username=dn
+    def bH(self,eP,fA):r=dS(['gh','repo','view',f'{eP}/{fA}']);return r.returncode==0
+    def bv(self,fA,bx='',dP=False,cm=False,eP=None):fX=['gh','repo','create',fA,'--source=.','--remote=origin','--private' if dP else '--public']
+        if bx:fX+=['--description',bx]
+        r=dS(fX)
+        if r.returncode!=0:if eP and self.repo_exists(eP,fA):return {'ssh_url':f'git@github.com:{eP}/{fA}.git'}
+            return None
+        return {'name':fA,'ssh_url':f'git@github.com:{eP}/{fA}.git'}
+class bM(aJ):def __init__(self,eY,dn=None):self.token=eY;self.username=dn
+    def cK(self):return {'Authorization':f'token {self.token}','Accept':'application/vnd.github.v3+json'}
+    def bH(self,eP,fA):import requests;r=requests.get(f'https://api.github.com/repos/{eP}/{fA}',dE=self._headers());return r.status_code==200
+    def bv(self,fA,bx='',dP=False,cm=False,eP=None):import requests;dN={'name':fA,'description':bx,'private':dP,'auto_init':cm};r=requests.post('https://api.github.com/user/repos',dE=self._headers(),json=dN)
+        if r.status_code==201:return r.json()
+        if r.status_code==422 and eP:return {'ssh_url':f'git@github.com:{eP}/{fA}.git'}
+        with bY.suppress(Exception):fQ(f"REST create failed ({r.status_code}):{r.json().get('message')}")
+        return None
+class al(aJ):def __init__(self,eY,dn=None):try:from github import Github;from github.Auth import Token
+        except ImportError as exc:raise SystemExit('pygithub backend requires `pip install PyGithub`') from gd
+        self.client=Github(fg=Token(eY));self.username=dn
+    def bH(self,eP,fA):try:fP=self.client.get_user(eP) if eP else self.client.get_user();fP.get_repo(fA);return True
+        except Exception:return False
+    def bv(self,fA,bx='',dP=False,cm=False,eP=None):try:fP=self.client.get_user(eP) if eP else self.client.get_user();fG=fP.create_repo(fA=fA,bx=bx,dP=dP,cm=cm);return {'name':fG.name,'html_url':fG.html_url,'clone_url':fG.clone_url,'ssh_url':fG.ssh_url}
+        except Exception as exc:if 'already exists' in str(gd).lower() and eP:return {'ssh_url':f'git@github.com:{eP}/{fA}.git'}
+            fQ(f'PyGithub create failed:{gd}');return None
+class aK(aJ):def __init__(self,eY,dn=None):try:import github3
+        except ImportError as exc:raise SystemExit('githubpython backend requires `pip install github3.py`') from gd
+        self.client=github3.login(eY=eY);self.username=dn
+    def bH(self,eP,fA):try:return self.client.repository(eP,fA) is not None
+        except Exception:return False
+    def bv(self,fA,bx='',dP=False,cm=False,eP=None):try:fG=self.client.create_repo(fA,bx=bx or None,dP=dP,cm=cm);return {'name':fG.name,'html_url':fG.html_url,'clone_url':fG.clone_url,'ssh_url':fG.ssh_url}
+        except Exception as exc:if 'already exists' in str(gd).lower() and eP:return {'ssh_url':f'git@github.com:{eP}/{fA}.git'}
+            fQ(f'github3.py create failed:{gd}');return None
+@cr
+class do:def bf(fA,eY,dn):if fA=='subprocess':return do(fA,aL(),bl(dn))
+    if fA=='gitpython':return do(fA,aW(),bl(dn))
+    if fA=='rest':if not eY:raise SystemExit("Backend 'rest' requires GITHUB_TOKEN.")
+        return do(fA,aL(),bM(eY,dn))
+    if fA=='pygithub':if not eY:raise SystemExit("Backend 'pygithub' requires GITHUB_TOKEN.")
+        return do(fA,aL(),al(eY,dn))
+    if fA=='githubpython':if not eY:raise SystemExit("Backend 'githubpython' requires GITHUB_TOKEN.")
+        return do(fA,aL(),aK(eY,dn))
+    if fA=='dulwich':return do(fA,bK(),bl(dn))
+    if fA=='libgit2':return do(fA,cj(),bl(dn))
+    raise SystemExit(f'Unknown backend:{fA}')
+def ai(bc,cT,dn):eY=V(cT);return bf(bc,eY,dn)
+@cr
+class bJ:dL=eD(default_factory=list);@property
+    def eU(self):return self.sha[:8]
+    @property
+    def fl(self):return cS.fromtimestamp(self.timestamp,tz=dk.utc)
+class ak:def __init__(self,fG,ds='subprocess'):self.repo=fb(fG).resolve();self.backend=ds;self._use_gitpython=ds=='gitpython';self._gitpython_repo=None
+        if self._use_gitpython:try:from git import Repo;self._gitpython_repo=Repo(str(self.repo))
+            except Exception:self._gitpython_repo=None
+    def fe(self,*ff,eA=True,input=None):return ch.run(['git',*ff],fZ=str(self.repo),capture_output=True,fM=True,input=input,eA=eA)
+    def fd(self,*ff):return self._run(*ff).stdout.strip()
+    def dF(self):r=self._run('rev-parse','--is-inside-work-tree',eA=False);return r.returncode==0 and r.stdout.strip()=='true'
+    def cE(self,*ff):return self._git('rev-parse',*ff)
+    def cX(self):return self.rev_parse('HEAD')
+    def aw(self):r=self._run('symbolic-ref','--short','-q','HEAD',eA=False);return r.stdout.strip() or None
+    def cY(self,cI=True):ff=['status','--porcelain']
+        if not cI:ff.append('--untracked-files=no')
+        return bool(self._run(*ff,eA=False).stdout.strip())
+    def Z(self):return self._run('status','--porcelain',eA=False).stdout.splitlines()
+    def gj(self,*,go='HEAD',n=None,dR=False):ff=['log','--format=%H%x00%s%x00%ct%x00%P']
+        if n:ff.append(f'-n{n}')
+        if dR:ff.append('--reverse')
+        ff.append(go);gm=self._run(*ff,eA=False).stdout;dw=[]
+        for fx in gm.splitlines():if not fx.strip():continue
+            eQ=fx.split('  ')
+            if len(eQ)<1:eQ=fx.split(' ')
+            if len(eQ)<4:eQ=fx.split(' ')
+            if len(eQ)<4:continue
+            try:dw.append(bJ(gq=eQ[0],subject=eQ[1],timestamp=int(eQ[2]),dL=eQ[3].split() if eQ[3] else []))
+            except ValueError:continue
+        return dw
+    def cN(self,go):self._git('checkout',go)
+    def eT(self,go,fz='hard'):self._git('reset',f'--{fz}',go)
+    def bq(self,gq,bp=True):ff=['cherry-pick']
+        if bp:ff.append('--allow-empty')
+        ff.append(gq);self._git(*ff)
+    def aQ(self,fA,eV=None):ff=['branch',fA]
+        if eV:ff.append(eV)
+        self._git(*ff)
+    def aR(self,fA,eG=True):self._git('branch','-D' if eG else '-d',fA)
+    def fT(self,*eE):self._git('add','--',*eE)
+    def eg(self,dG):return self._git('commit','-m',dG)
+    def M(self):return self._git('commit','--amend','--no-edit')
+    def fE(self,et,dQ,eG=False):ff=['push']
+        if eG:ff.append('--force')
+        ff.extend([et,dQ]);self._git(*ff)
+    def j(self):gm=self._run('log','--diff-filter=D','--pretty=format:%H','--name-only',eA=False).stdout;cs={};bw=None
+        for fx in gm.splitlines():fx=fx.strip()
+            if not fx:continue
+            if len(fx)==40 and ' ' not in fx:bw=fx
+            elif bw and fx not in cs:cs[fx]=bw
+        return cs
+    def z(self,n):gm=self._run('log','-n',str(n),'--pretty=format:','--name-status','--diff-filter=A',eA=False).stdout;ez=[]
+        for fx in gm.splitlines():if not fx.strip():continue
+            eQ=fx.split('	')
+            if len(eQ)>=2:p=self.repo/eQ[1]
+                if p.is_symlink():continue
+                ez.append(p)
+        return ez
+def dp(fm):return cS.now(dk.utc)-cF(fm=fm)
+def S(ts):return cS.fromtimestamp(ts,tz=dk.utc)
+def a(be):ca=set(be.deleted_files_in_history().keys())
+    if not ca:return []
+    dO=[]
+    for fx in be.status_porcelain():if len(fx)<4:continue
+        fj,fB=(fx[:2],fx[3:].strip())
+        if 'D' in fj and fB in ca:dO.append(fB)
+    return dO
+def I(gw):df=['https://(?:[^@/]+@)?github\.com/([^/]+)/([^/]+?)(?:\.git)?$','git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$']
+    for dM in df:eN=re.match(dM,gw)
+        if eN:return (eN.group(1),eN.group(2))
+    return None
+def R(gw,dn,eY,gf):if '@github.com' in gw and 'github.com' in gw and ('https://' in gw):return gw
+    fg=f'oauth2:{eY}' if gf=='oauth2' else f'{dn}:{eY}'
+    if gw.startswith('https://github.com/'):return gw.replace('https://github.com/',f'https://{fg}@github.com/')
+    if gw.startswith('git@github.com:'):fh=gw.replace('git@github.com:','https://github.com/');return fh.replace('https://github.com/',f'https://{fg}@github.com/')
+    return gw
+def x(fA):return re.sub('[^\w\-\.]','-',fA).lower()
+def aZ(gn):return [fu.strip() for fu in gn.split(',') if fu.strip()]
+def bO(eO):for fA in eO:fa=os.getenv(fA)
+        if fa:return fa
+    return None
+def aX():try:from dotenv import load_dotenv;fB=fb.home()/'.env'
+        if fB.exists():load_dotenv(fB)
+    except Exception:pass
+def bn(n):if n<1024:return f'{n}B'
+    if n<1048576:return f'{n/1024:.1f}KB'
+    if n<1024**3:return f'{n/1048576:.1f}MB'
+    return f'{n/1024**3:.2f}GB'
+def ao(fL):eQ=fL.split('/');return len(eQ)==2 and all(eQ)
+def ac(cv):if not cv.exists():gc(f'Error:{cv} does not exist');raise typer.Exit(1)
+    with cv.open() as f:eS=[fx.strip() for fx in f if fx.strip()]
+    if not eS:gc(f'Error:No repositories found in {cv}');raise typer.Exit(1)
+    return eS
+def m():return dS(['gh','--version']).returncode==0
+def l():return dS(['gh','auth','status']).returncode==0
+def aO(eX,dv,fJ):eW=Table(eX=eX)
+    for fY in dv:eW.add_column(fY)
+    for gp in fJ:eW.add_row(*gp)
+    dx.print(eW)
+@fV.command('create')
+def bU(cD=typer.Argument(...,help='Name of the new repository.'),bx=typer.Argument(v,help='Repository description.'),dP=typer.Option(False,'--private',help='Make repo private.'),ds=typer.Option('subprocess','--backend','-b',help='Backend.'),cT=typer.Option(P,'--env-file',help='Env file.'),af=typer.Option(k,'--github-username',help='GitHub username.')):be=ai(ds,cT,af);fk=be.github.create_repo(fA=cD,bx=bx,dP=dP,cm=True,eP=af)
+    if fk is None:raise typer.Exit(1)
+    ok('Repository created successfully!');dx.print(f"[bold]Name:[/bold] {fk.get('name',cD)}");dx.print(f"[bold]URL:[/bold] {fk.get('html_url',f'https://github.com/{af}/{cD}')}");dx.print(f"[bold]Clone:[/bold] {fk.get('clone_url',fk.get('ssh_url',''))}")
+@fV.command('create-push')
+def ad(fA=typer.Option(None,'-n','--name'),ee=typer.Option(aj,'--branch'),av=typer.Option(d,'--commit-message'),ds=typer.Option('subprocess','--backend','-b'),cT=typer.Option(P,'--env-file'),af=typer.Option(k,'--github-username')):be=ai(ds,cT,af);fZ=fb.cwd();cD=fA or fZ.name
+    if not be.git.is_git_repo(fZ):ft('No git repository found. Creating new one...');be.git.init_repo(fZ);ok('Git repository initialized.')
+    else:ft('Existing git repository found.')
+    if be.git.is_dirty(fZ):be.git.add_all(fZ);be.git.commit(fZ,av);ok('Changes committed.')
+    else:ft('No changes to commit.')
+    if be.git.get_remote_url(fZ) is None:ft("No remote 'origin' found. Creating GitHub repository...");fk=be.github.create_repo(fA=cD,dP=False,cm=False,eP=af)
+        if fk is None:raise typer.Exit(1)
+        dV=fk.get('ssh_url') or f'git@github.com:{af}/{cD}.git';be.git.add_remote(fZ,'origin',dV);ok(f"Remote 'origin' created:{dV}")
+    else:ft(f"Remote 'origin' already exists:{be.git.get_remote_url(fZ)}")
+    try:be.git.push(fZ,'origin',ee,bj=True);ok(f'Successfully pushed to origin/{ee}')
+    except Exception as exc:gc(f'Push failed:{gd}');raise typer.Exit(1)
+@fV.command('gh-create')
+def aP(fA=typer.Option(None,'-n','--name'),X=typer.Option(i,'--global-gitignore'),av=typer.Option(b,'--commit-message'),ds=typer.Option('subprocess','--backend','-b'),cT=typer.Option(P,'--env-file'),af=typer.Option(k,'--github-username')):be=ai(ds,cT,af);fZ=fb.cwd();cD=fA or fZ.name;ah=fZ/'.gitignore'
+    if X.exists() and (not ah.exists()):eu.copy2(X,ah);ok(f'Copied {X}->{ah}')
+    elif ah.exists():ft('.gitignore already exists in current directory.')
+    else:fQ(f'No global .gitignore found at {X}')
+    if be.git.is_git_repo(fZ):ft('Git repository already initialized.')
+    else:ft('Initializing git repository...');be.git.init_repo(fZ)
+    if be.git.get_remote_url(fZ) is not None:ft("Remote 'origin' already exists.");return
+    if be.github.repo_exists(af,cD):ft(f"GitHub repo '{cD}' already exists on your account.");dV=f'git@github.com:{af}/{cD}.git';be.git.add_remote(fZ,'origin',dV);ok(f'Added remote origin:{dV}')
+    else:ft(f"GitHub repo '{cD}' does not exist yet.");fk=be.github.create_repo(fA=cD,dP=False,cm=False,eP=af)
+        if fk is None:raise typer.Exit(1)
+        dV=fk.get('ssh_url') or f'git@github.com:{af}/{cD}.git';be.git.add_remote(fZ,'origin',dV);ok(f'Added remote origin:{dV}')
+    be.git.add_all(fZ)
+    if be.git.commit(fZ,av):ok('Committing changes...')
+    else:ft('No changes to commit.')
+    ee=be.git.current_branch(fZ);ft(f"Pushing branch '{ee}'...")
+    try:be.git.push(fZ,'origin',ee,bj=True)
+    except Exception as exc:gc(f'Push failed:{gd}');raise typer.Exit(1)
+    ok(f"Success! Repository '{cD}' is on GitHub.");dx.print(f'[bold]View at:[/bold] https://github.com/{af}/{cD}')
+@fV.command('gh-cli')
+def bW(fA=typer.Option(None,'-n','--name'),ee=typer.Option(aj,'--branch'),av=typer.Option(g,'--commit-message'),ds=typer.Option('subprocess','--backend','-b'),cT=typer.Option(P,'--env-file'),af=typer.Option(k,'--github-username')):be=ai(ds,cT,af);fZ=fb.cwd();cD=fA or fZ.name;ft(f'Repository name:{cD}')
+    if not be.git.is_git_repo(fZ):ft('Initializing git repository...');be.git.init_repo(fZ)
+    else:ft('Git repository already initialized.')
+    cd=be.git.get_remote_url(fZ)
+    if cd is None:ft(f"Creating GitHub repository '{cD}'...");fk=be.github.create_repo(fA=cD,dP=False,cm=False,eP=af)
+        if fk is None:raise typer.Exit(1)
+    else:ft("Remote 'origin' already exists. Checking if repo exists on GitHub...");eC=dS(['git','fetch','origin'],fZ=fZ)
+        if eC.returncode==0:ft('GitHub repository exists. Will push changes.')
+        else:fQ('Remote exists but seems inaccessible. You might need to authenticate.');dx.print(f'[bold]Remote URL:[/bold] {cd}')
+    ft('Adding all files...');be.git.add_all(fZ)
+    if be.git.is_dirty(fZ):ft('Committing changes...')
+        if not be.git.commit(fZ,av):ft('Nothing to commit after staging.')
+    else:ft('No changes to commit.')
+    ft('Pushing to GitHub...');bF=be.git.current_branch(fZ) or ee
+    try:be.git.push(fZ,'origin',bF,bj=True)
+    except Exception as exc:gc(f'Push failed:{gd}');raise typer.Exit(1)
+    ok(f"Success! Repository '{cD}' is now on GitHub.");dx.print(f'[bold]View at:[/bold] https://github.com/{af}/{cD}')
+@fV.command('managed')
+def bs(fA=typer.Option(None,'-n','--name'),dG=typer.Option(None,'-m','--message'),cx=typer.Option(G,'--git-email'),cW=typer.Option(Q,'--git-user'),ee=typer.Option(aj,'--branch'),ds=typer.Option('subprocess','--backend','-b'),cT=typer.Option(P,'--env-file'),af=typer.Option(k,'--github-username')):try:be=ai(ds,cT,af);fZ=fb.cwd();cD=fA or fZ.name;dh=f'https://github.com/{af}/{cD}.git';dx.rule(f'GitHub Repository Manager (backend:{be.name})');dx.print(f'Directory:{fZ}');dx.print(f'Repository:{cD}');dx.print(f'GitHub User:{af}');dx.print(f'Email:{cx}');dx.rule()
+        if ds=='subprocess':if not m():gc('GitHub CLI (gh) is not installed.');raise typer.Exit(1)
+            if not l():gc('GitHub CLI is not authenticated.');raise typer.Exit(1)
+            ok('GitHub CLI is installed and authenticated')
+        if be.git.is_git_repo(fZ):fQ(f'Git repository already exists in {fZ}');dy=be.git.get_remote_url(fZ);dx.print(f"Current remote:{dy or 'None'}")
+            while 1:dx.print('[bold]Options:[/bold]');dx.print('1. Merge changes (stage and commit to current repo)');dx.print('2. Create new repository (enter new name)');dx.print('3. Exit');ef=typer.prompt('Select option (1-3)').strip()
+                if ef=='1':ok('Using existing repository');break
+                if ef=='2':db=typer.prompt('Enter new repository name').strip()
+                    if not db:gc('Repository name cannot be empty.');continue
+                    cD=db;dh=f'https://github.com/{af}/{cD}.git';be.git.remove_remote(fZ,'origin');break
+                if ef=='3':ft('Exiting...');raise typer.Exit(0)
+                gc('Invalid choice.')
+        else:ft(f'Initializing local git repository in {fZ}...');be.git.init_repo(fZ);be.git.config_user(fZ,cW,cx);ok('Local repository initialized')
+        dY=[f for f in fZ.glob('*') if f.name!='.git'];ek=[f for f in fZ.glob('.*') if f.name not in {'.git','.','..'}]
+        if not (dY or ek):es=fZ/'README.md'
+            if not es.exists():es.write_text(f'# {cD}
+Repository initialized on {cS.now():%Y-%m-%d%H:%M:%S}
+');ok('Created README.md')
+        ft('Staging all changes...');be.git.add_all(fZ);ok('Changes staged');gk=dG or cS.now().strftime('Auto-commit:%Y-%m-%d%H:%M:%S');ft(f"Committing changes with message:'{gk}'")
+        if not be.git.commit(fZ,gk):fQ('Could not commit changes.');raise typer.Exit(1)
+        dy=be.git.current_branch(fZ)
+        if dy and dy!=ee:ft(f"Renaming branch from '{dy}' to '{ee}'...");be.git.rename_branch(fZ,ee)
+        if not be.github.repo_exists(af,cD):ft(f'Creating repository on GitHub:{cD}...');fk=be.github.create_repo(fA=cD,dP=False,cm=False,eP=af)
+            if fk is None:gc('Failed to create repository on GitHub');raise typer.Exit(1)
+            ok('Repository created on GitHub')
+        else:ok(f'Repository {cD} already exists on GitHub')
+        ft(f'Adding remote:{dh}');ax=be.git.get_remote_url(fZ)
+        if ax:if ax!=dh:be.git.set_remote_url(fZ,'origin',dh);ok('Remote URL updated')
+        else:be.git.add_remote(fZ,'origin',dh);ok('Remote added')
+        ft(f'Pushing to GitHub ({ee} branch)...')
+        try:be.git.push(fZ,'origin',ee,bj=True);ok('Successfully pushed to GitHub')
+        except Exception as exc:gc(f'Push failed:{gd}');raise typer.Exit(1)
+        dx.rule();ok('Success! Repository created and pushed to GitHub');dx.print(f'[bold]Repository URL:[/bold] https://github.com/{af}/{cD}')
+    except KeyboardInterrupt:ft('Exiting...');raise typer.Exit(0)
+    except typer.Exit:raise
+    except Exception as exc:gc(f'Unexpected error:{gd}');cH.print_exc();raise typer.Exit(1)
+@fV.command('checkout-previous')
+def t(fG=typer.Option(fb('.'),'-C','--repo'),er=typer.Option('2026-08-29','--prefix'),gx=typer.Option(False,'-y','--yes'),ds=typer.Option('subprocess','--backend','-b')):fI=fb(fG).resolve()
+    if not fI.is_dir():gc(f'Not a directory:{fI}');raise typer.Exit(1)
+    bS=[fI]+[p for p in fI.iterdir() if p.is_dir() and (not p.is_symlink())];eH=False
+    for co in bS:be=ak(co,ds)
+        if not be.is_repo():continue
+        eH=True
+        try:cy=be.log(go='HEAD',n=1)
+        except Exception as e:gc(f'{co.name}:{e}');continue
+        if not cy:continue
+        fs=cy[0]
+        if not fs.subject.startswith(er):ft(f'[skip] {co.name}:latest commit does not start with {er!r}');continue
+        if not fs.parents:ft(f'[skip] {co.name}:no parent commit');continue
+        ex=fs.parents[0];dx.print(f'[bold][match][/bold] Repository:{co.name}');dx.print(f'        Path:{co}');dx.print(f'        Current commit:{fs.short}');dx.print(f'        Latest message:{fs.subject}');dx.print(f'        Target commit:{ex[:8]}')
+        if not gx:fU=typer.prompt(f'Checkout {ex[:8]} in {co.name}? [y/N]',dz='N').strip().lower()
+            if fU not in ('y','yes'):ft(f'[skip] {co.name}:cancelled');continue
+        be.checkout(ex);ok(f'[done] {co.name}:now at {ex[:8]}')
+    if not eH:ft('No git repositories found.')
+@fV.command('rm-commits')
+def au(fG=typer.Option(fb('.'),'-C','--repo'),fm=typer.Option(30,'--days'),gx=typer.Option(False,'-y','--yes'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    ee=be.current_branch()
+    if ee is None:gc('HEAD is detached — checkout a branch first');raise typer.Exit(1)
+    ft(f'Current branch:{ee}');eh=dp(fm);ft(f'Cutoff:{eh:%Y-%m-%d%H:%M:%S UTC}')
+    if be.is_dirty(cI=True):gc('Working directory is not clean — commit or stash first');raise typer.Exit(1)
+    dw=be.log(go=ee)
+    if not dw:ft('No commits found.');return
+    fw=[c for c in dw if S(c.timestamp)>eh];gl=[c for c in dw if S(c.timestamp)<=eh]
+    if not gl:ft(f'No commits older than {fm} days.');return
+    if not fw:gc('All commits would be deleted — aborting');raise typer.Exit(1)
+    ft(f'Found {len(gl)} commit(s) to delete (older than {fm} days)');ft(f'Keeping {len(fw)} commit(s)')
+    for c in gl[-5:]:dx.print(f'  {c.short}-{c.date:%Y-%m-%d%H:%M}-{c.subject}')
+    da=fw[0];ft(f'New HEAD will be:{da.short}-{da.subject}')
+    if not gx:fU=typer.prompt('This will PERMANENTLY DELETE those commits. Continue? (yes/no)',dz='no').strip().lower()
+        if fU!='yes':ft('Cancelled.');return
+    ed=f'backup-{ee}-{cS.now():%Y%m%d%H%M%S}';ft(f'Creating backup branch:{ed}');be.create_branch(ed);be.reset(da.sha,'hard');ok(f'Deleted {len(gl)} commit(s)');dx.print(f'Backup branch:{ed}');dx.print(f'To restore:git reset--hard {ed}')
+@fV.command('cut')
+def du(fG=typer.Option(fb('.'),'-C','--repo'),fm=typer.Option(30,'--days'),en=typer.Option('squash','--method'),gx=typer.Option(False,'-y','--yes'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    eh=dp(fm);ft(f'Cutoff date:{eh:%Y-%m-%d%H:%M:%S UTC}');dw=be.log(go='HEAD')
+    if not dw:ft('No commits found.');return
+    fw=[c for c in dw if S(c.timestamp)>eh];gl=[c for c in dw if S(c.timestamp)<=eh];ft(f'Commits to keep:{len(fw)}');ft(f'Commits to remove:{len(gl)}')
+    if not fw:gc('No commits to keep — aborting');raise typer.Exit(1)
+    if not gl:ft('No old commits to remove.');return
+    bD=fw[-1];dx.print(f'Oldest kept:{bD.short}-{bD.subject}');dx.print(f'Date:{bD.date}')
+    if not gx:fU=typer.prompt('Rewrite history? (yes/no)',dz='no').strip().lower()
+        if fU!='yes':ft('Cancelled.');return
+    ee=be.current_branch()
+    if en=='squash':be.reset(bD.sha,'hard');ok(f'Old commits removed (reset--hard to {bD.short}).')
+        if ee:dx.print(f'Force push needed:git push--force origin {ee}')
+        return
+    if ee is None:gc('Cannot use orphan method on a detached HEAD');raise typer.Exit(1)
+    cb=f'cleaned_{ee}';ft(f'Creating orphan branch {cb}...');ch.run(['git','checkout','--orphan',cb],fZ=str(rp),eA=True)
+    for c in reversed(fw):try:be.cherry_pick(c.sha,bp=True)
+        except ch.CalledProcessError as e:fQ(f'cherry-pick {c.short} failed:{e}')
+    ok(f'New branch {cb} with {len(fw)} commit(s) created.');dx.print(f'To replace the original:git checkout {ee}&&git reset--hard {cb}&&git branch-D {cb}')
+@fV.command('del-remote-commits')
+def o(fG=typer.Option(fb('.'),'-C','--repo'),ee=typer.Option('master','--branch'),fm=typer.Option(7,'--days'),dJ=typer.Option(False,'--no-push'),gx=typer.Option(False,'-y','--yes'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    try:fF=ch.run(['git','for-each-ref','--format=%(refname:short)','refs/remotes/origin'],fZ=str(rp),capture_output=True,fM=True).stdout
+        if ee=='master' and 'origin/main' in fF and ('origin/master' not in fF):ee='main'
+    except Exception:pass
+    eh=dp(fm);dw=be.log(go=ee)
+    if not dw:gc(f'No commits on {ee}');raise typer.Exit(1)
+    fw=[c for c in dw if S(c.timestamp)>=eh]
+    if not fw:gc(f'No commits within {fm} days — nothing to keep,aborting');raise typer.Exit(1)
+    da=fw[0];ft(f'Branch:{ee}');ft(f'Cutoff:{eh:%Y-%m-%d%H:%M:%S UTC}');ft(f'Resetting to:{da.short}-{da.subject}')
+    if not gx:fU=typer.prompt('Proceed with local reset and force-push? (yes/no)',dz='no').strip().lower()
+        if fU!='yes':ft('Cancelled.');return
+    if be.current_branch()!=ee:be.checkout(ee)
+    be.reset(da.sha,'hard');ok(f'Local branch {ee} reset to {da.short}')
+    if dJ:ft('Skipping push (--no-push).')
+    else:try:be.push('origin',f'{ee}:{ee}',eG=True);ok(f'Force-pushed {ee} to origin')
+        except Exception as e:gc(f'push failed:{e}');raise typer.Exit(1)
+@fV.command('list-added')
+def at(fG=typer.Option(fb('.'),'-C','--repo'),n=typer.Option(10,'-n'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    ez=be.files_added_in_last(n)
+    if not ez:ft(f'No files created in the last {n} commit(s).');return
+    for fB in ez:try:dx.print(str(fB.relative_to(rp)))
+        except ValueError:dx.print(str(fB))
+@fV.command('restore-deleted')
+def y(fG=typer.Option(fb('.'),'-C','--repo'),dG=typer.Option('removed files','-m','--message'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    ft('Analyzing repository history for file deletions...');cs=be.deleted_files_in_history()
+    if not cs:ok("No deleted files found in this repository's history.");return
+    dH=[(p,gq) for p,gq in cs.items() if not (rp/p).exists()]
+    if not dH:ft('All historically deleted files are already present.');return
+    fQ(f'Found {len(dH)} missing file(s).');dj=0
+    for p,gq in dH:ft(f'Restoring:{p} (from commit prior to {gq[:8]})')
+        try:ch.run(['git','checkout',f'{gq}^','--',p],fZ=str(rp),eA=True,capture_output=True);ch.run(['git','add','--',p],fZ=str(rp),eA=True,capture_output=True);dj+=1
+        except ch.CalledProcessError:try:ch.run(['git','checkout',gq,'--',p],fZ=str(rp),eA=True,capture_output=True);ch.run(['git','add','--',p],fZ=str(rp),eA=True,capture_output=True);dj+=1
+            except ch.CalledProcessError as e2:gc(f'   could not restore {p}:{e2}')
+    if dj:ft(f'Committing {dj} restored file(s)...')
+        try:be.commit(dG);ok('Commit created.')
+        except Exception as e:gc(f'commit failed:{e}');raise typer.Exit(1)
+    else:gc('No files were successfully restored.')
+@fV.command('stage-deleted')
+def O(fG=typer.Option(fb('.'),'-C','--repo'),dG=typer.Option('removed files','-m','--message'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    dO=a(be)
+    if not dO:ok('No pending historical file deletions need staging.');return
+    fQ(f'Found {len(dO)} deleted file(s) to stage:')
+    for p in dO:dx.print(f'  {p}')
+    ft('Staging...')
+    for p in dO:be.add(p)
+    ft(f'Committing:"{dG}"')
+    try:be.commit(dG);ok('Commit created.')
+    except Exception as e:gc(f'commit failed:{e}');raise typer.Exit(1)
+@fV.command('squash-deletions')
+def u(fG=typer.Option(fb('.'),'-C','--repo'),ds=typer.Option('subprocess','--backend','-b')):rp=fb(fG).resolve();be=ak(rp,ds)
+    if not be.is_repo():gc(f'{rp} is not a git repository');raise typer.Exit(1)
+    dO=a(be)
+    if not dO:ok('No pending historical file deletions to squash.');return
+    fQ(f'Found {len(dO)} deleted file(s) to squash:')
+    for p in dO:dx.print(f'  {p}')
+    ft('Staging...')
+    for p in dO:be.add(p)
+    ft('Amending last commit (--amend--no-edit)...')
+    try:be.amend_last_commit();ok('Last commit amended.')
+    except Exception as e:gc(f'amend failed:{e}');raise typer.Exit(1)
+@fV.command('age-filter')
+def ar(fz=typer.Argument(...,help='clean or smudge'),dr=typer.Option(None,'--age-bin'),cf=typer.Option(fb.home()/'.config'/'age'/'public.key','--public-key'),bE=typer.Option(fb.home()/'.config'/'age'/'keys.txt','--private-key')):if fz not in ('clean','smudge'):gc("mode must be 'clean' or 'smudge'");raise typer.Exit(1)
+    di=dr
+    if not di:dz=fb.home()/'..'/'usr'/'bin'/'age';di=str(dz) if dz.exists() else 'age'
+    if fz=='clean':dg=fb(cf).expanduser()
+        if not dg.exists():gc(f'missing public key file:{dg}');raise typer.Exit(1)
+        cB=dg.read_text(encoding='utf-8').strip()
+        if not cB:gc('public key file is empty');raise typer.Exit(1)
+        fk=gt.stdin.buffer.read();r=ch.run([di,'-r',cB,'-a'],input=fk,capture_output=True)
+        if r.returncode!=0:gc(f"age encrypt failed:{r.stderr.decode(errors='replace')}");raise typer.Exit(1)
+        gt.stdout.buffer.write(r.stdout);return
+    fk=gt.stdin.buffer.read()
+    if not fk.lstrip().startswith(b'-----BEGIN AGE ENCRYPTED FILE-----'):gt.stdout.buffer.write(fk);return
+    fD=fb(bE).expanduser()
+    if not fD.exists():fQ('no private key; leaving ciphertext');gt.stdout.buffer.write(fk);return
+    r=ch.run([di,'-d','-i',str(fD)],input=fk,capture_output=True)
+    if r.returncode!=0:gc(f"age decrypt failed:{r.stderr.decode(errors='replace')}");raise typer.Exit(1)
+    gt.stdout.buffer.write(r.stdout)
+def bP(fB,aU,ag):from git import InvalidGitRepositoryError,Repo
+    try:return Repo(fB,search_parent_directories=aU)
+    except InvalidGitRepositoryError:if ag:fG=Repo.init(fB);ok('Repository initialized.');return fG
+        gc('Not a git repository.');raise typer.Exit(1)
+def H(fG,fz,ev,fn):if fz=='none':return
+    fI=fb(fG.working_tree_dir or '.');ct=fn if fn.is_absolute() else fI/fn
+    if ct.exists():ft(f'{ct} already exists.');return
+    bI=ev.expanduser()
+    if not bI.exists():fQ(f'{bI} does not exist. Skipping.');return
+    if fz=='copy':eu.copy(bI,ct);ok(f'Copied {bI}->{ct}')
+    elif fz=='symlink':ct.symlink_to(bI);ok(f'Symlinked {bI}->{ct}')
+def D(fI):eE=set()
+    for fB in fI.rglob('*.py'):if fB.is_file():eE.add(fB)
+    for fB in fI.rglob('*'):if not fB.is_file() or fB.suffix:continue
+        try:eF=fB.open(encoding='utf-8',errors='ignore').readline().strip()
+        except OSError:continue
+        if eF.startswith('#!') and 'python' in eF.lower():eE.add(fB)
+    return sorted(eE)
+def cL(fX):try:ch.check_call(fX);return True
+    except (ch.CalledProcessError,FileNotFoundError) as exc:gc(f"Command failed:{' '.join(fX)}:{gd}");return False
+def aM(fG,cn):fI=fb(fG.working_tree_dir or '.');eE=D(fI)
+    if not eE:ft('No Python files found.');return True
+    ft('Formatting Python files with black:')
+    for fB in eE:ft(f'->{fB}')
+        if not cL([cn,str(fB)]):return False
+    return True
+def K(fG,dG,cM):from git import GitCommandError
+    if cM=='all':fG.git.add('--all')
+    else:fG.index.add('*')
+    try:fG.git.commit('-m',dG);eg=fG.head.commit;ok(f'Committed with message:"{dG}"');ft(f'Commit hash:{eg.hexsha[:7]}');return eg.hexsha
+    except GitCommandError as exc:fM=str(gd).lower()
+        if 'nothing to commit' in fM or 'no changes' in fM:ft('No changes to commit.');return None
+        gc(f'Commit failed:{gd}');raise typer.Exit(1)
+def aN(eY,de):if de:return de
+    from github import Github;return Github(eY).get_user().login
+def h(eY,fA,bx,dP,cm,aG):from github import Github,GithubException;gh=Github(eY);fP=gh.get_user()
+    if aG:try:fG=fP.get_repo(fA);ft(f"Remote repository '{fA}' already exists.");return fG.clone_url
+        except GithubException:pass
+    ft(f"Creating remote repository '{fA}'...");fG=fP.create_repo(fA=fA,bx=bx,dP=dP,cm=cm);return fG.clone_url
+def bN(eY,eP,fA):from github import Github,GithubException;gh=Github(eY);fP=gh.get_user()
+    try:fr=fP.get_repo(fA);ft(f'Fork already exists:{fr.full_name}');return fr.clone_url
+    except GithubException:dl=gh.get_repo(f'{eP}/{fA}');ft(f'Forking {eP}/{fA}...');fr=fP.create_fork(dl);ft(f'Created fork:{fr.full_name}');return fr.clone_url
+def aY(fG,bG,ee,ci,eY,bB,aa,bj):from git import GitCommandError
+    try:et=fG.remote(bG)
+    except ValueError:gc(f"Remote '{bG}' not configured. Skipping push.");return
+    bg=et.url;bb=False
+    if ci in ('temporary','persistent') and eY and bB:dI=R(bg,bB,eY,aa)
+        if dI!=bg:et.set_url(dI);bb=True
+    try:if bj:fG.git.push('--set-upstream',bG,ee)
+        else:et.push(dQ=f'{ee}:{ee}')
+        ok(f'Successfully pushed to {bG}/{ee}')
+    except GitCommandError as exc:fM=str(gd);gc(f'Push failed:{gd}')
+        if '403' in fM or '401' in fM:gc('Authentication failed. Check your GitHub token.')
+        raise typer.Exit(1)
+    finally:if bb and ci=='temporary':et.set_url(bg)
+def am(eP,fG,by):gw=f'https://github.com/{eP}/{fG}.git';ft(f'Cloning {eP}/{fG} (shallow clone)...')
+    try:ch.run(['git','clone',gw,str(by)],eA=True);ok(f'Successfully cloned into:{by}');return True
+    except FileNotFoundError:gc('git command not found.');return False
+    except Exception as exc:gc(f'An unexpected error occurred during cloning:{gd}');return False
+def bm(eP,fG,eY=None):import requests;gw=f'https://api.github.com/repos/{eP}/{fG}';dE={'Accept':'application/vnd.github.v3+json'}
+    if eY:dE['Authorization']=f'token {eY}'
+    try:fH=requests.get(gw,dE=dE,dW=15);fH.raise_for_status();fk=fH.json();fK=fk.get('size')
+        if fK is None:return None
+        return round(fK/1024.0,2)
+    except Exception as exc:gc(f'API error for {eP}/{fG}:{gd}')
+    return None
+@fV.command('commit')
+def bT(fG=typer.Option(fb('.'),'--repo'),aU=typer.Option(True,'--search-parent/--no-search-parent'),ag=typer.Option(False,'--init-if-missing'),dG=typer.Option(None,'--message'),aC=typer.Option('','--message-prefix'),cM=typer.Option('all','--add-mode'),aB=typer.Option('none','--gitignore-mode'),W=typer.Option(fb.home()/'.gitignore','--gitignore-source'),aA=typer.Option(fb('.gitignore'),'--gitignore-dest'),bd=typer.Option(False,'--format-black'),cn=typer.Option('black','--black-cmd')):aX();r=bP(fG,aU,ag);H(r,aB,W,aA)
+    if bd and (not aM(r,cn)):raise typer.Exit(1)
+    gk=dG or f'{aC}{cS.now():%Y-%m-%d%H:%M:%S}';K(r,gk,cM);ft('Done.')
+@fV.command('push')
+def cP(fG=typer.Option(fb('.'),'--repo'),aU=typer.Option(True,'--search-parent/--no-search-parent'),ag=typer.Option(False,'--init-if-missing'),bG=typer.Option('origin','--remote-name'),ee=typer.Option(None,'--branch'),dG=typer.Option(None,'--message'),aC=typer.Option('','--message-prefix'),cM=typer.Option('all','--add-mode'),aB=typer.Option('none','--gitignore-mode'),W=typer.Option(fb.home()/'.gitignore','--gitignore-source'),aA=typer.Option(fb('.gitignore'),'--gitignore-dest'),bd=typer.Option(False,'--format-black'),cn=typer.Option('black','--black-cmd'),aI=typer.Option('GITHUB_TOKEN,GH_TOKEN,GIT_TOKEN','--token-env-vars'),bB=typer.Option(None,'--github-user'),bv=typer.Option(False,'--create-repo'),bA=typer.Option(False,'--fork-origin'),bh=typer.Option(False,'--push-to-fork/--no-push-to-fork'),U=typer.Option('fork','--fork-remote-name'),dP=typer.Option(False,'--private'),cm=typer.Option(False,'--auto-init/--no-auto-init'),bx=typer.Option(None,'--description'),A=typer.Option(True,'--reuse-existing-repo/--no-reuse-existing-repo'),ci=typer.Option('none','--token-auth'),ae=typer.Option('persistent','--fork-token-auth'),aa=typer.Option('user','--token-url-format'),bj=typer.Option(False,'--set-upstream/--no-set-upstream'),F=typer.Option(True,'--push-if-no-changes/--no-push-if-no-changes'),E=typer.Option(False,'--fail-if-no-changes'),aF=typer.Option(False,'--require-remote')):from git import Repo;aX();eO=aZ(aI);eY=bO(eO)
+    if (bv or bA or bh or (ci!='none')) and (not eY):gc('GITHUB_TOKEN not found.');raise typer.Exit(1)
+    r=bP(fG,aU,ag);H(r,aB,W,aA)
+    if bd and (not aM(r,cn)):raise typer.Exit(1)
+    try:ec=ee or r.active_branch.name
+    except TypeError:gc('In detached HEAD state. Skipping push.');raise typer.Exit(1)
+    gk=dG or f'{aC}{cS.now():%Y-%m-%d%H:%M:%S}';bt=K(r,gk,cM)
+    if bt is None:if E:gc('No changes to commit.');raise typer.Exit(1)
+        if not F:ft('Skipping push because there are no changes.');return
+    dD=bB
+    if eY and (bv or bA or bh or (ci!='none')):try:dD=aN(eY,dD)
+        except Exception as exc:gc(f'Error getting GitHub username:{gd}')
+            if bv or bA:raise typer.Exit(1)
+    bi=[rm.name for rm in r.remotes];dt=False
+    if bG not in bi:if bv:if not eY:gc('GITHUB_TOKEN not found. Cannot create remote repository.');raise typer.Exit(1)
+            fA=x(fb(r.working_tree_dir or '.').name);gw=h(eY,fA,bx,dP,cm,A);r.create_remote(bG,gw);ok(f"Added remote '{bG}':{gw}");dt=True
+    elif bA and eY and dD:et=r.remote(bG);eq=I(et.url)
+        if eq:eP,fA=eq
+            if eP.lower()!=dD.lower():gw=bN(eY,eP,fA);et.set_url(gw);ft(f"Updated remote '{bG}' to fork:{gw}");dt=True
+    Y=bG
+    if bh and eY:try:eo=r.remote(bG)
+        except ValueError:eo=None
+        if eo:eq=I(eo.url)
+            if eq:eP,fA=eq;eM=dD or aN(eY,None)
+                if eP.lower()!=eM.lower():eM=aN(eY,dD);gw=bN(eY,eP,fA)
+                    if U in [rm.name for rm in r.remotes]:r.remote(U).set_url(gw)
+                    else:r.create_remote(U,gw)
+                    Y=U
+    if Y not in [rm.name for rm in r.remotes]:fQ(f"Remote '{Y}' not configured. Changes committed locally only.")
+        if aF:raise typer.Exit(1)
+        return
+    cl=ci if Y==bG else ae;aY(r,Y,ec,cl,eY,dD,aa,bj or dt);ok('All done! Changes are now on GitHub.')
+@fV.command('sync')
+def cQ(fG=typer.Option(fb('.'),'--repo'),aU=typer.Option(True,'--search-parent/--no-search-parent'),ag=typer.Option(False,'--init-if-missing'),bG=typer.Option('origin','--remote-name'),ee=typer.Option(None,'--branch'),dG=typer.Option(None,'--message'),aC=typer.Option('','--message-prefix'),cM=typer.Option('all','--add-mode'),aB=typer.Option('none','--gitignore-mode'),W=typer.Option(fb.home()/'.gitignore','--gitignore-source'),aA=typer.Option(fb('.gitignore'),'--gitignore-dest'),aI=typer.Option('GITHUB_TOKEN,GH_TOKEN,GIT_TOKEN','--token-env-vars'),bB=typer.Option(None,'--github-user'),bh=typer.Option(True,'--push-to-fork/--no-push-to-fork'),U=typer.Option('fork','--fork-remote-name'),ci=typer.Option('none','--token-auth'),ae=typer.Option('persistent','--fork-token-auth'),aa=typer.Option('user','--token-url-format'),bj=typer.Option(False,'--set-upstream/--no-set-upstream'),cu=typer.Option(False,'--commit'),bo=typer.Option(False,'--allow-dirty')):aX();eO=aZ(aI);eY=bO(eO)
+    if not eY:gc('GITHUB_TOKEN not found.');raise typer.Exit(1)
+    r=bP(fG,aU,ag);H(r,aB,W,aA)
+    if cu:gk=dG or f'{aC}{cS.now():%Y-%m-%d%H:%M:%S}';K(r,gk,cM)
+    if ee:r.git.checkout(ee)
+    try:ec=ee or r.active_branch.name
+    except TypeError:gc('In detached HEAD state. Skipping sync.');raise typer.Exit(1)
+    try:et=r.remote(bG)
+    except ValueError:gc(f"Remote '{bG}' not found.");raise typer.Exit(1)
+    ft('Fetching updates...');et.fetch()
+    try:bR=r.active_branch
+    except TypeError:gc('In detached HEAD state. Skipping sync.');raise typer.Exit(1)
+    if not bR.tracking_branch():with bY.suppress(Exception):bR.set_tracking_branch(et.refs[ec])
+    ft(f"Pulling latest changes into '{ec}'...");et.pull();dD=bB or aN(eY,None);eq=I(et.url)
+    if not eq:gc(f'Could not parse GitHub remote URL:{et.url}');raise typer.Exit(1)
+    eP,fA=eq
+    if eP.lower()==dD.lower():if r.is_dirty(untracked_files=True) and (not bo):gc('Uncommitted local changes. Please commit before pushing.');raise typer.Exit(1)
+        aY(r,bG,ec,ci,eY,dD,aa,bj)
+    else:if not bh:ft('You are not the owner and--no-push-to-fork was given.');return
+        gw=bN(eY,eP,fA)
+        if U in [rm.name for rm in r.remotes]:r.remote(U).set_url(gw)
+        else:r.create_remote(U,gw)
+        ok(f"Using fork remote '{U}':{gw}");aY(r,U,ec,ae,eY,dD,aa,bj)
+    ok('Successfully synced.')
+def an(fL,ce):from git import GitCommandError,Repo;from git.exc import InvalidGitRepositoryError
+    if not ao(fL):return (fL,False,f'Invalid format:{fL} (expected user/repo)')
+    eP,fG=fL.split('/');fn=ce/eP/fG
+    if fn.exists():try:Repo(fn);return (fL,True,f'Already exists:{fn}')
+        except InvalidGitRepositoryError:return (fL,False,f'Directory exists but is not a git repo:{fn}')
+    fn.parent.mkdir(dL=True,exist_ok=True);gw=f'https://github.com/{fL}.git'
+    try:Repo.clone_from(gw,fn,depth=1,single_branch=True);return (fL,True,f'Successfully cloned to {fn}')
+    except GitCommandError as exc:if fn.exists():eu.rmtree(fn,ignore_errors=True)
+        return (fL,False,f'Clone failed:{str(gd).strip()}')
+    except Exception as exc:if fn.exists():eu.rmtree(fn,ignore_errors=True)
+        return (fL,False,f'Error:{gd!s}')
+def L(fL,ce,dW):import requests
+    if not ao(fL):return (fL,False,f'Invalid format:{fL}')
+    eP,fG=fL.split('/');fn=ce/eP/fG
+    if fn.exists():return (fL,True,f'Already exists:{fn}')
+    fn.parent.mkdir(dL=True,exist_ok=True);gw=f'https://api.github.com/repos/{fL}/zipball'
+    try:fH=requests.get(gw,dW=dW,stream=True);fH.raise_for_status()
+        with eb.ZipFile(io.BytesIO(fH.content)) as zf:dX=zf.namelist()[0].split('/')[0];gu=fn.parent/f'_temp_{fG}';zf.extractall(gu);eI=gu/dX
+            if eI.exists():fn.mkdir(dL=True,exist_ok=True)
+                for fu in eI.iterdir():eu.move(str(fu),str(fn/fu.name))
+                eu.rmtree(gu)
+            else:eu.move(str(gu),str(fn))
+        return (fL,True,f'Successfully downloaded to {fn}')
+    except Exception as exc:if fn.exists():eu.rmtree(fn,ignore_errors=True)
+        return (fL,False,f'Error:{gd!s}')
+def w(fL,cA):import requests
+    try:fH=requests.get(f'https://api.github.com/repos/{fL}',dW=10)
+        if fH.status_code==200:gn=fH.json().get('size',0);dT=int(gn) if isinstance(gn,(int,float,str)) else 0;cg=dT*1024;return (cg<=cA,cg)
+        return (True,0)
+    except Exception:return (True,0)
+def C(fL,ce,cA):from dulwich import porcelain;from dulwich.errors import NotGitRepository;from dulwich.repo import Repo as DulwichRepo
+    if not ao(fL):return (fL,False,f'Invalid format:{fL} (expected user/repo)')
+    eP,fG=fL.split('/');fn=ce/eP/fG
+    if fn.exists():try:DulwichRepo(str(fn));return (fL,True,f'Already exists:{fn}')
+        except NotGitRepository:return (fL,False,f'Directory exists but is not a git repo:{fn}')
+    fp,cg=w(fL,cA)
+    if not fp:return (fL,False,f'Too large ({bn(cg)}>{cA//1048576}MB)')
+    fn.parent.mkdir(dL=True,exist_ok=True);gw=f'https://github.com/{fL}.git'
+    try:porcelain.clone(gw,str(fn),depth=1);return (fL,True,f'Successfully cloned to {fn} ({bn(cg)})')
+    except Exception as exc:if fn.exists():eu.rmtree(fn,ignore_errors=True)
+        return (fL,False,f'Clone failed:{gd!s}')
+def J(gw,ce,bZ,dW=300):try:eq=dm(gw);fA=fb(eq.path).stem;fn=ce/fA;ch.run(['git','clone','--filter=blob:none','--sparse',gw,str(fn)],eA=True,capture_output=True,dW=dW);ch.run(['git','-C',str(fn),'sparse-checkout','init','--no-cone'],eA=True,capture_output=True);df=[f"**/*{(ge if ge.startswith('.') else '.'+ge)}" for ge in bZ];ch.run(['git','-C',str(fn),'sparse-checkout','set',*df],eA=True,capture_output=True);return (gw,True,f'Successfully cloned {fA}')
+    except Exception as exc:return (gw,False,f'Failed:{gd!s}')
+@fV.command('clone')
+def cq(fo=typer.Argument(fb('repos.txt')),ep=typer.Option(fb('repos'),'-o','--output'),dZ=typer.Option(8,'-w','--workers'),dA=typer.Option(False,'--dry-run')):eS=ac(fo);ft(f'Found {len(eS)} repositories to clone')
+    if dA:ft('Dry run-would clone:')
+        for fL in eS:if ao(fL):eP,fG=fL.split('/');fn=ep/eP/fG;fq='EXISTS' if fn.exists() else 'NEW';dx.print(f'  [{fq}] {fL}->{fn}')
+            else:dx.print(f'  [INVALID] {fL}')
+        return
+    cR={'ok':0,'existed':0,'failed':0}
+    def ej(fL,dK,gk):if dK and 'Already exists' in gk:cR['existed']+=1;dx.print(f'[yellow]⏭[/yellow]  {fL}:{gk}')
+        elif dK:cR['ok']+=1;dx.print(f'[green]✓[/green] {fL}:{gk}')
+        else:cR['failed']+=1;dx.print(f'[red]✗[/red] {fL}:{gk}')
+    ft(f'Cloning with {dZ} parallel workers to {ep.absolute()}')
+    with fc(processes=dZ) as fC:fv=[(fL,fC.apply_async(an,(fL,ep))) for fL in eS]
+        for fL,ck in fv:try:_,dK,gk=ck.get();ej(fL,dK,gk)
+            except Exception as exc:gc(f'{fL}:Unexpected error:{gd!s}')
+    dx.rule('Summary');dx.print(f"[green]✓[/green] Successfully cloned:{cR['ok']}");dx.print(f"[yellow]⏭[/yellow]  Already existed:{cR['existed']}");dx.print(f"[red]✗[/red] Failed:{cR['failed']}")
+@fV.command('zip-download')
+def T(fo=typer.Argument(fb('repos.txt')),ep=typer.Option(fb('repos'),'-o','--output'),dZ=typer.Option(8,'-w','--workers'),dW=typer.Option(30,'--timeout'),dA=typer.Option(False,'--dry-run')):eS=ac(fo);ft(f'Found {len(eS)} repositories to download')
+    if dA:for fL in eS:if ao(fL):eP,fG=fL.split('/');fn=ep/eP/fG;fq='EXISTS' if fn.exists() else 'NEW';dx.print(f'  [{fq}] {fL}->{fn}')
+            else:dx.print(f'  [INVALID] {fL}')
+        return
+    cR={'ok':0,'existed':0,'failed':0}
+    def ej(fL,dK,gk):if dK and 'Already exists' in gk:cR['existed']+=1;dx.print(f'[yellow]⏭[/yellow]  {fL}:{gk}')
+        elif dK:cR['ok']+=1;dx.print(f'[green]✓[/green] {fL}:{gk}')
+        else:cR['failed']+=1;dx.print(f'[red]✗[/red] {fL}:{gk}')
+    ft(f'Downloading with {dZ} parallel workers to {ep.absolute()}')
+    with fc(processes=dZ) as fC:fv=[(fL,fC.apply_async(L,(fL,ep,dW))) for fL in eS]
+        for fL,ck in fv:try:_,dK,gk=ck.get();ej(fL,dK,gk)
+            except Exception as exc:gc(f'{fL}:Unexpected error:{gd!s}')
+        fC.close();fC.join()
+    dx.rule('Summary');dx.print(f"[green]✓[/green] Successfully downloaded:{cR['ok']}");dx.print(f"[yellow]⏭[/yellow]  Already existed:{cR['existed']}");dx.print(f"[red]✗[/red] Failed:{cR['failed']}")
+@fV.command('dulwich-clone')
+def N(fo=typer.Argument(fb('repos.txt')),ep=typer.Option(fb('repos'),'-o','--output'),dZ=typer.Option(8,'-w','--workers'),cZ=typer.Option(5,'--max-size'),cc=typer.Option(False,'--no-cleanup'),dA=typer.Option(False,'--dry-run')):cA=cZ*1024*1024;eS=ac(fo);ft(f'Found {len(eS)} repositories to clone');ft(f'Max repo size:{cZ}MB')
+    if dA:for fL in eS:if ao(fL):eP,fG=fL.split('/');fn=ep/eP/fG;fp,fK=w(fL,cA)
+                if fn.exists():dx.print(f'  [EXISTS] {fL}->{fn}')
+                elif not fp:dx.print(f'  [TOO LARGE] {fL} ({bn(fK)})')
+                else:dx.print(f'  [OK] {fL}->{fn} ({bn(fK)})')
+            else:dx.print(f'  [INVALID] {fL}')
+        return
+    cR={'ok':0,'existed':0,'failed':0};aV=set()
+    def ej(fL,dK,gk):if dK and 'Already exists' in gk:cR['existed']+=1;aV.add(fL);dx.print(f'[yellow]⏭[/yellow]  {fL}:{gk}')
+        elif dK:cR['ok']+=1;aV.add(fL);dx.print(f'[green]✓[/green] {fL}:{gk}')
+        else:cR['failed']+=1;dx.print(f'[red]✗[/red] {fL}:{gk}')
+    with fc(processes=dZ) as fC:fv=[(fL,fC.apply_async(C,(fL,ep,cA))) for fL in eS]
+        for fL,ck in fv:try:_,dK,gk=ck.get();ej(fL,dK,gk)
+            except Exception as exc:gc(f'{fL}:Unexpected error:{gd!s}')
+    if not cc and aV:cC=[r for r in ac(fo) if r not in aV];fo.write_text('
+'.join(cC)+('
+' if cC else ''));ft(f'Removed {len(aV)} repos from {fo}')
+    dx.rule('Summary');dx.print(f"[green]✓[/green] Successfully cloned:{cR['ok']}");dx.print(f"[yellow]⏭[/yellow]  Already existed:{cR['existed']}");dx.print(f"[red]✗[/red] Failed:{cR['failed']}")
+@fV.command('fork')
+def cO(fG=typer.Argument(...,help='user/repo or full GitHub URL')):from git import Repo;from github import Github,GithubException;from github.GithubException import UnknownObjectException;gn=fG;fL=gn.replace('https://github.com/','').rstrip('/') if gn.startswith('https://github.com/') else gn
+    if '/' not in fL:gc("Use format 'user/repo'");raise typer.Exit(1)
+    cU=fb.home()/'.env'
+    if not cU.exists():cU.write_text('# GitHub Personal Access Token
+GITHUB_TOKEN=your_token_here
+');fQ(f'Created {cU}. Please add your token.');raise typer.Exit(1)
+    aX();eY=os.getenv('GITHUB_TOKEN')
+    if not eY:gc('GITHUB_TOKEN not set.');raise typer.Exit(1)
+    gh=Github(eY);fP=gh.get_user();ok(f'Authenticated as:{fP.login}')
+    try:dc=gh.get_repo(fL);ok(f'Found original repo:{dc.full_name}')
+        try:cV=fP.get_repo(dc.name);ok(f'Repository already forked:{cV.clone_url}');fr=cV
+        except UnknownObjectException:ft(f'Forking {fL}...');fr=dc.create_fork();ok(f'Fork created:{fr.clone_url}')
+    except GithubException as exc:gc(f'Error forking repository:{gd}');raise typer.Exit(1)
+    cD=fr.name;cp=fr.clone_url;ft(f'Cloning {cp}...')
+    try:eL=Repo.clone_from(cp,cD);ok(f'Cloned to:./{cD}')
+    except Exception as exc:gc(f'Error cloning:{gd}');raise typer.Exit(1)
+    bk=f'https://github.com/{fL}.git';ft(f'Adding upstream remote:{bk}');dl=eL.create_remote('upstream',bk);ay=fr.default_branch;dl.fetch();eL.git.branch(f'--set-upstream-to=upstream/{ay}',ay);ok('Setup complete!')
+    for et in eL.remotes:dx.print(f'  {et.name}:{et.url}')
+@fV.command('gclone')
+def bV(fo=typer.Argument(fb('repos.txt')),cZ=typer.Option(100,'--max-size'),eY=typer.Option(None,'--token'),aE=typer.Option(fb('remained'),'--remaining-file')):eK=fo.read_text(encoding='utf-8').splitlines(keepends=False);gv=eY or os.getenv('GITHUB_TOKEN');cG=[];eZ=len(eK)
+    for gg,fx in enumerate(eK):dx.print(f'{gg}/{eZ}');eP,fG=ap(fx)
+        if not eP or not fG:gc(f"Invalid GitHub repository format:'{fx}'");cG.append(fx);continue
+        ft(f'Analyzing repository:{eP}/{fG}');dU=bm(eP,fG,gv)
+        if dU is not None and dU<=cZ:ft(f'size:{dU} MB');by=fb.cwd()/fG
+            if by.exists():fQ(f'Destination already exists:{by}');continue
+            am(eP,fG,by)
+        else:if dU is not None:ft(f'Skipping (size {dU} MB>{cZ} MB)')
+            cG.append(fx)
+    aE.write_text('
+'.join(cG),encoding='utf-8');ft(f'Wrote {len(cG)} remaining entries to {aE}')
+def ap(fM):fM=fM.strip()
+    if '/' in fM and (not fM.startswith('http')):eQ=fM.split('/')
+        if len(eQ)==2 and eQ[0] and eQ[1]:return (eQ[0],eQ[1])
+        return (None,None)
+    try:eq=dm(fM)
+        if eq.netloc.lower() in {'github.com','www.github.com'}:fi=[p for p in eq.path.split('/') if p]
+            if len(fi)==2:return (fi[0],fi[1])
+    except Exception:pass
+    return (None,None)
+@fV.command('get-zip')
+def br(fG=typer.Argument(...,help='user/repo'),ee=typer.Option('main','--branch','-b'),ep=typer.Option(None,'--output','-o')):import requests;from github import Github;aX()
+    try:eP,fA=fG.split('/')
+    except ValueError:gc("Repository must be in format 'username/repo'");raise typer.Exit(1)
+    eY=os.getenv('GITHUB_TOKEN');gh=Github(eY);dC=gh.get_repo(f'{eP}/{fA}');ea=dC.get_zipball_url(ee);dE={'Authorization':f'token {eY}','Accept':'application/vnd.github.v3.raw'};fH=requests.get(ea,dE=dE,stream=True);fH.raise_for_status();eZ=int(fH.headers.get('content-length',0));ft(f'Download size:{eZ/1048576:.2f} MB ({eZ:,} bytes)');dd=str(ep) if ep else f'{fA}-{ee}.zip'
+    with open(dd,'wb') as f:for eR in fH.iter_content(chunk_size=8192):if eR:f.write(eR)
+    ok(f'Downloaded:{dd}')
+@fV.command('sparse')
+def bX(eJ=typer.Argument(...,help='Extensions and URLs,any order'),ep=typer.Option(fb('cloned_repos'),'-o','--output'),dZ=typer.Option(4,'-w','--workers')):bZ=[];fO=[]
+    for eY in eJ:if eY.startswith(('http://','https://')) or eY.endswith('.git'):fO.append(eY)
+        else:bZ.append(eY)
+    if not bZ or not fO:gc('Must provide at least one extension and one repository URL');raise typer.Exit(1)
+    ep.mkdir(exist_ok=True);ft(f"Extensions to clone:{','.join(bZ)}");ft(f'Repositories:{len(fO)}')
+    with B(max_workers=dZ) as fC:dB={fC.submit(J,gw,ep,bZ):gw for gw in fO}
+        for ei in ba(dB):gw,dK,gk=ei.result();em='[green]✓[/green]' if dK else '[red]✗[/red]';dx.print(f'{em} {gw}:{gk}')
+def fy():try:fV()
+    except KeyboardInterrupt:gc('Interrupted by user.');gt.exit(130)
+if __name__=='__main__':fy()
+
+
+# second code
+# file : gitutils.py
+
+@r
+class aL:pass
+@r
+class aN:pass
+@r
+class aM:pass
+@r
+class S:pass
+@r
+class aK:pass
+def cd(U,cc=None,bQ=True,bI=60):try:d=m.run(list(U),cc=str(cc) if cc else None,capture_output=True,cb=True,bQ=False,bI=bI)
+    except FileNotFoundError as f:raise RuntimeError(f'command not found:{U[0]}') from f
+    except m.TimeoutExpired as f:raise RuntimeError(f"command timed out:{' '.join(U)}") from f
+    if bQ and d.returncode!=0:v=(d.stderr or d.stdout or '').strip() or f"command failed:{' '.join(U)}";raise RuntimeError(v)
+    return d
+def o(c,cc=None,bQ=True,bI=60):return cd(['git',*c],cc,bQ,bI).stdout
+def am(bZ):return (bZ/'.git').is_dir()
+def W(u):H=[]
+    for ag,bm,T in os.walk(u):a=bU(ag)
+        if (a/'.git').is_dir():H.append(a);bm[:]=[]
+    return H
+def C(ca):j=o(['branch','--show-current'],ca,bQ=False).strip()
+    if j:return j
+    j=o(['rev-parse','--abbrev-ref','HEAD'],ca).strip()
+    if j=='HEAD':raise RuntimeError('detached HEAD')
+    return j
+def bk(ca):d=cd(['git','remote','show','origin'],ca,bQ=False)
+    if d.returncode==0:for bX in d.stdout.splitlines():if 'HEAD branch' in bX:return bX.split(':',1)[1].strip()
+    ac=o(['branch','-l'],ca).splitlines();bt=[J.strip().replace('*','').strip() for J in ac if J.strip()]
+    for bY in ('main','master'):if bY in bt:return bY
+    return 'main'
+def ao(ae=None):l=os.environ.get('GITHUB_TOKEN','').strip()
+    if l:return l
+    bZ=(ae or bU.home()/'.env').expanduser()
+    if not bZ.exists():raise RuntimeError(f'GITHUB_TOKEN not found and {bZ} does not exist')
+    for bX in bZ.read_text(encoding='utf-8').splitlines():z=bX.strip()
+        if not z or z.startswith('#'):continue
+        if z.startswith('export '):z=z[7:].lstrip()
+        if z.startswith('GITHUB_TOKEN='):aJ=z.split('=',1)[1].strip().strip('"\'')
+            if aJ:return aJ
+    raise RuntimeError(f'GITHUB_TOKEN not found in {bZ}')
+def aj(l,bM,g,G=None):bV=bW.dumps(G).encode() if G is not None else None;O=bH.Request(g,bV=bV,bM=bM);O.add_header('Authorization',f'token {l}');O.add_header('Accept','application/vnd.github.v3+json');O.add_header('User-Agent','git-helper/1.0')
+    if G is not None:O.add_header('Content-Type','application/json')
+    try:with bH.urlopen(O,bI=30) as bA:B=bA.read().decode();return bW.loads(B) if B else {}
+    except bS.HTTPError as f:B=f.read().decode()
+        try:aD=bW.loads(B)
+        except Exception:aD={'message':B}
+        raise RuntimeError(f"GitHub API {f.code}:{aD.get('message',B)}") from f
+def af(l,bY,bG,h,p):G={'name':bY,'private':bG,'auto_init':p}
+    if h:G['description']=h
+    try:return aj(l,'POST','https://api.github.com/user/repos',G)
+    except RuntimeError as f:if '422' in str(f):R=aj(l,'GET','https://api.github.com/user')['login'];return {'clone_url':f'https://github.com/{R}/{bY}.git','ssh_url':f'git@github.com:{R}/{bY}.git','html_url':f'https://github.com/{R}/{bY}'}
+        raise
+def bE(g):bw=['^git@github\.com:([^/]+)/(.+?)(?:\.git)?/?$','^https?://(?:[^@/]+@)?github\.com/([^/]+)/(.+?)(?:\.git)?/?$']
+    for bv in bw:ap=re.match(bv,g)
+        if ap:return (ap.group(1),ap.group(2))
+    return None
+def ah(ca,g,bN='origin'):d=cd(['git','remote','get-url',bN],ca,bQ=False)
+    if d.returncode==0:if d.stdout.strip()!=g:cd(['git','remote','set-url',bN,g],ca)
+    else:cd(['git','remote','add',bN,g],ca)
+def av(ca,bF):cd(['git','add','-A'],ca);d=cd(['git','status','--porcelain'],ca)
+    if not d.stdout.strip():return False
+    cd(['git','commit','-m',bF],ca);return True
+def ar(ca,bK,bN='origin',bp=False):c=['git','push','-u',bN,bK]
+    if bp:c.insert(2,'--force-with-lease')
+    cd(c,ca)
+def aw(ca,aH):bo='%an%x00%ae%x00%ad%x00%s';j=o(['show','-s',f'--format={bo}',aH],ca).strip();aS,bn,bj,bD=j.split(' ');return aL(aH,aS,bn,bj,bD)
+def bl(ca,F,E):bs=o(['diff','--name-status',F,E],ca).splitlines();bu=o(['diff','--numstat',F,E],ca).splitlines();aI={}
+    for bX in bu:k=bX.split('	')
+        if len(k)==3:X,V,bZ=k;aI[bZ]=(None if X=='-' else int(X),None if V=='-' else int(V))
+    au=[]
+    for bX in bs:k=bX.split('	')
+        if not k:continue
+        A=k[0];aC=None
+        if A.startswith(('R','C')) and len(k)==3:aC,bZ=(k[1],k[2])
+        elif len(k)>1:bZ=k[1]
+        else:continue
+        X,V=aI.get(bZ,(None,None));au.append(aN(A,bZ,aC,X,V))
+    return au
+def aX(c):ca=bU(c.repo).resolve();ak=o(['log','-2','--format=%H'],ca).strip().splitlines()
+    if len(ak)<2:raise RuntimeError('Repository needs at least 2 commits to diff.')
+    E,F=(ak[0],ak[1]);bz=aM(str(ca),aw(ca,F),aw(ca,E),bl(ca,F,E),o(['diff',F,E],ca));j=bU(c.output);j.write_text(bW.dumps(bJ(bz),indent=2),encoding='utf-8');print(f'Wrote diff report:{j}');return 0
+def bb(c):ca=bU(c.repo).resolve();ag=C(ca);bK=c.branch;d=cd(['git','cherry','-v',ag,bK],ca);aa=[]
+    for bX in d.stdout.splitlines():k=bX.split(' ')
+        if len(k)>2:aa.append(' '.join(k[2:]))
+    an=c.reviewer or f"{input('Reviewer name:')}<{input('Reviewer email:')}>";bF='
+'.join(aa)+f'
+
+Reviewed By:{an}';cd(['git','merge','--squash','--no-log',bK],ca);cd(['git','commit','-m',bF],ca);print('Successfully merged!');return 0
+def bC(bZ):try:d=cd(['git','status','--porcelain'],bZ,bQ=False,bI=10)
+        if d.returncode!=0:return S(bZ,False,f'Git error:{d.stderr.strip()}')
+        Y=[bX for bX in d.stdout.splitlines() if bX.strip()]
+        if not Y:return S(bZ,False,'Clean')
+        bL=','.join(Y[:5])
+        if len(Y)>5:bL+=f' (+{len(Y)-5} more)'
+        return S(bZ,True,bL)
+    except Exception as f:return S(bZ,False,f'Error:{f}')
+def bh(c):u=bU(c.path).resolve();w=W(u)
+    if not w:print('No git repositories found.');return 0
+    with b(max_workers=c.jobs or None) as y:t=list(y.map(bC,w))
+    bR=[e for e in t if e.dirty]
+    for e in t:if e.dirty:print(f'✗ {e.path.name}:CHANGES DETECTED');print(f'  └─ {e.detail}')
+        else:print(f'✓ {e.path.name}:No changes')
+            if e.detail!='Clean':print(f'  └─ {e.detail}')
+    if bR:print(f'Found {len(bR)} repository(ies) with changes')
+    else:print('All repositories are clean')
+    return 0
+def by(ca):try:bK=C(ca);d=cd(['git','remote'],ca,bQ=False)
+        if d.returncode!=0 or not d.stdout.strip():return (ca,False,'No remote configured')
+        bN=d.stdout.splitlines()[0];cd(['git','pull',bN,bK],ca,bI=120);return (ca,True,'Pulled successfully')
+    except Exception as f:return (ca,False,str(f))
+def bd(c):u=bU(c.path).resolve();w=W(u)
+    if not w:print('No git repositories found.');return 0
+    with b(max_workers=c.jobs or None) as y:t=list(y.map(by,w))
+    N=[e for e in t if e[1]];ab=[e for e in t if not e[1]]
+    for ca,T,v in N:print(f'✅ {ca.relative_to(u)}:{v}')
+    for ca,T,v in ab:print(f'❌ {ca.relative_to(u)}:{v}')
+    return 0
+def bx(ca,l):try:aF=cd(['git','remote'],ca,bQ=False).stdout.strip()
+        if aF:bK=C(ca);bN=aF.splitlines()[0];cd(['git','pull',bN,bK],ca,bI=120);return (ca,True,'Pulled successfully')
+        x=af(l,ca.name,False,f'Repository for {ca.name}',False);g=x.get('clone_url') or x.get('ssh_url')
+        if not g:return (ca,False,'Could not determine remote URL')
+        ah(ca,g);bK=C(ca);ar(ca,bK);return (ca,True,f'Created and pushed to {g}')
+    except Exception as f:return (ca,False,str(f))
+def be(c):l=ao(bU(c.env_file) if c.env_file else None);u=bU(c.path).resolve();w=W(u)
+    if not w:print('No git repositories found.');return 0
+    with b(max_workers=c.jobs or None) as y:t=list(y.map(bx,w,[l]*len(w)))
+    N=[e for e in t if e[1]];ab=[e for e in t if not e[1]]
+    for ca,T,v in N:print(f'✅ {ca.relative_to(u)}:{v}')
+    for ca,T,v in ab:print(f'❌ {ca.relative_to(u)}:{v}')
+    return 0
+def aW(c):l=ao(bU(c.env_file) if c.env_file else None);bP=bU(c.source).resolve();bY=c.name or bP.name;x=af(l,bY,c.private,c.description,c.auto_init);g=x.get('clone_url') if c.protocol=='https' else x.get('ssh_url')
+    if not g:raise RuntimeError('Could not determine remote URL')
+    if c.push:os.chdir(bP)
+        if not am(bP):cd(['git','init'],bP)
+        if c.git_user:cd(['git','config','user.name',c.git_user],bP)
+        if c.git_email:cd(['git','config','user.email',c.git_email],bP)
+        av(bP,c.commit_message)
+        if c.rename_branch:cd(['git','branch','-M',c.branch],bP)
+        ah(bP,g,c.remote);ar(bP,c.branch,c.remote)
+    print(x.get('html_url',g));return 0
+def bi(c):ca=bU(c.repo).resolve();n=c.n
+    if n<=0:raise RuntimeError('N must be>0')
+    cd(['git','add','-A'],ca);d=cd(['git','status','--porcelain'],ca)
+    if d.stdout.strip():cd(['git','commit','-m','auto-commit before squash','--no-verify'],ca)
+    al=o(['rev-parse','HEAD'],ca).strip();ax=o(['rev-list',f'--max-count={n}','--reverse','HEAD'],ca).splitlines()
+    if len(ax)<n:raise RuntimeError(f'Repository has fewer than {n} commits')
+    K=o(['rev-parse',f'HEAD~{n}'],ca).strip();aq=bU(c.patch_file).resolve();br=bU(c.meta_file).resolve();L=cd(['git','diff','--binary',f'{K}..{al}'],ca).stdout;aq.write_text(L,encoding='utf-8');br.write_text(bW.dumps({'base':K,'head':al,'commits':ax},indent=2),encoding='utf-8')
+    if c.dry_run:print(f'Would reset to {K},apply {aq},and commit');return 0
+    cd(['git','reset','--hard',K],ca);cd(['git','apply','--index',str(aq)],ca);cd(['git','add','-A'],ca);aa=o(['log','--format=%h-%s',f'{K}..{al}'],ca).strip().splitlines();bF=f'Squash {n} commits:'+'; '.join(aa);cd(['git','commit','-m',bF],ca);print('Done');return 0
+def aY(c):ca=bU(c.repo).resolve();cd(['git','fetch','origin'],ca);at=None
+    for aE in ('origin/master','origin/main'):d=cd(['git','rev-parse','--verify',aE],ca,bQ=False)
+        if d.returncode==0:at=aE;break
+    if not at:raise RuntimeError('Neither origin/master nor origin/main exists')
+    bK=C(ca);d=cd(['git','rebase','--onto',at,'HEAD',bK],ca,bQ=False)
+    if d.returncode!=0:cd(['git','rebase','--abort'],ca,bQ=False);raise RuntimeError(d.stderr.strip() or 'Rebase failed')
+    cd(['git','push','--force-with-lease','origin',bK],ca);print('Successfully synced branch');return 0
+def aZ(c):bX=c.line.strip()
+    if not bX:raise RuntimeError('line cannot be empty')
+    bT=[bU(a).resolve() for a in c.paths or ['.']];ai=[]
+    for bZ in bT:if bZ.is_file() and bZ.name=='.gitignore':ai.append(bZ)
+        elif bZ.is_dir():ai.extend((a for a in bZ.rglob('.gitignore') if a.is_file()))
+    M=0
+    for bZ in ai:try:cb=bZ.read_text(encoding='utf-8',errors='ignore')
+            if bX in cb.splitlines():continue
+            if cb and (not cb.endswith('
+')):cb+='
+'
+            cb+=bX+'
+';bZ.write_text(cb,encoding='utf-8');M+=1;print(f'Updated {bZ}')
+        except Exception as f:print(f'Failed {bZ}:{f}',file=ce.stderr)
+    print(f'Modified {M} file(s)');return 0
+def ba(c):ca=bU(c.repo).resolve()
+    if not am(ca):raise RuntimeError('Not a git repository')
+    D=bk(ca);ac=[J.strip().replace('*','').strip() for J in o(['branch','-l'],ca).splitlines() if J.strip()]
+    for bK in ac:if bK!=D:cd(['git','branch','-D',bK],ca,bQ=False)
+    cd(['git','checkout',D],ca);cd(['git','checkout','--orphan','temp_branch'],ca);cd(['git','add','-A'],ca);cd(['git','commit','-m','Squashed history,keeping last commit'],ca);cd(['git','branch','-D',D],ca);cd(['git','branch','-m',D],ca);print('Cleanup completed');return 0
+def bB(ca):try:cd(['git','restore','.'],ca);return (ca,True,'Restored')
+    except Exception as f:return (ca,False,str(f))
+def bg(c):u=bU(c.path).resolve();w=W(u)
+    if not w:print('No git repositories found.');return 0
+    with b(max_workers=c.jobs or None) as y:t=list(y.map(bB,w))
+    for ca,N,v in t:bq='✅' if N else '❌';print(f'{bq} {ca.relative_to(u)}:{v}')
+    return 0
+def aU(c):ca=bU(c.repo).resolve();P=o(['rev-list',c.branch],ca).splitlines()
+    if c.max_count:P=P[:c.max_count]
+    t=[]
+    for Q in P:d=cd(['git','show','-s','--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s',Q],ca);k=d.stdout.strip().split('')
+        if len(k)<5:continue
+        az,aQ,aP,aO,v=k;L=cd(['git','diff-tree','--no-commit-id','--name-status','-r','-M','--root',Q],ca).stdout;I=[];M=[];ay=[];aG=[]
+        for bX in L.splitlines():i=bX.split('	')
+            if not i:continue
+            A=i[0]
+            if A.startswith('A') and len(i)>1:I.append(i[1])
+            elif A.startswith('M') and len(i)>1:M.append(i[1])
+            elif A.startswith('D') and len(i)>1:ay.append(i[1])
+            elif A.startswith(('R','C')) and len(i)>2:aG.append({'from':i[1],'to':i[2]})
+        t.append(aK(az,az[:8],aQ,aP,aO,v,I,M,ay,aG))
+    j=bU(c.output);j.write_text(bW.dumps([bJ(e) for e in t],indent=2),encoding='utf-8');print(f'Wrote {len(t)} commits to {j}');return 0
+def bf(c):ca=bU(c.repo).resolve();P=o(['rev-list','HEAD'],ca).splitlines();H={}
+    for Q in P:L=cd(['git','diff-tree','--no-commit-id','--name-status','-r','-M','--root',Q],ca).stdout;I=[]
+        for bX in L.splitlines():i=bX.split('	')
+            if i and i[0].startswith('A') and (len(i)>1):I.append(bU(i[1]).name)
+        H[Q[:8]]=sorted(set(I))
+    j=bU(c.output);j.write_text(bW.dumps(H,indent=2),encoding='utf-8');print(f'Wrote {len(H)} commits to {j}');return 0
+def aV(c):ca=bU(c.repo).resolve();aA=bU.home()/'.gitignore';aB=ca/'.gitignore'
+    if aA.exists() and (not aB.exists()):bO.copy2(aA,aB)
+    cd(['git','add','-A'],ca);bF=ad.now().strftime('Auto-commit at%Y-%m-%d%H:%M:%S');d=cd(['git','status','--porcelain'],ca)
+    if d.stdout.strip():cd(['git','commit','-m',bF],ca)
+    bK=C(ca);cd(['git','push','origin',bK],ca);print(f'Pushed to origin/{bK} with message:{bF}');return 0
+def bc(c):l=ao(bU(c.env_file) if c.env_file else None);ca=bU.cwd().resolve();bY=c.name or ca.name;R=aj(l,'GET','https://api.github.com/user')['login'];x=af(l,bY,c.private,c.description,False);g=x.get('clone_url') or x.get('ssh_url')
+    if not g:raise RuntimeError('Could not determine remote URL')
+    if not am(ca):cd(['git','init','-b',c.branch],ca)
+    if not (ca/'.gitignore').exists() and (bU.home()/'.gitignore').exists():bO.copy2(bU.home()/'.gitignore',ca/'.gitignore')
+    av(ca,c.message);cd(['git','branch','-M',c.branch],ca);ah(ca,g);ar(ca,c.branch);print(f'https://github.com/{R}/{bY}');return 0
+def aT():Z=s.ArgumentParser(prog='git-helper');q=Z.add_subparsers(dest='command',required=True);a=q.add_parser('diff-report');a.add_argument('repo',nargs='?',default='.');a.add_argument('output',nargs='?',default='diff_report.json');a.set_defaults(func=aX);a=q.add_parser('merge-squash');a.add_argument('branch');a.add_argument('--repo',default='.');a.add_argument('--reviewer');a.set_defaults(func=bb);a=q.add_parser('scan-changes');a.add_argument('path',nargs='?',default='.');a.add_argument('--jobs',type=int);a.set_defaults(func=bh);a=q.add_parser('pull-all');a.add_argument('path',nargs='?',default='.');a.add_argument('--jobs',type=int);a.set_defaults(func=bd);a=q.add_parser('pull-new');a.add_argument('path',nargs='?',default='.');a.add_argument('--env-file');a.add_argument('--jobs',type=int);a.set_defaults(func=be);a=q.add_parser('create-repo');a.add_argument('--name');a.add_argument('--source',default='.');a.add_argument('--description');a.add_argument('--private',action='store_true');a.add_argument('--auto-init',action='store_true');a.add_argument('--push',action='store_true');a.add_argument('--env-file');a.add_argument('--remote',default='origin');a.add_argument('--protocol',choices=['https','ssh'],default='ssh');a.add_argument('--branch',default='main');a.add_argument('--commit-message',default='Update files');a.add_argument('--git-user');a.add_argument('--git-email');a.add_argument('--rename-branch',action='store_true');a.set_defaults(func=aW);a=q.add_parser('squash');a.add_argument('n',type=int);a.add_argument('--repo',default='.');a.add_argument('--patch-file',default='saved_patch.diff');a.add_argument('--meta-file',default='saved_patch.meta.json');a.add_argument('--dry-run',action='store_true');a.set_defaults(func=bi);a=q.add_parser('fix');a.add_argument('repo',nargs='?',default='.');a.set_defaults(func=aY);a=q.add_parser('gitignore-add');a.add_argument('line');a.add_argument('paths',nargs='*');a.set_defaults(func=aZ);a=q.add_parser('keep-main');a.add_argument('repo',nargs='?',default='.');a.set_defaults(func=ba);a=q.add_parser('restore');a.add_argument('path',nargs='?',default='.');a.add_argument('--jobs',type=int);a.set_defaults(func=bg);a=q.add_parser('added-files');a.add_argument('repo',nargs='?',default='.');a.add_argument('output',nargs='?',default='added_files.json');a.add_argument('--branch',default='HEAD');a.add_argument('--max-count',type=int);a.set_defaults(func=aU);a=q.add_parser('report');a.add_argument('repo',nargs='?',default='.');a.add_argument('output',nargs='?',default='added_files.json');a.set_defaults(func=bf);a=q.add_parser('auto-commit-push');a.add_argument('repo',nargs='?',default='.');a.set_defaults(func=aV);a=q.add_parser('newrepo');a.add_argument('--name');a.add_argument('--private',action='store_true');a.add_argument('--description');a.add_argument('--message',default='Initial commit');a.add_argument('--branch',default='main');a.add_argument('--env-file');a.set_defaults(func=bc);return Z
+def D(aR=None):Z=aT();c=Z.parse_args(aR)
+    try:return int(c.func(c))
+    except Exception as f:print(f'Error:{f}',file=ce.stderr);return 1
+if __name__=='__main__':raise SystemExit(D())
+# NOTE: This code is compressed. Standard library imports have been removed. You may rename variables and functions freely.
+return full type-annotated code in one markdown block, no docstrings & no comments

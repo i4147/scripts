@@ -1,0 +1,210 @@
+# filename: module_usage.py
+J=aa.home()/'bin';O=aa.home()/'dh_usage.txt';L='dh'
+def a():Q=set()
+    for t in N.iter_modules():ad=t.name
+        if ad.startswith('_'):continue
+        Q.add(ad)
+    U={'os','sys','re','json','math','time','datetime','pathlib','collections','itertools','functools','typing','argparse','logging','subprocess','shutil','tempfile','hashlib','base64','uuid','csv','io','textwrap','string','random','statistics','decimal','fractions','enum','dataclasses','abc','copy','pprint','traceback','warnings','contextlib','threading','multiprocessing','socket','http','urllib','email','xml','html','configparser','ast','inspect','dis','tokenize','compileall','zipfile','tarfile','gzip','bz2','lzma','pickle','shelve','dbm','sqlite3','unittest','doctest','pdb','profile','cProfile','webbrowser','tkinter','turtle'};Q.update(U);return Q
+def D(u,B):E=u.split('.')[0];return E in B
+def h(af):try:ah=ai.parse(af.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError) as e:print(f'   ⚠️  Skipping {af.name}:{e}');return {}
+    M=s(list)
+    for ae in ai.walk(ah):if isinstance(ae,ai.Import):for R in ae.names:aj=R.name;P=R.asname
+                if aj not in M:M[aj]=[]
+                if P:M[aj].append(P)
+        if isinstance(ae,ai.ImportFrom) and ae.module:aj=ae.module
+            for R in ae.names:ad=R.name if R.asname is None else R.asname;M[aj].append(ad)
+    G=set()
+    for ae in ai.walk(ah):if isinstance(ae,ai.Import):for R in ae.names:if R.name==L or R.name.startswith(L+'.'):ad=R.asname if R.asname else R.name;G.add(ad)
+    for ae in ai.walk(ah):if isinstance(ae,ai.Call):ab=ae.func
+            if (isinstance(ab,ai.Attribute) and isinstance(ab.value,ai.Name)) and ab.value.id in G:M[L].append(ab.attr)
+            if isinstance(ab,ai.Attribute) and isinstance(ab.value,ai.Attribute):ag=ab.value
+                while isinstance(ag,ai.Attribute):ag=ag.value
+                if isinstance(ag,ai.Name) and ag.id in G:M[L].append(ab.attr)
+    return dict(M)
+def r(af,M):try:ah=ai.parse(af.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError):return {}
+    j={}
+    for aj,Y in M.items():for ad in Y:j[ad]=(aj,ad)
+    q=s(lambda:s(int))
+    for ae in ai.walk(ah):if isinstance(ae,ai.Call):ab=ae.func
+            if isinstance(ab,ai.Name) and ab.id in j:aj,ad=j[ab.id];q[aj][ad]+=1
+            if isinstance(ab,ai.Attribute) and isinstance(ab.value,ai.Name):H=ab.value.id
+                for aj,Y in M.items():if aj==H or aj.endswith('.'+H):q[aj][ab.attr]+=1
+    return dict(q)
+def i(l,B):X=[];ak=__import__('datetime').datetime.now();n=K();d=K();C=K();p=s(set);g=s(set);F=s(set)
+    for V,o in l:for aj,A in o.items():Z=sum(A.values());E=aj.split('.')[0]
+            if E==L:C[aj]+=Z
+                for ab in A:F[ab].add(V)
+            elif D(aj,B):n[aj]+=Z
+                for ab in A:p[ab].add(V)
+            else:d[aj]+=Z
+                for ab in A:g[ab].add(V)
+    X.append(f"{'='*40}");X.append(f'  IMPORT USAGE REPORT — {ak:%Y-%m-%d%H:%M}');X.append(f"{'='*40}");X.append(f'  Scanned directory:{J}');X.append(f'  Files scanned:{len(l)}');X.append('');X.append(f"{'─'*40}");X.append('  SECTION 1:STANDARD LIBRARY MODULES');X.append(f"{'─'*40}")
+    if n:X.append(f"\n  {'Module':<35} {'Total Calls':<15} {'Files':<10}");X.append('  '+'-'*40)
+        for aj in sorted(n,key=lambda m:-n[m]):z=len(p.get(aj,set()));X.append(f'  {aj:<35} {n[aj]:<15} {z:<10}')
+        X.append(f'\n  Total stdlib modules used:{len(n)}')
+    else:X.append('  (none)')
+    X.append(f"\n{'─'*40}");X.append('  SECTION 2:THIRD-PARTY PACKAGES');X.append(f"{'─'*40}")
+    if d:X.append(f"\n  {'Package':<35} {'Total Calls':<15} {'Files':<10}");X.append('  '+'-'*40)
+        for aj in sorted(d,key=lambda m:-d[m]):z=len(g.get(aj,set()));X.append(f'  {aj:<35} {d[aj]:<15} {z:<10}')
+        X.append(f'\n  Total third-party packages used:{len(d)}')
+    else:X.append('  (none)')
+    X.append(f"\n{'─'*40}");X.append(f"  SECTION 3:CUSTOM '{L}' PACKAGE");X.append(f"{'─'*40}")
+    if C:X.append(f"\n  {'Function':<35} {'Total Calls':<15} {'Files':<10}");X.append('  '+'-'*40)
+        for ab in sorted(C,key=lambda f:-C[f]):z=len(F.get(ab,set()));X.append(f'  {ab:<35} {C[ab]:<15} {z:<10}')
+        X.append(f'\n  Total dh functions used:{len(C)}')
+    else:X.append('  (none)')
+    X.append(f"\n{'─'*40}");X.append('  SECTION 4:PER-FILE BREAKDOWN');X.append(f"{'─'*40}")
+    for V,o in sorted(l,key=lambda x:-sum((sum(c.values()) for c in x[1].values()))):w=sum((sum(c.values()) for c in o.values()));X.append(f'\n  📄 {V}  ({w} total calls)');k={};b={};y={}
+        for aj,A in o.items():E=aj.split('.')[0]
+            if E==L:y[aj]=A
+            elif D(aj,B):k[aj]=A
+            else:b[aj]=A
+        if k:X.append('    [stdlib]')
+            for aj in sorted(k):W=k[aj];Z=sum(W.values());X.append(f'      {aj:<30} {Z} call(s)')
+                for ab,T in sorted(W.items(),key=lambda x:-x[1]):if T>0:X.append(f'        {ab:<28} {T} time(s)')
+        if b:X.append('    [third-party]')
+            for aj in sorted(b):W=b[aj];Z=sum(W.values());X.append(f'      {aj:<30} {Z} call(s)')
+                for ab,T in sorted(W.items(),key=lambda x:-x[1]):if T>0:X.append(f'        {ab:<28} {T} time(s)')
+        if y:X.append(f'    [{L}]')
+            for aj in sorted(y):W=y[aj];Z=sum(W.values());X.append(f'      {aj:<30} {Z} call(s)')
+                for ab,T in sorted(W.items(),key=lambda x:-x[1]):if T>0:X.append(f'        {ab:<28} {T} time(s)')
+    X.append('');X.append(f"{'='*40}");X.append('  END OF REPORT');X.append(f"{'='*40}");return '\n'.join(X)
+def ac():if not J.is_dir():print(f'❌ {J} does not exist or is not a directory.');al.exit(1)
+    I=sorted(J.glob('*.py'))
+    if not I:print(f'⚠️  No .py files found in {J}.');O.write_text(f'No .py files found in {J}.\n');return
+    print(f'🔍 Scanning {len(I)} Python file(s) in {J} ...');print('   Building stdlib list (this may take a moment)...');B=a();print(f'   Detected {len(B)} stdlib modules\n');l=[]
+    for f in I:M=h(f)
+        if not M:continue
+        S=r(f,M)
+        if S:l.append((f.name,S))
+    if not l:print('✅ No imports found in any script.');O.write_text(f'No imports found in {J}.\n');return
+    v=i(l,B);O.write_text(v,encoding='utf-8');print(v);print(f'\n✅ Report saved to {O}')
+if __name__=='__main__':raise SystemExit(ac())
+# filename: module_usage_with_charts.py
+import matplotlib.pyplot as plt;R=ak.home()/'bin';X=ak.home()/'dh_usage.txt';T='dh'
+def a():ab=set()
+    for z in W.iter_modules():an=z.name
+        if an.startswith('_'):continue
+        ab.add(an)
+    ae={'os','sys','re','json','math','time','datetime','pathlib','collections','itertools','functools','typing','argparse','logging','subprocess','shutil','tempfile','hashlib','base64','uuid','csv','io','textwrap','string','random','statistics','decimal','fractions','enum','dataclasses','abc','copy','pprint','traceback','warnings','contextlib','threading','multiprocessing','socket','http','urllib','email','xml','html','configparser','ast','inspect','dis','tokenize','compileall','zipfile','tarfile','gzip','bz2','lzma','pickle','shelve','dbm','sqlite3','unittest','doctest','pdb','profile','cProfile','webbrowser','tkinter','turtle'};ab.update(ae);return ab
+def L(A,H):M=A.split('.')[0];return M in H
+def n(A,H):M=A.split('.')[0]
+    if M==T:return False
+    if M in H:return False
+    return not M.startswith('__')
+def i(ap):try:ar=at.parse(ap.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError) as e:print(f'   ⚠️  Skipping {ap.name}:{e}');return {}
+    V=y(list)
+    for ao in at.walk(ar):if isinstance(ao,at.Import):for ac in ao.names:av=ac.name;Z=ac.asname
+                if av not in V:V[av]=[]
+                if Z:V[av].append(Z)
+        if isinstance(ao,at.ImportFrom) and ao.module:av=ao.module
+            for ac in ao.names:an=ac.name if ac.asname is None else ac.asname;V[av].append(an)
+    P=set()
+    for ao in at.walk(ar):if isinstance(ao,at.Import):for ac in ao.names:if ac.name==T or ac.name.startswith(T+'.'):an=ac.asname if ac.asname else ac.name;P.add(an)
+    for ao in at.walk(ar):if isinstance(ao,at.Call):am=ao.func
+            if (isinstance(am,at.Attribute) and isinstance(am.value,at.Name)) and am.value.id in P:V[T].append(am.attr)
+            if isinstance(am,at.Attribute) and isinstance(am.value,at.Attribute):aq=am.value
+                while isinstance(aq,at.Attribute):aq=aq.value
+                if isinstance(aq,at.Name) and aq.id in P:V[T].append(am.attr)
+    return dict(V)
+def w(ap,V):try:ar=at.parse(ap.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError):return {}
+    l={}
+    for av,ai in V.items():for an in ai:l[an]=(av,an)
+    u=y(lambda:y(int))
+    for ao in at.walk(ar):if isinstance(ao,at.Call):am=ao.func
+            if isinstance(am,at.Name) and am.id in l:av,an=l[am.id];u[av][an]+=1
+            if isinstance(am,at.Attribute) and isinstance(am.value,at.Name):Q=am.value.id
+                for av,ai in V.items():if av==Q or av.endswith('.'+Q):u[av][am.attr]+=1
+    return dict(u)
+def j(q,H):ah=[];aw=__import__('datetime').datetime.now();r=S();d=S();K=S();t=y(set);g=y(set);O=y(set)
+    for af,s in q:for av,F in s.items():aj=sum(F.values());M=av.split('.')[0]
+            if M==T:K[av]+=aj
+                for am in F:O[am].add(af)
+            elif L(av,H):r[av]+=aj
+                for am in F:t[am].add(af)
+            else:d[av]+=aj
+                for am in F:g[am].add(af)
+    ah.append(f"{'='*40}");ah.append(f'  IMPORT USAGE REPORT — {aw:%Y-%m-%d%H:%M}');ah.append(f"{'='*40}");ah.append(f'  Scanned directory:{R}');ah.append(f'  Files scanned:{len(q)}');ah.append('');ah.append(f"{'─'*40}");ah.append('  SECTION 1:STANDARD LIBRARY MODULES');ah.append(f"{'─'*40}")
+    if r:ah.append(f"\n  {'Module':<35} {'Total Calls':<15} {'Files':<10}");ah.append('  '+'-'*40)
+        for av in sorted(r,key=lambda m:-r[m]):E=len(t.get(av,set()));ah.append(f'  {av:<35} {r[av]:<15} {E:<10}')
+        ah.append(f'\n  Total stdlib modules used:{len(r)}')
+    else:ah.append('  (none)')
+    ah.append(f"\n{'─'*40}");ah.append('  SECTION 2:THIRD-PARTY PACKAGES');ah.append(f"{'─'*40}")
+    if d:ah.append(f"\n  {'Package':<35} {'Total Calls':<15} {'Files':<10}");ah.append('  '+'-'*40)
+        for av in sorted(d,key=lambda m:-d[m]):E=len(g.get(av,set()));ah.append(f'  {av:<35} {d[av]:<15} {E:<10}')
+        ah.append(f'\n  Total third-party packages used:{len(d)}')
+    else:ah.append('  (none)')
+    ah.append(f"\n{'─'*40}");ah.append(f"  SECTION 3:CUSTOM '{T}' PACKAGE");ah.append(f"{'─'*40}")
+    if K:ah.append(f"\n  {'Function':<35} {'Total Calls':<15} {'Files':<10}");ah.append('  '+'-'*40)
+        for am in sorted(K,key=lambda f:-K[f]):E=len(O.get(am,set()));ah.append(f'  {am:<35} {K[am]:<15} {E:<10}')
+        ah.append(f'\n  Total dh functions used:{len(K)}')
+    else:ah.append('  (none)')
+    ah.append(f"\n{'─'*40}");ah.append('  SECTION 4:PER-FILE BREAKDOWN');ah.append(f"{'─'*40}")
+    for af,s in sorted(q,key=lambda x:-sum((sum(c.values()) for c in x[1].values()))):C=sum((sum(c.values()) for c in s.values()));ah.append(f'\n  📄 {af}  ({C} total calls)');o={};b={};D={}
+        for av,F in s.items():M=av.split('.')[0]
+            if M==T:D[av]=F
+            elif L(av,H):o[av]=F
+            else:b[av]=F
+        if o:ah.append('    [stdlib]')
+            for av in sorted(o):ag=o[av];aj=sum(ag.values());ah.append(f'      {av:<30} {aj} call(s)')
+                for am,ad in sorted(ag.items(),key=lambda x:-x[1]):if ad>0:ah.append(f'        {am:<28} {ad} time(s)')
+        if b:ah.append('    [third-party]')
+            for av in sorted(b):ag=b[av];aj=sum(ag.values());ah.append(f'      {av:<30} {aj} call(s)')
+                for am,ad in sorted(ag.items(),key=lambda x:-x[1]):if ad>0:ah.append(f'        {am:<28} {ad} time(s)')
+        if D:ah.append(f'    [{T}]')
+            for av in sorted(D):ag=D[av];aj=sum(ag.values());ah.append(f'      {av:<30} {aj} call(s)')
+                for am,ad in sorted(ag.items(),key=lambda x:-x[1]):if ad>0:ah.append(f'        {am:<28} {ad} time(s)')
+    ah.append('');ah.append(f"{'='*40}");ah.append('  END OF REPORT');ah.append(f"{'='*40}");return ('\n'.join(ah),r,d,K)
+def B(r,d,K,q,H):G=ak.home();plt.style.use('seaborn-v0_8-darkgrid')
+    if not r and (not d) and (not K):print('⚠️  No data to chart.');return
+    print('\n📊 Generating matplotlib charts...');au,ax=plt.subplots(figsize=(12,6));I=dict(sorted(r.items(),key=lambda x:-x[1])[:10])
+    if I:ax.barh(list(I.keys()),list(I.values()),color='#3498db');ax.set_xlabel('Total Calls');ax.set_title('Top 10 Standard Library Modules by Usage',fontsize=14,fontweight='bold');ax.invert_yaxis();plt.tight_layout();plt.savefig(G/'01_stdlib_top10.png',dpi=100,bbox_inches='tight');plt.close();print('   ✅ Saved:01_stdlib_top10.png')
+    au,ax=plt.subplots(figsize=(10,8));h={'Standard Library':sum(r.values()),'Third-Party':sum(d.values()),'Custom (dh)':sum(K.values())};h={k:v for k,v in h.items() if v>0}
+    if h:aa=['#3498db','#e74c3c','#2ecc71'];U,Y,J=ax.pie(h.values(),labels=h.keys(),autopct='%1.1f%%',aa=aa[:len(h)],startangle=90)
+        for N in J:N.set_color('white');N.set_fontweight('bold')
+        ax.set_title('Import Usage Distribution by Category',fontsize=14,fontweight='bold');plt.tight_layout();plt.savefig(G/'02_category_distribution.png',dpi=100,bbox_inches='tight');plt.close();print('   ✅ Saved:02_category_distribution.png')
+    au,ax=plt.subplots(figsize=(12,6));p=dict(sorted(d.items(),key=lambda x:-x[1])[:10])
+    if p:ax.barh(list(p.keys()),list(p.values()),color='#e74c3c');ax.set_xlabel('Total Calls');ax.set_title('Top 10 Third-Party Packages by Usage',fontsize=14,fontweight='bold');ax.invert_yaxis();plt.tight_layout();plt.savefig(G/'03_thirdparty_top10.png',dpi=100,bbox_inches='tight');plt.close();print('   ✅ Saved:03_thirdparty_top10.png')
+    al,ax=plt.subplots(figsize=(12,6))
+    if K:ax.bar(list(K.keys()),list(K.values()),color='#2ecc71')
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

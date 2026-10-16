@@ -1,0 +1,50 @@
+# filename: qrcode_reader.py
+from PIL import Image;from pyzbar.pyzbar import decode
+def b(c):try:k=Image.open(c);a=decode(k)
+        if not a:print('No QR code found in the image.');return []
+        print(f'Found {len(a)} QR code(s):\n');f=[]
+        for i,l in enumerate(a,1):g=l.data.decode('utf-8');j=l.rect;print(f'QR Code {i}:');print(f'  Data:{g}');print(f'  Type:{l.type}');print(f'  Position:(left={j.left},top={j.top},width={j.width},height={j.height})');print();f.append(g)
+        return f
+    except FileNotFoundError:print(f"Error:Image file '{c}' not found.");m.exit(1)
+    except Exception as e:print(f'Error processing image:{e}');m.exit(1)
+def h():if len(m.argv)<2:print('Usage:python qr_reader.py<image_path>');print('Example:python qr_reader.py qrcode.png');m.exit(1)
+    d=m.argv[1];print(f'Reading QR code from:{d}\n');f=b(d)
+    if f:print('First QR code data only:');print(f[0])
+if __name__=='__main__':raise SystemExit(h())
+# filename: qrcoder.py
+from PIL import Image;from pyzbar import pyzbar
+def a(b):try:with Image.open(b) as h:if h.mode!='RGB':h=h.convert('RGB')
+            c=pyzbar.decode(h);d=[]
+            for j in c:if j.type=='QRCODE':d.append(j.data.decode('utf-8'))
+            return d
+    except Exception as e:print(f'Error:{e}',file=k.stderr);return []
+def g():if len(k.argv)!=2:print('Usage:python qr_extractor.py<path_to_qrcode_image>');k.exit(1)
+    b=k.argv[1]
+    if not l.path.exists(b):print(f"Error:File '{b}' not found.");k.exit(1)
+    d=a(b)
+    if d:print(f'\nFound {len(d)} QR code(s):');print('-'*40)
+        for i,f in enumerate(d,1):print(f'QR #{i}:{f}')
+        print('-'*40)
+    else:print('No QR codes found in the image.')
+if __name__=='__main__':raise SystemExit(g())
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+
+## Input Scripts
+[Insert scripts here]

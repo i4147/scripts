@@ -1,0 +1,348 @@
+# filename: dedupsym.py
+import xxhash;k=J.home()/'.cache'/'dups_cache.json';r=J.home()/'.cache'/'dups';a=r/'manifest.json';l=8192
+def n(Q):try:with J(Q).open(encoding='utf-8') as f:return N.load(f)
+    except Exception:return {}
+def q(Q,L):Q.parent.mkdir(parents=True,exist_ok=True)
+    with J(Q).open('w',encoding='utf-8') as f:N.dump(L,f,indent=2,ensure_ascii=False)
+def b(p):h=xxhash.xxh64()
+    with p.open('rb') as f:while 1:F=f.read(l)
+            if not F:break
+            h.update(F)
+    return h.hexdigest()
+def c(R,E):A=g(list)
+    for Q in R.rglob('*'):if not Q.is_file():continue
+        if '.git' in Q.parts:continue
+        if Q.is_symlink():continue
+        try:V=Q.stat()
+        except Exception:continue
+        T=str(Q);S=V.st_size;H=V.st_mtime;y=E.get(T)
+        if y and y.get('size')==S and (y.get('mtime')==H):h=y['hash']
+        else:try:h=b(Q)
+            except Exception:continue
+            E[T]={'size':S,'mtime':H,'hash':h}
+        A[h].append(Q)
+    return A
+def z(R,w=False,G=False):E=n(k) if k.exists() else {};A=c(R,E);q(k,E);r.mkdir(parents=True,exist_ok=True);t=n(a) if a.exists() else {};v=False
+    for h,I in A.items():if len(I)<2:continue
+        d=sorted(I,T=str);u=d[0];i=f'{h}__{u.name}';j=r/i
+        if not j.exists():if w:print(f'[DRY] move:{u}->{j}')
+            else:j.parent.mkdir(parents=True,exist_ok=True);B.move(str(u),str(j));print(f'moved:{u}->{j}')
+            v=True
+        elif u.exists():if w:print(f'[DRY] remove original file before symlink:{u}')
+            else:u.unlink();print(f'removed original file:{u}')
+        for p in d[1:]:if p.is_symlink():continue
+            if w:print(f'[DRY] symlink:{p}->{j.resolve()}')
+            else:if p.exists():try:p.unlink()
+                    except Exception as e:print(f'warning:could not remove {p}:{e}');continue
+                p.parent.mkdir(parents=True,exist_ok=True);J(str(p)).symlink_to(str(j.resolve()));print(f'symlinked:{p}->{j.resolve()}')
+            v=True
+        t[str(j)]={'hash':h,'originals':[str(p) for p in d]}
+    if not w and v:q(a,t);q(k,E);print(f'manifest written to {a}')
+    elif w:print('dry-run complete; no changes written.')
+def x(w=False):if not a.exists():print('No manifest found at ~/dups/manifest.json');return
+    t=n(a)
+    for m,M in t.items():C=J(m)
+        if not C.exists():print(f'stored file missing:{C}');continue
+        o=[J(p) for p in M.get('originals',[])]
+        for P in o:if P.exists() and (not P.is_symlink()):print(f'skipping restore for {P} (exists and not a symlink)');continue
+            if P.is_symlink():try:D=J(J(P).readlink())
+                except Exception:print(f'skipping {P} (broken symlink)');continue
+                if D.resolve()!=C.resolve():print(f'skipping {P} (symlink points elsewhere)');continue
+            if w:print(f'[DRY] restore {C}->{P}')
+            else:if P.exists() or P.is_symlink():try:P.unlink()
+                    except Exception as e:print(f'warning:could not remove {P}:{e}');continue
+                P.parent.mkdir(parents=True,exist_ok=True);B.copy2(C,P);print(f'restored:{P}')
+        if w:print(f'[DRY] remove stored file {C}')
+        else:try:C.unlink();print(f'removed stored file:{C}')
+            except Exception as e:print(f'warning:could not remove stored file {C}:{e}')
+    if not w:try:a.unlink();print(f'removed manifest:{a}')
+        except Exception:pass
+def O():U=s.ArgumentParser(description='Deduplicate files by moving one copy to ~/dups and symlinking duplicates using xxhash.');U.add_argument('path',nargs='?',default='.',help='Path to scan (default current directory)');U.add_argument('--dry-run',action='store_true',help='Show actions without making changes');U.add_argument('--restore',action='store_true',help='Restore files from ~/dups using manifest');U.add_argument('--force',action='store_true',help='Force overwrite behavior (not used for safety here)');K=U.parse_args();R=J(K.path).resolve()
+    if K.restore:x(w=K.dry_run)
+    else:z(R,w=K.dry_run,G=K.force)
+if __name__=='__main__':raise SystemExit(O())
+# filename: dupefix.py
+import xxhash;from loguru import logger;r=8;d=8192;i='.';e=tuple[H,str|None]
+def h(v):try:if not v.exists():return (v,None)
+        A=xxhash.xxh64()
+        with v.open('rb') as f:while 1:D=f.read(d)
+                if not D:break
+                A.update(D)
+        return (v,A.hexdigest())
+    except (OSError,PermissionError):return (v,None)
+def b(O):y=l(list)
+    for M in O.rglob('*'):if M.is_file() and (not M.is_symlink()):try:y[M.stat().st_size].append(M)
+            except OSError:continue
+    n=[]
+    for G in y.values():if len(G)>1:n.extend(G)
+    return n
+def k(E):w=l(list)
+    if not E:return w
+    with I(processes=r) as N:for B in N.imap_unordered(h,E):v,s=B
+            if s:w[s].append(v)
+    return w
+def j(M):try:if not M.exists():return None
+        t=M.stat().st_size
+        if C.which('gio'):o.run(['gio','trash',str(M)],check=True)
+        else:M.unlink()
+        return t
+    except OSError as exc:logger.error('Error deleting {}:{}',M,P);return None
+def a(x,z=True):O=H(x);logger.info('Scanning directory tree...');g=b(O);logger.info('Hashing {} potential duplicate files...',len(g));w=k(g);m=0;c=0
+    for G in w.values():if len(G)<=1:continue
+        c+=len(G)-1;G.sort(key=lambda p:(p.stat().st_mtime,str(p)));u=G[1:]
+        for p in u:try:if not p.exists():continue
+                t=p.stat().st_size
+                if z:logger.info('Would delete:{} ({} bytes)',p,t);m+=t
+                else:F=j(p)
+                    if F is not None:m+=F;logger.info('Deleted:{}',p)
+            except OSError as exc:logger.error('Error deleting {}:{}',p,P)
+    logger.info('Cleanup complete.');logger.info('Duplicate files found:{}',c)
+    if not z:logger.info('Total disk space freed:{:.2f} MB',m/1048576)
+    else:logger.info('Potential space to free:{:.2f} MB',m/1048576);logger.info('Run with dry_run=False to actually delete files.')
+def L(K=None):J=list(K) if K is not None else Q.argv[1:];q=J[0] if J else i;logger.info('DRY RUN-No files will be deleted');a(q,z=True);return 0
+if __name__=='__main__':raise SystemExit(L())
+# filename: dupf.py
+from dh import cprint,fsz,gsz;from xxhash import xxh64;r=32768
+def q(y):y=x(y);return bool(y.is_symlink() or not y.stat().st_size or any((B in y.parts for B in ('.git','__pycache__','.mypy_cache','.ruff_cache'))))
+def j(y):if not y.exists() or not y.stat().st_size:return ('',y)
+    h=xxh64()
+    try:with y.open('rb') as f:while (u :=f.read(r)):h.update(u)
+        return (h.hexdigest(),y)
+    except OSError:return ('',y)
+def c():A=x.cwd();g=n(list);b=0;C=[y for y in A.rglob('*') if y.is_file() and (not q(y))];i={}
+    for p in C:try:z=p.stat().st_size;i.setdefault(z,[]).append(p)
+        except OSError as e:print(f'Error getting size for {p}:{e}');continue
+    k=[]
+    for z,v in i.items():if len(v)>1:k.extend(v)
+    with a(max_workers=8) as s:d={s.submit(j,y):y for y in k}
+        for t in m(d):o,y=t.result()
+            if o is not None:g.setdefault(o,[]).append(y)
+    w=0
+    for hash,v in g.items():if len(v)>1:b+=len(v)-1;print(f'hash {hash} :')
+            for y in v:l=y.relative_to(A);cprint(f'-{l}','cyan');w+=gsz(y)
+    if w:cprint(f'total :{fsz(w)}')
+    else:cprint('NO DUPS')
+if __name__=='__main__':c()
+# filename: dupfx.py
+from loguru import logger;from xxhash import xxh64;d=32768;w=4096;u=65536;j=8
+def i(p):try:st=p.stat();return (st.st_ino,st.st_dev)
+    except OSError:return None
+def A(ad,n=w):h=xxh64()
+    try:ah=ad.stat().st_size
+        with ad.open('rb') as f:ab=f.read(n);h.update(ab)
+            if ah>n*2:f.seek(max(ah-n,0));ai=f.read(n);h.update(ai)
+            elif ah>n:af=f.read();h.update(af)
+    except OSError as e:raise OSError(f'quick_hash error {ad}:{e}') from e
+    return h.hexdigest()
+def B(ad):try:if not ad.stat().st_size:return ('',ad)
+    except OSError:return ('',ad)
+    h=xxh64()
+    try:with ad.open('rb') as f:while 1:T=f.read(u)
+                if not T:break
+                h.update(T)
+        return (h.hexdigest(),ad)
+    except OSError:return ('',ad)
+def z(ag,F,b,K):if F:J=ag.rglob('*')
+    else:J=ag.iterdir()
+    for p in J:if '.git' in p.parts:continue
+        if not p.is_file():continue
+        if p.is_symlink() and (not b):continue
+        try:if p.stat().st_size>=K:yield p
+        except OSError:continue
+def l(U,R='oldest'):if not U:raise ValueError('Empty file list')
+    if R=='first':return min(U,al=str)
+    if R=='oldest':return min(U,al=lambda p:p.stat().st_mtime)
+    if R=='newest':return max(U,al=lambda p:p.stat().st_mtime)
+    return min(U,al=str)
+def ac():aj=Y.cwd();p=H.ArgumentParser(description='Find and delete duplicate files by content.');p.add_argument('-r','--recursive',action='store_true',default=True,help='Search directories recursively (default:True).');p.add_argument('-n','--dry-run',action='store_true',default=False,help="Don't delete; just show what would be done.");p.add_argument('--follow-symlinks',action='store_true',default=False,help='Follow symlinks to files.');p.add_argument('--min-size',type=int,default=1,help='Minimum file size (bytes) to consider. Default 1 (skip zero-size).');p.add_argument('-k','--keep',choices=('first','oldest','newest'),default='oldest',help='Which file to keep within duplicates.');aa=p.parse_args();ag=Y.cwd();print('Phase 1:Scanning files and grouping by size...');r=m(list);t=0
+    for f in z(ag,aa.recursive,aa.follow_symlinks,aa.min_size):t+=1
+        try:ah=f.stat().st_size;r[ah].append(f)
+        except OSError:continue
+    x={s:am for s,am in r.items() if len(am)>1}
+    if not x:print(f'Scanned {t} files. No potential duplicates found.');return
+    a=sum((len(v) for v in x.values()));print(f'Phase 1 complete:{a} files in {len(x)} size-groups to examine.');print('Phase 2:Quick hash comparison...');k=m(list)
+    with Z(processes=j) as ae:N=[]
+        for U in x.values():for V in U:N.append((V,ae.apply_async(A,(V,))))
+        for V,ak in N:try:h=ak.get();al=(V.stat().st_size,h);k[al].append(V)
+            except Exception as e:logger.warning(f'Skipping {V}:{e}')
+    E=[W for W in k.values() if len(W)>1]
+    if not E:print('No duplicates found after quick hash comparison.');return
+    c=sum((len(g) for g in E));print(f'Phase 2 complete:{c} files in {len(E)} groups need full hash.');print('Phase 3:Full hash comparison...');q=m(list)
+    with Z(processes=j) as ae:I=[]
+        for W in E:for V in W:S=i(V);I.append((V,S,ae.apply_async(B,(V,))))
+        for V,S,ak in I:try:h,_=ak.get()
+                if h:q[h].append((V,S))
+            except Exception as e:logger.warning(f'Skipping {V}:{e}')
+    print('Phase 4:Processing results...');G=[]
+    for M in q.values():if len(M)<2:continue
+        C=m(list)
+        for Q,ao in M:C[ao].append(Q)
+        y=[min(ps,al=str) for ps in C.values()]
+        if len(y)<2:continue
+        D=l(y,R=aa.keep)
+        for an in y:if an!=D:G.append(an)
+    if not G:print('No duplicate files found.');return
+    print(f'\nFound {len(G)} duplicate files to delete.')
+    if aa.dry_run:print('DRY RUN-Files that would be deleted:')
+    else:print('Files to be deleted:')
+    for X in G:try:L=X.relative_to(aj)
+        except ValueError:L=X
+        print(f'  {L}')
+    if aa.dry_run:print(f'\nDry-run complete. {len(G)} files would be deleted.');return
+    O=0;P=0;o=0
+    for X in G:try:ah=X.stat().st_size;X.unlink();o+=ah;O+=1
+            try:print(f'Deleted:{X.relative_to(aj)} ({ah:,} bytes)')
+            except ValueError:print(f'Deleted:{X} ({ah:,} bytes)')
+        except OSError as e:P+=1
+            try:logger.error(f'Failed:{X.relative_to(aj)}-{e}')
+            except ValueError:logger.error(f'Failed:{X}-{e}')
+    print('\nSummary:');print(f'  Files scanned:{t}');print(f'  Duplicates found:{len(G)}');print(f'  Successfully deleted:{O}')
+    if P:print(f'  Failed to delete:{P}')
+    if o:print(f'  Space freed:{o:,} bytes ({o/1024/1024:.2f} MB)')
+if __name__=='__main__':raise SystemExit(ac())
+# filename: findupy.py
+from tqdm import tqdm;g=[]
+def s(D,l=8192):I=u.sha256()
+    try:t=D.stat().st_size
+        with A(D).open('rb') as f,tqdm(total=t,unit='B',unit_scale=True,unit_divisor=1024,desc=f'Hashing {D.name}',leave=False) as E:for x in iter(lambda:f.read(l),b''):I.update(x);E.update(len(x))
+    except PermissionError:g.append(str(D));return None
+    except OSError:g.append(str(D));return None
+    return I.hexdigest()
+def c(o):n=[]
+    for F,w,y in J.walk(o,onerror=lambda e:None):for f in y:r=A(F)/f;n.append(r)
+    return n
+def a(o):o=A(o)
+    if not o.exists():raise ValueError(H)
+    n=c(o);m=j(list);print(f'📁 Scanning {len(n)} files...\n')
+    for D in tqdm(n,desc='Overall Progress',unit='file'):q=s(D)
+        if q:m[q].append(str(D))
+    return {h:z for h,z in m.items() if len(z)>1}
+def d(B):if not B:print('🎉 No duplicates found!');return
+    print('\n🔍 Duplicate Files Found:\n')
+    for i,(h,z) in enumerate(B.items(),start=1):print(f'Group {i} (hash={h[:12]}...):')
+        for p in z:print(f'   • {p}')
+        print('-'*40)
+def e(B,k='duplicates.json'):with A(k).open('w',encoding='utf-8') as f:C.dump(B,f,indent=2)
+    print(f'📦 Results exported to {k}')
+def b():if not g:return
+    print('\n⚠️  Skipped (permission denied):')
+    for p in g:print(f'   • {p}')
+if __name__=='__main__':v=input('Enter folder path to scan:').strip();m=a(v);d(m);b()
+    if m:G=input('Export results to JSON? (y/n):').lower().strip()
+        if G=='y':e(m)
+# filename: fsimz.py
+from dh import get_files;from ppdeep import hash_from_file
+def k(p):d=f(list);b=0;c=0;a=0;m=get_files(p)
+    for o in m:if o.is_symlink():continue
+        if o.is_file():try:i=hash_from_file(str(o));d[i].append(o)
+            except Exception as e:print(f'Error processing file {o}:{e}');continue
+    for i,n in d.items():if len(n)>1:b+=len(n)-1;n.sort(key=lambda x:x.stat().st_mtime,reverse=True)
+            for h in n:print(r.path.relpath(h))
+            for j in n[1:]:try:l=j.stat().st_size;c+=1;a+=l
+                except Exception as e:print(f'Error deleting file {j}:{e}')
+        else:continue
+    return (b,c,a)
+if __name__=='__main__':g=q.argv[1].strip();k(g)
+# filename: symdups.py
+from xxhash import xxh64;q='.symlink_backup.json';k=1
+def b(U,w=32768):if not U.is_file():return None
+    J=xxh64()
+    try:with Q(U).open('rb') as f:while (N :=f.read(w)):J.update(N)
+        return J.hexdigest()
+    except OSError as e:print(f'[ERROR] Reading {U}:{e}');return None
+def g(A='.'):print(f'[INFO] Scanning directory:{Q(A).resolve()}');H=t(list);y=0;n=0;X=Q.cwd()
+    for U in X.rglob('*'):if U.is_symlink() or U.is_dir():continue
+        if '.git' in U.parts:continue
+        V=U.stat().st_size
+        if V<k:n+=1;continue
+        H[V].append(U);y+=1
+    G=t(list);a=[P for P in H.values() if len(P)>1]
+    for P in a:for U in P:C=b(U)
+            if C:G[C].append(U)
+    return {h:P for h,P in G.items() if len(P)>1}
+def l(O):return min(O,key=lambda f:(len(str(f)),f))
+def d(x,I=False):r={'timestamp':E.now(tz=W).isoformat(),'operations':[]};v=0;o=0
+    for O in x.values():K=l(O);z=Q(K).resolve()
+        for B in O:if B==K:continue
+            m=Q(B).resolve();F=Q(B).stat().st_size;print(f'  Symlinking:{B}->{z}')
+            if not I:r['operations'].append({'symlink':str(m),'target':str(z),'original_existed':True,'size':F})
+                try:Q(B).unlink();Q(m).symlink_to(z);o+=1;v+=F
+                except OSError as e:print(f'  [ERROR] {e}')
+            else:print(f'  [DRY RUN] Would replace {B} with symlink to {K}');o+=1;v+=F
+    if not I and o>0:with Q(q).open('w',encoding='utf-8') as f:S.dump(r,f,indent=2)
+        print(f'\n[INFO] Backup data saved to {q}')
+    print(f'  Space saved:{v/1048576:.2f} MB')
+    if I:print('[DRY RUN] No changes were made')
+    return o
+def c(s=q):if not Q(s).exists():print(f'[ERROR] Backup file {s} not found!');return False
+    with Q(s).open(encoding='utf-8') as f:r=S.load(f)
+    j=0
+    for Y in r['operations']:p=Y['symlink'];u=Y['target']
+        if not Q(p).is_symlink():continue
+        if not Q(u).exists():continue
+        try:Q(p).unlink();M.copy2(u,p);j+=1
+        except OSError as e:print(f'[ERROR] Restoring {p}:{e}')
+    i=f"{s}.restored.{E.now(tz=W).strftime('%Y%m%d_%H%M%S')}";Q(s).rename(i);print(f'[INFO] Backup file renamed to:{i}');return True
+def T():L=D.ArgumentParser(description='Find duplicate files and replace with symlinks (reversible)');L.add_argument('directory',nargs='?',default='.',help='Directory to scan (default:current directory)');L.add_argument('--dry-run',action='store_true',help='Show what would be done without making changes');L.add_argument('--reverse',action='store_true',help='Reverse previous symlinking operation');L.add_argument('--backup-file',default=q,help=f'Backup file path (default:{q})');R=L.parse_args()
+    if R.reverse:c(R.backup_file)
+    else:x=g(R.directory)
+        if not x:print('\n[INFO] No duplicates found!');return
+        print(f'\n[INFO] Found {len(x)} groups of duplicates');print(f'[INFO] Total duplicate files:{sum((len(O)-1 for O in x.values()))}')
+        if R.dry_run:print('\n[INFO] [DRY RUN MODE-No changes will be made]')
+        d(x,I=R.dry_run)
+if __name__=='__main__':raise SystemExit(T())
+# filename: xordup.py
+from dh import cprint,mpf;from xorhash import get_xorhash;g='-y' in t.argv
+def a(o):c={};b=[]
+    for r,_,j in e(o):for m in j:n=l(r)/m
+            if '.git' in n.parts or not n.stat().st_size:continue
+            if not n.is_symlink() and n.is_file() and n.exists():b.append(n)
+    if not b:return {}
+    f=mpf(get_xorhash,b)
+    for s in f:d,n=s
+        if d is not None:c.setdefault(d,[]).append(n)
+    return {h:k for h,k in c.items() if len(k)>1}
+if __name__=='__main__':q=l.cwd();i=a(q)
+    if not i:print('No dups');t.exit(1)
+    for h,k in i.items():cprint(f'dups with hash:{h}')
+        for p in k:print('-',p)
+    if g:for k in i.values():for p in k[1:]:l(p).unlink()
+    print(f'Found {len(i)} group(s) of dups')
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

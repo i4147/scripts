@@ -1,0 +1,903 @@
+# --- File: check_system_bin.py ---
+import hashlib
+import shutil
+from pathlib import Path
+def a(b, c=8192):
+    d = hashlib.sha256()
+    try:
+        with b.open('rb') as f:
+            for e in iter(lambda: f.read(c), b''):
+                d.update(e)
+        return d.hexdigest()
+    except (OSError, PermissionError):
+        return None
+def f():
+    g = Path('/system/bin')
+    if not g.exists():
+        print('⚠️  /system/bin directory not found!')
+        return {}
+    h = {}
+    print('📂 Scanning /system/bin files...')
+    for b in g.iterdir():
+        try:
+            if b.is_file() or b.is_symlink():
+                i = a(b)
+                if i:
+                    h[i] = b.name
+        except (PermissionError, OSError):
+            continue
+    print(f'✅ Scanned {len(h)} files in /system/bin\n')
+    return h
+def j(k):
+    l = Path.cwd()
+    m = l / 'matched_system_files'
+    m.mkdir(exist_ok=True)
+    n = []
+    o = []
+    print('🔍 Scanning current directory...')
+    for b in l.iterdir():
+        try:
+            if b.is_file() and (not b.name.startswith('.')):
+                if b.resolve() == m.resolve():
+                    continue
+                i = a(b)
+                if i and i in k:
+                    p = k[i]
+                    n.append((b.name, p))
+                    if b.name == p:
+                        q = m / b.name
+                        r = 1
+                        s = q
+                        while q.exists():
+                            q = s.parent / f'{s.stem}_{r}{s.suffix}'
+                            r += 1
+                        shutil.move(b, q)
+                        o.append((b.name, q.name))
+                        print(f'  📦 Moved: {b.name} -> {q.name}')
+                    else:
+                        print(f'  ⚠️  Hash matches but filename differs: {b.name} (system: {p})')
+        except (PermissionError, OSError) as e:
+            print(f'  ⚠️  Error with {b.name}: {e}')
+            continue
+    return (n, o)
+def t():
+    print('-' * 40)
+    print('🔐 File Hash Comparison & Move Tool')
+    print('-' * 40)
+    k = f()
+    if not k:
+        print('❌ No readable files found in /system/bin')
+        return
+    n, o = j(k)
+    print('\n' + '=' * 40)
+    print('📊 SUMMARY')
+    print('-' * 40)
+    if n:
+        print(f'⚠️  Found {len(n)} files with matching hashes:')
+        for u, v in n:
+            w = '✅ MOVED' if u == v else '❌ Name mismatch'
+            print(f'  • {u} matches /system/bin/{v} - {w}')
+        if o:
+            print(f"\n📦 Moved {len(o)} files to './matched_system_files/' directory:")
+            for x, y in o:
+                print(f'  • {x} -> {y}')
+    else:
+        print('✅ No matching files found.')
+    print('-' * 40)
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: check_system_missing_files.py ---
+import json
+import subprocess
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+def z(b):
+    a1 = Path(b).parts
+    return any((len(a1) > i + 1 and a1[i:i + 2][1] in {'man', 'info', 'doc', 'LICENSES'} for i in range(len(a1) - 1) if a1[i] == 'share'))
+def b1(c1):
+    try:
+        d1 = subprocess.run(['dpkg', '-L', c1], capture_output=True, text=True, timeout=5, check=False)
+        if d1.returncode != 0:
+            return (c1, None)
+        e1 = []
+        for b in d1.stdout.strip().split('\n'):
+            if not b or z(b):
+                continue
+            p = Path(b)
+            if p.is_dir():
+                continue
+            if not p.exists():
+                e1.append(b)
+        return (c1, e1 if e1 else None)
+    except (subprocess.TimeoutExpired, Exception):
+        return (c1, None)
+def t():
+    f1 = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('missing_files.json')
+    d1 = subprocess.run(['dpkg', '-l'], capture_output=True, text=True, check=False)
+    g1 = [h1.split()[1] for h1 in d1.stdout.split('\n') if h1.startswith('ii')]
+    print(f'Scanning {len(g1)} packages...')
+    i1 = {}
+    with ProcessPoolExecutor(max_workers=os.cpu_count()) as j1:
+        k1 = {j1.submit(b1, pkg): pkg for pkg in g1}
+        for i, l1 in enumerate(as_completed(k1), 1):
+            pkg, e1 = l1.result()
+            if e1:
+                i1[pkg] = e1
+            if i % 10 == 0:
+                print(f'  {i}/{len(g1)}')
+    try:
+        with open(f1, 'w') as f:
+            json.dump(i1, f, indent=2)
+        with open('missing.txt', 'w') as f:
+            f.write('\n'.join(i1.keys()))
+        print(f'\n✓ {len(i1)} packages with missing files → {f1}')
+        print(f'  Total missing: {sum((len(f) for f in i1.values()))}')
+    except OSError as e:
+        print(f'Error writing output: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    import os
+    raise SystemExit(t())
+
+# --- File: chk_sys_missing.py ---
+import json
+import subprocess
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+def m1():
+    try:
+        d1 = subprocess.run(['dpkg', '-l'], capture_output=True, text=True, check=True)
+        g1 = []
+        for h1 in d1.stdout.split('\n'):
+            a1 = h1.split()
+            if len(a1) >= 2 and a1[0] == 'ii':
+                g1.append(a1[1])
+        return g1
+    except subprocess.CalledProcessError:
+        return []
+def n1(c1):
+    try:
+        d1 = subprocess.run(['dpkg', '-L', c1], capture_output=True, text=True, check=True)
+        return [Path(f) for f in d1.stdout.strip().split('\n') if f]
+    except subprocess.CalledProcessError:
+        return []
+def o1(b):
+    p1 = {'share/man', 'share/info', 'share/doc'}
+    a1 = b.parts
+    for i in range(len(a1) - 1):
+        if (f'{a1[i]}/share' == 'share' or a1[i] == 'share') and i + 1 < len(a1):
+            q1 = a1[i + 1]
+            if q1 in {'man', 'info', 'doc'}:
+                return True
+    r1 = str(b)
+    return any((f'/{s1}/' in r1 or r1.endswith(f'/{s1}') for s1 in p1))
+def t1(c1):
+    u1 = n1(c1)
+    e1 = []
+    v1 = 0
+    for b in u1:
+        if o1(b):
+            continue
+        v1 += 1
+        if not b.exists():
+            e1.append(str(b))
+    return {'package': c1, 'total_checked': v1, 'missing_count': len(e1), 'missing_files': e1}
+def t():
+    g1 = m1()
+    print(f'Found {len(g1)} installed packages')
+    with Pool(cpu_count()) as w1:
+        i1 = w1.map(t1, g1)
+    x1 = {'timestamp': datetime.now().isoformat(), 'total_packages': len(g1), 'summary': {'packages_with_missing': sum((1 for r in i1 if r['missing_count'] > 0)), 'total_missing_files': sum((r['missing_count'] for r in i1))}, 'packages': [r for r in i1 if r['missing_count'] > 0]}
+    y1 = Path.home() / 'pkg_audit_report.json'
+    with open(y1, 'w') as f:
+        json.dump(x1, f, indent=2)
+    print(f"\nReport: {x1['summary']}")
+    print(f'Saved to: {y1}')
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: copy_system_pkg_files.py ---
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+def n1(z1):
+    try:
+        d1 = subprocess.run(['dpkg', '-L', z1], capture_output=True, text=True, check=True)
+        a2 = d1.stdout.strip().splitlines()
+        return a2
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    try:
+        d1 = subprocess.run(['rpm', '-ql', z1], capture_output=True, text=True, check=True)
+        a2 = d1.stdout.strip().splitlines()
+        return a2
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    print(f"Error: could not find package '{z1}' via dpkg or rpm.")
+    sys.exit(1)
+def b2(z1):
+    c2 = Path.home() / 'tmp' / 'deb' / z1
+    c2.mkdir(parents=True, exist_ok=True)
+    d2 = n1(z1)
+    e2 = 0
+    f2 = 0
+    for g2 in d2:
+        src = Path(g2)
+        if not src.exists() or not src.is_file():
+            f2 += 1
+            continue
+        h2 = src.relative_to(src.anchor)
+        q = c2 / h2
+        try:
+            q.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, q)
+            e2 += 1
+        except (PermissionError, OSError) as e:
+            print(f"Warning: could not copy '{src}': {e}")
+            f2 += 1
+    print(f'\nDone. Package: {z1}')
+    print(f'Destination:   {c2}')
+    print(f'Copied files:  {e2}')
+    print(f'Skipped:       {f2} (missing or non-file entries)')
+def t():
+    if len(sys.argv) != 2:
+        print('Usage: python copy_pkg_files.py <pkgname>')
+        sys.exit(1)
+    z1 = sys.argv[1]
+    b2(z1)
+if __name__ == '__main__':
+    t()
+
+# --- File: deborphan.py ---
+import re
+from pathlib import Path
+i2 = Path('/var/lib/dpkg/status')
+def j2(k2):
+    l2 = {}
+    m2 = re.split('\\n\\s*\\n', k2.strip(), flags=re.MULTILINE)
+    for b in m2:
+        pkg = re.search('^Package:\\s*(.+)$', b, flags=re.MULTILINE)
+        w = re.search('^Status:\\s*(.+)$', b, flags=re.MULTILINE)
+        n2 = re.findall('^Provides:\\s*(.+)$', b, flags=re.MULTILINE)
+        o2 = re.findall('^Depends:\\s*(.+)$', b, flags=re.MULTILINE)
+        if not pkg or not w:
+            continue
+        c1 = pkg.group(1).strip()
+        p2 = w.group(1).strip()
+        if 'install ok installed' not in p2:
+            continue
+        q2 = []
+        for d in o2:
+            for r2 in d.split(','):
+                r2 = r2.strip()
+                if not r2:
+                    continue
+                alt = r2.split('|', 1)[0].strip()
+                m = re.match('^([A-Za-z0-9+_.:-]+)\\s*(?:\\(|$)', alt)
+                if m:
+                    q2.append(m.group(1))
+        s2 = []
+        for p in n2:
+            for tok in p.split(','):
+                tok = tok.strip()
+                if tok:
+                    m = re.match('^([A-Za-z0-9+_.:-]+)', tok)
+                    if m:
+                        s2.append(m.group(1))
+        l2[c1] = {'depends': q2, 'provides': s2}
+    return l2
+def t2(l2):
+    u2 = {}
+    for pkg, v2 in l2.items():
+        u2.setdefault(pkg, set()).add(pkg)
+        for pr in v2['provides']:
+            u2.setdefault(pr, set()).add(pkg)
+    w2 = {pkg: set() for pkg in l2}
+    for pkg, v2 in l2.items():
+        for dep in v2['depends']:
+            for x2 in u2.get(dep, []):
+                w2.setdefault(x2, set()).add(pkg)
+    return w2
+def y2(c1):
+    return c1.startswith('lib')
+def z2(l2, w2):
+    a3 = []
+    for pkg in l2:
+        if not y2(pkg):
+            continue
+        b3 = w2.get(pkg, set())
+        if not b3:
+            a3.append(pkg)
+    return sorted(a3)
+def t():
+    if not i2.exists():
+        raise SystemExit(f'Missing {i2}. This script expects a Debian-style dpkg database.\nOn Termux, you may need a Debian/Ubuntu rootfs that includes /var/lib/dpkg/status.')
+    k2 = i2.read_text(errors='replace')
+    l2 = j2(k2)
+    w2 = t2(l2)
+    a3 = z2(l2, w2)
+    print('Orphan-ish libraries (no installed package depends on them):')
+    for p in a3:
+        print(p)
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: deborphan2.py ---
+import subprocess
+import sys
+from collections import defaultdict
+class c3:
+    def __init__(self):
+        self.all_packages = set()
+        self.dependencies = defaultdict(set)
+        self.keep_list = set()
+    def m1(self):
+        try:
+            d1 = subprocess.run(['pkg', 'list-installed'], capture_output=True, text=True)
+            g1 = set()
+            for h1 in d1.stdout.strip().split('\n'):
+                if h1:
+                    c1 = h1.split('/')[0]
+                    g1.add(c1)
+            return g1
+        except Exception as e:
+            print(f'Error getting installed packages: {e}')
+            sys.exit(1)
+    def d3(self, e3):
+        try:
+            d1 = subprocess.run(['pkg', 'show', e3], capture_output=True, text=True)
+            f3 = set()
+            for h1 in d1.stdout.split('\n'):
+                if h1.startswith('Depends:'):
+                    g3 = h1.replace('Depends:', '').strip()
+                    for dep in g3.split(','):
+                        h3 = dep.strip().split()[0]
+                        if h3:
+                            f3.add(h3)
+                elif h1.startswith('Pre-Depends:'):
+                    g3 = h1.replace('Pre-Depends:', '').strip()
+                    for dep in g3.split(','):
+                        h3 = dep.strip().split()[0]
+                        if h3:
+                            f3.add(h3)
+            return f3
+        except Exception:
+            return set()
+    def i3(self):
+        print('Analyzing installed packages...')
+        self.all_packages = self.get_installed_packages()
+        print(f'Found {len(self.all_packages)} installed packages')
+        print('Building dependency graph...')
+        j3 = set()
+        for pkg in self.all_packages:
+            q2 = self.get_package_dependencies(pkg)
+            for dep in q2:
+                if dep in self.all_packages:
+                    j3.add(dep)
+                    self.dependencies[dep].add(pkg)
+        a3 = []
+        for pkg in self.all_packages:
+            if pkg not in j3 and pkg not in self.keep_list:
+                a3.append(pkg)
+        return sorted(a3)
+    def k3(self, l3=None):
+        if l3 is None:
+            l3 = '/data/data/com.termux/files/home/.deborphan-keep'
+        try:
+            with open(l3, 'r') as f:
+                self.keep_list = {h1.strip() for h1 in f if h1.strip()}
+            print(f'Loaded {len(self.keep_list)} packages to keep')
+        except FileNotFoundError:
+            self.keep_list = set()
+    def m3(self, l3=None):
+        if l3 is None:
+            l3 = '/data/data/com.termux/files/home/.deborphan-keep'
+        try:
+            with open(l3, 'w') as f:
+                f.writelines((f'{pkg}\n' for pkg in sorted(self.keep_list)))
+            print(f'Saved keep list to {l3}')
+        except Exception as e:
+            print(f'Error saving keep list: {e}')
+    def n3(self, e3):
+        self.keep_list.add(e3)
+    def o3(self, e3):
+        self.keep_list.discard(e3)
+def p3():
+    q3 = c3()
+    q3.load_keep_list()
+    a3 = q3.analyze()
+    if not a3:
+        print('\n✓ No orphaned packages found!')
+        return
+    print(f'\n⚠ Found {len(a3)} orphaned packages:\n')
+    for i, pkg in enumerate(a3, 1):
+        print(f'{i}. {pkg}')
+    print('\n--- Interactive Mode ---')
+    print("Commands: 'keep <pkg>' (add to keep list), 'remove <pkg>' (remove from keep list),")
+    print("          'list' (show keep list), 'save' (save keep list), 'quit' (exit)")
+    print('-' * 40)
+    while True:
+        cmd = input('\n> ').strip()
+        if cmd.startswith('keep '):
+            pkg = cmd[5:].strip()
+            if pkg in a3:
+                q3.add_to_keep(pkg)
+                print(f"Added '{pkg}' to keep list")
+            else:
+                print(f"Package '{pkg}' not found in orphans")
+        elif cmd.startswith('remove '):
+            pkg = cmd[7:].strip()
+            q3.remove_from_keep(pkg)
+            print(f"Removed '{pkg}' from keep list")
+        elif cmd == 'list':
+            if q3.keep_list:
+                print('\nKeep list:')
+                for pkg in sorted(q3.keep_list):
+                    print(f'  - {pkg}')
+            else:
+                print('Keep list is empty')
+        elif cmd == 'save':
+            q3.save_keep_list()
+        elif cmd == 'quit':
+            print('Exiting...')
+            break
+        else:
+            print('Unknown command')
+def r3(s3):
+    q3 = c3()
+    q3.load_keep_list()
+    a3 = q3.analyze()
+    if not a3:
+        print('No orphaned packages found.')
+        return 0
+    for pkg in a3:
+        print(pkg)
+    return len(a3)
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--interactive':
+        p3()
+    else:
+        t3 = r3(sys.argv[1:])
+        print(f'\nTotal orphaned packages: {t3}')
+
+# --- File: list_pkgs_bysize.py ---
+import re
+import subprocess
+from dh import fsz
+def u3():
+    try:
+        d1 = subprocess.run(['apt', 'list', '--installed'], capture_output=True, text=True)
+        g1 = []
+        for h1 in d1.stdout.split('\n'):
+            if h1 and (not h1.startswith('Listing')):
+                a1 = h1.split()
+                if a1:
+                    c1 = a1[0].split('/')[0]
+                    g1.append(c1)
+        v3 = []
+        for pkg in g1:
+            try:
+                w3 = subprocess.run(['apt', 'show', pkg], capture_output=True, text=True)
+                for h1 in w3.stdout.split('\n'):
+                    if h1.startswith('Installed-Size:'):
+                        x3 = int(re.search('\\d+', h1).group())
+                        v3.append((pkg, x3 * 1024))
+                        break
+            except:
+                continue
+        return sorted(v3, key=lambda x: x[1], reverse=True)
+    except Exception as e:
+        print(f'Error: {e}')
+        return []
+def t():
+    print('Fetching package sizes...')
+    g1 = u3()
+    if not g1:
+        print('No packages found or error occurred')
+        return
+    print('\n' + '=' * 40)
+    print(f"{'Package':<30} {'Size':>20}")
+    print('-' * 40)
+    y3 = 0
+    for pkg, z3 in g1:
+        print(f'{pkg:<30} {fsz(z3):>20}')
+        y3 += z3
+    print('-' * 40)
+    print(f"{'TOTAL':<30} {fsz(y3):>20}")
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: make_deb.py ---
+import sys
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import apt
+import apt.package
+from loguru import logger
+a4 = Path.home() / 'debs'
+b4 = Path.home() / 'make_deb.log'
+c4 = 8
+d4 = frozenset({'llvm', 'clang', 'libllvm', 'libclang', 'rust', 'cargo', 'lld', 'lldb', 'compiler-rt', 'libc++', 'libc++abi', 'rust-stdlib', 'rust-analyzer', 'cargo-c'})
+logger.remove()
+logger.add(sys.stderr, level='INFO')
+logger.add(b4, level='INFO', format='{time:YYYY-MM-DD HH:mm:ss} - {level} - {message}')
+def e4(c1):
+    f4 = c1.lower()
+    if f4 in d4:
+        return True
+    if any((g4 in f4 for g4 in ('llvm', 'clang'))):
+        return True
+    return any((g4 in f4 for g4 in ('rust', 'cargo')))
+def m1():
+    try:
+        h4 = apt.Cache()
+        g1 = [pkg.name for pkg in h4 if pkg.is_installed and (not e4(pkg.name))]
+        return sorted(g1)
+    except Exception as exc:
+        logger.error(f'Failed to get installed packages: {exc}')
+        return []
+def i4(c1):
+    try:
+        a4.mkdir(parents=True, exist_ok=True)
+        j4 = a4 / f'{c1}.deb'
+        if j4.exists():
+            print(f'✓ {c1}.deb already exists, skipping...')
+            return True
+        h4 = apt.Cache()
+        if c1 not in h4:
+            logger.error(f'✗ Package {c1} not found in apt cache')
+            return False
+        pkg = h4[c1]
+        k4 = pkg.candidate
+        if k4 is None:
+            logger.error(f'✗ No candidate version available for {c1}')
+            return False
+        print(f'⟳ Creating .deb for {c1}...')
+        l4 = k4.fetch_binary(dest_dir=str(a4))
+        if l4 and Path(l4).exists():
+            print(f'✓ Successfully created {c1}.deb')
+            return True
+        if j4.exists():
+            print(f'✓ Successfully created {c1}.deb')
+            return True
+        logger.warning(f'⚠ Fetch returned no file for {c1}')
+        return False
+    except Exception as exc:
+        logger.error(f'✗ Error creating {c1}.deb: {exc}')
+        return False
+def m4(g1):
+    n4 = 0
+    o4 = 0
+    p4 = [p for p in g1 if not e4(p)]
+    if not p4:
+        logger.warning('No packages to process (all excluded or empty list)')
+        return (0, 0)
+    print(f'Processing {len(p4)} packages with {c4} workers...')
+    with Pool(processes=c4) as w1:
+        q4 = [w1.apply_async(i4, (pkg,)) for pkg in p4]
+        for pkg, r4 in zip(p4, q4):
+            try:
+                if r4.get():
+                    n4 += 1
+                else:
+                    o4 += 1
+            except Exception as exc:
+                logger.error(f'✗ Unexpected error for {pkg}: {exc}')
+                o4 += 1
+    return (n4, o4)
+def t():
+    if len(sys.argv) > 1:
+        g1 = sys.argv[1:]
+        print(f"Processing specified packages: {', '.join(g1)}")
+    else:
+        print('Getting list of all installed packages...')
+        g1 = m1()
+        print(f'Found {len(g1)} installed packages (after exclusions)')
+    if not g1:
+        logger.error('No packages to process')
+        sys.exit(1)
+    n4, o4 = m4(g1)
+    print('=' * 40)
+    print(f'Summary: {n4} successful, {o4} failed')
+    print(f'Total: {n4 + o4}')
+    print(f'.deb files saved in: {a4}')
+    print(f'Log file: {b4}')
+    if o4 > 0:
+        logger.warning(f'Some packages failed. Check {b4} for details.')
+    sys.exit(0 if o4 == 0 else 1)
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: pkgtoremove.py ---
+import operator
+import re
+import subprocess
+from pathlib import Path
+def m1():
+    s4 = []
+    d1 = subprocess.run(['dpkg-query', '-W', '-f=${binary:Package} ${Installed-Size}\n'], check=True, capture_output=True, text=True)
+    for h1 in d1.stdout.splitlines():
+        pkg, z3 = h1.split()
+        s4.append((pkg, int(z3)))
+    return s4
+def t4():
+    u4 = Path('~/.bash_history').expanduser()
+    if not Path(u4).exists():
+        return []
+    with Path(u4).open(encoding='utf-8') as f:
+        return f.read().splitlines()
+def v4(w4, s4):
+    x4 = set()
+    y4 = dict(s4)
+    for h1 in w4:
+        for pkg in y4:
+            if re.search(f'\\b{pkg}\\b', h1):
+                x4.add(pkg)
+    return x4
+def z4(s4):
+    a5 = {'build-essential', 'gcc', 'make', 'libc6-dev', 'pkg-config', 'libtool', 'dpkg-dev', 'autoconf', 'automake'}
+    return [(pkg, z3) for pkg, z3 in s4 if pkg not in a5]
+def b5(s4, x4, c5=200):
+    d5 = [pkg for pkg in s4 if pkg[0] not in x4]
+    d5 = z4(d5)
+    d5.sort(key=operator.itemgetter(1), reverse=True)
+    return d5[:c5]
+def t():
+    s4 = m1()
+    w4 = t4()
+    x4 = v4(w4, s4)
+    e5 = b5(s4, x4, top_n=100)
+    print('Top unused packages (sorted by size):')
+    for pkg, z3 in e5:
+        if 'python' not in str(pkg) and 'l8b' not in str(pkg) and ('static' not in str(pkg)):
+            print(f'{pkg}: {z3 / 1024} MB')
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: savedebnames.py ---
+import subprocess
+from pathlib import Path
+def f5(f1='installed.txt'):
+    try:
+        d1 = subprocess.run(['dpkg-query', '-f', '${binary:Package}\n', '-W'], capture_output=True, text=True, check=True)
+        s4 = d1.stdout.splitlines()
+        Path(f1).write_text('\n'.join(s4), encoding='utf-8')
+        print(f"Installed package names saved to '{f1}'")
+    except FileNotFoundError:
+        print('Error: dpkg-query command not found. Are you running this script on a Debian-based system?')
+    except subprocess.CalledProcessError as e:
+        print(f'Error: Failed to retrieve installed packages. {e}')
+    except Exception as e:
+        print(f'An unexpected error occurred: {e}')
+if __name__ == '__main__':
+    f5()
+
+# --- File: show_big_system_pkgs.py ---
+import contextlib
+import json
+import re
+import subprocess
+import sys
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from dh import fsz
+def g5(h5):
+    h5 = h5.strip()
+    i5 = re.match('([\\d.]+)\\s*([KMGT]?)B?', h5, re.IGNORECASE)
+    if not i5:
+        return 0
+    j5 = float(i5.group(1))
+    k5 = i5.group(2).upper()
+    l5 = {'': 1, 'K': 1024, 'M': 1024 * 1024, 'G': 1024 * 1024 * 1024, 'T': 1024 * 1024 * 1024 * 1024}
+    return int(j5 * l5.get(k5, 1))
+def m5():
+    try:
+        print('📦 Fetching list of all available packages...')
+        d1 = subprocess.run(['apt', 'list', '--all-versions'], capture_output=True, text=True, check=True)
+        g1 = []
+        a2 = d1.stdout.strip().split('\n')
+        for h1 in a2:
+            if h1 and (not h1.startswith('Listing')) and ('/' in h1):
+                c1 = h1.split('/', 1)[0]
+                if c1 not in g1:
+                    g1.append(c1)
+        return g1
+    except subprocess.CalledProcessError as e:
+        print(f'Error getting package list: {e}')
+        return []
+def n5(e3):
+    try:
+        d1 = subprocess.run(['apt', 'show', e3], capture_output=True, text=True, check=False, timeout=10)
+        if d1.returncode != 0:
+            return (e3, 0, False)
+        for h1 in d1.stdout.split('\n'):
+            if h1.startswith('Download-Size:'):
+                o5 = h1.replace('Download-Size:', '').strip()
+                p5 = g5(o5)
+                return (e3, p5, True)
+        return (e3, 0, False)
+    except subprocess.TimeoutExpired:
+        return (e3, 0, False)
+    except Exception:
+        return (e3, 0, False)
+def q5(g1, r5, s5=None):
+    if s5 is None:
+        s5 = min(cpu_count(), 8)
+    print(f'🚀 Using {s5} parallel processes...')
+    with Pool(processes=s5) as w1:
+        i1 = []
+        t5 = 0
+        y3 = len(g1)
+        print(f'📊 Processing {y3} packages...\n')
+        for d1 in w1.imap_unordered(n5, g1, chunksize=10):
+            i1.append(d1)
+            t5 += 1
+            if t5 % 50 == 0 or t5 == y3:
+                u5 = t5 / y3 * 40
+                print(f'⏳ Progress: {t5}/{y3} ({u5:.1f}%)', end='\r')
+        print('\n✅ Processing complete!                    \n')
+        v5 = {}
+        w5 = {}
+        x5 = 0
+        for pkg, z3, y5 in i1:
+            if y5 and z3 > 0:
+                w5[pkg] = z3
+                if z3 >= r5:
+                    v5[pkg] = z3
+            else:
+                x5 += 1
+                w5[pkg] = 0
+        return (v5, w5, x5, y3)
+def z5(a6, l3, b6, c6=False):
+    d6 = {'metadata': {'threshold_mb': b6, 'threshold_bytes': b6 * 1024 * 1024, 'scan_date': datetime.now().isoformat(), 'total_packages': len(a6.get('all_packages', {})), 'packages_above_threshold': len(a6.get('large_packages', {}))}, 'packages': a6.get('large_packages', {})}
+    if c6:
+        d6['all_packages'] = a6.get('all_packages', {})
+    try:
+        with open(l3, 'w') as f:
+            json.dump(d6, f, indent=2, sort_keys=True)
+        return True
+    except Exception as e:
+        print(f'Error saving JSON: {e}')
+        return False
+def t():
+    e6 = 10
+    if len(sys.argv) > 1:
+        try:
+            b6 = float(sys.argv[1])
+        except ValueError:
+            print(f"Error: Invalid threshold '{sys.argv[1]}'. Using default {e6}MB.")
+            b6 = e6
+    else:
+        b6 = e6
+    r5 = int(b6 * 1024 * 1024)
+    s5 = 12
+    if len(sys.argv) > 2:
+        with contextlib.suppress(ValueError):
+            s5 = int(sys.argv[2])
+    print(f'🔍 Scanning ALL available packages larger than {b6}MB...')
+    print('-' * 40)
+    g1 = m5()
+    if not g1:
+        print('❌ No packages found or error retrieving package list.')
+        print("Make sure you have internet connection and run 'pkg update' first.")
+        return
+    print(f'📦 Found {len(g1)} available packages.')
+    v5, w5, x5, y3 = q5(g1, r5, s5)
+    print('-' * 40)
+    print(f'\n📊 RESULTS: Found {len(v5)} packages larger than {b6}MB')
+    print('-' * 40)
+    if v5:
+        f6 = sorted(v5.items(), key=lambda x: x[1], reverse=True)
+        g6 = 0
+        print(f"{'PACKAGE NAME':<40} {'DOWNLOAD SIZE':>15}")
+        print('-' * 40)
+        h6 = min(len(f6), 50)
+        for _i, (pkg, z3) in enumerate(f6[:h6]):
+            print(f'{pkg:<40} {fsz(z3):>15}')
+            g6 += z3
+        if len(f6) > 50:
+            print(f'\n... and {len(f6) - 50} more packages')
+            for _, z3 in f6[50:]:
+                g6 += z3
+        print('-' * 40)
+        print(f"{'TOTAL SIZE:':<40} {fsz(g6):>15}")
+        print(f"{'TOTAL PACKAGES:':<40} {len(v5):>15}")
+    else:
+        print('✅ No packages found exceeding the threshold.')
+    print('\n📈 Statistics:')
+    print(f'   Total packages checked: {y3}')
+    print(f'   Packages with size info: {y3 - x5}')
+    print(f'   Packages below threshold: {y3 - len(v5) - x5}')
+    print(f'   Packages with no size info: {x5}')
+    i6 = {'large_packages': v5, 'all_packages': w5}
+    if v5:
+        j6 = f'packages_above_{b6}mb.json'
+        if z5(i6, j6, b6, include_all=False):
+            print(f'\n💾 Results saved to: {j6}')
+            print(f"   Format: {{'package_name': size_in_bytes}} for packages > {b6}MB")
+    k6 = input('\n💾 Save ALL packages (including smaller ones) to JSON? (y/n): ').lower()
+    if k6 == 'y':
+        l6 = 'all_packages_sizes.json'
+        if z5(i6, l6, b6, include_all=True):
+            print(f'✅ All packages saved to: {l6}')
+            print("   Format: {'package_name': size_in_bytes} for ALL packages")
+    m6 = input('\n💾 Save simple JSON (just {package: size})? (y/n): ').lower()
+    if m6 == 'y':
+        n6 = f'packages_sizes_{b6}mb.json'
+        try:
+            with open(n6, 'w') as f:
+                json.dump(v5, f, indent=2, sort_keys=True)
+            print(f'✅ Simple JSON saved to: {n6}')
+            print('   Format: {"package1": 12345678, "package2": 98765432}')
+        except Exception as e:
+            print(f'Error saving simple JSON: {e}')
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+    raise SystemExit(t())
+
+# --- File: sortpkgbysize.py ---
+import argparse
+import csv
+from pathlib import Path
+def o6(l3):
+    with Path(l3).open(newline='', encoding='utf-8') as f:
+        p6 = csv.DictReader(f)
+        q6 = list(p6)
+        r6 = p6.fieldnames
+    if 'Installed-Size' not in r6:
+        print("Error: 'Installed-Size' column not found in CSV")
+        return
+    q6.sort(key=lambda x: int(x.get('Installed-Size') or 0), reverse=True)
+    with Path(l3).open('w', newline='', encoding='utf-8') as f:
+        s6 = csv.DictWriter(f, fieldnames=r6)
+        s6.writeheader()
+        s6.writerows(q6)
+    print(f"File '{l3}' sorted by Installed-Size and overwritten.")
+if __name__ == '__main__':
+    t6 = argparse.ArgumentParser(description='Sort Debian packages CSV by Installed-Size')
+    t6.add_argument('fname', help='CSV file to sort')
+    s3 = t6.parse_args()
+    o6(s3.fname)
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

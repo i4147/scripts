@@ -1,0 +1,70 @@
+# filename: vid2txt.py
+import cv2;import pytesseract;from dh import cprint;from PIL import Image;l=x.argv[1];f=m(l).with_suffix('.txt')
+def a(r,k):while 1:p=r.get()
+        if p is None:break
+        c,j=p;j=cv2.resize(j,None,fx=1.5,fy=1.5,interpolation=cv2.INTER_CUBIC);o=cv2.cvtColor(j,cv2.COLOR_BGR2GRAY);o=255-o;t=pytesseract.image_to_string(Image.fromarray(o),lang='eng',config='--oem 3--psm 6')
+        if t and len(t.strip())>5:cprint(f'frame {c}-->{t}','cyan');f.open('a',encoding='utf-8').write(t+'\n')
+        else:cprint(f'frame {c}-->no text','blue')
+        k.put((c,t))
+def q():u=cv2.VideoCapture(l);r=h(maxsize=b());k=h();g=[e(target=a,args=(r,k)) for _ in range(b())]
+    for w in g:w.start()
+    c=0;s=0
+    while 1:v,j=u.read()
+        if not v:break
+        c+=1;r.put((c,j));s+=1
+    for _ in g:r.put(None)
+    d=0
+    while d<s:n,i=k.get();d+=1
+    u.release()
+    for w in g:w.join()
+if __name__=='__main__':raise SystemExit(q())
+# filename: video2text.py
+import cv2;import pytesseract;from dh import cprint;from PIL import Image;e=l.argv[1];c=f(e).with_suffix('.txt')
+def a(b,d):d=cv2.resize(d,None,fx=1.5,fy=1.5,interpolation=cv2.INTER_CUBIC);g=cv2.cvtColor(d,cv2.COLOR_BGR2GRAY);g=255-g;i=pytesseract.image_to_string(Image.fromarray(g),lang='eng',config='--oem 3--psm 6')
+    if i and len(i.strip())>5:cprint(f'frame {b}-->{i}','cyan');c.open('a',encoding='utf-8').write(i+'\n')
+    else:cprint(f'frame {b}-->no text','blue')
+def h():j=cv2.VideoCapture(e);b=0
+    while 1:k,d=j.read()
+        if not k:break
+        a(b,d);b+=1
+if __name__=='__main__':raise SystemExit(h())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

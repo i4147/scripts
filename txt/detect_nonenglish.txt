@@ -1,0 +1,470 @@
+# --- File: noneng_gcld3.py ---
+import argparse
+from collections.abc import Iterable
+from datetime import datetime
+from multiprocessing import Pool
+from pathlib import Path
+import gcld3
+a = None
+b = {'.txt', '.csv', '.log', '.md', '.rst', '.py', '.js', '.html', '.css', '.json', '.xml', '.yaml', '.yml', '.ini', '.cfg', '.conf', '.sh', '.bat', '.ps1', '.java', '.cpp', '.c', '.h', '.hpp', '.sql', '.r', '.rb', '.php', '.pl', '.go', '.rs', '.ts', '.jsx', '.tsx', '.vue', '.tex', '.bib', '.toml', '.env', '.gitignore', '.dockerfile'}
+c = 10 * 1024 * 1024
+d = 8
+e = tuple[int, str, str, float]
+f = tuple[Path, list[e] | None, str | None]
+def g():
+    global _DETECTOR
+    if a is None:
+        a = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
+    return a
+def h(i):
+    return i.suffix.lower() in b
+def j(k):
+    if not k.strip():
+        return (None, None, True)
+    l = g().FindLanguage(text=k)
+    if l.language == 'und':
+        return ('und', l.probability, l.is_reliable)
+    return (l.language, l.probability, l.is_reliable)
+def m(i):
+    try:
+        if i.stat().st_size > c:
+            return (i, None, 'File too large (>10MB)')
+    except (OSError, PermissionError) as exc:
+        return (i, None, f'Cannot access file: {exc}')
+    try:
+        n = None
+        for o in ('utf-8', 'latin-1', 'cp1252'):
+            try:
+                with open(i, 'r', encoding=o) as p:
+                    n = p.readlines()
+                break
+            except UnicodeDecodeError:
+                continue
+        if n is None:
+            return (i, None, 'Cannot decode file')
+        q = []
+        for r, s in enumerate(n, 1):
+            t = s.strip()
+            if not t:
+                continue
+            u, v, w = j(t)
+            if u and u != 'en' and w and (v is not None):
+                q.append((r, t, u, v))
+            elif u == 'und' and (not w) and (v is not None):
+                q.append((r, t, 'und', v))
+        return (i, q, None)
+    except Exception as exc:
+        return (i, None, f'Error processing file: {exc}')
+def x(y='.', z=b):
+    a1 = Path(y)
+    b1 = []
+    for ext in z:
+        b1.extend(a1.rglob(f'*{ext}'))
+    c1 = list(set(b1))
+    d1 = [f for f in c1 if h(f)]
+    d1.sort()
+    return d1
+def e1():
+    f1 = argparse.ArgumentParser(description='Find non-English lines in text files using gcld3')
+    f1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    f1.add_argument('-o', '--output', default='noneng.txt', help='Output report file (default: noneng.txt)')
+    f1.add_argument('--extensions', nargs='+', help='Additional file extensions to scan')
+    return f1
+def g1(h1, i1, j1, k1, l1, m1, n1):
+    with open(h1, 'w', encoding='utf-8') as p:
+        p.write('=' * 40 + '\n')
+        p.write('Non-English Lines Detection Report\n')
+        p.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        p.write(f'Directory scanned: {Path(i1).resolve()}\n')
+        p.write(f'Files scanned: {j1}\n')
+        p.write(f'Files with non-English content: {k1}\n')
+        p.write(f'Total non-English lines found: {l1}\n')
+        p.write('=' * 40 + '\n\n')
+        if m1:
+            for i, o1 in m1:
+                p.write(f"\n{'─' * 40}\n")
+                p.write(f'File: {i}\n')
+                p.write(f'Non-English lines: {len(o1)}\n')
+                p.write(f"{'─' * 40}\n\n")
+                for r, p1, u, v in o1:
+                    p.write(f'  Line {r}: [{u}] (confidence: {v:.2f})\n')
+                    p.write(f'  Content: {p1}\n\n')
+        else:
+            p.write('No non-English lines found.\n')
+        if n1:
+            p.write(f"\n{'=' * 40}\n")
+            p.write(f'Errors encountered: {len(n1)}\n')
+            p.write(f"{'=' * 40}\n\n")
+            for i, q1 in n1:
+                p.write(f'  {i}: {q1}\n')
+def r1():
+    f1 = e1()
+    s1 = f1.parse_args()
+    z = set(b)
+    if s1.extensions:
+        z.update(s1.extensions)
+    print(f'Scanning directory: {s1.directory}')
+    b1 = x(s1.directory, z)
+    print(f'Found {len(b1)} text files to process')
+    m1 = []
+    n1 = []
+    k1 = 0
+    l1 = 0
+    print(f'Processing files using {d} workers...')
+    t1 = Pool(processes=d)
+    try:
+        u1 = [t1.apply_async(m, (f,)) for f in b1]
+        v1 = 0
+        w1 = len(b1)
+        for x1 in u1:
+            v1 += 1
+            if v1 % 100 == 0 or v1 == w1:
+                print(f'Progress: {v1}/{w1} files processed')
+            i, y1, q1 = x1.get()
+            if q1:
+                n1.append((i, q1))
+            elif y1:
+                k1 += 1
+                l1 += len(y1)
+                m1.append((i, y1))
+    finally:
+        t1.close()
+        t1.join()
+    h1 = Path(s1.output)
+    print(f'Generating report: {h1}')
+    g1(output_path=h1, directory=s1.directory, files_scanned=len(b1), files_with_findings=k1, total_non_eng_lines=l1, non_english_results=m1, errors=n1)
+    print('=' * 40)
+    print('Scan complete!')
+    print(f'Files scanned: {len(b1)}')
+    print(f'Files with non-English content: {k1}')
+    print(f'Total non-English lines found: {l1}')
+    print(f'Errors: {len(n1)}')
+    print(f'Report saved to: {h1.resolve()}')
+    print('=' * 40)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+# --- File: noneng_langdetect.py ---
+from pathlib import Path
+from dh import get_nobinary, mpf3
+from langdetect import DetectorFactory, detect
+from langdetect.lang_detect_exception import LangDetectException
+DetectorFactory.seed = 0
+z1 = 5000
+def m(i):
+    i = Path(i)
+    try:
+        with Path(i).open(encoding='utf-8', errors='ignore') as f:
+            k = f.read(z1).strip()
+            if len(k) < 20:
+                return False
+            if detect(k) != 'en':
+                print(i)
+                return True
+    except (LangDetectException, OSError):
+        return False
+def r1():
+    cwd = Path.cwd()
+    a2 = get_nobinary(cwd)
+    mpf3(m, a2)
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+# --- File: noneng_lingua.py ---
+import argparse
+import json
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+from lingua import Language, LanguageDetector, LanguageDetectorBuilder
+from loguru import logger
+b = {'.txt', '.py', '.js', '.html', '.css', '.json', '.xml', '.yaml', '.yml', '.md', '.rst', '.csv', '.tsv', '.log', '.sh', '.bash', '.c', '.cpp', '.h', '.java', '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.lua', '.toml', '.ini', '.cfg', '.conf', '.properties', '.env'}
+b2 = {'.git', '__pycache__', 'node_modules', '.venv', 'venv', '.tox', '.mypy_cache', '.pytest_cache', 'build', 'dist'}
+c2 = 100
+d2 = 8
+a = None
+def g():
+    global _DETECTOR
+    if a is None:
+        a = LanguageDetectorBuilder.from_all_languages().build()
+    return a
+def e2(k):
+    if not k or len(k.strip()) < 3:
+        return (True, 1.0)
+    try:
+        f2 = g()
+        g2 = f2.compute_language_confidence_values(k)
+        if not g2:
+            return (True, 0.0)
+        h2 = g2[0]
+        i2 = h2.language == Language.ENGLISH
+        return (i2, float(h2.value))
+    except Exception:
+        return (True, 0.0)
+def j2(i):
+    for o in ('utf-8', 'latin-1', 'cp1252'):
+        try:
+            return i.read_text(encoding=o, errors='ignore')
+        except UnicodeDecodeError:
+            continue
+        except OSError:
+            return None
+    return None
+def k2(o1):
+    l2 = []
+    for idx, s in enumerate(o1, 1):
+        if not s.strip():
+            continue
+        i2, v = e2(s)
+        if not i2:
+            l2.append({'line_num': idx, 'text': s[:200], 'confidence': v, 'full_text': s if len(s) <= 200 else f'{s[:200]}...'})
+    return l2
+def m2(i, n2=False):
+    try:
+        n = j2(i)
+        if n is None:
+            return None
+        o1 = n.splitlines()
+        if not o1:
+            return None
+        o2 = g().detect_language_of(n[:10000])
+        if o2 is not None and o2 != Language.ENGLISH:
+            g2 = g().compute_language_confidence_values(n[:10000])
+            p2 = float(g2[0].value) if g2 else 0.0
+            l = {'file': str(i), 'language': o2.name.lower(), 'confidence': p2, 'size_bytes': i.stat().st_size, 'line_count': len(o1), 'non_english_lines': []}
+            if n2:
+                l2 = k2(o1)
+                if l2:
+                    l['non_english_lines'] = l2
+                    l['non_eng_line_count'] = len(l2)
+            return l
+        if n2:
+            l2 = k2(o1)
+            if l2:
+                return {'file': str(i), 'language': 'en', 'confidence': 1.0, 'size_bytes': i.stat().st_size, 'line_count': len(o1), 'non_english_lines': l2, 'non_eng_line_count': len(l2), 'mixed': True}
+        return None
+    except Exception as e:
+        return {'file': str(i), 'error': str(e), 'non_english_lines': []}
+def q2(s1):
+    return m2(*s1)
+def r2(y, n2=False):
+    a2 = []
+    for ext in b:
+        a2.extend(y.rglob(f'*{ext}'))
+    a2 = [f for f in a2 if not any((s2 in b2 for s2 in f.parts))]
+    print(f'Found {len(a2)} text files. Analyzing with {d2} workers...')
+    y1 = []
+    with Pool(processes=d2) as t1:
+        u1 = [t1.apply_async(q2, ((f, n2),)) for f in a2]
+        v1 = 0
+        for x1 in u1:
+            v1 += 1
+            if v1 % 50 == 0:
+                print(f'Progress: {v1}/{len(a2)} files...')
+            try:
+                l = x1.get()
+                if l:
+                    y1.append(l)
+            except Exception as e:
+                logger.error(f'Error analyzing file: {e}')
+    return y1
+def r1():
+    f1 = argparse.ArgumentParser(description='Find non-English files recursively')
+    f1.add_argument('-l', '--detailed', action='store_true', help='Report non-English lines within each file')
+    f1.add_argument('-o', '--output', default='noneng.json', help='Output JSON file (default: noneng.json)')
+    f1.add_argument('-d', '--dir', default='.', help='Root directory to scan (default: current directory)')
+    s1 = f1.parse_args()
+    y = Path(s1.dir).resolve()
+    if not y.exists():
+        logger.error(f'Directory {y} does not exist')
+        return 1
+    print(f'Scanning: {y}')
+    print(f'Detailed mode: {s1.detailed}')
+    y1 = r2(y, s1.detailed)
+    y1.sort(key=lambda x: x.get('file', ''))
+    h1 = Path(s1.output)
+    with open(h1, 'w', encoding='utf-8') as f:
+        json.dump({'scan_root': str(y), 'detailed': s1.detailed, 'total_non_english_files': len(y1), 'results': y1}, f, indent=2, ensure_ascii=False)
+    print(f"{'=' * 40}")
+    print(f'Found {len(y1)} non-English files')
+    print(f'Results saved to: {h1}')
+    if y1:
+        print('Sample (first 5 files):')
+        for r in y1[:5]:
+            u = r.get('language', 'unknown')
+            o1 = r.get('non_eng_line_count', 0)
+            print(f"  {r['file']} → {u} (confidence: {r.get('confidence', 0):.2%})")
+            if s1.detailed and o1:
+                print(f'    {o1} non-English lines')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+# --- File: noneng_pycld2.py ---
+import argparse
+from collections.abc import Iterable, Sequence
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+import pycld2 as cld2
+b = {'.txt', '.csv', '.log', '.md', '.rst', '.py', '.js', '.html', '.css', '.json', '.xml', '.yaml', '.yml', '.ini', '.cfg', '.conf', '.sh', '.bat', '.ps1', '.java', '.cpp', '.c', '.h', '.hpp', '.sql', '.r', '.rb', '.php', '.pl', '.go', '.rs', '.ts', '.jsx', '.tsx', '.vue', '.tex', '.bib', '.toml', '.env', '.gitignore', '.dockerfile'}
+t2 = {'en': 'ENGLISH', 'es': 'SPANISH', 'fr': 'FRENCH', 'de': 'GERMAN', 'it': 'ITALIAN', 'pt': 'PORTUGUESE', 'ru': 'RUSSIAN', 'zh': 'CHINESE', 'ja': 'JAPANESE', 'ko': 'KOREAN', 'ar': 'ARABIC', 'hi': 'HINDI', 'nl': 'DUTCH', 'pl': 'POLISH', 'tr': 'TURKISH', 'vi': 'VIETNAMESE', 'th': 'THAI', 'sv': 'SWEDISH', 'da': 'DANISH', 'fi': 'FINNISH', 'no': 'NORWEGIAN', 'cs': 'CZECH', 'hu': 'HUNGARIAN', 'el': 'GREEK', 'he': 'HEBREW', 'id': 'INDONESIAN', 'ms': 'MALAY', 'ro': 'ROMANIAN', 'sk': 'SLOVAK', 'uk': 'UKRAINIAN', 'bg': 'BULGARIAN', 'hr': 'CROATIAN', 'sr': 'SERBIAN', 'ca': 'CATALAN', 'sl': 'SLOVENIAN', 'lt': 'LITHUANIAN', 'lv': 'LATVIAN', 'et': 'ESTONIAN', 'fa': 'PERSIAN', 'tl': 'TAGALOG', 'sw': 'SWAHILI', 'bn': 'BENGALI', 'ta': 'TAMIL', 'te': 'TELUGU', 'mr': 'MARATHI', 'ur': 'URDU', 'gu': 'GUJARATI', 'kn': 'KANNADA', 'ml': 'MALAYALAM', 'pa': 'PUNJABI', 'unknown': 'UNKNOWN'}
+d = 8
+c = 10 * 1024 * 1024
+u2 = tuple[int, str, str, str, int]
+f = tuple[Path, list[u2] | None, str | None]
+def h(i):
+    return i.suffix.lower() in b
+def j(k):
+    if not k.strip():
+        return (None, None, 0, True)
+    try:
+        v2, w2, x2 = cld2.detect(k)
+        if not x2:
+            return ('un', 'UNKNOWN', 0, False)
+        y2, z2, a3, b3 = x2[0]
+        z2 = z2.lower() if z2 else 'un'
+        return (z2, y2, a3, v2)
+    except Exception:
+        return ('un', 'UNKNOWN', 0, False)
+def m(i):
+    c3 = []
+    try:
+        if i.stat().st_size > c:
+            return (i, None, 'File too large (>10MB)')
+    except (OSError, PermissionError) as exc:
+        return (i, None, f'Cannot access file: {exc}')
+    n = None
+    for o in ('utf-8', 'latin-1', 'cp1252'):
+        try:
+            with open(i, 'r', encoding=o) as p:
+                n = p.readlines()
+            break
+        except UnicodeDecodeError:
+            continue
+    if n is None:
+        return (i, None, 'Cannot decode file')
+    try:
+        for r, s in enumerate(n, 1):
+            if not s.strip():
+                continue
+            z2, y2, p2, d3 = j(s.strip())
+            if z2 and z2 != 'en' and (p2 >= 50) or (z2 == 'un' and p2 < 50):
+                c3.append((r, s.strip(), z2, y2, p2))
+        return (i, c3, None)
+    except Exception as exc:
+        return (i, None, f'Error processing file: {exc}')
+def x(y='.', z=b):
+    a1 = Path(y)
+    b1 = []
+    for ext in z:
+        b1.extend(a1.rglob(f'*{ext}'))
+    c1 = list(set(b1))
+    e3 = [f for f in c1 if h(f)]
+    e3.sort()
+    return e3
+def f3():
+    f1 = argparse.ArgumentParser(description='Find non-English lines in text files using pycld2')
+    f1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    f1.add_argument('-o', '--output', default='noneng.txt', help='Output report file (default: noneng.txt)')
+    f1.add_argument('--extensions', nargs='+', help='Additional file extensions to scan')
+    f1.add_argument('--min-confidence', type=int, default=50, help='Minimum confidence percentage for non-English detection (default: 50)')
+    return f1.parse_args()
+def g1(h1, g3, b1, m1, n1, h3):
+    k1 = len(m1)
+    l1 = sum((len(o1) for _, o1 in m1))
+    with open(h1, 'w', encoding='utf-8') as p:
+        p.write('=' * 40 + '\n')
+        p.write('Non-English Lines Detection Report\n')
+        p.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        p.write(f'Directory scanned: {g3.resolve()}\n')
+        p.write(f'Files scanned: {len(b1)}\n')
+        p.write(f'Files with non-English content: {k1}\n')
+        p.write(f'Total non-English lines found: {l1}\n')
+        p.write(f'Minimum confidence threshold: {h3}%\n')
+        p.write('=' * 40 + '\n\n')
+        if m1:
+            i3 = {}
+            for _, o1 in m1:
+                for _, _, z2, y2, _ in o1:
+                    key = f'{y2} ({z2})'
+                    i3[key] = i3.get(key, 0) + 1
+            if i3:
+                p.write('Language Distribution:\n')
+                p.write('-' * 40 + '\n')
+                p.writelines((f'  {u}: {j3} lines\n' for u, j3 in sorted(i3.items(), key=lambda k3: k3[1], reverse=True)))
+                p.write('\n')
+            for i, o1 in m1:
+                p.write(f"\n{'─' * 40}\n")
+                p.write(f'File: {i}\n')
+                p.write(f'Non-English lines: {len(o1)}\n')
+                p.write(f"{'─' * 40}\n\n")
+                for r, p1, z2, y2, p2 in o1:
+                    p.write(f'  Line {r}: [{y2}] ({z2}) - Confidence: {p2}%\n')
+                    p.write(f'  Content: {p1}\n\n')
+        else:
+            p.write('No non-English lines found.\n')
+        if n1:
+            p.write(f"\n{'=' * 40}\n")
+            p.write(f'Errors encountered: {len(n1)}\n')
+            p.write(f"{'=' * 40}\n\n")
+            for i, q1 in n1:
+                p.write(f'  {i}: {q1}\n')
+def r1():
+    s1 = f3()
+    z = set(b)
+    if s1.extensions:
+        z.update(s1.extensions)
+    g3 = Path(s1.directory)
+    print('Scanning directory: {}', g3)
+    b1 = x(g3, z)
+    print('Found {} text files to process', len(b1))
+    m1 = []
+    n1 = []
+    k1 = 0
+    l1 = 0
+    l3 = min(d, max(1, cpu_count()))
+    print('Processing files using {} workers...', l3)
+    with Pool(processes=l3) as t1:
+        u1 = [t1.apply_async(m, (f,)) for f in b1]
+        w1 = len(u1)
+        for v1, x1 in enumerate(u1, 1):
+            if v1 % 100 == 0 or v1 == w1:
+                print('Progress: {}/{} files processed', v1, w1)
+            i, y1, q1 = x1.get()
+            if q1:
+                n1.append((i, q1))
+            elif y1:
+                k1 += 1
+                l1 += len(y1)
+                m1.append((i, y1))
+    h1 = Path(s1.output)
+    print('Generating report: {}', h1)
+    g1(output_path=h1, scanned_directory=g3, text_files=b1, non_english_results=m1, errors=n1, min_confidence=s1.min_confidence)
+    print('=' * 40)
+    print('Scan complete!')
+    print('Files scanned: {}', len(b1))
+    print('Files with non-English content: {}', k1)
+    print('Total non-English lines found: {}', l1)
+    print('Errors: {}', len(n1))
+    print('Report saved to: {}', h1.resolve())
+    print('=' * 40)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(r1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## sample usage of merged script
+  python detect_nonenglish.py --backend langdetect <files/dirs paths>
+  backend is one of langdetect/lingua/pycld2/gcld3/fast_langdetect
+
+return fully refactored and annotated code
+   

@@ -1,0 +1,359 @@
+# --- File: monolithei.py ---
+import argparse
+import base64
+import re
+import sys
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+class a:
+    b = {'.css': 'text/css', '.js': 'application/javascript', '.svg': 'image/svg+xml', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.eot': 'application/vnd.ms-fontobject', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
+    def __init__(self, c=False, d=False, e=10, f='utf-8'):
+        self.ignore_errors = c
+        self.no_images = d
+        self.timeout = e
+        self.encoding = f
+        self.base_url = None
+        self.session = requests.Session()
+        self.session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Monolith/1.0'})
+        self.fetched_resources = {}
+    def g(self, url):
+        if url in self.fetched_resources:
+            return self.fetched_resources[url]
+        try:
+            h = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+            h.raise_for_status()
+            i = h.content
+            self.fetched_resources[url] = i
+            return i
+        except Exception as e:
+            if not self.ignore_errors:
+                raise
+            print(f'⚠ Skipping unreachable resource: {url}', file=sys.stderr)
+            return b''
+    def j(self, url, k=None):
+        i = self.fetch_resource(url)
+        if not i:
+            return ''
+        if not k:
+            ext = Path(urlparse(url).path).suffix.lower()
+            k = self.MIME_TYPES.get(ext, 'application/octet-stream')
+        b64 = base64.b64encode(i).decode('ascii')
+        return f'data:{k};base64,{b64}'
+    def l(self, m):
+        for n in m.find_all('link', rel='stylesheet'):
+            o = n.get('href')
+            if not o:
+                continue
+            url = urljoin(self.base_url, o)
+            try:
+                p = self.fetch_resource(url).decode('utf-8', errors='ignore')
+                p = self._rebase_css_urls(p, url)
+                q = m.new_tag('style')
+                q['type'] = 'text/css'
+                q.string = p
+                n.replace(q)
+            except Exception as e:
+                if not self.ignore_errors:
+                    raise
+                print(f'⚠ Skipping CSS: {url}', file=sys.stderr)
+    def r(self, css, s):
+        def t(u):
+            url = u.group(1).strip('\'"')
+            if url.startswith(('data:', '#')):
+                return u.group(0)
+            v = urljoin(s, url)
+            try:
+                w = self.resource_to_data_uri(v)
+                return f"url('{w}')" if w else u.group(0)
+            except Exception:
+                if not self.ignore_errors:
+                    raise
+                return u.group(0)
+        return re.sub('url\\([\\\'"]?([^\\)]+)[\\\'"]?\\)', t, css)
+    def x(self, m):
+        for y in m.find_all('script', src=True):
+            src = y.get('src')
+            if not src:
+                continue
+            url = urljoin(self.base_url, src)
+            try:
+                z = self.fetch_resource(url).decode('utf-8', errors='ignore')
+                y['src'] = None
+                y.string = z
+            except Exception as e:
+                if not self.ignore_errors:
+                    raise
+                print(f'⚠ Skipping script: {url}', file=sys.stderr)
+    def a1(self, m):
+        if self.no_images:
+            for img in m.find_all('img'):
+                img.decompose()
+            return
+        for img in m.find_all('img'):
+            src = img.get('src')
+            if not src:
+                continue
+            url = urljoin(self.base_url, src)
+            try:
+                w = self.resource_to_data_uri(url)
+                if w:
+                    img['src'] = w
+            except Exception as e:
+                if not self.ignore_errors:
+                    raise
+                print(f'⚠ Skipping image: {url}', file=sys.stderr)
+        for b1 in m.find_all(srcset=True):
+            c1 = b1.get('srcset', '')
+            d1 = []
+            for e1 in c1.split(','):
+                e1 = e1.strip()
+                if not e1:
+                    continue
+                f1 = e1.split()
+                url = f1[0]
+                g1 = ' '.join(f1[1:]) if len(f1) > 1 else ''
+                h1 = urljoin(self.base_url, url)
+                try:
+                    w = self.resource_to_data_uri(h1)
+                    if w:
+                        d1.append(f'{w} {g1}'.strip())
+                except Exception:
+                    if not self.ignore_errors:
+                        raise
+            if d1:
+                b1['srcset'] = ', '.join(d1)
+    def i1(self, m):
+        for q in m.find_all('style'):
+            if not q.string:
+                continue
+            css = q.string
+            css = self._rebase_css_urls(css, self.base_url)
+            q.string = css
+    def j1(self, k1, l1=None):
+        self.base_url = l1 or 'http://localhost/'
+        m = BeautifulSoup(k1, 'html.parser')
+        m1 = m.find('meta', charset=True)
+        if not m1:
+            m1 = m.new_tag('meta', charset=self.encoding)
+            n1 = m.find('head')
+            if n1:
+                n1.insert(0, m1)
+            else:
+                o1 = m.find('html')
+                p1 = m.new_tag('head')
+                p1.append(m1)
+                if o1:
+                    o1.insert(0, p1)
+        else:
+            m1['charset'] = self.encoding
+        self.inline_css(m)
+        self.inline_scripts(m)
+        self.inline_images(m)
+        self.inline_fonts(m)
+        return str(m)
+    def q1(self, url):
+        print(f'📥 Fetching {url}...', file=sys.stderr)
+        h = self.session.get(url, timeout=self.timeout)
+        h.raise_for_status()
+        r1 = h.text
+        return self.process_html(r1, url)
+    def s1(self, t1):
+        t1 = Path(t1).resolve()
+        print(f'📂 Loading {t1}...', file=sys.stderr)
+        with open(t1, 'r', encoding='utf-8', errors='ignore') as f:
+            r1 = f.read()
+        u1 = t1.as_uri()
+        return self.process_html(r1, u1)
+def v1():
+    w1 = argparse.ArgumentParser(description='Save webpages as single HTML files with embedded resources', prog='monolith')
+    w1.add_argument('source', help='URL or local file path')
+    w1.add_argument('-e', '--ignore-errors', action='store_true', help='Ignore unreachable resources (continue on errors)')
+    w1.add_argument('-i', '--no-images', action='store_true', help='Strip all images from output')
+    w1.add_argument('-o', '--output', help='Output file path (default: stdout)')
+    x1 = w1.parse_args()
+    try:
+        y1 = a(ignore_errors=x1.ignore_errors, no_images=x1.no_images)
+        if x1.source.startswith(('http://', 'https://')):
+            r1 = y1.from_url(x1.source)
+        else:
+            r1 = y1.from_file(x1.source)
+        if x1.output:
+            z1 = Path(x1.output)
+            print(f'💾 Writing to {z1}...', file=sys.stderr)
+            z1.write_text(r1, encoding='utf-8')
+            print(f'✅ Done! Saved to {z1}', file=sys.stderr)
+        else:
+            print(r1)
+    except requests.RequestException as e:
+        print(f'❌ Network error: {e}', file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f'❌ File not found: {e}', file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f'❌ Error: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    v1()
+
+# --- File: pymonolith.py ---
+import argparse
+import sys
+from base64 import b64encode
+from mimetypes import guess_type
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
+class a:
+    def __init__(self, s, e=10, a2=None):
+        self.base_url = s
+        self.timeout = e
+        self.session = requests.Session()
+        self.session.headers.update(a2 or {'User-Agent': 'Monolith/1.0'})
+        self.cache = {}
+    def b2(self, url):
+        if url in self.cache:
+            return self.cache[url]
+        try:
+            c2 = self.session.get(url, timeout=self.timeout)
+            c2.raise_for_status()
+            self.cache[url] = c2.content
+            return c2.content
+        except requests.RequestException as e:
+            print(f'⚠ Failed to fetch {url}: {e}', file=sys.stderr)
+            return None
+    def d2(self, i, k):
+        if not i:
+            return None
+        b64 = b64encode(i).decode('ascii')
+        return f'data:{k};base64,{b64}'
+    def e2(self, url):
+        if url.startswith(('http://', 'https://')):
+            return url
+        if url.startswith('//'):
+            f2 = urlparse(self.base_url).scheme
+            return f'{f2}:{url}'
+        return urljoin(self.base_url, url)
+    def g2(self, url, h2='application/octet-stream'):
+        i2 = urlparse(url).path
+        j2, _ = guess_type(i2)
+        return j2 or h2
+    def k2(self, m):
+        for n in m.find_all('link', rel='stylesheet'):
+            o = n.get('href')
+            if not o:
+                continue
+            l2 = self.resolve_url(o)
+            i = self.fetch(l2)
+            if i:
+                w = self.to_data_uri(i, 'text/css')
+                if w:
+                    n.attrs['href'] = w
+    def m2(self, m):
+        for y in m.find_all('script'):
+            src = y.get('src')
+            if not src:
+                continue
+            l2 = self.resolve_url(src)
+            i = self.fetch(l2)
+            if i:
+                y.string = i.decode('utf-8', errors='replace')
+                del y.attrs['src']
+    def n2(self, m):
+        for img in m.find_all('img'):
+            src = img.get('src')
+            if not src:
+                continue
+            l2 = self.resolve_url(src)
+            i = self.fetch(l2)
+            if i:
+                j2 = self.guess_mime(l2, 'image/png')
+                w = self.to_data_uri(i, j2)
+                if w:
+                    img.attrs['src'] = w
+    def o2(self, m):
+        for q in m.find_all('style'):
+            q.string = self._inline_font_urls(q.string or '')
+    def p2(self, q2):
+        import re
+        def t(u):
+            url = u.group(1)
+            l2 = self.resolve_url(url)
+            i = self.fetch(l2)
+            if i:
+                j2 = self.guess_mime(l2, 'font/woff2')
+                w = self.to_data_uri(i, j2)
+                if w:
+                    return f'url({w})'
+            return u.group(0)
+        return re.sub('url\\([\\\'"]?([^\\)\\\'\\"]+)[\\\'"]?\\)', t, q2)
+    def r2(self):
+        i = self.fetch(self.base_url)
+        if not i:
+            raise RuntimeError(f'Failed to fetch {self.base_url}')
+        m = BeautifulSoup(i, 'html.parser')
+        self.process_stylesheets(m)
+        self.process_scripts(m)
+        self.process_images(m)
+        self.process_fonts(m)
+        return str(m.prettify())
+def v1():
+    w1 = argparse.ArgumentParser(description='Download a URL as a single, self-contained HTML file.')
+    w1.add_argument('url', help='URL to download')
+    w1.add_argument('-o', '--output', help='Output file (default: stdout)')
+    w1.add_argument('-t', '--timeout', type=int, default=10, help='Request timeout in seconds')
+    x1 = w1.parse_args()
+    try:
+        s2 = a(x1.url, timeout=x1.timeout)
+        r1 = s2.convert()
+        if x1.output:
+            Path(x1.output).write_text(r1, encoding='utf-8')
+            print(f'✓ Saved to {x1.output}', file=sys.stderr)
+        else:
+            print(r1)
+    except Exception as e:
+        print(f'✗ Error: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(v1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

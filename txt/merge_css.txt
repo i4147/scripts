@@ -1,0 +1,51 @@
+# filename: joincss.py
+b=D('/sdcard/_static/fonts');i={'.woff','.woff2','.ttf','.otf','.eot'};o={'.png','.jpg','.jpeg','.gif','.svg','.webp'};g=L.compile('@import\\s+url\\([^)]+fonts\\.googleapis[^)]+\\);?',L.IGNORECASE);c={'roboto':'roboto','lato':'lato','opensans':'opensans','open-sans':'opensans','fontawesome':'fa','fa-':'fa'};u=L.compile('url\\(([\\"\\\']?)(https?://[^)]+?\\.(?:woff2?|ttf|otf|eot))\\1\\)',L.IGNORECASE)
+def k(C):H=set();x=[]
+    for p in C:p=D(p)
+        if p.is_file() and p.suffix.lower()=='.css':M=p.resolve()
+            if M not in H:H.add(M);x.append(M)
+        elif p.is_dir():t='**/*.css'
+            for f in sorted(p.glob(t)):M=f.resolve()
+                if M not in H:H.add(M);x.append(M)
+        else:print(f'Skipping invalid path:{p}',E=J.stderr)
+    return x
+def m(y):e=None;v=[]
+    def a(A):K=A.group(2);j=K.split('/')[-1];return f'url("{b}/{j}")'
+    for E in y:I=E.read_text(errors='ignore');I=g.sub('',I);I=u.sub(a,I);z=I.splitlines();r=[]
+        for F in z:n=F.strip().lower()
+            if n.startswith('@charset'):if e is None:e=F.strip()
+                continue
+            r.append(F)
+        v.append((E,'\n'.join(r).strip()))
+    return (e,v)
+def l(y,w):q,v=m(y);B=[]
+    if q:B.append(q+'\n')
+    for E,s in v:B.append(f'\n/*====={E.name}=====*/\n{s}\n')
+    h='\n'.join(B).strip()+'\n';d(w,h)
+def G():y=k('.')
+    if not y:print('No CSS files found.',E=J.stderr);J.exit(1)
+    l(y,'merged.css');print(f'Joined {len(y)} files->merged.css')
+if __name__=='__main__':raise SystemExit(G())
+# filename: mergecss.py
+from dh import runcmd
+if __name__=='__main__':a=['cleancss','-O2','removeDuplicateRules:on','*.css','-o','merged.css'];runcmd(a,show_output=True)
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

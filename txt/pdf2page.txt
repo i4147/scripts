@@ -1,0 +1,258 @@
+# filename: pdftotxt.py
+import pdfplumber
+def a(g):g=d(g);i=1
+    with pdfplumber.open(g) as j:for f in j.pages:h=f.extract_text(encoding='utf-8');d(g).stem
+            if not d(c).exists():d(c).mkdir()
+            if i<10:b=f'{c}/{d(g).stem}00{i!s}.txt'
+            elif i<100 and i>=10:b=f'{c}/{d(g).stem}0{i!s}.txt'
+            else:b=f'{c}/{d(g).stem}{i!s}.txt'
+            d(b).write_text(h,encoding='utf-8');print(f'{b} created');i+=1
+def e():a(k.argv[1])
+if __name__=='__main__':raise SystemExit(e())
+# filename: perpage.py
+from dh import get_files,mpf_joblib;from PyPDF2 import PdfReader
+def d(r):r=n(r)
+    if not r.is_file() or r.suffix.lower()!='.pdf':print(f'Error:Invalid PDF file path provided:{r}');return
+    a=r.stem;b=r.parent/a
+    try:b.mkdir(parents=True,exist_ok=True);print(f'Saving page text files to:{b}')
+    except OSError as e:print(f'Error creating output directory {b}:{e}');return
+    try:l=PdfReader(r)
+    except Exception as e:print(f'Error opening PDF file {r}:{e}');return
+    g=len(l.pages);j=len(str(g));print(f'Processing PDF:{r.name} ({g} pages)')
+    for h in range(g):k=str(h+1).zfill(j);c=f'{a}_{k}.txt';f=b/c
+        if f.exists():continue
+        try:q=l.pages[h];s=q.extract_text()
+            if s:with f.open('w',encoding='utf-8') as i:i.write(s)
+                if h%10==0:print(f'Saved:{f.name}')
+            else:print(f'Warning:No text extracted from page {h+1}.')
+        except Exception as e:print(f'Error processing page {h+1}:{e}')
+if __name__=='__main__':t=n.cwd();o=u.argv[1:];m=[n(p) for p in o] if o else get_files(t,ext=['.pdf','.PDF'])
+    if len(m)==1:d(m[0]);u.exit(0)
+    mpf_joblib(d,m)
+# filename: pp_fitz.py
+import fitz;from joblib import Parallel,delayed
+def c(p):k=[]
+    if not p:p=[s('.')]
+    for t in p:w=s(t)
+        if w.is_file() and w.suffix.lower()=='.pdf':k.append(w)
+        elif w.is_dir():k.extend(w.rglob('*.pdf'))
+        else:print(f'Warning:{w} is not a valid PDF file or directory',file=z.stderr)
+    return k
+def b(h):l,v,f=h
+    if l%10==0:print(f'processing page {l}')
+    try:x=v.get_text();j=f/f'page_{l:03d}.txt';j.write_text(x,encoding='utf-8');return (l,j)
+    except Exception as e:print(f'Error extracting page {l}:{e}',file=z.stderr);return None
+def a(n,q=4):n=s(n);f=n.parent/n.stem;f.mkdir(exist_ok=True);o=[]
+    try:y=fitz.open(n);g=[(l,y[l-1],f) for l in range(1,len(y)+1)];d=Parallel(q=q,backend='threading')((delayed(b)(h) for h in g));o=[r for r in d if r is not None];y.close()
+    except Exception as e:print(f'Error processing {n}:{e}',file=z.stderr)
+    return o
+def u():p=z.argv[1:] if len(z.argv)>1 else [];k=c(p)
+    if not k:print('No PDF files found.',file=z.stderr);return
+    print(f'Found {len(k)} PDF file(s) to process.')
+    for i,m in enumerate(k,1):print(f'Processing file {i}/{len(k)}:{m.name}')
+        try:o=a(m,q=8);print(f'  Extracted {len(o)} pages from {m.name}')
+        except Exception as e:print(f'Failed to process {m}:{e}',file=z.stderr)
+if __name__=='__main__':raise SystemExit(u())
+# filename: pp_pdfminer.py
+try:from pdfminer.high_level import extract_text;from pdfminer.pdfdocument import PDFDocument;from pdfminer.pdfpage import PDFPage;from pdfminer.pdfparser import PDFParser
+except ImportError:print('pdfminer.six not installed. Install with:pip install pdfminer.six');F.exit(1)
+def b(q):with open(q,'rb') as f:w=PDFParser(f);E=PDFDocument(w);return sum((1 for _ in PDFPage.create_pages(E)))
+def a(A):q,m,k,h=A;r=len(str(h));s=[]
+    for o in m:try:D=extract_text(q,page_numbers=[o]) or '';n=f'page_{o+1:0{r}d}.txt';g=k/n;g.write_text(D,encoding='utf-8');s.append((o+1,str(g),len(D)))
+        except Exception as e:s.append((o+1,f'ERROR:{e}',0))
+    return s
+def d(q,l=8):q=z(q).resolve()
+    if not q.is_file():raise FileNotFoundError(f'PDF not found:{q}')
+    k=z(q.stem);k.mkdir(exist_ok=True);h=b(str(q));print(f'PDF:{q.name}\nPages:{h}\nOutput:{k.resolve()}');j=max(1,h//l+1);u=[list(range(i,min(i+j,h))) for i in range(0,h,j)];y=[(str(q),x,k,h) for x in u]
+    with G.Pool(processes=l) as C:for c in C.imap_unordered(a,y):for o,B,v in c:print(f'  Page {o}:{B} ({v} chars)')
+    print('Done.')
+if __name__=='__main__':if len(F.argv)<2:print('Usage:python extract_pdf.py<pdf_file>[n_workers]');F.exit(1)
+    p=F.argv[1];t=int(F.argv[2]) if len(F.argv)>2 else 8;d(p,l=t)
+# filename: pp_pdfminer2.py
+import pdfminer.high_level;from pdfminer.layout import LAParams,LTTextBox;from pdfminer.pdfexceptions import PDFValueError;k=(('.htm','html'),('.html','html'),('.xml','xml'),('.tag','tag'))
+def b(x):if x.lower().strip()=='disabled':return None
+    try:return float(x)
+    except ValueError as err:raise y.ArgumentTypeError(f'invalid float value:{x}') from T
+def a(R,z=None):S=''
+    for F in R:if isinstance(F,LTTextBox):S+=F.get_text()
+    return S
+def l(L=[],G='-',z=None,p='text',J='utf-8',j=False,A=0,m=None,D='',N=1.0,E=0,t='normal',u=None,K=False,e=False,**H):if not L:raise PDFValueError('Must provide files to work upon!')
+    for M in L:s=O(M);d=s.parent/s.stem;d.mkdir(exist_ok=True);C=0
+        for B,q in enumerate(pdfminer.high_level.extract_pages(M,z=z,A=A,m=m,D=D,caching=not e)):if A>0 and C>=A:break
+            if m and B not in m:continue
+            S=''
+            for F in q:if isinstance(F,LTTextBox):S+=F.get_text()
+            o=d/f'page_{B:04d}.txt'
+            if o.exists():print(f'{o.name} exists.');continue
+            with open(o,'w',encoding=J) as f:if j:S=''.join((c for c in S if ord(c)>=32 or c in '\n\r\t'))
+                f.write(S)
+            print(f'Saved:{o}');C+=1
+def h():I=y.ArgumentParser(description=__doc__,add_help=True);I.add_argument('files',type=str,default=None,nargs='+',help='One or more paths to PDF files.');I.add_argument('--version','-v',action='version',version=f'pdfminer.six v{pdfminer.__version__}');I.add_argument('--debug','-d',default=False,action='store_true',help='Use debug logging level.');I.add_argument('--disable-caching','-C',default=False,action='store_true',help='If caching or resources,such as fonts,should be disabled.');n=I.add_argument_group('Parser',description='Used during PDF parsing');n.add_argument('--page-numbers',type=int,default=None,nargs='+',help='A space-seperated list of page numbers to parse.');n.add_argument('--pagenos','-p',type=str,help='A comma-separated list of page numbers to parse. Included for legacy applications,use--page-numbers for more idiomatic argument entry.');n.add_argument('--maxpages','-m',type=int,default=0,help='The maximum number of pages to parse.');n.add_argument('--password','-P',type=str,default='',help='The password to use for decrypting PDF file.');n.add_argument('--rotation','-R',default=0,type=int,help='The number of degrees to rotate the PDF before other types of processing.');w=LAParams();g=I.add_argument_group('Layout analysis',description='Used during layout analysis.');g.add_argument('--no-laparams','-n',default=False,action='store_true',help='If layout analysis parameters should be ignored.');g.add_argument('--detect-vertical','-V',default=w.detect_vertical,action='store_true',help='If vertical text should be considered during layout analysis');g.add_argument('--line-overlap',type=float,default=w.line_overlap,help='If two characters have more overlap than this they are considered to be on the same line. The overlap is specified relative to the minimum height of both characters.');g.add_argument('--char-margin','-M',type=float,default=w.char_margin,help='If two characters are closer together than this margin they are considered to be part of the same line. The margin is specified relative to the width of the character.');g.add_argument('--word-margin','-W',type=float,default=w.word_margin,help='If two characters on the same line are further apart than this margin then they are considered to be two separate words,and an intermediate space will be added for readability. The margin is specified relative to the width of the character.');g.add_argument('--line-margin','-L',type=float,default=w.line_margin,help='If two lines are close together they are considered to be part of the same paragraph. The margin is specified relative to the height of a line.');g.add_argument('--boxes-flow','-F',type=b,default=w.boxes_flow,help='Specifies how much a horizontal and vertical position of a text matters when determining the order of lines. The value should be within the range of-1.0 (only horizontal position matters) to+1.0 (only vertical position matters). You can also pass `disabled` to disable advanced layout analysis,and instead return text based on the position of the bottom left corner of the text box.');g.add_argument('--all-texts','-A',default=w.all_texts,action='store_true',help='If layout analysis should be performed on text in figures.');i=I.add_argument_group('Output',description='Used during output generation.');i.add_argument('--codec','-c',type=str,default='utf-8',help='Text encoding to use in output file.');i.add_argument('--strip-control','-S',default=False,action='store_true',help='Remove control statement from text.');return I
+def v(P):r=h().parse_args(P=P)
+    if r.no_laparams:r.laparams=None
+    else:r.laparams=LAParams(line_overlap=r.line_overlap,char_margin=r.char_margin,line_margin=r.line_margin,word_margin=r.word_margin,boxes_flow=r.boxes_flow,detect_vertical=r.detect_vertical,all_texts=r.all_texts)
+    if r.page_numbers:r.page_numbers={x-1 for x in r.page_numbers}
+    if r.pagenos:r.page_numbers={int(x)-1 for x in r.pagenos.split(',')}
+    return r
+def Q(P=None):r=v(P);l(**vars(r));return 0
+if __name__=='__main__':U.exit(Q())
+# filename: pp_plumber.py
+import pdfplumber;from joblib import Parallel,delayed
+def b(j):m,o,g=j
+    if m%10==0:print(f'processing page {m}')
+    try:with pdfplumber.open(o) as z:w=z.pages[m-1];y=w.extract_text() or ''
+        k=g/f'page_{m:03d}.txt';k.write_text(y,encoding='utf-8');return (m,k)
+    except Exception as e:print(f'Error extracting page {m}:{e}',file=A.stderr);return None
+def a(o,r=4):o=t(o);g=o.parent/o.stem;g.mkdir(exist_ok=True)
+    with pdfplumber.open(o) as z:f=len(z.pages)
+    h=[(m,o,g) for m in range(1,f+1)];d=Parallel(r=r,backend='threading')((delayed(b)(j) for j in h));return [s for s in d if s is not None]
+def c(q):l=[]
+    if not q:q=[t('.')]
+    for u in q:x=t(u)
+        if x.is_file() and x.suffix.lower()=='.pdf':l.append(x)
+        elif x.is_dir():l.extend(x.rglob('*.pdf'))
+        else:print(f'Warning:{x} is not a valid PDF file or directory',file=A.stderr)
+    return l
+def v():q=A.argv[1:] if len(A.argv)>1 else [];l=c(q)
+    if not l:print('No PDF files found.',file=A.stderr);return
+    print(f'Found {len(l)} PDF file(s) to process.')
+    for i,n in enumerate(l,1):print(f'Processing file {i}/{len(l)}:{n.name}')
+        try:p=a(n,r=8);print(f'  Extracted {len(p)} pages from {n.name}')
+        except Exception as e:print(f'Failed to process {n}:{e}',file=A.stderr)
+if __name__=='__main__':raise SystemExit(v())
+# filename: pp_pymupdf.py
+import fitz;from joblib import Parallel,delayed
+def b(o,d,j):q=[]
+    try:B=fitz.open(o)
+        for m in d:if m%10==0:print(f'processing page {m}')
+            y=B[m-1];A=y.get_text('text',sort=True);k=j/f'page_{m:03d}.txt';k.write_text(A,encoding='utf-8');q.append((m,k))
+        B.close()
+    except Exception as e:print(f'Error:{e}',file=D.stderr)
+    return q
+def a(o,t=4):o=v(o);j=o.parent/o.stem;j.mkdir(exist_ok=True)
+    try:B=fitz.open(o);g=len(B);B.close();h=max(1,g//t);p=[]
+        for i in range(0,g,h):C=min(i+h,g);p.append(list(range(i+1,C+1)))
+        f=Parallel(t=t,backend='threading')((delayed(b)(o,u,j) for u in p));q=[w for r in f for w in r];return q
+    except Exception as e:print(f'Error processing {o}:{e}',file=D.stderr);return []
+def c(s):l=[]
+    if not s:s=[v('.')]
+    for w in s:z=v(w)
+        if z.is_file() and z.suffix.lower()=='.pdf':l.append(z)
+        elif z.is_dir():l.extend(z.rglob('*.pdf'))
+        else:print(f'Warning:{z} is not a valid PDF file or directory',file=D.stderr)
+    return l
+def x():s=D.argv[1:] if len(D.argv)>1 else [];l=c(s)
+    if not l:print('No PDF files found.',file=D.stderr);return
+    print(f'Found {len(l)} PDF file(s) to process.')
+    for i,n in enumerate(l,1):print(f'Processing file {i}/{len(l)}:{n.name}')
+        try:q=a(n,t=8);print(f'  Extracted {len(q)} pages from {n.name}')
+        except Exception as e:print(f'Failed to process {n}:{e}',file=D.stderr)
+if __name__=='__main__':raise SystemExit(x())
+# filename: pp_pypdf.py
+try:from pypdf import PdfReader
+except ImportError:print('pypdf not installed. Install with:pip install pypdf');A.exit(1)
+h=10
+def a(v):n,j,k,i,g=v;print(f'processing pages {j+1}-{k}');o=len(str(g));p=[]
+    try:with open(n,'rb') as f:r=PdfReader(f)
+            for m in range(j,k):try:y=r.pages[m].extract_text() or ''
+                except Exception as e:y=''
+                l=f'page_{m+1:0{o}d}.txt';d=i/l;d.write_text(y,encoding='utf-8');p.append((m+1,str(d),len(y)))
+    except Exception as e:for m in range(j,k):p.append((m+1,f'ERROR:{e}',0))
+    return p
+def c(n):n=u(n).resolve()
+    if not n.is_file():raise FileNotFoundError(f'PDF not found:{n}')
+    i=u(n.stem);i.mkdir(exist_ok=True)
+    with open(n,'rb') as f:r=PdfReader(f);g=len(r.pages)
+    print(f'PDF:{n.name}');print(f'Pages:{g}');print(f'Output:{i.resolve()}');t=[]
+    for s in range(0,g,h):z=min(s+h,g);t.append((str(n),s,z,i,g))
+    print(f'Chunks:{len(t)} ({h} pages each)')
+    with B.Pool(processes=8) as x:for b in x.imap_unordered(a,t):for m,w,q in b:print(f'  Page {m}:{w} ({q} chars)')
+    print('Done.')
+if __name__=='__main__':if len(A.argv)<2:print('Usage:python extract_pdf.py<pdf_file>');A.exit(1)
+    c(A.argv[1])
+# filename: pp_pypdf2.py
+try:import PyPDF2
+except ImportError:print('PyPDF2 not installed. Install with:pip install PyPDF2');x.exit(1)
+def a(s):k,j,g,d=s
+    if j%10==0:print(f'processing page {j}')
+    try:with open(k,'rb') as f:o=PyPDF2.PdfReader(f);w=o.pages[j].extract_text() or ''
+        l=len(str(d));h=f'page_{j+1:0{l}d}.txt';c=g/h;c.write_text(w,encoding='utf-8');return (j+1,str(c),len(w))
+    except Exception as e:return (j+1,f'ERROR:{e}',0)
+def b(k):k=q(k).resolve()
+    if not k.is_file():raise FileNotFoundError(f'PDF not found:{k}')
+    g=q(k.stem);g.mkdir(exist_ok=True)
+    with open(k,'rb') as f:o=PyPDF2.PdfReader(f);d=len(o.pages)
+    print(f'PDF:{k.name}');print(f'Pages:{d}');print(f'Output:{g.resolve()}');p=[(str(k),i,g,d) for i in range(d)]
+    with y.Pool(processes=8) as u:m=[u.apply_async(a,(v,)) for v in p]
+        for r in m:j,t,n=r.get();print(f'  Page {j}:{t} ({n} chars)')
+    print('Done.')
+if __name__=='__main__':if len(x.argv)<2:print('Usage:python extract_pdf.py<pdf_file>');x.exit(1)
+    b(x.argv[1])
+# filename: ppminer.py
+from pdfminer.high_level import extract_text;from pdfminer.pdfpage import PDFPage
+def f(y):v=int(y)
+    if v<1:raise p.ArgumentTypeError('must be greater than zero')
+    return v
+def b(u):o=set()
+    for B in u:E=z(B).expanduser()
+        if not E.exists():raise FileNotFoundError(f'Input does not exist:{E}')
+        if E.is_file():if E.suffix.lower()=='.pdf':o.add(E.resolve())
+        elif E.is_dir():for n in E.rglob('*'):if n.is_file() and n.suffix.lower()=='.pdf':o.add(n.resolve())
+    return sorted(o)
+def g(s):with s.open('rb') as q:return sum((1 for _ in PDFPage.get_pages(q,password='',caching=True,check_extractable=True)))
+def a(H):r,i=H
+    if i%10==0:print(f'processing {i}')
+    G=extract_text(r,page_numbers=[i]);return G.rstrip('\x0c')
+def j(s,t=8):l=g(s)
+    if l==0:print(f'Skipping empty PDF:{s}');return
+    k=s.parent/s.stem;k.mkdir(parents=True,exist_ok=True);c=max(3,len(str(l)));C=[(str(s),i) for i in range(l)];d=min(t,l);print(f'Processing {s} ({l} pages,{d} workers)')
+    with J.Pool(processes=d) as F:m=F.map(a,C)
+    for i,G in enumerate(m,start=1):h=k/f'{i:0{c}d}.txt';h.write_text(G,encoding='utf-8')
+    print(f'Saved pages to:{k}')
+def e():w=p.ArgumentParser(description='Extract each PDF page into a separate TXT file.');w.add_argument('inputs',nargs='+',help='PDF files and/or directories containing PDF files.');return w
+def D():w=e();A=w.parse_args()
+    try:o=b(A.inputs)
+        if not o:w.error('No PDF files were found.')
+        for s in o:try:j(s,8)
+            except Exception as error:print(f'Error processing {s}:{x}',file=I.stderr)
+    except FileNotFoundError as error:w.error(str(x))
+    return 0
+if __name__=='__main__':J.freeze_support();raise SystemExit(D())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,11 @@
+*$py.class
+*.log
+*.py[cod]
+*.pyc
+*.tmp
+__pycache__/
+credential.json
+out/
+output/
+simz.json
+.mypy_cache/

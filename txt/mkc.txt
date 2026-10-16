@@ -1,0 +1,71 @@
+# filename: compile_c_cpp_files.py
+def a(u):w,g,b=u
+    try:y=[g,str(w),'-o',str(b)];p=c.run(y,capture_output=True,text=True,timeout=60)
+        if p.returncode==0:return (str(w),True,f'✓ Compiled:{w.name}->{b.name}')
+        return (str(w),False,f'✗ Failed:{w.name}\n{p.stderr}')
+    except c.TimeoutExpired:return (str(w),False,f'✗ Timeout:{w.name}')
+    except Exception as e:return (str(w),False,f'✗ Error:{w.name}-{e!s}')
+def v():i=s.cwd();print(f'Scanning directory:{i}\n');j=list(i.rglob('*.c'));f=list(i.rglob('*.cpp'));r=[]
+    for n in j:b=n.with_suffix('');r.append((n,'clang',b))
+    for h in f:b=h.with_suffix('');r.append((h,'clang++',b))
+    if not r:print('No .c or .cpp files found.');return
+    print(f'Found {len(j)} .c file(s) and {len(f)} .cpp file(s)');print(f'Starting compilation with 4 workers...\n')
+    with t(processes=4) as x:l=x.map(a,r)
+    print('\n'+'='*40);print('Compilation Results:');print('='*40+'\n');d=0;o=0
+    for q,m,k in l:print(k)
+        if m:d+=1
+        else:o+=1
+    print('\n'+'='*40);print(f'Summary:{d} successful,{o} failed');print('='*40);z.exit(0 if o==0 else 1)
+if __name__=='__main__':raise SystemExit(v())
+# filename: crun.py
+from dh import fsz,gsz,mpf3,should_skip
+def i(l):c=set();l=q(l)
+    if l.is_dir():for n,j,g in o(l,topdown=True):f=q(n)
+            for m in list(j):h=f/m;a=h.resolve()
+                if should_skip(h) or a in c:j.remove(m)
+                c.add(a)
+            for k in g:t=q(n)/k
+                if not should_skip(t):yield t
+    else:yield l
+def b(t):t=q(t)
+    if not t.exists():return False
+    if t.suffix=='.c':u=f"clang {t!s}-o {t.with_suffix('')!s}"
+    if t.suffix=='.cpp':u=f"clang++{t!s}-o {t.with_suffix('')!s}"
+    w,x,r=d(u);print(x);return w
+def s():v=q().cwd();e=gsz(v);p=[]
+    for t in i(v):if t.is_file() and t.suffix in {'.c','.cpp'}:p.append(t)
+    mpf3(b,p);print(f'{fsz(e-gsz(v))}')
+if __name__=='__main__':raise SystemExit(s())
+# filename: mkc.py
+def a(c):j=k(c)
+    if not j.exists():print(f'Error:{c} not found',file=l.stderr);l.exit(1)
+    if j.suffix=='.c':g='clang'
+    elif j.suffix=='.cpp':g='clang++'
+    else:print(f'Error:unsupported file type {j.suffix}',file=l.stderr);l.exit(1)
+    h=j.stem;b=[g,str(j),'-o',h]
+    try:i=d.run(b,check=True,capture_output=True,text=True);print(f'Compiled {c} → {h}');f=['strip',h];d.run(f,check=True,capture_output=True);print(f'Stripped {h}')
+    except d.CalledProcessError as e:print('Error:Compilation failed',file=l.stderr)
+        if e.stderr:print(e.stderr,file=l.stderr)
+        l.exit(1)
+if __name__=='__main__':if len(l.argv)<2:print('Usage:python mkc.py<file.c or file.cpp>',file=l.stderr);l.exit(1)
+    a(l.argv[1])
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

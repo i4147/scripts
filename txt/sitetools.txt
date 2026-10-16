@@ -1,0 +1,189 @@
+# filename: clean_meta.py
+from dh import cprint,fsz,get_files,gsz,mpf3;d='\n';i=w.compile('^\\s*(\\.\\.\\s+image::|:target:|:alt:)',w.IGNORECASE)
+def b(s):s=o(s);print(f'Processing {s.name}')
+    try:k=s.read_text(encoding='utf-8')
+    except Exception as e:print(f'⚠️  Skipping {s}:{e}');return
+    n=k.splitlines(keepends=True);a=0;v=[]
+    for q in n:j=q.rstrip('\r\n')
+        if j.lower().startswith('classifier'):v.append('\n');a+=1;continue
+        if j.startswith('[![') or j.lower().startswith('project-url'):v.append('\n');a+=1;continue
+        if j.startswith(('Metadata-Version','Home-page','Author','Maintainer','License','Platform','Requires-Python','Description-Content-Type','Provides-Extra')):v.append('\n');a+=1;continue
+        if i.match(j):v.append('\n');a+=1;continue
+        v.append(q)
+    if not a:return
+    c=''.join(v)
+    if a:s.write_text(c,encoding='utf-8');print(f'✅ {s.name}',end='');cprint(f'{a}','cyan');return
+    print(f'❌ {s.name}:(no change)')
+def r():t=o.cwd();l=gsz(t);p=u.argv[1:];m=[o(f) for f in p] if p else get_files(t,ext=['.metadata','.md']);h=list(t.rglob('METADATA'))
+    if h:m.extend(h)
+    print(f'{len(m)} files found.');_=mpf3(b,m);g=l-gsz(t);print(f'space saved :{fsz(g)}')
+if __name__=='__main__':raise SystemExit(r())
+# filename: clean_record.py
+a={'METADATA','RECORD','WHEEL','entry_points.txt','top_level.txt'}
+def c():for e in j('.').glob('*.dist-info'):d=e/'RECORD'
+        if d.exists():h=d.read_text().splitlines();f=[]
+            for k in h:if not k.strip():continue
+                i=k.split(',');n=i[0];g=j(n);b=any((m.endswith('.dist-info') for m in g.parts))
+                if b and g.name not in a:print(f'Removed dist-info reference:{n}');continue
+                f.append(k)
+            d.write_text('\n'.join(f)+('\n' if f else ''));print(f'record file in {d.parent.name} cleaned.')
+def l():c()
+if __name__=='__main__':raise SystemExit(l())
+# filename: distinfo3.py
+from dh import cprint;d,e,_,_,_=j.version_info;b=f'{d}.{e}'
+def a(l):print(l.name)
+    if 'dist-info' in l.name:for k in l.iterdir():if k.name in {'top_level.txt','entry_points.txt'}:cprint(f'{l} removed','cyan');c.rmtree(l)
+    return True
+def g():i=f(f'/data/data/com.termux/files/usr/lib/python{b}/site-packages')
+    if not i.exists():return
+    for h in i.iterdir():if h.is_dir() and len(list(h.iterdir()))==1:a(h)
+if __name__=='__main__':raise SystemExit(g())
+# filename: fix_targz_pkg_fname.py
+def a(l):with o.open(l,'r:gz') as w:n=w.getmembers()
+        if not n:return (None,None)
+        p=n[0].name.split('/')[0]
+        for g in ['PKG-INFO','METADATA']:try:r=w.getmember(f'{p}/{g}');m=w.extractfile(r).read().decode('utf-8',errors='ignore');u=x.search('^Name:\\s*(.+)$',m,x.MULTILINE);q=x.search('^Version:\\s*(.+)$',m,x.MULTILINE)
+                if u and q:return (u.group(1).strip(),q.group(1).strip())
+            except KeyError:continue
+        for i in ['setup.py','setup.cfg','pyproject.toml']:try:r=w.getmember(f'{p}/{i}');m=w.extractfile(r).read().decode('utf-8',errors='ignore');d=x.search('name\\s*=\\s*[\'\\"]([^\'\\"]+)[\'\\"]',m);c=x.search('version\\s*=\\s*[\'\\"]([^\'\\"]+)[\'\\"]',m)
+                if d:u=d.group(1)
+                if c:q=c.group(1)
+                if u and q:return (u,q)
+            except KeyError:continue
+        s=x.match('^(.+)-(\\d[^-]*)$',p)
+        if s:return (s.group(1),s.group(2))
+    return (None,None)
+def b(f):f=t(f);h=list(f.glob('*.tar.gz'))
+    for l in h:u,q=a(l)
+        if u and q:j=f'{u}-{q}.tar.gz';k=f/j
+            if k!=l:if k.exists():print(f'SKIP:{l.name}->{j} (already exists)')
+                else:l.rename(k);print(f'RENAMED:{l.name}->{j}')
+        else:print(f'ERROR:Could not determine name/version for {l.name}')
+if __name__=='__main__':e=v.argv[1] if len(v.argv)>1 else '.';b(e)
+# filename: rename_json.py
+def a():g=[f for f in k.listdir('.') if f.endswith('.json')]
+    for b in g:try:with h(b).open(encoding='utf-8') as f:i=j.load(f)
+            d=None
+            if 'info' in i and 'name' in i['info']:d=i['info']['name']
+            elif 'name' in i:d=i['name']
+            if d:c=f'{d}.json'
+                if b==c:print(f'Skipping:{b} is already correctly named.');continue
+                h(b).rename(c);print(f'Renamed:{b}->{c}')
+            else:print(f'Warning:Could not find package name in {b}')
+        except j.JSONDecodeError:print(f'Error:{b} is not a valid JSON file.')
+        except Exception as e:print(f'An error occurred with {b}:{e}')
+if __name__=='__main__':a()
+# filename: rename_meta.py
+from dh import cprint,get_files,unique_path;c=m('/data/data/com.termux/files/home/tmp/metadata')
+def a(o):h='';o=m(o);b=''
+    if not o.exists():return False
+    f=o.read_text(encoding='utf-8');k=f.splitlines();i=k[1];j=k[2];d=i.lower().strip();e=j.lower().strip()
+    if d.startswith('name:'):h=d.replace('name:','').lstrip()
+    if e.startswith('version:'):b=e.replace('version:','').lstrip()
+    if b and h:l=m(h+'-'+b+'.metadata');g=c/l
+        if g.exists():g=unique_path(g)
+        g.write_text(f,encoding='utf-8');cprint(f'{l} created.','green')
+    elif h and (not b):l=m(h+'.metadata');g=c/l;f=o.read_text(encoding='utf-8')
+        if g.exists():g=unique_path(g)
+        f=o.read_text(encoding='utf-8');g.write_text(f,encoding='utf-8');cprint(f'{l} created.','yellow')
+    elif not h and (not b):cprint(f'no data{o}','cyan');input('what u wanna do?')
+    return None
+def n():p=m.cwd()
+    for o in get_files(p):if o.is_file() and (o.name=='METADATA' or o.suffix=='.metadata'):a(o)
+if __name__=='__main__':raise SystemExit(n())
+# filename: rmpyc_entries.py
+def b(d):i=d.read_text(encoding='utf-8').splitlines();g=[k for k in i if '.pyc' not in k];g=[k for k in g if 'licenses' not in k];g=[k for k in g if 'license.md' not in k.lower()];g=[k for k in g if 'license.txt' not in k.lower()];d.write_text('\n'.join(g)+'\n',encoding='utf-8');print(f'{d.name} in {d.parent.name} cleaned')
+def a():c=j(f.get_paths()['purelib'])
+    for e in c.glob('*.dist-info'):h=e/'RECORD'
+        if h.exists():b(h)
+if __name__=='__main__':a();print('Removed .pyc references from all RECORD files.')
+# filename: update_record.py
+C.basicConfig(level=C.INFO,format='%(asctime)s-%(levelname)s-%(message)s',stream=S.stderr);H=C.getLogger(__name__)
+def a(Q):r=B.sha256()
+    try:with Q.open('rb') as f:for I in iter(lambda:f.read(65536),b''):r.update(I)
+        z=r.digest();w=F.urlsafe_b64encode(z).decode('ascii').rstrip('=');return f'sha256={w}'
+    except Exception:H.exception('Error hashing%s',Q);return ''
+def j(Q):try:return Q.stat().st_size
+    except Exception:H.exception('Error getting size for%s',Q);return 0
+def c(N):K=N.strip().split(',')
+    if len(K)==3:return (K[0],K[1],K[2])
+    if len(K)==2:return (K[0],K[1],'')
+    return (K[0],'','')
+def b(Q):P=Q.name;return not (Q.suffix=='.pyc' or P.endswith('.pyc') or P in ('direct_url.json','INSTALLER','RECORD'))
+def d(i):p=i/'RECORD';print('Processing%s',p)
+    if not p.exists():H.error('RECORD not found:%s',p);return False
+    try:with p.open('r',encoding='utf-8') as f:J=f.readlines()
+    except Exception:H.exception('Failed to read%s',p);return False
+    v=[];k=[]
+    for A in J:N=A.strip()
+        if not N:continue
+        l,s,t=c(N)
+        if l=='RECORD':continue
+        u=i.parent/l
+        if not b(u):H.debug('Skipping excluded file:%s',l);continue
+        if not u.exists():k.append(l);H.warning('Missing file:%s',l);continue
+        x=a(u)
+        if not x:H.warning('Hash failed for%s,keeping original line',l);v.append(A.rstrip('\n'));continue
+        y=j(u);v.append(f'{l},{x},{y}')
+    g=str(p.relative_to(i.parent));v.append(f'{g},,')
+    if k:H.warning('%d missing files in%s:%s',len(k),i.name,','.join(k))
+    try:p.write_text('\n'.join(v)+'\n',encoding='utf-8');print('Updated%s',p)
+    except Exception:H.exception('Failed to write%s',p);return False
+    try:o=a(p);q=j(p)
+        with p.open('r',encoding='utf-8') as f:n=f.readlines()
+        if n:M=n[-1].strip().split(',')
+            if len(M)>=1:n[-1]=f'{M[0]},{o},{q}\n'
+        p.write_text(''.join(n),encoding='utf-8');H.debug('Self-hash updated for%s',p)
+    except Exception:H.exception('Failed to update self-hash for%s',p)
+    return True
+def O():m=L.cwd();h=sorted(m.glob('*.dist-info'))
+    if not h:H.warning('you should run this script from a site packages folder.');S.exit(0)
+    print('Found%d distribution(s)',len(h));E=0;G=0
+    with e.Pool(processes=8) as R:for D in R.imap_unordered(d,h):if D:E+=1
+            else:G+=1
+    print(f'Summary:{E} updated,{G} failed')
+if __name__=='__main__':e.freeze_support();raise SystemExit(O())
+# filename: urecord.py
+def a():i=z.getsitepackages();m=[p for p in i if p is not None]
+    if not m:o=z.getusersitepackages()
+        if o and v(o).exists():m=[o]
+    return m
+def c(k):try:with k.open(encoding='utf-8') as f:u=list(A.reader(f))
+        h=len(u);g=[]
+        for B in u:if not B:continue
+            y=B[0] if B else ''
+            if y.endswith('.pyc') or y in {'direct_url.json','INSTALLER'} or y.startswith('LICENSE'):continue
+            g.append(B)
+        if len(g)==h:return False
+        with k.open('w',encoding='utf-8',newline='') as f:t=A.writer(f);t.writerows(g)
+        print(f'  Updated:{k} (removed {h-len(g)} entries)');return True
+    except Exception as e:print(f'  Error processing {k}:{e}',file=C.stderr);return False
+def d(b):j=0;l=0
+    for r in b:if not v(r).exists():print(f'Directory does not exist:{r}');continue
+        print(f'\nScanning:{r}')
+        for y in v(r).rglob('*'):if y.name=='RECORD' and c(y):j+=1
+    return (l,j)
+def x():s=q.ArgumentParser(description='Remove .pyc and direct_url.json references from RECORD files in site-packages');s.add_argument('--site-dir','-s',action='append',help='Specific site-packages directory to scan (can be used multiple times)');s.add_argument('--verbose','-v',action='store_true',help='Print more detailed information');w=s.parse_args();n=w.site_dir or a()
+    if not n:print('Error:Could not find site-packages directory',file=C.stderr);C.exit(1)
+    print(f'Python version:{C.version}');print(f"Site packages directories:{','.join(n)}");l,j=d(n);print(f"\n{'='*40}");print('Summary:');print(f'  Total RECORD files found:{l}');print(f'  Files that would be/are updated:{j}')
+if __name__=='__main__':raise SystemExit(x())
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

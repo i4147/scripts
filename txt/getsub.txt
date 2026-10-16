@@ -1,0 +1,103 @@
+# filename: get_subtitle.py
+import babelfish;from subliminal import download_best_subtitles,save_subtitles;from subliminal.providers import ProviderError;from subliminal.video import scan_video;i.basicConfig(level=i.INFO,format='%(asctime)s-%(levelname)s-%(message)s');k=i.getLogger(__name__)
+def a(h,d=None):h=m(h)
+    if not h.exists():k.error(f'File not found:{h}');return False
+    if h.suffix.lower()!='.mkv':k.warning(f'File is not an MKV:{h}')
+    if d is None:d=h.parent
+    else:d=m(d);d.mkdir(parents=True,exist_ok=True)
+    print(f'Scanning video:{h}')
+    try:l=scan_video(h);print(f'Found video:{l.name}');print(f'-Size:{l.size} bytes');print(f'-Duration:{l.duration:.2f} seconds');print(f'-Hashes:{l.hashes}')
+    except Exception as e:k.error(f'Error scanning video:{e}');return False
+    g=babelfish.Language('eng');print('Searching for English subtitles...')
+    try:f=download_best_subtitles([l],{g},providers=['opensubtitles','podnapisi','addic7ed','tvsubtitles']);b=f.get(l,{})
+        if not b:k.warning(f'No English subtitles found for {h.name}');return False
+        c=d/f'{h.stem}.srt';save_subtitles(l,b,single=True,path=c);print(f'Subtitles saved to:{c}');return True
+    except ProviderError as e:k.error(f'Provider error:{e}');return False
+    except Exception as e:k.error(f'Error downloading subtitles:{e}');return False
+def n():if len(o.argv)<2:print('Usage:python subtitle_downloader.py<path_to_mkv_file>[output_directory]');print('Example:python subtitle_downloader.py movie.mkv');print('Example:python subtitle_downloader.py/path/to/movie.mkv/path/to/subtitles/');o.exit(1)
+    h=o.argv[1];d=o.argv[2] if len(o.argv)>2 else None;j=a(h,d)
+    if j:print('✓ Subtitles downloaded successfully!')
+    else:print('✗ Failed to download subtitles.');o.exit(1)
+if __name__=='__main__':raise SystemExit(n())
+# filename: getsub.py
+import requests
+class g:def __init__(self):self.session=requests.Session();self.session.headers.update({'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+    def d(self,B):try:k=B.replace('_',' ').replace('.',' ');I='https://rest.opensubtitles.com/api/v1/subtitles';x={'query':k,'languages':'en','type':'all'};s=self.session.get(I,x=x)
+            if s.status_code==200:D=s.json()
+                if D.get('data'):for E in D['data']:z=E.get('attributes',{})
+                        if z.get('language')=='en':return {'id':E['id'],'title':z.get('title',B),'url':z.get('url'),'files':z.get('files',[])}
+            return None
+        except Exception as e:print(f'Error searching OpenSubtitles:{e}');return None
+    def a(self,t):try:if t and t.get('files'):for o in t['files']:if o.get('file_name','').endswith('.srt'):j=o.get('url')
+                        if j:s=self.session.get(j)
+                            if s.status_code==200:return s.text
+            return None
+        except Exception as e:print(f'Error downloading from OpenSubtitles:{e}');return None
+    def c(self,B):try:B=B.replace('_',' ').replace('.',' ');n=f'https://yts.mx/api/v2/list_movies.json?query_term={C(B)}&limit=1';s=self.session.get(n)
+            if s.status_code==200:D=s.json();w=D.get('data',{}).get('movies',[])
+                if w:r=w[0]['id'];l=f'https://yts.mx/api/v2/movie_details.json?movie_id={r}&with_images=false';s=self.session.get(l)
+                    if s.status_code==200:D=s.json();A=D.get('data',{}).get('movie',{});p=A.get('subtitles',[])
+                        for G in p:if G.get('lang')=='english':return G.get('url')
+            return None
+        except Exception as e:print(f'Error searching YIFY subtitles:{e}');return None
+    def b(self,I):try:if not I:return None
+            s=self.session.get(I)
+            if s.status_code==200:u=s.text
+                if u and ('1\n00:00:' in u or 'WEBVTT' in u):return u
+                if 'application/zip' in s.headers.get('Content-Type',''):print('ZIP file detected,trying alternative source...');return None
+                return u
+            return None
+        except Exception as e:print(f'Error downloading SRT:{e}');return None
+    def h(self,B):print(f'Searching for subtitles:{B}');print('Trying OpenSubtitles.org...');t=self.search_opensubtitles(B)
+        if t:u=self.download_from_opensubtitles(t)
+            if u:return (u,'OpenSubtitles.org')
+        print('Trying YIFY subtitles...');v=self.search_yify_subtitles(B)
+        if v:u=self.download_srt_from_url(v)
+            if u:return (u,'YIFY Subtitles')
+        return (None,None)
+    def i(self,u,q):if not u:return False
+        q=J.sub('[^\\w\\s-]','',q);q=J.sub('[-\\s]+','_',q)
+        if not q.endswith('.srt'):q+='.srt'
+        try:with open(q,'w',encoding='utf-8') as f:f.write(u)
+            print(f'✅ Subtitle saved to:{q}');return True
+        except Exception as e:print(f'Error saving file:{e}');return False
+def F():if len(H.argv)<2:print('Usage:python get_sub.py "movie_or_series_name"');print('Example:python get_sub.py outcast_s01');print('Example:python get_sub.py "The Witcher season 2"');H.exit(1)
+    B=' '.join(H.argv[1:]);m=g();u,y=m.download_subtitles(B)
+    if u:print(f'✅ Subtitles found from {y}');q=B.replace(' ','_').replace('.','_');m.save_subtitle(u,q)
+    else:print('❌ No subtitles found for the given query');print('Tips:');print('-Try using the exact movie/TV show name');print("-For TV series,use format:'show_name_season_episode'");print("-Example:'breaking_bad_s01e01'");print('-Try removing special characters')
+if __name__=='__main__':raise SystemExit(F())
+# filename: getsubtitle.py
+import babelfish;from subliminal import download_best_subtitles,save_subtitles;from subliminal.video import scan_video;j.basicConfig(level=j.INFO,format='%(asctime)s-%(name)s-%(levelname)s-%(message)s');l=j.getLogger(__name__)
+def a(i,d=None):i=n(i)
+    if not i.exists():l.error(f'File not found:{i}');return False
+    if d is None:d=i.parent
+    else:d=n(d);d.mkdir(parents=True,exist_ok=True)
+    try:m=scan_video(i);print(f'Processing:{m.name}')
+    except Exception as e:l.error(f'Error scanning:{e}');return False
+    f=['opensubtitles','podnapisi','addic7ed','tvsubtitles'];h=babelfish.Language('eng')
+    try:g=download_best_subtitles([m],{h},f=f);b=g.get(m,{})
+        if not b:l.warning('No English subtitles found');return False
+        c=d/f'{i.stem}.en.srt';save_subtitles(m,b,single=True,path=c);print(f'✓ Subtitles saved:{c}');return True
+    except Exception as e:l.error(f'Error:{e}');return False
+if __name__=='__main__':if len(o.argv)<2:print('Usage:python subtitle_downloader.py<movie.mkv>[output_dir]');o.exit(1)
+    k=a(o.argv[1],o.argv[2] if len(o.argv)>2 else None);o.exit(0 if k else 1)
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

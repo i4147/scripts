@@ -1,0 +1,291 @@
+# filename: check_double_shebang.py
+from dh import get_files
+def a(k):k=g(k)
+    if k.is_symlink():return
+    b=k.read_text();e=b.splitlines();c=0
+    for i in e:if i.startswith('#!'):c+=1
+    if c>1:print(k.name)
+def j():m=g.cwd();h=n.argv[1:]
+    if h:for l in h:p=g(l)
+            if p.is_file():d.append(p)
+            if p.is_dir():d.extend(get_files(p))
+    else:d=get_files(m,ext=['.py'])
+    for f in d:a(f)
+if __name__=='__main__':raise SystemExit(j())
+# filename: checkshebang.py
+def a(h):j=h.read_text(encoding='utf-8',errors='ignore');c=j.splitlines(keepends=False)
+    if not c:return False
+    i=0
+    for f in c:if f.startswith('#!'):i+=1
+    return i>1
+def g():b=0;k=d.cwd()
+    for e in k.rglob('*.py'):if a(e):b+=1;print(f'{e} has 2 shebang')
+    print(f'\nDone. Updated {b} files.')
+if __name__=='__main__':raise SystemExit(g())
+# filename: fix_bash_shebang.py
+a='#!/data/data/com.termux/files/usr/bin/bash';g=d.cwd()
+def b(e):e=d(e);print(f'processing {e.name}')
+    with e.open('r+',encoding='utf-8') as f:c=f.readlines()
+        if not c:return
+        if c[0].startswith('#!'):c[0]=a+'\n'
+            if len(c)>1 and c[1].strip()!='':c.insert(1,'\n')
+        else:c.insert(0,a+'\n')
+            if len(c)>1 and c[1].strip()!='':c.insert(1,'\n')
+        f.seek(0);f.writelines(c);f.truncate();print(f'{e.name} updated')
+    if 'bin' in e.parts:e.chmod(493)
+if __name__=='__main__':for e in g.rglob('*.sh'):b(e)
+# filename: fixext_by_shebang.py
+h={'python':'.py','python3':'.py','python2':'.py','bash':'.sh','sh':'.sh','zsh':'.sh','ksh':'.sh','dash':'.sh'};a={'.py','.sh'}
+def b(y):try:with open(y,encoding='utf-8',errors='ignore') as f:m=f.readline().strip()
+            if m.startswith('#!'):k=m[2:].strip()
+                if '/env ' in k:k=k.split('/env ')[-1]
+                else:k=C.path.basename(k)
+                for A,z in h.items():if A in k.lower():return z
+    except OSError as e:print(f'Error reading {y}:{e}')
+    return None
+def d(y,n):j=C.path.splitext(y)[1].lower();return j!=n
+def l(y,n):o=C.path.dirname(y);p=C.path.splitext(C.path.basename(y))[0]
+    if not C.path.splitext(y)[1]:p=C.path.basename(y)
+    q=f'{p}{n}';r=C.path.join(o,q);s=1
+    while C.path.exists(r) and r!=y:q=f'{p}_{s}{n}';r=C.path.join(o,q);s+=1
+    try:if r!=y:C.rename(y,r);return r
+    except OSError as e:print(f'Error renaming {y} to {r}:{e}');return None
+    return None
+def x():t='--dry-run' in B.argv or '-n' in B.argv;u='--verbose' in B.argv or '-v' in B.argv
+    if t:print('***DRY RUN MODE-No files will be renamed***\n')
+    i=C.getcwd();c=0;g=0
+    for w in C.listdir(i):y=C.path.join(i,w)
+        if not C.path.isfile(y):continue
+        n=b(y)
+        if n is None:if u:print(f'  SKIP:{w} (no recognized shebang)')
+            continue
+        if not d(y,n):if u:print(f'  SKIP:{w} (already has correct extension)')
+            g+=1;continue
+        if t:q=C.path.splitext(w)[0]+n;print(f'  WOULD RENAME:{w}->{q}');c+=1
+        else:v=l(y,n)
+            if v:print(f'  RENAMED:{w}->{C.path.basename(v)}');c+=1
+            else:g+=1
+    print('\nSummary:')
+    if t:print(f'  Would rename:{c} files')
+    else:print(f'  Renamed:{c} files')
+    print(f'  Skipped:{g} files')
+if __name__=='__main__':raise SystemExit(x())
+# filename: fixshebang.py
+k=U.compile('^#!.*python[23]?(?:\\.\\d+)?(?:[ \\t]+.*)?$',U.MULTILINE);m='#!/data/data/com.termux/ust';n='#!/data/data/com.termux/files/usr/bin/python';h={'.py'};c={'setup','setup.py','manage','manage.py','app','app.py','wsgi','wsgi.py','asgi','asgi.py','test','test.py','conftest','conftest.py','requirements','main','main.py','cli','cli.py','run','run.py'}
+def x(I):if U.search('^\\s*(?:import\\s+cv2\\b|from\\s+cv2\\b)',I,U.MULTILINE):return m
+    return m
+def D(S):return S.is_symlink()
+def b(S):try:with open(S,'rb') as f:I=f.read(512)
+            if I.startswith(b'#!'):C=I.split(b'\n')[0] if b'\n' in I else I
+                if b'python' in C.lower():return True
+            A=I.decode('utf-8',K='ignore');l=['^(from|import)\\s+','^def\\s+\\w+\\s*\\(','^class\\s+\\w+[:\\(]','^if\\s+__name__\\s*==\\s*[\'\\"]__main__[\'\\"]','^#!.*python'];return any((U.search(J,A,U.MULTILINE) for J in l))
+    except (OSError,UnicodeDecodeError,PermissionError):return False
+def i(E):u=[]
+    for S in E.rglob('*'):if any((R.startswith('.') and R!='.' for R in S.parts)) and '.git' in S.parts:continue
+        if D(S):continue
+        if not S.is_file():continue
+        if S.suffix in h:u.append(S);continue
+        p=['\\.(md|txt|rst|json|yaml|yml|toml|ini|cfg|conf|log|lock|gitignore|dockerignore)$','\\.(css|html|js|ts|jsx|tsx|vue|svelte)$','\\.(jpg|jpeg|png|gif|svg|ico|webp)$','\\.(mp4|mp3|avi|mkv|mov)$','\\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$','\\.(zip|tar|gz|rar|7z)$','\\.(so|dll|dylib|exe|o|a|lib)$','\\.(pyc|pyo|pyd)$']
+        if any((U.search(J,str(S),U.IGNORECASE) for J in p)):continue
+        if S.stem in c:if b(S):u.append(S)
+            continue
+        if '.' not in S.name and b(S):u.append(S)
+    return u
+def t(S,H):G=str(S.relative_to(H))
+    if D(S):return (S,False,'Symlink skipped',G,'skipped')
+    try:I=S.read_text(encoding='utf-8');z=x(I);y=I.startswith('#!')
+        if not y:S.write_text(f'{z}\n{I}',encoding='utf-8');return (S,True,None,G,'added')
+        C=I.split('\n',1)[0]
+        if 'python' not in C.lower():return (S,False,'Not a Python shebang',G,'skipped')
+        if C.strip()==z:return (S,False,'Already correct',G,'unchanged')
+        M=I.split('\n');M[0]=z;S.write_text('\n'.join(M),encoding='utf-8');return (S,True,None,G,'updated')
+    except Exception as e:return (S,False,str(e),G,'error')
+def g(P):return t(*P)
+def Q():w=N.cwd();print(f'📁 Scanning directory:{w}');print('-'*40);u=i(w)
+    if not u:print('No Python files found.');return 0
+    print(f'Found {len(u)} Python files to check.');print('-'*40);r=[];d=[];K=[];q=0;a=0;j=0
+    with O(processes=8) as T:o=[]
+        for S in u:o.append(T.apply_async(g,((S,w),)))
+        for s in o:S,B,L,G,v=s.get()
+            if L:if 'Symlink' in L:q+=1
+                elif 'Not a Python shebang' in L:j+=1
+                elif 'Already correct' in L:a+=1
+                else:K.append((G,L))
+            elif B and v=='updated':r.append((S,G))
+            elif B and v=='added':d.append((S,G))
+            else:q+=1
+    if r:print(f'\n✅ Updated existing shebangs in {len(r)} files:');print('-'*40)
+        for S,G in r:F=G
+            if '.' not in N(G).name:F+=' (no extension)'
+            print(f'  ✏️  {F}')
+    if d:print(f'\n➕ Added new shebang to {len(d)} files:');print('-'*40)
+        for S,G in d:F=G
+            if '.' not in N(G).name:F+=' (no extension)'
+            print(f'  ➕ {F}')
+    if not r and (not d):print('\n✅ No files needed updating.')
+    print('\n'+'='*40);print('📊 Summary:');print(f'  ✏️  Updated existing shebangs:{len(r)} files');print(f'  ➕ Added new shebangs:{len(d)} files');print(f'  ⏭️  Skipped (symlinks):{q} files');print(f'  ⏭️  Not Python shebang:{j} files');print(f'  ⏭️  Already correct:{a} files');print(f'  📝 Total processed:{len(u)} files')
+    if K:print(f'  ❌ Errors:{len(K)} files')
+    if K:print('\n❌ Errors:')
+        for G,L in K:print(f'-{G}:{L}')
+        return 1
+    return 0
+if __name__=='__main__':raise SystemExit(Q())
+# filename: rename_by_shebang.py
+c={'#!/data/data/com.termux/files/usr/bin/python3?':'.py','#!/data/data/com.termux/files/usr/bin/env python3?':'.py','#!/usr/bin/env python':'.py','#!/usr/bin/python':'.py','#!/data/data/com.termux/files/usr/bin/env sh':'.sh','#!/data/data/com.termux/files/usr/bin/bash':'.sh','#!/data/data/com.termux/files/usr/bin/sh':'.sh','#!/data/data/com.termux/files/usr/bin/env bash':'.sh','#!/usr/bin/env bash':'.sh','#!/bin/bash':'.sh','#!/bin/sh':'.sh','#!/data/data/com.termux/files/usr/bin/node':'.js','#!/data/data/com.termux/files/usr/bin/env node':'.js','#!/usr/bin/env node':'.js','#!/usr/bin/node':'.js','#!/data/data/com.termux/files/usr/bin/ruby':'.rb','#!/data/data/com.termux/files/usr/bin/env ruby':'.rb','#!/usr/bin/env ruby':'.rb','#!/usr/bin/ruby':'.rb','#!/data/data/com.termux/files/usr/bin/perl':'.pl','#!/data/data/com.termux/files/usr/bin/env perl':'.pl','#!/usr/bin/env perl':'.pl','#!/usr/bin/perl':'.pl','#!/data/data/com.termux/files/usr/bin/lua':'.lua','#!/data/data/com.termux/files/usr/bin/env lua':'.lua','#!/usr/bin/env lua':'.lua','#!/usr/bin/lua':'.lua','#!/data/data/com.termux/files/usr/bin/php':'.php','#!/data/data/com.termux/files/usr/bin/env php':'.php','#!/usr/bin/env php':'.php','#!/usr/bin/php':'.php','#!/data/data/com.termux/files/usr/bin/Rscript':'.r','#!/usr/bin/env Rscript':'.r','#!/usr/bin/Rscript':'.r','#!/data/data/com.termux/files/usr/bin/fish':'.fish','#!/data/data/com.termux/files/usr/bin/env fish':'.fish','#!/usr/bin/env fish':'.fish','#!/usr/bin/fish':'.fish','#!/usr/bin/awk':'.awk','#!/usr/bin/env awk':'.awk','#!/usr/bin/sed':'.sed'}
+def k(D):try:with open(D,encoding='utf-8') as f:m=f.readline().strip()
+            if m.startswith('#!'):return m
+    except (OSError,UnicodeDecodeError):pass
+    return None
+def a(x):for w,n in c.items():if I.match(w,x):return n
+    return None
+def l(s,q):if s==q:return False
+    u=1;b=q
+    while q.exists():E=b.stem;z=b.suffix;q=b.parent/f'{E}_{u}{z}';u+=1
+    print(f'  🔄 Renaming:{s.name}->{q.name}');y.move(str(s),str(q));return True
+def j():h='/data/data/com.termux/files/usr';o=H.path.exists(h)
+    if o:print('📱 Termux environment detected');print(f'   Prefix:{h}');print(f"   Python:{H.path.realpath('/data/data/com.termux/files/usr/bin/python3')}")
+    else:print('💻 Standard Linux/Unix environment detected')
+    return o
+def C():F=B.cwd();d=0;g=0;i=0;j();print(f'📂 Scanning directory:{F}\n');A=[f for f in F.iterdir() if f.is_file()]
+    if not A:print('No files found in current directory.');return
+    for D in A:if D.name.startswith('.'):continue
+        x=k(D)
+        if not x:continue
+        n=a(x)
+        if not n:e=x[:50]+'...' if len(x)>50 else x;print(f'❓ Unknown shebang in:{D.name}');print(f'   Shebang:{e}');i+=1;continue
+        r=D.stem
+        if not D.suffix or D.suffix!=n:p=f'{r}{n}'
+        else:g+=1;continue
+        q=D.parent/p
+        if l(D,q):d+=1
+    print(f"\n{'='*40}");print('📊 Summary:');print(f'   ✅ Renamed:{d} file(s)');print(f'   ⏭️  Skipped (already correct):{g} file(s)')
+    if i:print(f'   ❓ Unknown shebangs:{i} file(s)')
+    print(f"{'='*40}")
+    if i>0:print('\n💡 Tip:You can add new shebang patterns to the SHEBANG_MAPPING dictionary')
+def v():F=B.cwd();print('🔍 DRY RUN MODE-No files will be renamed\n');j();print(f'📂 Scanning directory:{F}\n')
+    for D in F.iterdir():if not D.is_file() or D.name.startswith('.'):continue
+        x=k(D)
+        if not x:continue
+        n=a(x)
+        if n and (not D.suffix==n):p=f'{D.stem}{n}';print(f'  Would rename:{D.name}->{p}')
+    print("\nRun without '--dry-run' to apply changes.")
+if __name__=='__main__':if len(G.argv)>1 and G.argv[1]=='--dry-run':v()
+    elif len(G.argv)>1 and G.argv[1]=='--help':print('Usage:python rename_by_shebang.py [OPTION]');print('Options:');print('--dry-run    Preview changes without renaming');print('--help       Show this help message')
+    else:t=input('⚠️  This will rename files in the current directory. Continue? (y/N):')
+        if t.lower()=='y':raise SystemExit(C())
+        print('Operation cancelled.')
+# filename: rmshebang.py
+from dh import fsz,get_files,gsz;c=16
+def a(p):p=m(p)
+    try:g=p.read_text(encoding='utf-8');l=g.splitlines();d=[]
+        if l[0].startswith('#!/'):d=l[1:];g='\n'.join(d);p.write_text(g,encoding='utf-8');print(f'{p.name} updated.');return
+        return
+    except Exception:pass
+def o():s=m.cwd();i=gsz(s);n=t.argv[1:];k=[m(r) for r in n] if n else get_files(s,ext=['.py'])
+    with b('spawn').Pool(8) as q:h=j()
+        for f in k:h.append(q.apply_async(a,(f,)))
+            if len(h)>c:h.popleft().get()
+        while h:h.popleft().get()
+    e=i-gsz(s);print(f'space saved:{fsz(e)}')
+if __name__=='__main__':raise SystemExit(o())
+# filename: sheb.py
+c='#!/data/data/com.termux/files/usr/bin/env python'
+def d(n):if l(n).stat().st_size==0 or n.endswith('__init__.py'):return False
+    if n.endswith('.py'):return True
+    try:with l(n).open(encoding='utf-8') as f:g=f.readline().strip()
+            if g.startswith('#!') and 'python' in g:return True
+            if g.startswith('#!') and 'python' in g:return True
+            f.seek(0)
+            for m in f:m=m.strip()
+                if m and (not m.startswith('#')):return m.startswith(('import ','from ','class ','def '))
+            return False
+    except (OSError,UnicodeDecodeError):return False
+def e(n):l(n)
+    with l(n).open('r+',encoding='utf-8') as f:k=f.readlines()
+        if not k:return
+        if k and k[0].startswith('#!'):k[0]=c+'\n'
+            if len(k)>1 and k[1].strip():k.insert(1,'\n')
+        else:b=any((m.strip().startswith(('import ','from ','def ','class ')) for m in k))
+            if b:k.insert(0,c+'\n');k.insert(1,'\n')
+        f.seek(0);f.writelines(k);f.truncate();print(f'{p.path.relpath(n)} updated.')
+    if 'bin' in n.split(p.sep):l(n).chmod(493)
+def a(h):for o,_,j in p.walk(h):for i in j:n=p.path.join(o,i)
+            if l(n).is_symlink():continue
+            if d(n):e(n)
+if __name__=='__main__':a(l.cwd())
+# filename: toshellcloud.py
+def a(w):try:l=w.read_text(encoding='utf-8')
+        if not l.startswith('#!'):return (str(w),False,'No shebang found')
+        s=l.split('\n');n=s[0];b=['#!/data/data/com.termux/files/usr/bin/python','#!/data/data/com.termux/files/usr/bin/python3','#!/data/data/com.termux/files/usr/bin/env python','#!/data/data/com.termux/files/usr/bin/env python3']
+        if n not in b:return (str(w),False,'Not a Termux shebang')
+        if 'python3' in n:g='#!/usr/bin/env python3'
+        else:g='#!/usr/bin/env python'
+        s[0]=g;d='\n'.join(s);w.write_text(d,encoding='utf-8');return (str(w),True,None)
+    except Exception as e:return (str(w),False,str(e))
+def c(j):return list(j.rglob('*.py'))
+def v():if len(y.argv)>1:i=t(y.argv[1])
+    else:i=t('.')
+    if not i.exists() or not i.is_dir():print(f'Error:{i} is not a valid directory');y.exit(1)
+    print(f'Searching for Python files in:{i.absolute()}');k=c(i)
+    if not k:print('No Python files found.');return
+    print(f'Found {len(k)} Python files');print('Converting Termux shebangs...');print('-'*40)
+    with u(processes=8) as x:m=x.starmap(a,[(f,) for f in k])
+    h=0;o=0;q=0;print('\nResults:');print('-'*40)
+    for w,p,r in m:if p:h+=1;print(f'✅ {w}')
+        elif r=='No shebang found' or r=='Not a Termux shebang':o+=1;print(f'⏭️  {w}-{r}')
+        else:q+=1;print(f'❌ {w}-{r}')
+    print('-'*40);print(f'\nSummary:');print(f'  Successfully converted:{h}');print(f'  Skipped:{o}');print(f'  Failed:{q}');print(f'  Total files processed:{len(k)}')
+if __name__=='__main__':v()
+
+You are a senior Python engineer. You will be given N Python scripts that do
+nearly the same job with small differences. Merge them into ONE well-structured,
+runnable Python script.
+## Input
+are scripts provided above.
+## Deliverable
+A single runnable file named `<merged>.py`, invoked as:
+    python <merged>.py <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse`. Expose every behavioral difference between the original
+   scripts as a CLI argument.
+   - Use subcommands if the scripts are distinct modes/jobs.
+   - Use flags if they are variations of one pipeline.
+2. Factor shared logic (imports, helpers, config, error handling) into common
+   functions. Do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Include a mapping
+   block (see Output format §3).
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args, with
+   defaults equal to the original values.
+5. If differences cannot be unified, keep BOTH behind a flag/choice. Never
+   silently pick one.
+6. Sensible defaults so it runs out of the box. Print help if ambiguous.
+7. Type hints on all public functions. Docstrings on all public functions and
+   classes. Module-level docstring with usage examples.
+8. Standard library only, unless the originals already import third-party
+   packages — in that case list them explicitly at the top of the module
+   docstring and in the imports.
+## Output format (exactly these three sections, in order)
+### 1. Comparison table
+Markdown table: script name | what it does | shared with others | unique to it |
+proposed CLI mapping.
+### 2. Merged script
+One fenced code block containing the complete file.
+### 3. Mapping
+A fenced code block (plain text) showing the exact command for each original:
+    original_name1.py  ->  python merged.py mode-a ...
+    original_name2.py  ->  python merged.py mode-b --flag ...
+## Comment policy
+- Keep the module-level docstring (with usage examples).
+- Keep the mapping block from §3 as real comments in the file.
+- Strip ALL other comments and docstrings from the final code.
+- Exception: keep a short comment wherever a non-obvious behavior was
+  preserved behind a flag, so a future reader knows why the branch exists.
+## Ambiguity policy
+- If something is ambiguous, state your assumption in one line and proceed.
+- If something is impossible, say so plainly. Do not simulate or fake output.
+- Only ask a clarifying question if a wrong assumption would SILENTLY change
+  runtime behavior. Otherwise assume and move on.
+## Batch mode (optional)
+If the user says "batch mode", emit ONLY §2 (the code) for each input group,
+omit the table and mapping sections, and write each merged file to
+`<group>_merged.py` next to the inputs. Otherwise emit all three sections.

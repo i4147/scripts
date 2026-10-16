@@ -1,0 +1,261 @@
+# filename: dirinfo.py
+import matplotlib.pyplot as plt;from dh import fsz
+def h(C='.'):t=0;s=0;l=0;r=set();o=n(int);u=A(C)
+    for p in u.rglob('*'):if p.is_dir():l+=1
+        elif p.is_file():s+=1
+            try:D=p.stat().st_size
+            except OSError:D=0
+            t+=D;E=p.suffix.lower() if p.suffix else '(no extension)';r.add(E);o[E]+=D
+    return (t,s,l,r,o)
+def k(w=None):t,s,l,r,o=h();j=[];j.append(f'Total size:{fsz(t)}\n');j.append('File extensions:\n');c=sorted(r)
+    for E in c:j.append(f'-{E}\n')
+    j.append(f'Number of files:{s}\n');j.append(f'Number of folders:{l}\n');j.append('Size by extension:\n');b=sorted(o.items(),key=x.itemgetter(1),reverse=True)
+    for E,D in b:j.append(f'  {E}:{fsz(D)}\n')
+        if w is None or w==F.stderr:print(f'  {E}:{fsz(D)}\n',file=F.stderr)
+    i=''.join(j)
+    if w.exists():print(f'{w} exists');F.exit(1)
+    if w and w!=F.stderr:try:with w.open('w',encoding='utf-8') as f:f.write(i)
+            print(f'Summary saved to {w}')
+        except OSError as e:print(f'Error saving summary to {w}:{e}',file=F.stderr)
+    elif w is None:print(i)
+def d(q,g='/sdcard/dirinfo.png'):_,_,_,_,o=h();m=sorted([(E,D) for E,D in o.items() if D>0],key=x.itemgetter(1),reverse=True)
+    if not m:print('No data to plot.',file=F.stderr);return
+    r,z=zip(*m,strict=False);a=r;plt.title('Size by File Extension');plt.xticks(rotation=45,ha='right');plt.gca().set_xticklabels(a);plt.figure(figsize=(12,7));plt.bar(a,z,color='skyblue');plt.xlabel('File Extension');plt.ylabel('Size (bytes)');plt.tight_layout()
+    try:plt.savefig(g);print(f'Bar chart saved to {g}')
+    except Exception as e:print(f'Error saving chart to {g}:{e}',file=F.stderr)
+if __name__=='__main__':y=v.ArgumentParser(description='Analyze directory information.');y.add_argument('-s','--save',action='store_true',help='Save the report to a file named .dirinfo in the current directory.');y.add_argument('-i','--image',metavar='FILENAME',type=str,help='Save a Matplotlib bar chart of file types and sizes to the specified image file (e.g.,chart.png).');y.add_argument('-t','--type',choices=['persian','english'],default='english',help='Specify the language/type of the Matplotlib chart title and labels (default:english).');y.add_argument('path',metavar='PATH',type=str,nargs='?',default='.',help='The directory to scan (default:current directory).');B=y.parse_args()
+    if B.save:k(A('/sdcard/.dirinfo'))
+    elif B.image:d(B.type,B.image)
+    else:k(A('/sdcard/dirinfo'))
+# filename: dirinfo2.py
+import matplotlib.pyplot as plt;s=25;i=100;a='dirinfo.png';l='bar'
+def g(n):p=0
+    try:for t,q,r in E.walk(n):for f in r:A=E.path.join(t,f)
+                if not E.path.islink(A):with m.suppress(OSError):p+=E.path.getsize(A)
+    except Exception as e:print(f'Error walking directory {n}:{e}',file=C.stderr)
+    return p
+def d(o='.'):o=E.path.abspath(o);print(f'Analyzing directory:{o}');h={};p=0
+    try:for v in E.scandir(o):if v.is_dir() and (not v.name.startswith('.')) and (not E.path.islink(v.path)):B=g(v.path)
+                if B>=i*1024:h[v.name]=B;p+=B
+    except Exception as e:print(f'Error:{e}',file=C.stderr);return
+    if not h:print('No subdirectories meeting criteria.');return
+    c=sorted(h.items(),key=lambda item:y[1],reverse=True);k=dict(c[:s]);b=sum((B for z,B in h.items() if z not in k));j={z:B/p*40 for z,B in k.items()}
+    if b>0:j['Other']=b/p*40
+    u=list(k.keys())
+    if b>0:u.append('Other')
+    w=list(j.values());x,D=plt.subplots(figsize=(10,6))
+    if l=='bar':D.bar(u,w,color='skyblue');D.set_ylabel('Percentage%');D.set_title('Directory Size Distribution')
+    elif l=='pie':D.pie(w,u=u,autopct='%1.1f%%',startangle=140);D.set_title('Directory Size Distribution')
+    elif l=='circle':D.pie(w,u=u,autopct='%1.1f%%',startangle=140,wedgeprops={'width':0.4});D.set_title('Directory Size Distribution')
+    else:print(f"Chart type '{l}' is not supported.");return
+    plt.tight_layout()
+    try:plt.savefig(a,dpi=300);print(f'Chart saved to {a}')
+    except Exception as e:print(f'Error saving chart:{e}',file=C.stderr)
+    plt.close()
+if __name__=='__main__':d()
+# filename: foldesiz.py
+from dh import fsz,should_skip,unique_path
+def j(G):A=[]
+    for E in G.rglob('*'):if should_skip(E):continue
+        if E.is_file():F=E.stat().st_size;A.append((E,F))
+    return sorted(A,key=w.itemgetter(1))
+def f(A):if len(A)<2:return 1
+    B=[F for _,F in A];u,v=(max(B),min(B));q=u-v;a=q/100;p=max(1,int(q/a));return min(p,len(A))
+def b(G,A,p):B=sorted([F for _,F in A]);h=[];d=len(A)//p;s=len(A)%p;t=0
+    for i in range(p):x=t+d+(1 if i<s else 0);k=B[t:x]
+        if k:v,u=(min(k),max(k));m=f'{fsz(v)}-{fsz(u)}';h.append((v,u,m));n=I.path.join(G,m);C(n).mkdir(exist_ok=True,parents=True)
+        t=x
+    return h
+def c(A,y,G):g={}
+    for v,u,m in y:g[v,u]=m
+    o=0
+    for E,F in A:for (v,u),m in g.items():if v<=F<=u:l=I.path.join(G,m);r=I.path.join(l,C(E).name)
+                try:r=unique_path(r);z.move(E,r);o+=1;break
+                except Exception as e:print(f'Failed to move {E}:{e}')
+                break
+        else:print(f'No folder match for {C(E).name} ({F:,} bytes)')
+def D():G=C.cwd();A=j(G)
+    if not A:print('No files found.');return
+    p=int(H.argv[1]) if len(H.argv)>0 else f(A);print(f'{p} dirs will be created');y=b(G,A,p);c(A,y,G);print('Folderization complete!')
+if __name__=='__main__':raise SystemExit(D())
+# filename: foldesize.py
+def b(C):x=[]
+    try:for R in C.rglob('*'):if R.is_file() and (not R.is_symlink()):try:S=R.stat().st_size;x.append({'path':R,'name':R.name,'size':S})
+                except OSError as e:print(f'Error accessing {R}:{e}')
+    except Exception as e:print(f'Error scanning directory:{e}')
+    return x
+def a(w,n=None):if n:return Q.ceil(w/n)
+    if w<=100:return 10
+    if w<=500:return 25
+    if w<=1000:return 50
+    if w<=5000:return 100
+    return 200
+def d(x):if not x:return {}
+    M=[f['size'] for f in x];return {'min':min(M),'max':max(M),'avg':sum(M)/len(M),'total':sum(M),'count':len(M)}
+def g(C='.',n=4,k=None):print('-'*40);print('File Organization-Direct to Root Path (No Subdirectories)');print('-'*40);C=O(C).resolve();print(f'\nRoot directory:{C}');print('Mode:Files will be moved into organized folders in root path');print('\n[1/5] Scanning files in root directory...');x=b(C)
+    if not x:print('No files found in root directory!');return
+    print('[2/5] Analyzing file size distribution...');N=d(x);print('\nFile Statistics:');print(f"  Total files:{N['count']}");print(f"  Total size:{o(N['total'])}");print(f"  Average size:{o(N['avg'])}");print(f"  Size range:{o(N['min'])}-{o(N['max'])}");print('\n[3/5] Sorting files by size...');x.sort(key=G.itemgetter('size'));print('[4/5] Calculating optimal folder distribution...')
+    if k:m=k*1024*1024;J=[];l=[];p=0
+        for B in x:if p+B['size']>m and l:J.append(l);l=[];p=0
+            l.append(B);p+=B['size']
+        if l:J.append(l)
+        h=500
+    else:h=a(N['count'],n);v=Q.ceil(N['count']/h);J=[]
+        for i in range(v):D=i*h;I=min(D+h,N['count']);J.append(x[D:I])
+    print('\nOrganization Plan:');print(f'  Number of folders to create:{len(J)}');h=500
+    if h:print(f'  Files per folder:~{h}')
+    if k:print(f'  Max folder size:{k} MB')
+    print(f'  Folders will be created directly in:{C}');print('\n[5/5] Creating folders and moving files...');u=0;r=0;j=[]
+    for V,q in enumerate(J,1):if not q:continue
+        F=q[0]['size'];E=q[-1]['size'];y=sum((f['size'] for f in q));s=f'{o(F)}-{o(E)}';s=''.join((c for c in s if c not in '<>:"/\\|?*'));t=X.path.join(C,s)
+        try:O(t).mkdir(exist_ok=True,parents=True);j.append(s);print(f'\n  Folder {V}/{len(J)}:{s}');print(f'    Files:{len(q)}');print(f'    Size range:{o(F)}-{o(E)}');print(f'    Total size:{o(y)}')
+            for B in q:W=B['path'];T=X.path.join(t,B['name']);H=1;A,U=X.path.splitext(B['name'])
+                while O(T).exists():T=X.path.join(t,f'{A}_{H}{U}');H+=1
+                try:L.move(W,T);u+=1
+                except Exception as e:print(f"      Error moving {B['name']}:{e}");r+=1
+        except Exception as e:print(f'  Error creating folder {s}:{e}');r+=len(q)
+    print('\n'+'='*40);print('✓ Organization complete!');print(f'  Root directory:{C}');print(f'  Folders created:{len(j)}');print(f'  Files moved:{u}');print(f'  Errors:{r}');print('\nCreated folders:')
+    for K in j:print(f'-{K}')
+    print('-'*40)
+def P():g(C=z)
+if __name__=='__main__':raise SystemExit(P())
+# filename: foldsize.py
+from loguru import logger
+def h(L):return [p for p in L.rglob('*') if p.is_file() and (not p.name.startswith('.')) and (p.name!='folderize.py')]
+def l(P,u):I=u/P.name
+    if not I.exists():return I
+    M,C=(I.stem,I.suffix);i=1
+    while 1:x=f'{M}_{i}{C}';I=u/x
+        if not I.exists():return I
+        i+=1
+def r(F,E):def O(n):if n<1000:return f'{n}B'
+        if n<1000000:return f'{n//1000}k'
+        return f'{n//1000000}M'
+    return f'{O(F)}-{O(E)}'
+def J():L=H();D=h(L)
+    if not D:logger.warning('No files found to process.');return
+    m=sum((f.stat().st_size for f in D));s=len(D);print(f'Found {s:,} files ({m:,} bytes)');m/s if s else 1;a=max(1000,int(s/10));b=max(1000000,m//10);e=(s+a-1)//a;g=(m+b-1)//b;A=max(2,min(100,max(e,g)));print(f'Targeting ~{A} directories');k=sorted(D,key=lambda p:p.stat().st_size,reverse=True);q=[{'files':[],'size':0} for _ in range(A)]
+    for f in k:R=f.stat().st_size;t=min(range(A),key=lambda i:q[i]['size']);q[t]['files'].append(f);q[t]['size']+=R
+    j=[];c={p.name for p in L.iterdir() if p.is_dir()}
+    for Q,d in enumerate(q):if not d['files']:continue
+        G=[f.stat().st_size for f in d['files']];F,E=(min(G),max(G));v=r(F,E);o=v;z=1
+        while v in c:v=f'{o}_{z}';z+=1
+        w=L/v;w.mkdir(exist_ok=True);j.append((v,len(d['files']),d['size']));c.add(v);print(f"Created dir '{v}' → {len(d['files'])} files,{d['size']:,} bytes")
+        for f in d['files']:I=l(f,w);B.move(str(f),str(I))
+    print('-'*40);print('✅ Folderization complete:');print(f'   Files processed:{s:,}');print(f'   Directories created:{len(j)}');print('-'*40);print(f"\n{'Dir Name':<20} {'Files':>8} {'Size (bytes)':>14}");print('-'*40)
+    for K,N,R in sorted(j,key=y.itemgetter(2)):print(f'{K:<20} {N:>8} {R:>14,}')
+    print(f'\nTotal directories:{len(j)}')
+if __name__=='__main__':raise SystemExit(J())
+# filename: foldsize2.py
+def d(G):return [p for p in G.glob('*') if p.is_file() and (not p.name.startswith('.')) and (p.name!='folderize.py')]
+def g(K,n):D=n/K.name
+    if not D.exists():return D
+    H,y=(D.stem,D.suffix);i=1
+    while 1:s=f'{H}_{i}{y}';D=n/s
+        if not D.exists():return D
+        i+=1
+def b(m,u,h):return f'{m}_{u}'
+def E():G=C();A=d(G)
+    if not A:v.warning('No files found to process.');return
+    h=len(A);print(f'Found {h:,} files');c=max(1000,h//10);w=max(2,(h+c-1)//c);w=max(2,min(100,w));j=h//w;l=h%w;print(f'Creating {w} directories (~{j} files each)');e=[];a={p.name for p in G.iterdir() if p.is_dir()}
+    for i in range(w):B=i*j+min(i,l);J=B+j+(1 if i<l else 0);o=b(B,J-1,h);k=o;t=1
+        while o in a:o=f'{k}_{t}';t+=1
+        q=G/o;q.mkdir(exist_ok=True);e.append((o,J-B));a.add(o)
+    print(f"Created dir '{o}' for files [{B},{J})");r=0
+    for o,z in e:q=G/o
+        for _ in range(z):if r>=h:break
+            f=A[r];D=g(f,q);x.move(str(f),str(D));r+=1
+    print('-'*40);print('✅ Folderization complete:');print(f'   Files processed:{h:,}');print(f'   Directories created:{len(e)}');print('-'*40);print(f"\n{'Dir Name':<20} {'Files':>8}");print('-'*40)
+    for F,I in e:print(f'{F:<20} {I:>8}')
+    print(f'\nTotal directories:{len(e)}')
+if __name__=='__main__':raise SystemExit(E())
+# filename: pddd.py
+from dh import fsz
+def c(j):h=0
+    for j in j.rglob('*'):if j.is_file() and (not j.is_symlink()):try:h+=j.stat().st_size
+            except OSError:continue
+    return h
+def a(j):f=[];h=0
+    for g in j.iterdir():if g.is_dir() or g.is_file():k=c(g) if g.is_dir() else g.stat().st_size;h+=k;f.append((k,str(g)))
+    b=sorted(f,key=d(0),reverse=False)
+    for e,j in b:m=fsz(e);j=i(j)
+        if j.is_dir():if e>1048576:print(f'\x1b[5;94m{j.name:25}\x1b[0m  \x1b[5;96m {m}\x1b[0m')
+            else:print(f'\x1b[5;94m{j.name:25}\x1b[0m  {m}')
+        if j.is_file():if e>1048576:print(f'\x1b[5;92m{j.name:25}\x1b[0m  \x1b[5;96m {m}\x1b[0m')
+            else:print(f'\x1b[5;92m{j.name:25}\x1b[0m  {m}')
+    print(f'total size :\x1b[5;94m{fsz(h)}\x1b[0m')
+if __name__=='__main__':l=i.cwd();a(l)
+# filename: pytree.py
+from dh import fsz,gsz
+def b(z,e=4):def d(t):p=t.is_dir()
+        if p:return (t,True)
+        return (t,False)
+    with a(e=e) as k:n=[]
+        for t in z.rglob('*'):if t.name.startswith('.') or '.git' in t.parts:continue
+            n.append(k.submit(d,t))
+        for o in n:yield o.result()
+def B(z,g=False,h=False,c=False,e=4):m=sorted(b(z,e),key=lambda x:(not x[1],x[0]))
+    def f(t,p,r=''):if h and (not p):return
+        l=''
+        if g:A=gsz(t) if p else t.stat().st_size;l=f' [{(fsz(A) if c else A)}]'
+        print(f"{r}{('└── ' if r else '')}{t.name}{l}")
+    for t,p in m:if t==z:print(t.name);continue
+        u=list(t.relative_to(z).parts);r=''
+        for i,s in enumerate(u[:-1]):r+='    ' if i==len(u)-2 else '│   '
+        f(t,p,r)
+def y():q=j.ArgumentParser(description='Python tree command implementation');q.add_argument('directory',nargs='?',default='.',help='Directory to traverse');q.add_argument('-s','--sizes',action='store_true',help='Show sizes');q.add_argument('-d','--dirs-only',action='store_true',help='List directories only');q.add_argument('-H','--human-readable',action='store_true',help='Human-readable sizes');q.add_argument('-j','--jobs',type=int,default=8,help='Number of parallel workers');w=q.parse_args();z=v(w.directory).resolve()
+    if not z.exists():print(f'Error:{z} does not exist',file=C.stderr);C.exit(1)
+    B(z,w.sizes,w.dirs_only,w.human_readable,w.jobs)
+if __name__=='__main__':raise SystemExit(y())
+# filename: visdir.py
+import matplotlib.pyplot as plt;t=w.getcwd();d={};h=0
+for l,i,j in w.walk(t):k=0
+    for f in j:r=w.path.join(l,f)
+        with e.suppress(OSError):k+=w.path.getsize(r)
+    if l!=t:d[l]=k;h+=k
+    else:for f in j:r=w.path.join(l,f)
+            with e.suppress(OSError):h+=w.path.getsize(r)
+a={}
+for n,s in d.items():if h>0:g=s/h*40;a[w.path.basename(n)]=g
+    else:a[w.path.basename(n)]=0
+m=list(a.keys());p=list(a.values());c=[]
+for o in m:c.append(o)
+u,v=plt.subplots(figsize=(10,10));v.pie(p,m=c,autopct='%1.1f%%beding',startangle=140);v.axis('equal');q='subdirs sizes';plt.title(q);b='size.png';plt.savefig(b,bbox_inches='tight');print(f"saved '{b}'");print(f'size:{h}')
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

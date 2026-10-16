@@ -1,0 +1,1806 @@
+# --- File: check_duplicate_packages.py ---
+import concurrent.futures
+import pathlib
+import site
+import sys
+def a():
+    b = [pathlib.Path(p) for p in site.getsitepackages()]
+    c = pathlib.Path(site.getusersitepackages())
+    d = [d for d in b if d != c]
+    e = [c] if c.exists() else []
+    return (d, e)
+def f(g):
+    h = {}
+    if not g.exists():
+        return h
+    try:
+        for i in g.iterdir():
+            if i.is_dir():
+                if (i / '__init__.py').exists():
+                    h[i.name] = i
+                elif i.suffix == '.dist-info' or i.suffix == '.egg-info':
+                    j = i.name.split('-')[0]
+                    h[j] = i
+            elif i.is_file():
+                if i.suffix == '.py':
+                    h[i.stem] = i
+                elif (i.suffix == '.dist-info' or i.suffix == '.egg-info') and i.is_dir():
+                    j = i.name.split('-')[0]
+                    h[j] = i
+    except PermissionError:
+        print(f'Warning: Permission denied accessing {g}', file=sys.stderr)
+    except Exception as e:
+        print(f'Warning: Error scanning {g}: {e}', file=sys.stderr)
+    return h
+def k(l, m):
+    n = {}
+    o = set(l.keys()) & set(m.keys())
+    for j in sorted(o):
+        n[j] = (l[j], m[j])
+    return n
+def p(q):
+    l = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(q) or 1) as r:
+        s = {r.submit(f, g): g for g in q}
+        for t in concurrent.futures.as_completed(s):
+            g = s[t]
+            try:
+                h = t.result()
+                l.update(h)
+            except Exception as e:
+                print(f'Error processing {g}: {e}', file=sys.stderr)
+    return l
+def u(v):
+    m = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(v) or 1) as r:
+        s = {r.submit(f, g): g for g in v}
+        for t in concurrent.futures.as_completed(s):
+            g = s[t]
+            try:
+                h = t.result()
+                m.update(h)
+            except Exception as e:
+                print(f'Error processing {g}: {e}', file=sys.stderr)
+    return m
+def w(x, y, z):
+    a1 = {'system_version': 'unknown', 'user_version': 'unknown'}
+    for b1, c1 in [('system', y), ('user', z)]:
+        try:
+            if c1.suffix in ['.dist-info', '.egg-info']:
+                d1 = ['METADATA', 'PKG-INFO']
+                for e1 in d1:
+                    f1 = c1 / e1
+                    if f1.exists():
+                        with open(f1) as f:
+                            for g1 in f:
+                                if g1.startswith('Version:'):
+                                    h1 = f'{b1}_version'
+                                    a1[h1] = g1.split(':', 1)[1].strip()
+                                    break
+            else:
+                i1 = c1.parent if c1.is_file() else c1
+                j1 = list(i1.glob(f'{x}-*.dist-info'))
+                if not j1:
+                    j1 = list(i1.glob(f'{x}-*.egg-info'))
+                for k1 in j1[:1]:
+                    f1 = k1 / 'METADATA'
+                    if not f1.exists():
+                        f1 = k1 / 'PKG-INFO'
+                    if f1.exists():
+                        with open(f1) as f:
+                            for g1 in f:
+                                if g1.startswith('Version:'):
+                                    h1 = f'{b1}_version'
+                                    a1[h1] = g1.split(':', 1)[1].strip()
+                                    break
+        except Exception:
+            pass
+    return a1
+def l1():
+    print('Python Package Duplicate Checker')
+    print('-' * 40)
+    try:
+        q, v = a()
+    except Exception as e:
+        print(f'Error getting site directories: {e}', file=sys.stderr)
+        sys.exit(1)
+    print('\nSystem site directories:')
+    for d in q:
+        print(f'  - {d}')
+    print('\nUser site directory:')
+    for d in v:
+        print(f'  - {d}')
+    if not v:
+        print('\nNo user site-packages directory found.')
+        return
+    print('\nScanning for packages...')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as r:
+        m1 = r.submit(p, q)
+        n1 = r.submit(u, v)
+        l = m1.result()
+        m = n1.result()
+    n = k(l, m)
+    print('\nResults:')
+    print(f'  System packages found: {len(l)}')
+    print(f'  User packages found: {len(m)}')
+    print(f'  Duplicate packages: {len(n)}')
+    if n:
+        print('\n' + '=' * 40)
+        print('Packages installed in BOTH system and user directories:')
+        print('-' * 40)
+        for j, (o1, p1) in n.items():
+            a1 = w(j, o1, p1)
+            print(f'\n📦 {j}')
+            print(f'   System:  {o1}')
+            if a1['system_version'] != 'unknown':
+                print(f"            Version: {a1['system_version']}")
+            print(f'   User:    {p1}')
+            if a1['user_version'] != 'unknown':
+                print(f"            Version: {a1['user_version']}")
+            if (a1['system_version'] != 'unknown' and a1['user_version'] != 'unknown') and a1['system_version'] != a1['user_version']:
+                print('   ⚠️  Version mismatch!')
+    else:
+        print('\n✅ No duplicate packages found.')
+    print('\n' + '=' * 40)
+    print('Note: Having packages in both locations can lead to confusion about')
+    print('which version is being used. Consider removing user installations of')
+    print('packages that are already available system-wide.')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: check_missing_scripts.py ---
+import multiprocessing as mp
+import sys
+from configparser import ConfigParser
+from datetime import datetime
+from pathlib import Path
+def q1():
+    for r1 in sys.path:
+        p = Path(r1)
+        if p.name == 'site-packages' and p.exists():
+            return p
+    return None
+def s1():
+    t1 = Path(sys.prefix)
+    u1 = t1 / 'bin'
+    if u1.exists():
+        return u1
+    for v1 in [Path('/data/data/com.termux/files/usr/bin'), Path('/usr/bin'), Path('/usr/local/bin')]:
+        if v1.exists():
+            return v1
+    return None
+def w1(x1):
+    y1 = []
+    if not x1.exists():
+        return y1
+    try:
+        z1 = ConfigParser()
+        z1.read(x1)
+        if z1.has_section('console_scripts'):
+            for a2, b2 in z1.items('console_scripts'):
+                y1.append((a2.strip(), b2.strip()))
+    except Exception as e:
+        print(f'Error parsing {x1}: {e}')
+    return y1
+def c2(d2):
+    e2, u1 = d2
+    x = e2.name.replace('.dist-info', '')
+    x1 = e2 / 'entry_points.txt'
+    f2 = {'package': x, 'path': str(e2), 'missing_scripts': [], 'defined_scripts': [], 'has_entry_points': False}
+    y1 = w1(x1)
+    if not y1:
+        return f2
+    f2['has_entry_points'] = True
+    for a2, b2 in y1:
+        f2['defined_scripts'].append(a2)
+        g2 = u1 / a2
+        if not g2.exists():
+            f2['missing_scripts'].append({'name': a2, 'entry': b2, 'expected_path': str(g2)})
+    return f2
+def h2(i2):
+    return sorted(i2.glob('*.dist-info'))
+def l1():
+    print('-' * 40)
+    print('Python Package Script Checker for Termux')
+    print('-' * 40)
+    print()
+    i2 = q1()
+    if not i2:
+        print('ERROR: Could not find site-packages directory!')
+        sys.exit(1)
+    u1 = s1()
+    if not u1:
+        print('ERROR: Could not find bin directory!')
+        sys.exit(1)
+    print(f'Site-packages: {i2}')
+    print(f'Bin directory: {u1}')
+    print(f'Python version: {sys.version}')
+    print()
+    j1 = h2(i2)
+    print(f'Found {len(j1)} installed packages')
+    print()
+    d2 = [(d, u1) for d in j1]
+    j2 = min(mp.cpu_count(), len(j1) if j1 else 1)
+    print(f'Using {j2} processes for scanning...')
+    with mp.Pool(processes=j2) as k2:
+        l2 = k2.map(c2, d2)
+    m2 = [r for r in l2 if r['has_entry_points']]
+    n2 = [r for r in l2 if r['missing_scripts']]
+    o2 = sum((len(r['missing_scripts']) for r in n2))
+    print()
+    print('-' * 40)
+    print('SCAN RESULTS')
+    print('-' * 40)
+    print()
+    print(f'Total packages scanned: {len(l2)}')
+    print(f'Packages with console_scripts: {len(m2)}')
+    print(f'Packages with missing scripts: {len(n2)}')
+    print(f'Total missing scripts: {o2}')
+    print()
+    p2 = []
+    p2.append('=' * 40)
+    p2.append('PYTHON PACKAGE SCRIPT INTEGRITY REPORT')
+    p2.append('=' * 40)
+    p2.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    p2.append(f'Site-packages: {i2}')
+    p2.append(f'Bin directory: {u1}')
+    p2.append(f'Python: {sys.version}')
+    p2.append('')
+    p2.append(f'Total packages scanned: {len(l2)}')
+    p2.append(f'Packages with console_scripts: {len(m2)}')
+    p2.append(f'Packages with missing scripts: {len(n2)}')
+    p2.append(f'Total missing scripts: {o2}')
+    p2.append('')
+    if n2:
+        p2.append('-' * 40)
+        p2.append('PACKAGES WITH MISSING SCRIPTS')
+        p2.append('-' * 40)
+        p2.append('')
+        for pkg in n2:
+            p2.append(f"Package: {pkg['package']}")
+            p2.append(f"Location: {pkg['path']}")
+            p2.append(f"Missing scripts: {len(pkg['missing_scripts'])}")
+            p2.append('')
+            for q2 in pkg['missing_scripts']:
+                p2.append(f"  • {q2['name']}")
+                p2.append(f"    Entry point: {q2['entry']}")
+                p2.append(f"    Expected at: {q2['expected_path']}")
+                p2.append('')
+    else:
+        p2.append('✓ No missing scripts found!')
+        p2.append('')
+    p2.append('-' * 40)
+    p2.append('SUMMARY')
+    p2.append('-' * 40)
+    p2.append('')
+    for pkg in sorted(l2, key=lambda x: x['package']):
+        if pkg['has_entry_points']:
+            r2 = '✓ OK' if not pkg['missing_scripts'] else f"✗ Missing {len(pkg['missing_scripts'])}"
+            p2.append(f"{pkg['package']:40s} {r2}")
+    for g1 in p2:
+        print(g1)
+    s2 = Path.cwd() / f"missing_scripts_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    try:
+        s2.write_text('\n'.join(p2) + '\n')
+        print(f'\nReport saved to: {s2}')
+    except Exception as e:
+        print(f'\nError saving report: {e}')
+    if n2:
+        print(f'\n⚠️  Found {o2} missing script(s) in {len(n2)} package(s).')
+        print('These packages may need to be reinstalled.')
+        sys.exit(1)
+    else:
+        print('\n✓ All console scripts are properly installed.')
+        sys.exit(0)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: check_pkgs_site.py ---
+import site
+import sys
+from importlib.metadata import distributions
+from pathlib import Path
+def t2(u2):
+    h = {}
+    v2 = str(u2)
+    try:
+        for w2 in r10():
+            try:
+                c1 = None
+                if hasattr(w2, '_path'):
+                    c1 = str(w2._path)
+                elif hasattr(w2, 'files') and w2.files:
+                    for x2 in w2.files:
+                        try:
+                            loc = str(x2.locate())
+                            if v2 in loc:
+                                c1 = loc
+                                break
+                        except:
+                            continue
+                if c1 and v2 in c1:
+                    y2 = w2.metadata.get('Name', 'Unknown')
+                    z2 = w2.metadata.get('Version', 'Unknown')
+                    h[y2] = z2
+            except:
+                continue
+    except Exception as e:
+        print(f'Error scanning {u2}: {e}')
+    return h
+def l1():
+    a3 = Path(site.getusersitepackages())
+    q = []
+    for r1 in sys.path:
+        if 'site-packages' in r1 or 'dist-packages' in r1:
+            p = Path(r1)
+            if p.exists() and (not str(p).startswith(str(Path.home()))):
+                q.append(p)
+    b3 = Path('/data/data/com.termux/files/usr/lib')
+    if b3.exists():
+        for c3 in b3.glob('python*/site-packages'):
+            if c3.exists() and c3 not in q:
+                q.append(c3)
+    d3 = {}
+    for e3 in q:
+        d3.update(t2(e3))
+    f3 = t2(a3) if a3.exists() else {}
+    n = set(f3.keys()) & set(d3.keys())
+    print(f'System packages: {len(d3)}')
+    print(f'User packages: {len(f3)}')
+    print(f'\nDuplicate packages: {len(n)}')
+    if n:
+        print('\nDuplicate packages found:')
+        for pkg in sorted(n):
+            print(f"  {pkg}: system={d3.get(pkg, '?')}, user={f3.get(pkg, '?')}")
+    else:
+        print('\n✅ No duplicate packages found!')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: detect_orphan_files.py ---
+import importlib.metadata
+import json
+import os
+import site
+import sysconfig
+from multiprocessing import Pool
+from pathlib import Path
+from loguru import logger
+logger.remove()
+g3 = Path.home() / 'tmp' / 'apps' / 'orphan_files.log'
+logger.add(g3)
+def h3(i3):
+    j3, k3, l3 = i3
+    m3 = set()
+    n3 = set()
+    try:
+        e2 = Path(k3)
+        if l3:
+            for r1 in l3:
+                o3 = Path(r1)
+                if o3.is_absolute():
+                    m3.add(str(o3.resolve()))
+                else:
+                    m3.add(str((e2.parent / r1).resolve()))
+        if e2.exists():
+            m3.add(str(e2.resolve()))
+            n3.add(str(e2.resolve()))
+            p3 = e2 / 'RECORD'
+            if p3.exists():
+                try:
+                    import csv
+                    with open(p3, 'r', encoding='utf-8') as f:
+                        q3 = csv.reader(f)
+                        for row in q3:
+                            if row:
+                                r1 = row[0]
+                                if not r1.startswith('..'):
+                                    o3 = (e2.parent / r1).resolve()
+                                    m3.add(str(o3))
+                except:
+                    pass
+            r3 = e2 / 'installed-files.txt'
+            if r3.exists():
+                try:
+                    with open(r3, 'r', encoding='utf-8') as f:
+                        for g1 in f:
+                            g1 = g1.strip()
+                            if g1 and (not g1.startswith('#')):
+                                o3 = (e2.parent / g1).resolve()
+                                m3.add(str(o3))
+                except:
+                    pass
+        try:
+            s3 = e2 / 'top_level.txt'
+            if s3.exists():
+                t3 = s3.read_text(encoding='utf-8')
+                for g1 in t3.splitlines():
+                    g1 = g1.strip()
+                    if g1:
+                        u3 = e2.parent / g1
+                        if u3.exists():
+                            m3.add(str(u3.resolve()))
+                            if u3.is_dir():
+                                for x2 in u3.rglob('*'):
+                                    if x2.is_file():
+                                        m3.add(str(x2.resolve()))
+        except:
+            pass
+    except Exception as e:
+        print(f'Warning: Could not process package {j3}: {e}')
+    return (m3, n3)
+def v3(d2):
+    w3, x3, y3 = d2
+    z3 = []
+    if not Path(w3).exists():
+        return z3
+    for a4, n3, m3 in os.walk(w3):
+        b4 = Path(a4)
+        if '__pycache__' in n3:
+            n3.remove('__pycache__')
+        try:
+            c4 = str(b4.resolve())
+            if c4 in y3:
+                n3.clear()
+                continue
+        except:
+            pass
+        for x2 in m3:
+            r1 = str((b4 / x2).resolve())
+            if r1 in x3:
+                continue
+            if d4(r1):
+                continue
+            z3.append(r1)
+    return z3
+def d4(r1):
+    e4 = ['__pycache__', '.pyc', '.pyo', '.pyd', '.so', '.egg-link', '.pth', 'easy-install.pth', 'site.py']
+    f4 = r1.lower()
+    for g4 in e4:
+        if g4 in f4:
+            return True
+    return bool('.dist-info' in f4 or '.egg-info' in f4)
+class h4:
+    def __init__(self):
+        self.site_dirs = self._get_site_dirs()
+        self.package_files = set()
+        self.package_dirs = set()
+    def i4(self):
+        n3 = []
+        for r1 in site.getsitepackages():
+            if 'user' not in r1.lower():
+                n3.append(Path(r1))
+        try:
+            i2 = Path(sysconfig.get_paths()['purelib'])
+            if i2 not in n3 and 'user' not in str(i2).lower():
+                n3.append(i2)
+        except:
+            pass
+        return n3
+    def j4(self):
+        return list(importlib.metadata.distributions())
+    def k4(self):
+        print('Collecting package files...')
+        h = self.get_installed_packages()
+        l4 = []
+        for w2 in h:
+            try:
+                l3 = [str(f) for f in w2.files] if w2.files else []
+                l4.append((w2.metadata['Name'], str(w2._path), l3))
+            except:
+                continue
+        with Pool(processes=8) as k2:
+            l2 = k2.map(h3, l4)
+        for m3, n3 in l2:
+            self.package_files.update(m3)
+            self.package_dirs.update(n3)
+        print(f'Found {len(self.package_files)} files belonging to packages')
+    def m4(self):
+        z3 = []
+        print('\nScanning site-packages directories:')
+        n4 = []
+        for w3 in self.site_dirs:
+            print(f'  - {w3}')
+            if w3.exists():
+                n4.append((str(w3), self.package_files, self.package_dirs))
+            else:
+                print('    (does not exist)')
+        with Pool(processes=8) as k2:
+            l2 = k2.map(v3, n4)
+        for m3 in l2:
+            z3.extend(m3)
+        return sorted({Path(f) for f in z3})
+    def o4(self, z3):
+        p4 = {'Python packages/modules': [], 'Data files': [], 'Executables/scripts': [], 'Libraries': [], 'Other': []}
+        for r1 in z3:
+            ext = r1.suffix.lower()
+            y2 = r1.name.lower()
+            if ext in ['.py', '.pyw'] or (r1.is_dir() and '__init__.py' in [f.name for f in r1.iterdir() if f.is_file()]):
+                p4['Python packages/modules'].append(r1)
+            elif ext in ['.txt', '.md', '.json', '.xml', '.csv', '.ini', '.cfg', '.yaml', '.yml', '.toml']:
+                p4['Data files'].append(r1)
+            elif ext in ['.exe', '.bat', '.cmd', '.sh', '.bash'] or (r1.is_file() and os.access(r1, os.X_OK)):
+                p4['Executables/scripts'].append(r1)
+            elif ext in ['.so', '.dll', '.dylib', '.a', '.lib']:
+                p4['Libraries'].append(r1)
+            else:
+                p4['Other'].append(r1)
+        return p4
+    def run(self, q4=False):
+        print('=' * 40)
+        print('Orphan File Detector for Python Site-Packages')
+        print('=' * 40)
+        self.collect_package_files()
+        z3 = self.scan_site_dirs()
+        p4 = self.analyze_orphan_files(z3)
+        print('\n' + '=' * 40)
+        print('RESULTS')
+        print('=' * 40)
+        print(f'\nFound {len(z3)} orphan files/directories:')
+        for r4, m3 in p4.items():
+            if m3:
+                print(f'\n{r4} ({len(m3)}):')
+                for r1 in sorted(m3):
+                    if q4:
+                        if r1.is_file():
+                            s4 = r1.stat().st_size
+                            t4 = self._format_size(s4)
+                            print(f'  {r1} ({t4})')
+                        else:
+                            print(f'  {r1} (directory)')
+                    else:
+                        print(f'  {r1}')
+        print('\n' + '-' * 40)
+        print('SUMMARY:')
+        for r4, m3 in p4.items():
+            if m3:
+                print(f'  {r4}: {len(m3)}')
+        print('\nWARNING: Review these files carefully before removing them.')
+        print('Some may be intentionally installed or required by other tools.')
+        return z3
+    def u4(self, s4):
+        for v4 in ['B', 'KB', 'MB', 'GB']:
+            if s4 < 1024.0:
+                return f'{s4:.1f} {v4}'
+            s4 /= 1024.0
+        return f'{s4:.1f} TB'
+    def w4(self, z3, s2='orphan_files.json'):
+        x4 = {'total_orphan_files': len(z3), 'site_directories': [str(d) for d in self.site_dirs], 'files': [str(f) for f in z3]}
+        with open(s2, 'w', encoding='utf-8') as f:
+            json.dump(x4, f, indent=2)
+        print(f'\nOrphan files list exported to: {s2}')
+def l1():
+    import argparse
+    y4 = argparse.ArgumentParser(description='Detect orphan files in Python site-packages directories')
+    y4.add_argument('-v', '--verbose', action='store_true', help='Show verbose output with file sizes')
+    y4.add_argument('-e', '--export', action='store_true', help='Export results to JSON file')
+    y4.add_argument('-o', '--output', default='orphan_files.json', help='Output file for export (default: orphan_files.json)')
+    d2 = y4.parse_args()
+    z4 = h4()
+    z3 = z4.run(verbose=d2.verbose)
+    if d2.export:
+        z4.export_to_file(z3, d2.output)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: distinfo.py ---
+import contextlib
+import re
+import site
+from collections import defaultdict
+from pathlib import Path
+def a5():
+    n3 = []
+    with contextlib.suppress(Exception):
+        n3.extend(site.getsitepackages())
+    n3.append(site.getusersitepackages())
+    return list(dict.fromkeys(n3))
+def b5(c5):
+    m = re.match('(.+)-(\\d+.*?)(\\.dist-info|\\.egg-info)$', c5)
+    if m:
+        return (m.group(1).lower(), m.group(2))
+    return (None, None)
+def d5():
+    e5 = defaultdict(set)
+    for f5 in a5():
+        g5 = Path(f5)
+        if not g5.is_dir():
+            continue
+        for h5 in g5.iterdir():
+            if h5.name.endswith(('.dist-info', '.egg-info')):
+                y2, z2 = b5(h5.name)
+                if y2:
+                    e5[y2].add(z2)
+    for pkg, a1 in sorted(e5.items()):
+        if len(a1) > 1:
+            print(f'\nPackage: {pkg}')
+            for v in sorted(a1):
+                print(f'  - Version: {v}')
+    print('\nDone.')
+if __name__ == '__main__':
+    d5()
+# --- File: find_binary_pkgs.py ---
+import argparse
+import site
+from collections.abc import Iterable
+from multiprocessing import Pool
+from pathlib import Path
+import importlib_metadata
+from loguru import logger
+i5 = 8
+j5 = ('.so', '.pyd', '.dll', '.dylib')
+def k5():
+    l5 = []
+    for r1 in site.getsitepackages():
+        l5.append(Path(r1))
+    c = site.getusersitepackages()
+    if c:
+        m5 = Path(c)
+        if m5.exists():
+            l5.append(m5)
+    return l5
+def j4():
+    h = []
+    n5 = list(importlib_metadata.distributions())
+    for w2 in n5:
+        try:
+            y2 = w2.metadata.get('Name')
+            z2 = w2.version
+            if y2 and z2:
+                h.append((y2, z2))
+        except Exception as e:
+            logger.warning(f'Error getting info for package: {e}')
+    return h
+def o5(x, p5):
+    for q5 in p5:
+        u3 = q5 / x
+        if u3.exists() and u3.is_dir():
+            return u3
+        r5 = x.replace('-', '_')
+        u3 = q5 / r5
+        if u3.exists() and u3.is_dir():
+            return u3
+        for i in q5.iterdir():
+            if i.is_dir() and i.name.lower().replace('-', '_') == x.lower().replace('-', '_'):
+                return i
+    return None
+def s5(x, p5):
+    u3 = o5(x, p5)
+    if not u3:
+        logger.warning(f'Cannot find package directory for {x}')
+        return True
+    for ext in j5:
+        try:
+            if any(u3.rglob(f'*{ext}')):
+                return False
+        except (PermissionError, OSError):
+            continue
+    return True
+def c2(t5):
+    x, z2, p5 = t5
+    try:
+        u5 = s5(x, p5)
+        return (x, z2, u5)
+    except Exception as e:
+        logger.error(f'Error checking {x}: {e}')
+        return (x, z2, True)
+def v5():
+    y4 = argparse.ArgumentParser(description='Find non-pure Python packages in site-packages')
+    y4.add_argument('-o', '--output', default='binary_packages.txt', help='Output file for package list (default: binary_packages.txt)')
+    y4.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    return y4.parse_args()
+def w5(x5, y5):
+    z5 = Path(x5).expanduser().resolve()
+    z5.parent.mkdir(parents=True, exist_ok=True)
+    with open(z5, 'w') as f:
+        f.write('# Binary (non-pure Python) packages found in site-packages\n')
+        f.write('# Format: package_name==version\n\n')
+        f.writelines((f'{pkg}=={ver}\n' for pkg, ver in sorted(y5)))
+    return z5
+def l1():
+    d2 = v5()
+    if d2.verbose:
+        logger.remove()
+        logger.add(lambda msg: print(msg, end=''), level='DEBUG')
+    p5 = k5()
+    print(f'Site-packages paths: {[str(p) for p in p5]}')
+    a6 = j4()
+    print(f'Found {len(a6)} installed packages')
+    if not a6:
+        logger.error('No packages found')
+        return 1
+    b6 = [(pkg, ver, p5) for pkg, ver in a6]
+    y5 = []
+    c6 = []
+    d6 = len(b6)
+    e6 = 0
+    print(f'Checking packages using {i5} parallel workers...')
+    with Pool(processes=i5) as k2:
+        f6 = [(k2.apply_async(c2, (arg,)), arg[0]) for arg in b6]
+        for g6, j in f6:
+            e6 += 1
+            h6, z2, u5 = g6.get()
+            if not u5:
+                y5.append((h6, z2))
+                print(f'[{e6}/{d6}] ✓ {h6} is BINARY')
+            else:
+                c6.append((h6, z2))
+                logger.debug(f'[{e6}/{d6}] - {h6} is pure Python')
+    z5 = w5(d2.output, y5)
+    print('=' * 40)
+    print('SUMMARY')
+    print('=' * 40)
+    print(f'Total packages checked: {d6}')
+    print(f'Binary packages found: {len(y5)}')
+    print(f'Pure Python packages: {len(c6)}')
+    print(f'Results saved to: {z5}')
+    if y5:
+        print('Binary packages:')
+        for pkg, ver in y5[:10]:
+            print(f'  - {pkg}=={ver}')
+        if len(y5) > 10:
+            print(f'  ... and {len(y5) - 10} more')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: get_small_pkgs.py ---
+import csv
+import os
+import site
+from pathlib import Path
+def i6():
+    j1 = []
+    for w3 in [*site.getsitepackages(), site.getusersitepackages()]:
+        if Path(w3).exists():
+            j1.extend((os.path.join(w3, i) for i in os.listdir(w3) if i.endswith('.dist-info')))
+    return j1
+def j6(k6):
+    p3 = os.path.join(k6, 'RECORD')
+    j = Path(k6).name.replace('.dist-info', '').split('-')[0].lower()
+    sum = 0
+    if Path(p3).exists():
+        with Path(p3).open(encoding='utf-8') as f:
+            q3 = csv.reader(f)
+            for row in q3:
+                if row[-1] and isinstance(int(row[-1]), int):
+                    sum += int(row[-1])
+    if sum < 1024 * 1024:
+        return j
+    return None
+def l6():
+    j1 = i6()
+    m6 = []
+    for n6 in j1:
+        o6 = j6(n6)
+        if o6:
+            print(o6)
+            m6.append(o6)
+    with Path('/sdcard/data/pure').open('w', encoding='utf-8') as f:
+        f.writelines((f'{k}\n' for k in m6))
+    print(len(m6))
+if __name__ == '__main__':
+    l6()
+# --- File: havebin.py ---
+import os
+import subprocess
+from pathlib import Path
+def p6(s2='have_scripts.txt'):
+    print("Starting search for packages with 'bin' scripts...")
+    try:
+        q6 = get_ipkgs()
+        if not q6:
+            print("No Python packages found via 'pip list'. Please ensure pip is installed and accessible.")
+            return
+        print(f"Found {len(q6)} installed packages. Checking each for 'bin' scripts...")
+        r6 = []
+        s6 = len(q6)
+        for i, x in enumerate(q6):
+            print(f"[{i + 1}/{s6}] Checking '{x}'...", end='\r')
+            try:
+                f2 = subprocess.run(['pip', 'show', '-f', x], capture_output=True, text=True, check=True, encoding='utf-8', errors='ignore')
+                t6 = f2.stdout.split('\n')
+                u6 = [os.path.join(os.sep, 'bin', ''), os.path.join('bin', ''), os.path.join('scripts', '')]
+                v6 = False
+                for g1 in t6:
+                    g1 = g1.strip()
+                    if g1.startswith('Location:'):
+                        continue
+                    if g1.startswith('Files:'):
+                        continue
+                    for w6 in u6:
+                        if w6 in g1.lower() and (g1.endswith('.py') or os.path.splitext(g1)[1] == '' or os.path.splitext(g1)[1] == '.exe') and (not any((x6 in g1 for x6 in ['__pycache__', '.dist-info', '.egg-info', '.pth']))):
+                            v6 = True
+                            break
+                    if v6:
+                        break
+                if v6:
+                    r6.append(x)
+            except subprocess.CalledProcessError:
+                pass
+            except Exception as e:
+                print(f"\nAn unexpected error occurred while checking '{x}': {e}")
+        with Path(s2).open('w', encoding='utf-8') as f:
+            f.writelines((pkg + '\n' for pkg in r6))
+        print(f"\nSearch complete. Found {len(r6)} packages with 'bin' scripts.")
+        print(f"List saved to '{s2}'.")
+    except FileNotFoundError:
+        print("Error: 'pip' command not found. Please ensure Python and pip are installed and in your PATH.")
+    except subprocess.CalledProcessError as e:
+        print(f'Error running pip command: {e.cmd}')
+        print(f'Stdout: {e.stdout}')
+        print(f'Stderr: {e.stderr}')
+    except Exception as e:
+        print(f'An unexpected error occurred: {e}')
+if __name__ == '__main__':
+    p6()
+# --- File: list_nonpure.py ---
+import os
+import site
+from pathlib import Path
+c = Path(site.getusersitepackages())
+y6 = {'.so', '.pyd', '.dylib', '.dll'}
+for pkg in c.iterdir():
+    if pkg.is_dir() and (not pkg.name.endswith(('.dist-info', '.egg-info'))):
+        z6 = False
+        for a7, b7, m3 in os.walk(pkg):
+            for f in m3:
+                if os.path.splitext(f)[1].lower() in y6:
+                    z6 = True
+                    break
+            if z6:
+                break
+        if z6:
+            print(pkg.name)
+# --- File: list_noscript_pkgs.py ---
+import site
+from pathlib import Path
+u = Path(site.getusersitepackages())
+for p in u.iterdir():
+    if p.is_dir() and (not p.name.endswith(('.dist-info', '.egg-info'))):
+        c7 = False
+        for g4 in [f'{p.name}*.dist-info', f'{p.name}*.egg-info']:
+            for d in u.glob(g4):
+                if (d / 'entry_points.txt').exists():
+                    c7 = True
+                    break
+            if c7:
+                break
+        if not c7:
+            print(p.name)
+# --- File: list_pkgs_to_zpkg.py ---
+import sys
+from concurrent.futures import ProcessPoolExecutor
+from importlib.metadata import distributions
+from pathlib import Path
+def s5(w2):
+    try:
+        if w2.files is None:
+            return False
+        return not any((f.suffix in {'.so', '.pyd', '.dylib'} for f in w2.files))
+    except Exception:
+        return False
+def d7(y2):
+    return '-' not in y2 and '_' not in y2
+def e7(w2):
+    try:
+        if w2.read_text('top_level.txt'):
+            return {g1.strip() for g1 in w2.read_text('top_level.txt').splitlines() if g1.strip()}
+    except (FileNotFoundError, TypeError):
+        pass
+    if w2.files:
+        f7 = set()
+        for x2 in w2.files:
+            g7 = x2.parts
+            if g7 and (not g7[0].endswith('.dist-info')):
+                f7.add(g7[0])
+        return f7
+    return set()
+def h7(i7):
+    c = Path.home() / '.local' / 'lib'
+    try:
+        return str(c) in str(Path(i7).resolve())
+    except Exception:
+        return False
+def c2(w2):
+    if not s5(w2):
+        return None
+    y2 = w2.name.lower()
+    if not d7(y2):
+        return None
+    if not h7(w2._path):
+        return None
+    f7 = e7(w2)
+    if len(f7) != 1:
+        return None
+    return w2.name
+def l1():
+    j7 = list(r10())
+    with ProcessPoolExecutor() as r:
+        l2 = [r for r in r.map(c2, j7) if r is not None]
+    if not l2:
+        print('No packages found matching criteria.', file=sys.stderr)
+        sys.exit(0)
+    l2.sort(key=str.lower)
+    z5 = Path.home() / 'list.txt'
+    z5.write_text('\n'.join(l2) + '\n')
+    print(f'Saved {len(l2)} package names to {z5}')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: list_pkgs_with_script.py ---
+import site
+from pathlib import Path
+u = Path(site.getusersitepackages())
+nl = []
+for p in u.iterdir():
+    if p.is_dir() and (not p.name.endswith(('.dist-info', '.egg-info'))):
+        for d in u.glob(f'{p.name}*.dist-info'):
+            if (d / 'entry_points.txt').exists():
+                print(p.name)
+                nl.append(p.name)
+                break
+        else:
+            for d in u.glob(f'{p.name}*.egg-info'):
+                if (d / 'entry_points.txt').exists():
+                    print(p.name)
+                    nl.append(d.name)
+                    break
+k7 = Path('/sdcard/data/pkgs_with_scripts')
+l7 = '\n'.join(nl)
+k7.write_text(l7, encoding='utf-8')
+# --- File: no_entry_point.py ---
+import argparse
+import json
+import re
+import sys
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from typing import dict, list, tuple
+def a5():
+    b = []
+    import site
+    for r1 in site.getsitepackages():
+        b.append(Path(r1))
+    c = site.getusersitepackages()
+    if c:
+        b.append(Path(c))
+    m7 = [Path(sys.prefix) / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages', Path(sys.prefix) / 'local' / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages']
+    for r1 in m7:
+        if r1.exists() and r1 not in b:
+            b.append(r1)
+    return [d for d in b if d.exists() and d.is_dir()]
+def n7(r1):
+    y2 = r1.name
+    if y2.endswith('.dist-info'):
+        y2 = y2[:-10]
+    elif y2.endswith('.egg-info'):
+        y2 = y2[:-9]
+    y2 = re.sub('-\\d+\\.\\d+\\.\\d+.*$', '', y2)
+    y2 = re.sub('-\\d+\\.\\d+.*$', '', y2)
+    y2 = re.sub('-py\\d+\\.\\d+$', '', y2)
+    y2 = re.sub('-py\\d+$', '', y2)
+    return y2
+def o7(j, w3):
+    try:
+        p7 = [f'{j}*.dist-info', f"{j.replace('-', '_')}*.dist-info", f"{j.replace('_', '-')}*.dist-info"]
+        for g4 in p7:
+            for i3 in w3.glob(g4):
+                if i3.is_dir():
+                    p3 = i3 / 'RECORD'
+                    if p3.exists():
+                        try:
+                            l7 = p3.read_text(encoding='utf-8', errors='ignore')
+                            if '.so' in l7:
+                                return False
+                        except Exception:
+                            pass
+        q7 = [f'{j}*.egg-info', f"{j.replace('-', '_')}*.egg-info", f"{j.replace('_', '-')}*.egg-info"]
+        for g4 in q7:
+            for r7 in w3.glob(g4):
+                if r7.is_dir():
+                    s7 = r7 / 'SOURCES.txt'
+                    if s7.exists():
+                        try:
+                            l7 = s7.read_text(encoding='utf-8', errors='ignore')
+                            if '.so' in l7:
+                                return False
+                        except:
+                            pass
+                    t7 = r7 / 'native_libs.txt'
+                    if t7.exists():
+                        return False
+        u7 = [j, j.replace('-', '_'), j.replace('_', '-')]
+        for g4 in u7:
+            for v7 in w3.glob(g4):
+                if v7.is_dir() and (not v7.name.endswith('.dist-info')) and (not v7.name.endswith('.egg-info')):
+                    for i in v7.rglob('*'):
+                        if i.is_file() and i.suffix == '.so':
+                            return False
+                        if i.is_file() and '.cpython-' in str(i) and (i.suffix == '.so'):
+                            return False
+        return True
+    except Exception:
+        return True
+def w7(x7, w3):
+    j = n7(x7)
+    f2 = {'name': j, 'has_entry_points': False, 'is_pure_python': True, 'error': None}
+    try:
+        y7 = False
+        p7 = [f'{j}*.dist-info', f"{j.replace('-', '_')}*.dist-info", f"{j.replace('_', '-')}*.dist-info", f'{x7.name}*.dist-info']
+        for g4 in p7:
+            for i3 in w3.glob(g4):
+                if i3.is_dir():
+                    z7 = i3 / 'entry_points.txt'
+                    if z7.exists():
+                        y7 = True
+                        break
+            if y7:
+                break
+        if not y7:
+            q7 = [f'{j}*.egg-info', f"{j.replace('-', '_')}*.egg-info", f"{j.replace('_', '-')}*.egg-info", f'{x7.name}*.egg-info']
+            for g4 in q7:
+                for r7 in w3.glob(g4):
+                    if r7.is_dir():
+                        z7 = r7 / 'entry_points.txt'
+                        if z7.exists():
+                            y7 = True
+                            break
+                if y7:
+                    break
+        if not y7 and x7.is_dir():
+            z7 = x7 / 'entry_points.txt'
+            if z7.exists():
+                y7 = True
+        f2['has_entry_points'] = y7
+        if not y7:
+            f2['is_pure_python'] = o7(j, w3)
+    except Exception as e:
+        f2['error'] = str(e)
+    return f2
+def a8(w3):
+    c6 = []
+    b8 = []
+    c8 = set()
+    try:
+        d8 = []
+        for i in w3.iterdir():
+            if i.is_dir():
+                if i.name.startswith('_') or i.name.startswith('.'):
+                    continue
+                e8 = i / '__init__.py'
+                f8 = e8.exists()
+                g8 = i.suffix in ['.dist-info', '.egg-info']
+                if f8 or g8:
+                    d8.append(i)
+        for i in d8:
+            f2 = w7(i, w3)
+            if f2['error'] is None and (not f2['has_entry_points']):
+                j = f2['name']
+                if j in c8:
+                    continue
+                c8.add(j)
+                if f2['is_pure_python']:
+                    c6.append(j)
+                else:
+                    b8.append(j)
+            elif f2['error']:
+                print(f"Error scanning {i}: {f2['error']}", file=sys.stderr)
+    except Exception as e:
+        print(f'Error scanning directory {w3}: {e}', file=sys.stderr)
+    return (c6, b8)
+def l1():
+    y4 = argparse.ArgumentParser(description='Find Python packages without entry_points.txt in system site directories (Linux/Termux optimized)')
+    y4.add_argument('--pure-output', default='noep_pure.txt', help='Output file for pure Python packages (default: noep_pure.txt)')
+    y4.add_argument('--nonpure-output', default='noep_nopure.txt', help='Output file for non-pure packages (default: noep_nopure.txt)')
+    y4.add_argument('-j', '--json', action='store_true', help='Output in JSON format')
+    y4.add_argument('-p', '--processes', type=int, default=None, help=f'Number of processes to use (default: {j2()})')
+    y4.add_argument('-v', '--verbose', action='store_true', help='Print verbose output')
+    d2 = y4.parse_args()
+    b = a5()
+    if not b:
+        print('No site-packages directories found!', file=sys.stderr)
+        sys.exit(1)
+    if d2.verbose:
+        print(f'Found site directories: {[str(d) for d in b]}')
+        print(f'Python version: {sys.version}')
+        print(f'Platform: {sys.platform}')
+    h8 = d2.processes or j2()
+    if d2.verbose:
+        print(f'Using {h8} processes')
+    i8 = []
+    j8 = []
+    with Pool(processes=h8) as k2:
+        l2 = k2.map(a8, b)
+        for k8, l8 in l2:
+            i8.extend(k8)
+            j8.extend(l8)
+    m8 = set()
+    n8 = []
+    for pkg in i8:
+        if pkg not in m8:
+            m8.add(pkg)
+            n8.append(pkg)
+    o8 = set()
+    p8 = []
+    for pkg in j8:
+        if pkg not in o8:
+            o8.add(pkg)
+            p8.append(pkg)
+    n8.sort()
+    p8.sort()
+    if d2.json:
+        q8 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(n8), 'packages': n8}
+        Path(d2.pure_output).write_text(json.dumps(q8, indent=2))
+    else:
+        Path(d2.pure_output).write_text('\n'.join(n8))
+    if d2.json:
+        r8 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(p8), 'packages': p8}
+        Path(d2.nonpure_output).write_text(json.dumps(r8, indent=2))
+    else:
+        Path(d2.nonpure_output).write_text('\n'.join(p8))
+    print('=== SUMMARY ===')
+    print(f'Platform: {sys.platform}')
+    print(f'Pure Python packages without entry_points.txt: {len(n8)}')
+    print(f'Non-pure packages without entry_points.txt: {len(p8)}')
+    print(f'Total: {len(n8) + len(p8)}')
+    if d2.verbose:
+        print(f'\nPure packages written to: {d2.pure_output}')
+        print(f'Non-pure packages written to: {d2.nonpure_output}')
+        if n8:
+            print('\nPure packages:')
+            for pkg in n8[:10]:
+                print(f'  {pkg}')
+            if len(n8) > 10:
+                print(f'  ... and {len(n8) - 10} more')
+        if p8:
+            print('\nNon-pure packages:')
+            for pkg in p8[:10]:
+                print(f'  {pkg}')
+            if len(p8) > 10:
+                print(f'  ... and {len(p8) - 10} more')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: pkgs_with_entry_points.py ---
+import argparse
+import configparser
+import json
+import re
+import sys
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+def a5():
+    b = []
+    import site
+    for r1 in site.getsitepackages():
+        b.append(Path(r1))
+    c = site.getusersitepackages()
+    if c:
+        b.append(Path(c))
+    m7 = [Path(sys.prefix) / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages', Path(sys.prefix) / 'local' / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages']
+    for r1 in m7:
+        if r1.exists() and r1 not in b:
+            b.append(r1)
+    return [d for d in b if d.exists() and d.is_dir()]
+def n7(r1):
+    y2 = r1.name
+    if y2.endswith('.dist-info'):
+        y2 = y2[:-10]
+    elif y2.endswith('.egg-info'):
+        y2 = y2[:-9]
+    y2 = re.sub('-\\d+\\.\\d+\\.\\d+.*$', '', y2)
+    y2 = re.sub('-\\d+\\.\\d+.*$', '', y2)
+    y2 = re.sub('-py\\d+\\.\\d+$', '', y2)
+    y2 = re.sub('-py\\d+$', '', y2)
+    return y2
+def o7(j, w3):
+    try:
+        p7 = [f'{j}*.dist-info', f"{j.replace('-', '_')}*.dist-info", f"{j.replace('_', '-')}*.dist-info"]
+        for g4 in p7:
+            for i3 in w3.glob(g4):
+                if i3.is_dir():
+                    p3 = i3 / 'RECORD'
+                    if p3.exists():
+                        try:
+                            l7 = p3.read_text(encoding='utf-8', errors='ignore')
+                            if '.so' in l7:
+                                return False
+                        except Exception:
+                            pass
+        q7 = [f'{j}*.egg-info', f"{j.replace('-', '_')}*.egg-info", f"{j.replace('_', '-')}*.egg-info"]
+        for g4 in q7:
+            for r7 in w3.glob(g4):
+                if r7.is_dir():
+                    s7 = r7 / 'SOURCES.txt'
+                    if s7.exists():
+                        try:
+                            l7 = s7.read_text(encoding='utf-8', errors='ignore')
+                            if '.so' in l7:
+                                return False
+                        except:
+                            pass
+                    t7 = r7 / 'native_libs.txt'
+                    if t7.exists():
+                        return False
+        u7 = [j, j.replace('-', '_'), j.replace('_', '-')]
+        for g4 in u7:
+            for v7 in w3.glob(g4):
+                if v7.is_dir() and (not v7.name.endswith('.dist-info')) and (not v7.name.endswith('.egg-info')):
+                    for i in v7.rglob('*'):
+                        if i.is_file() and i.suffix == '.so':
+                            return False
+                        if i.is_file() and '.cpython-' in str(i) and (i.suffix == '.so'):
+                            return False
+        return True
+    except Exception:
+        return True
+def w1(x1):
+    y1 = {'console_scripts': [], 'gui_scripts': [], 'other': []}
+    try:
+        if not x1.exists():
+            return y1
+        l7 = x1.read_text(encoding='utf-8', errors='ignore')
+        z1 = configparser.ConfigParser()
+        try:
+            z1.read_string(l7)
+            if z1.has_section('console_scripts'):
+                for key, s8 in z1.items('console_scripts'):
+                    y1['console_scripts'].append(key)
+            if z1.has_section('gui_scripts'):
+                for key, s8 in z1.items('gui_scripts'):
+                    y1['gui_scripts'].append(key)
+            for t8 in z1.sections():
+                if t8 not in ['console_scripts', 'gui_scripts']:
+                    for key, s8 in z1.items(t8):
+                        y1['other'].append(f'{t8}:{key}')
+        except:
+            t6 = l7.split('\n')
+            u8 = None
+            for g1 in t6:
+                g1 = g1.strip()
+                if not g1:
+                    continue
+                if g1.startswith('[') and g1.endswith(']'):
+                    u8 = g1[1:-1]
+                elif u8 and '=' in g1:
+                    key = g1.split('=')[0].strip()
+                    if u8 == 'console_scripts':
+                        y1['console_scripts'].append(key)
+                    elif u8 == 'gui_scripts':
+                        y1['gui_scripts'].append(key)
+                    else:
+                        y1['other'].append(f'{u8}:{key}')
+    except Exception:
+        pass
+    return y1
+def w7(x7, w3):
+    j = n7(x7)
+    f2 = {'name': j, 'has_entry_points': False, 'entry_points_data': None, 'is_pure_python': True, 'error': None}
+    try:
+        x1 = None
+        p7 = [f'{j}*.dist-info', f"{j.replace('-', '_')}*.dist-info", f"{j.replace('_', '-')}*.dist-info", f'{x7.name}*.dist-info']
+        for g4 in p7:
+            for i3 in w3.glob(g4):
+                if i3.is_dir():
+                    v8 = i3 / 'entry_points.txt'
+                    if v8.exists():
+                        x1 = v8
+                        break
+            if x1:
+                break
+        if not x1:
+            q7 = [f'{j}*.egg-info', f"{j.replace('-', '_')}*.egg-info", f"{j.replace('_', '-')}*.egg-info", f'{x7.name}*.egg-info']
+            for g4 in q7:
+                for r7 in w3.glob(g4):
+                    if r7.is_dir():
+                        v8 = r7 / 'entry_points.txt'
+                        if v8.exists():
+                            x1 = v8
+                            break
+                if x1:
+                    break
+        if not x1 and x7.is_dir():
+            v8 = x7 / 'entry_points.txt'
+            if v8.exists():
+                x1 = v8
+        if x1:
+            f2['has_entry_points'] = True
+            f2['entry_points_data'] = w1(x1)
+        f2['is_pure_python'] = o7(j, w3)
+    except Exception as e:
+        f2['error'] = str(e)
+    return f2
+def w8(w3):
+    x8 = []
+    y8 = []
+    z8 = []
+    a9 = []
+    c8 = set()
+    try:
+        d8 = []
+        for i in w3.iterdir():
+            if i.is_dir():
+                if i.name.startswith('_') or i.name.startswith('.'):
+                    continue
+                e8 = i / '__init__.py'
+                f8 = e8.exists()
+                g8 = i.suffix in ['.dist-info', '.egg-info']
+                if f8 or g8:
+                    d8.append(i)
+        for i in d8:
+            f2 = w7(i, w3)
+            if f2['error'] is None:
+                j = f2['name']
+                if j in c8:
+                    continue
+                c8.add(j)
+                if f2['has_entry_points']:
+                    if f2['is_pure_python']:
+                        z8.append(j)
+                    else:
+                        a9.append(j)
+                elif f2['is_pure_python']:
+                    x8.append(j)
+                else:
+                    y8.append(j)
+            elif f2['error']:
+                print(f"Error scanning {i}: {f2['error']}", file=sys.stderr)
+    except Exception as e:
+        print(f'Error scanning directory {w3}: {e}', file=sys.stderr)
+    return (x8, y8, z8, a9)
+def l1():
+    y4 = argparse.ArgumentParser(description='Find Python packages and categorize by entry_points.txt and purity (Linux/Termux optimized)')
+    y4.add_argument('--pure-noep-output', default='noep_pure.txt', help='Output file for pure Python packages without entry_points (default: noep_pure.txt)')
+    y4.add_argument('--nonpure-noep-output', default='noep_nopure.txt', help='Output file for non-pure packages without entry_points (default: noep_nopure.txt)')
+    y4.add_argument('--pure-ep-output', default='ep_pure.txt', help='Output file for pure Python packages with entry_points (default: ep_pure.txt)')
+    y4.add_argument('--nonpure-ep-output', default='ep_nopure.txt', help='Output file for non-pure packages with entry_points (default: ep_nopure.txt)')
+    y4.add_argument('--ep-details-output', default='ep_details.txt', help='Output file for detailed entry_points information (default: ep_details.txt)')
+    y4.add_argument('-j', '--json', action='store_true', help='Output in JSON format')
+    y4.add_argument('-p', '--processes', type=int, default=None, help=f'Number of processes to use (default: {j2()})')
+    y4.add_argument('-v', '--verbose', action='store_true', help='Print verbose output')
+    d2 = y4.parse_args()
+    b = a5()
+    if not b:
+        print('No site-packages directories found!', file=sys.stderr)
+        sys.exit(1)
+    if d2.verbose:
+        print(f'Found site directories: {[str(d) for d in b]}')
+        print(f'Python version: {sys.version}')
+        print(f'Platform: {sys.platform}')
+    h8 = d2.processes or j2()
+    if d2.verbose:
+        print(f'Using {h8} processes')
+    b9 = []
+    c9 = []
+    d9 = []
+    e9 = []
+    with Pool(processes=h8) as k2:
+        l2 = k2.map(w8, b)
+        for f9, g9, h9, i9 in l2:
+            b9.extend(f9)
+            c9.extend(g9)
+            d9.extend(h9)
+            e9.extend(i9)
+    def j9(lst):
+        k9 = set()
+        l9 = []
+        for i in lst:
+            if i not in k9:
+                k9.add(i)
+                l9.append(i)
+        return l9
+    m9 = j9(b9)
+    n9 = j9(c9)
+    o9 = j9(d9)
+    p9 = j9(e9)
+    m9.sort()
+    n9.sort()
+    o9.sort()
+    p9.sort()
+    if d2.json:
+        x4 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(m9), 'packages': m9}
+        Path(d2.pure_noep_output).write_text(json.dumps(x4, indent=2))
+    else:
+        Path(d2.pure_noep_output).write_text('\n'.join(m9))
+    if d2.json:
+        x4 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(n9), 'packages': n9}
+        Path(d2.nonpure_noep_output).write_text(json.dumps(x4, indent=2))
+    else:
+        Path(d2.nonpure_noep_output).write_text('\n'.join(n9))
+    if d2.json:
+        x4 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(o9), 'packages': o9}
+        Path(d2.pure_ep_output).write_text(json.dumps(x4, indent=2))
+    else:
+        Path(d2.pure_ep_output).write_text('\n'.join(o9))
+    if d2.json:
+        x4 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(p9), 'packages': p9}
+        Path(d2.nonpure_ep_output).write_text(json.dumps(x4, indent=2))
+    else:
+        Path(d2.nonpure_ep_output).write_text('\n'.join(p9))
+    if d2.verbose:
+        print('\nGathering entry points details...')
+    q9 = []
+    with Pool(processes=h8) as k2:
+        l2 = k2.map(u9, b)
+        for r9 in l2:
+            q9.extend(r9)
+    s9 = set()
+    t9 = []
+    for pkg in q9:
+        if pkg['name'] not in s9:
+            s9.add(pkg['name'])
+            t9.append(pkg)
+    t9.sort(key=lambda x: x['name'])
+    if d2.json:
+        x4 = {'timestamp': datetime.now().isoformat(), 'site_directories': [str(d) for d in b], 'platform': sys.platform, 'total': len(t9), 'packages': t9}
+        Path(d2.ep_details_output).write_text(json.dumps(x4, indent=2))
+    else:
+        t6 = []
+        for pkg in t9:
+            t6.append(f"{pkg['name']}:")
+            if pkg['entry_points']['console_scripts']:
+                t6.append(f"  console_scripts: {', '.join(pkg['entry_points']['console_scripts'])}")
+            if pkg['entry_points']['gui_scripts']:
+                t6.append(f"  gui_scripts: {', '.join(pkg['entry_points']['gui_scripts'])}")
+            if pkg['entry_points']['other']:
+                t6.append(f"  other: {', '.join(pkg['entry_points']['other'])}")
+            t6.append('')
+        Path(d2.ep_details_output).write_text('\n'.join(t6))
+    print(f"\n{'=' * 40}")
+    print('SUMMARY - Python Package Classification')
+    print(f"{'=' * 40}")
+    print(f'Platform: {sys.platform}')
+    print(f'Site directories: {len(b)}')
+    print()
+    print('Without entry_points.txt:')
+    print(f'  • Pure Python packages: {len(m9)}')
+    print(f'  • Non-pure packages:    {len(n9)}')
+    print(f'  • Subtotal:             {len(m9) + len(n9)}')
+    print()
+    print('With entry_points.txt:')
+    print(f'  • Pure Python packages: {len(o9)}')
+    print(f'  • Non-pure packages:    {len(p9)}')
+    print(f'  • Subtotal:             {len(o9) + len(p9)}')
+    print()
+    print(f'Grand total: {len(m9) + len(n9) + len(o9) + len(p9)}')
+    print(f"{'=' * 40}")
+    if d2.verbose:
+        print('\nOutput files:')
+        print(f'  Pure no-ep:      {d2.pure_noep_output}')
+        print(f'  Non-pure no-ep:  {d2.nonpure_noep_output}')
+        print(f'  Pure with ep:    {d2.pure_ep_output}')
+        print(f'  Non-pure with ep:{d2.nonpure_ep_output}')
+        print(f'  EP details:      {d2.ep_details_output}')
+        if m9:
+            print('\nSample - Pure packages without EP (first 5):')
+            for pkg in m9[:5]:
+                print(f'  {pkg}')
+            if len(m9) > 5:
+                print(f'  ... and {len(m9) - 5} more')
+        if o9:
+            print('\nSample - Pure packages with EP (first 5):')
+            for pkg in o9[:5]:
+                print(f'  {pkg}')
+            if len(o9) > 5:
+                print(f'  ... and {len(o9) - 5} more')
+def u9(w3):
+    v9 = []
+    w9 = set()
+    try:
+        for i in w3.iterdir():
+            if not i.is_dir() or i.name.startswith('_') or i.name.startswith('.'):
+                continue
+            e8 = i / '__init__.py'
+            x9 = e8.exists() or i.suffix in ['.dist-info', '.egg-info']
+            if x9:
+                f2 = w7(i, w3)
+                if f2['error'] is None and f2['has_entry_points']:
+                    j = f2['name']
+                    if j not in w9:
+                        w9.add(j)
+                        v9.append({'name': j, 'entry_points': f2['entry_points_data']})
+    except:
+        pass
+    return v9
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: purenotpure.py ---
+import contextlib
+import sys
+import sysconfig
+from importlib import metadata
+from pathlib import Path
+def y9(w2):
+    try:
+        m3 = list(w2.files or [])
+        if not m3:
+            return False
+        loc = Path(w2.locate_file(m3[0])).resolve()
+        p5 = set()
+        for key in ('purelib', 'platlib'):
+            p = sysconfig.get_paths().get(key)
+            if p:
+                p5.add(Path(p).resolve())
+        for p in sys.path:
+            if p and 'site-packages' in p:
+                with contextlib.suppress(Exception):
+                    p5.add(Path(p).resolve())
+        return any((str(loc).startswith(str(sp)) for sp in p5))
+    except Exception:
+        return False
+def z9(w2):
+    try:
+        for f in w2.files or []:
+            y2 = str(f).lower()
+            if y2.endswith('.so') or '.so.' in y2:
+                return True
+        return False
+    except Exception:
+        return False
+def l1():
+    a10 = []
+    b10 = []
+    for w2 in z10.distributions():
+        y2 = w2.metadata.get('Name') or w2.metadata.get('Summary') or w2.metadata.get('name')
+        if not y2:
+            continue
+        if not y9(w2):
+            continue
+        if z9(w2):
+            b10.append(y2)
+        else:
+            a10.append(y2)
+    a10 = sorted(set(a10), key=str.lower)
+    b10 = sorted(set(b10), key=str.lower)
+    Path('pure.txt').write_text('\n'.join(a10) + ('\n' if a10 else ''), encoding='utf-8')
+    Path('notpure.txt').write_text('\n'.join(b10) + ('\n' if b10 else ''), encoding='utf-8')
+    print(f'Wrote {len(a10)} pure-python packages to pure.txt')
+    print(f'Wrote {len(b10)} packages with C extensions to notpure.txt')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: ren_node_pkgs.py ---
+import json
+import re
+import sys
+from pathlib import Path
+def c10(y2):
+    y2 = y2.lstrip('@')
+    y2 = y2.replace('/', '__')
+    return re.sub('[^\\w.-]', '_', y2)
+def d10(cwd, e10=False):
+    for f10 in cwd.rglob('package.json'):
+        g10 = f10.parent
+        if g10.name != 'package':
+            continue
+        try:
+            with f10.open(encoding='utf-8') as f:
+                x4 = json.load(f)
+        except Exception:
+            continue
+        j = x4.get('name')
+        if not j:
+            continue
+        h10 = c10(j)
+        i10 = g10.parent / h10
+        if g10.name == h10:
+            continue
+        if i10.exists():
+            print(f'[SKIP] {i10} already exists')
+            continue
+        if e10:
+            print(f'[DRY] {g10} -> {i10}')
+        else:
+            print(f'[RENAME] {g10} -> {i10}')
+            g10.rename(i10)
+def l1():
+    cwd = Path.cwd()
+    e10 = '--dry-run' in sys.argv
+    d10(cwd, dry_run=e10)
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: saveinstalledpkgs.py ---
+import subprocess
+import sys
+from pathlib import Path
+j10 = Path('installed_packages_deb.txt')
+def k10():
+    try:
+        f2 = subprocess.run(['dpkg-query', '-W', '-f=${binary:Package}\n'], check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        sys.exit('dpkg-query not found. Are you on a Debian-based system?')
+    except subprocess.CalledProcessError as exc:
+        sys.exit(exc.stderr.strip())
+    return sorted((pkg for pkg in f2.stdout.splitlines() if pkg))
+def l10(h, r1):
+    r1.write_text('\n'.join(h) + '\n', encoding='utf-8')
+def l1():
+    h = k10()
+    l10(h, j10)
+    print(f'Saved {len(h)} packages to {j10.resolve()}')
+if __name__ == '__main__':
+    raise SystemExit(l1())
+# --- File: savekeys.py ---
+import json
+import sys
+def m10(x4):
+    if isinstance(x4, dict):
+        n10 = [x4]
+    elif isinstance(x4, list):
+        n10 = x4
+    else:
+        raise ValueError('JSON root must be an object or a list of objects')
+    o10 = []
+    for i, i in enumerate(n10):
+        if not isinstance(i, dict):
+            raise ValueError(f'Item at index {i} is not a JSON object')
+        if 'pkgname' not in i:
+            print(f"Warning: item at index {i} has no 'pkgname' key, skipping", file=sys.stderr)
+            continue
+        o10.append(i['pkgname'])
+    return o10
+def l1():
+    if len(sys.argv) != 2:
+        print(f'Usage: {sys.argv[0]} <input.json>', file=sys.stderr)
+        sys.exit(1)
+    p10 = sys.argv[1]
+    try:
+        with open(p10, 'r', encoding='utf-8') as f:
+            x4 = json.load(f)
+    except FileNotFoundError:
+        print(f'Error: file not found: {p10}', file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f'Error: invalid JSON in {p10}: {e}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        o10 = m10(x4)
+    except ValueError as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
+    with open('keys.txt', 'w', encoding='utf-8') as f:
+        f.writelines((f'{y2}\n' for y2 in o10))
+    print(f'Wrote {len(o10)} pkgname values to keys.txt')
+if __name__ == '__main__':
+    l1()
+# --- File: savepkgspure_notpure.py ---
+import importlib.metadata
+import multiprocessing as mp
+from pathlib import Path
+def c2(w2):
+    j = w2.name or w2.metadata.get('Name', 'Unknown')
+    m3 = w2.files or []
+    q10 = any((Path(x2).suffix in ('.so', '.pyd', '.c', '.cpp') for x2 in m3))
+    return (j, not q10)
+def l1():
+    r10 = list(importlib.metadata.distributions())
+    k8 = []
+    s10 = []
+    with mp.Pool(processes=8) as k2:
+        f6 = [k2.apply_async(c2, (w2,)) for w2 in r10]
+        for f2 in f6:
+            j, u5 = f2.get()
+            if u5:
+                k8.append(j)
+            else:
+                s10.append(j)
+    t10 = sorted({p for p in k8 if p})
+    u10 = sorted({p for p in s10 if p})
+    v10 = Path('pure.txt')
+    v10.write_text('\n'.join(t10) + '\n', encoding='utf-8')
+    w10 = Path('notpure.txt')
+    w10.write_text('\n'.join(u10) + '\n', encoding='utf-8')
+    print(f'Done! Pure: {len(t10)}, Not Pure: {len(u10)}')
+if __name__ == '__main__':
+    l1()
+# --- File: xpkgs_git_repo.py ---
+import json
+import subprocess
+import sys
+from pathlib import Path
+def x10():
+    try:
+        f2 = subprocess.run([sys.executable, '-m', 'pip', 'list', '--format=json'], capture_output=True, text=True, check=True)
+        h = json.loads(f2.stdout)
+        return [pkg['name'] for pkg in h]
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        print(f'Error listing packages: {e}', file=sys.stderr)
+        return []
+def y10(x):
+    try:
+        f2 = subprocess.run([sys.executable, '-m', 'pip', 'show', x], capture_output=True, text=True, check=True)
+        z10 = {}
+        for g1 in f2.stdout.splitlines():
+            if ':' in g1:
+                key, _, a11 = g1.partition(':')
+                z10[key.strip()] = a11.strip()
+        return z10
+    except subprocess.CalledProcessError:
+        return {}
+def b11(z10):
+    c11 = ('github.com', 'gitlab.com', 'bitbucket.org', 'sourcehut.org', 'codeberg.org')
+    d11 = []
+    e11 = z10.get('Home-page', '').strip()
+    if e11 and e11.lower() not in ('none', 'unknown', ''):
+        d11.append(e11)
+    f11 = z10.get('Project-URLs') or z10.get('Project-URL', '')
+    for h5 in f11.split('\n'):
+        h5 = h5.strip()
+        if not h5:
+            continue
+        g11, sep, url = h5.partition(',')
+        if sep:
+            h11 = g11.strip().lower()
+            url = url.strip()
+            if any((kw in h11 for kw in ('source', 'repository', 'repo', 'code', 'git'))):
+                d11.insert(0, url)
+            else:
+                d11.append(url)
+    i11 = z10.get('Download-URL', '').strip()
+    if i11 and i11.lower() not in ('none', 'unknown', ''):
+        d11.append(i11)
+    for url in d11:
+        if any((j11 in url for j11 in c11)):
+            url = url.rstrip('/')
+            return url
+    return None
+def k11(h):
+    l2 = {}
+    d6 = len(h)
+    for idx, y2 in enumerate(h, start=1):
+        print(f'[{idx}/{d6}] Checking {y2} ...', end='\r', flush=True)
+        l11 = y10(y2)
+        l2[y2] = b11(l11)
+    print()
+    return l2
+def l1():
+    z5 = Path.home() / 'pkg_git_urls.json'
+    print('Fetching installed package list ...')
+    h = x10()
+    if not h:
+        print('No packages found. Exiting.')
+        sys.exit(1)
+    print(f'Found {len(h)} packages. Extracting git URLs ...')
+    m11 = k11(h)
+    n11 = {k: v for k, v in m11.items() if v}
+    o11 = {k: v for k, v in m11.items() if not v}
+    x5 = {'summary': {'total_packages': len(m11), 'with_git_url': len(n11), 'without_git_url': len(o11)}, 'packages': m11}
+    with z5.open('w', encoding='utf-8') as f:
+        json.dump(x5, f, indent=2, ensure_ascii=False)
+    print(f'\nDone.')
+    print(f'  {len(n11)} packages have a git URL.')
+    print(f'  {len(o11)} packages have no detectable git URL.')
+    print(f'  Results saved to: {z5}')
+if __name__ == '__main__':
+    l1()
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

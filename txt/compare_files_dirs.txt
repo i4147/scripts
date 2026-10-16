@@ -1,0 +1,151 @@
+# filename: a-b.py
+def i():e=g(j.argv[1]);f=g(j.argv[2]);d={h.rstrip('\n') for h in f.read_text(encoding='utf-8').splitlines()};c=e.read_text(encoding='utf-8').splitlines(keepends=True);a=[h for h in c if h.rstrip('\n') not in d];b=e.with_suffix(e.suffix+'.tmp');b.write_text(''.join(a),encoding='utf-8');b.replace(e)
+if __name__=='__main__':raise SystemExit(i())
+# filename: compare_and_move.py
+def i(w):t=C(w).expandvars();return C(t).expanduser().resolve()
+def a(q,r):A=i(q);B=i(r);print(f'Source directory (first):{A}');print(f'Target directory (second):{B}');print('-'*40)
+    if not A.exists():print(f"Error:Source directory '{q}' (expanded to '{A}') does not exist.");return
+    if not B.exists():print(f"Error:Target directory '{r}' (expanded to '{B}') does not exist.");return
+    o=C.cwd()/'common';o.mkdir(exist_ok=True);print(f'Created/verified directory:{o}');g={f.name for f in A.iterdir() if f.is_file()};h={f.name for f in B.iterdir() if f.is_file()};c=g&h
+    if not c:print('\nNo files found that exist in both directories.');return
+    print(f'\nFound {len(c)} file(s) that exist in BOTH directories:')
+    for u in sorted(c):l=(A/u).stat().st_size;n=(B/u).stat().st_size;p='✓' if l==n else '⚠';print(f'  {p} {u} (source:{l} bytes,target:{n} bytes)')
+    print('\n'+'='*40);x=input(f"Move these {len(c)} common file(s) from source to '{o}'? (y/n):").lower()
+    if x!='y':print('Operation cancelled.');return
+    j=0;d=[];b=[]
+    for u in sorted(c):k=A/u;s=o/u;m=B/u
+        if k.stat().st_size!=m.stat().st_size:b.append(u)
+        if s.exists():D=s.stem;F=s.suffix;y=1
+            while s.exists():v=f'{D}_common{y}{F}';s=o/v;y+=1
+            print(f"\n  Note:'{u}' will be renamed to '{s.name}' to avoid conflict")
+        try:z.move(k,s);print(f'  ✓ Moved:{u}->{s.name}');j+=1
+        except Exception as e:print(f'  ✗ Error moving {u}:{e}');d.append(u)
+    print('\n'+'='*40);print(f'Summary:Successfully moved {j} of {len(c)} common file(s)')
+    if b:print(f'\n⚠ Warning:{len(b)} file(s) had different sizes in source vs target:')
+        for u in b:print(f'-{u}')
+        print('  (Files were still moved,but verify they are correct versions)')
+    if d:print(f'\nFailed to move {len(d)} file(s):')
+        for u in d:print(f'-{u}')
+    if j>0:print(f'\nMoved common files are located in:{o}');print(f'Note:These files still exist in the target directory:{B}')
+def E():if len(G.argv)!=3:print('Usage:python compare_dirs.py<source_directory><target_directory>');print('\nWhat this script does:');print('  Moves files that exist in BOTH directories from the source directory');print("  to a 'common' folder in the current working directory.");print('\nExamples:');print('  python compare_dirs.py ~/Documents/dir1/absolute/path/to/dir2');print('  python compare_dirs.py ./first_dir ../second_dir');print('  python compare_dirs.py $HOME/data1 $PROJECT/data2');G.exit(1)
+    q=G.argv[1];r=G.argv[2];a(q,r)
+if __name__=='__main__':raise SystemExit(E())
+# filename: compare_dirs.py
+from dh import cprint;e=32768
+def i(H):H=D(H);h=z()
+    with H.open('rb') as f:for A in iter(lambda:f.read(e),b''):h.update(A)
+    return h.hexdigest()
+def b(c,q,n,l,j):with c.open('w',encoding='utf-8') as M:M.write('#!/bin/sh\n')
+        for d in sorted(l):t=n/d;M.write(f'mkdir-p {C.quote(str(t))}\n')
+        for f in sorted(j):m=n/f;o=q/f;x=m.parent;M.write(f'mkdir-p {C.quote(str(x))}&&cp-a {C.quote(str(o))} {C.quote(str(m))}\n')
+    N=c.stat();c.chmod(N.st_mode|I.S_IXUSR|I.S_IXGRP|I.S_IXOTH)
+def G():K=D.cwd();E=L.argv[1].strip();F=L.argv[2].strip();B=D(E).expanduser() if '~' in E else D(E);y=D(F).expanduser() if '~' in F else D(F);u=[p.name for p in B.glob('*') if p.is_file()];[p.name for p in B.glob('*') if p.is_dir()];w=[p.name for p in y.glob('*') if p.exists() and p.is_file()];[p.name for p in y.glob('*') if p.is_dir()];r=[D(E).resolve()/p for p in u if p in w];s={str(D(E).resolve()/p):str(D(F).resolve()/p) for p in u if p in w}
+    if r:for k in r:print(f'-{k}')
+    else:print('no common files');L.exit(1)
+    a=[p for p in u if p not in w];[p for p in w if p not in u];g=K/'common.txt';g.write_text('\n'.join([str(p) for p in r]));J=input(f'delete from {E}  ? ')
+    if J=='y':for k,v in s.items():if i(k)==i(v):print(f'the files are identical \n{k}\n{v}');D(k).unlink()
+            else:print(f'similar name filed:\n{k}\n{v}\n')
+    cprint('only in first')
+    for p in a:print(p)
+if __name__=='__main__':raise SystemExit(G())
+# filename: compare_dirz.py
+def e(y,d=65536):h=n.sha256()
+    with y.open('rb') as f:while (p :=f.read(d)):h.update(p)
+    return h.hexdigest()
+def a(g):k={}
+    for v in g.rglob('*'):if v.is_file():z=v.relative_to(g);k[str(z)]=e(v)
+    return k
+def b(i,j):t=s(i);u=s(j);w=a(t);x=a(u);m=[];o=[];c=[]
+    for l,B in w.items():if l not in x:c.append(l)
+        elif B==x[l]:o.append(l)
+        else:m.append(l)
+    s('dir1.txt').write_text('\n'.join(m),encoding='utf-8');s('common.txt').write_text('\n'.join(o),encoding='utf-8');s('only_in_dir1.txt').write_text('\n'.join(c),encoding='utf-8')
+if __name__=='__main__':if len(A.argv)<3:print('Usage:python compare_dirz.py<dir1><dir2>');A.exit(1)
+    q=A.argv[1];r=A.argv[2];b(q,r);print('Comparison complete. See dir1.txt,common.txt,only_in_dir1.txt')
+# filename: fcmp.py
+if __name__=='__main__':e=d.cwd();f=d(g.argv[1]);c=a(e,f);b(c.report_full_closure())
+# filename: pdif.py
+def a(h,j):try:with k(h).open('r',encoding='utf-8') as n,k(j).open('r',encoding='utf-8') as o:f=n.readlines();g=o.readlines()
+    except FileNotFoundError as e:print(f'Error:{e}');return
+    f=[l.rstrip('\n') for l in f];g=[l.rstrip('\n') for l in g];c=[];d=[];b=0
+    for i,l in enumerate(f):if l not in g:c.append(i+1)
+    for i,l in enumerate(g):if l not in f:d.append(i+1)
+    for l in f:if l in g:b+=1
+    print(f'{h} :{len(f)}');print(f'{j} :{len(g)}');print(f'common:{b}');print(f'Number of different lines in File 1:{len(c)}')
+    if c:print(f'Line numbers:{c}')
+    print(f'Number of different lines in File 2:{len(d)}')
+    if d:print(f'Line numbers:{d}')
+if __name__=='__main__':if len(m.argv)!=3:print('Usage:python script.py<file1><file2>');m.exit(1)
+    a(m.argv[1],m.argv[2])
+# filename: pycommon.py
+def a(c,d):g=i(c);h=i(d)
+    if not g.exists() or not h.exists():print('Error:One or both files do not exist.');l.exit(1)
+    with g.open('r',encoding='utf-8') as m:f={j.strip('\n') for j in m}
+    e=[];k=set()
+    with h.open('r',encoding='utf-8') as n:for j in n:b=j.strip('\n')
+            if b in f and b not in k:e.append(b);k.add(b);print(b)
+if __name__=='__main__':if len(l.argv)<3:print('Usage:python script.py<file1><file2>');l.exit(1)
+    a(l.argv[1],l.argv[2])
+# filename: same_file.py
+def a(b,c):try:return d(b).samefile(c)
+    except FileNotFoundError:return False
+    except OSError as e:print(f'error:{e}',file=f.stderr);return False
+# filename: udiffer.py
+def a(c):try:with open(c) as f:return f.readlines()
+    except UnicodeDecodeError:with open(c,encoding='utf_16') as f:return f.readlines()
+def k():g=b.ArgumentParser();g.add_argument('first',metavar='FILE');g.add_argument('second',metavar='FILE');e=g.parse_args();j=a(e.first);h=a(e.second);i=list(d.unified_diff(j,h,fromfile=e.first,tofile=e.second))
+    if i:l.stdout.writelines(i);l.exit(1)
+if __name__=='__main__':raise SystemExit(k())
+
+You are a senior Python engineer. You will be given N Python scripts that do
+nearly the same job with small differences. Merge them into ONE well-structured,
+runnable Python script.
+## Input
+are scripts provided above.
+## Deliverable
+A single runnable file named `<merged>.py`, invoked as:
+    python <merged>.py <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse`. Expose every behavioral difference between the original
+   scripts as a CLI argument.
+   - Use subcommands if the scripts are distinct modes/jobs.
+   - Use flags if they are variations of one pipeline.
+2. Factor shared logic (imports, helpers, config, error handling) into common
+   functions. Do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Include a mapping
+   block (see Output format §3).
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args, with
+   defaults equal to the original values.
+5. If differences cannot be unified, keep BOTH behind a flag/choice. Never
+   silently pick one.
+6. Sensible defaults so it runs out of the box. Print help if ambiguous.
+7. Type hints on all public functions. Docstrings on all public functions and
+   classes. Module-level docstring with usage examples.
+8. Standard library only, unless the originals already import third-party
+   packages — in that case list them explicitly at the top of the module
+   docstring and in the imports.
+## Output format (exactly these three sections, in order)
+### 1. Comparison table
+Markdown table: script name | what it does | shared with others | unique to it |
+proposed CLI mapping.
+### 2. Merged script
+One fenced code block containing the complete file.
+### 3. Mapping
+A fenced code block (plain text) showing the exact command for each original:
+    original_name1.py  ->  python merged.py mode-a ...
+    original_name2.py  ->  python merged.py mode-b --flag ...
+## Comment policy
+- Keep the module-level docstring (with usage examples).
+- Keep the mapping block from §3 as real comments in the file.
+- Strip ALL other comments and docstrings from the final code.
+- Exception: keep a short comment wherever a non-obvious behavior was
+  preserved behind a flag, so a future reader knows why the branch exists.
+## Ambiguity policy
+- If something is ambiguous, state your assumption in one line and proceed.
+- If something is impossible, say so plainly. Do not simulate or fake output.
+- Only ask a clarifying question if a wrong assumption would SILENTLY change
+  runtime behavior. Otherwise assume and move on.
+## Batch mode (optional)
+If the user says "batch mode", emit ONLY §2 (the code) for each input group,
+omit the table and mapping sections, and write each merged file to
+`<group>_merged.py` next to the inputs. Otherwise emit all three sections.

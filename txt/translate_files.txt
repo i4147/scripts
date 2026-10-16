@@ -1,0 +1,479 @@
+# --- File: vitrans.py ---
+import json
+import logging
+import signal
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
+a = 4800
+b = 1.2
+c = 3.0
+d = 5
+e = 5
+f = frozenset({'lazy', '.git', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache'})
+logging.basicConfig(level=logging.WARNING)
+g = logging.getLogger(__name__)
+h = False
+def i(sig, j):
+    global _interrupted
+    print('\n⚠️  Ctrl+C — finishing current chunk then stopping.')
+    h = True
+signal.signal(signal.SIGINT, i)
+class k(Exception):
+    pass
+class l(Exception):
+    pass
+def m(n):
+    o = ('utf-8', 'utf-8-sig', 'utf-16', 'cp1258', 'gb18030')
+    for enc in o:
+        try:
+            return (n.read_text(encoding=enc, errors='strict'), enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return (n.read_bytes().decode('utf-8', errors='replace'), 'utf-8')
+def p(q, r=a):
+    if len(q) <= r:
+        return [q]
+    s = []
+    t = q
+    while len(t) > r:
+        u = t[:r]
+        cut = u.rfind('\n\n')
+        if cut == -1 or cut < r // 4:
+            cut = u.rfind('\n')
+        if cut == -1 or cut < r // 4:
+            cut = u.rfind(' ')
+        if cut == -1:
+            cut = r
+        s.append(t[:cut])
+        t = t[cut:].lstrip('\n')
+    if t:
+        s.append(t)
+    return s
+@retry(reraise=True, stop=stop_after_attempt(d), wait=wait_exponential_jitter(initial=3, max=90, jitter=4), retry=retry_if_exception_type((k, l)), before_sleep=before_sleep_log(g, logging.DEBUG))
+def v(q):
+    try:
+        w = GoogleTranslator(source='vi', target='en').translate(q)
+        if not w or not w.strip():
+            raise l('Empty result returned from translator')
+        return w
+    except Exception as e:
+        msg = str(e).lower()
+        if any((k in msg for k in ('429', 'rate limit', 'too many', 'quota'))):
+            print('   ⏳ Rate limited — backing off…')
+            raise k(str(e)) from e
+        if any((k in msg for k in ('timeout', 'timed out', 'connection', 'reset'))):
+            raise l(str(e)) from e
+        raise l(str(e)) from e
+def x(q, idx):
+    try:
+        return (v(q), True)
+    except Exception as e:
+        print(f'   ❌ Chunk {idx} failed after all retries: {e}')
+        return (q, False)
+def y(src):
+    return src.with_suffix(src.suffix + '.viprogress')
+def z(src, a1, b1):
+    try:
+        c1 = {'source': str(src), 'saved_at': datetime.now().isoformat(), 'total_chunks': b1, 'chunks': {str(k): v for k, v in a1.items()}}
+        y(src).write_text(json.dumps(c1, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception as e:
+        print(f'   ⚠️  Could not save progress: {e}')
+def d1(src):
+    p = y(src)
+    if not p.exists():
+        return {}
+    try:
+        c1 = json.loads(p.read_text(encoding='utf-8'))
+        if Path(c1.get('source', '')) != src:
+            return {}
+        e1 = {int(k): v for k, v in c1.get('chunks', {}).items()}
+        print(f'   🔄 Resuming: {len(e1)} chunk(s) already done')
+        return e1
+    except Exception:
+        return {}
+def f1(src):
+    y(src).unlink(missing_ok=True)
+def g1(src):
+    return src.with_suffix(src.suffix + '.en')
+def h1(n):
+    global _interrupted
+    out = g1(n)
+    print(f'\n📄 {n.name}  →  {out.name}')
+    try:
+        q, _ = m(n)
+    except Exception as e:
+        print(f'   ❌ Cannot read: {e}')
+        return False
+    if not q.strip():
+        print('   ⚠️  File is empty — skipping')
+        return True
+    s = p(q)
+    b1 = len(s)
+    print(f'   📦 {b1} chunk(s)  |  file size: {len(q):,} chars')
+    a1 = d1(n)
+    i1 = 0
+    for i, j1 in enumerate(s):
+        if h:
+            z(n, a1, b1)
+            print('   💾 Progress saved.')
+            return False
+        if i in a1:
+            print(f'   [{i + 1:>3}/{b1}] ⏭  skipped (cached)')
+            continue
+        k1, ok = x(j1, i)
+        a1[i] = k1
+        if not ok:
+            i1 += 1
+        l1 = j1[:40].replace('\n', '↵').strip()
+        m1 = '✓' if ok else '✗'
+        print(f'   [{i + 1:>3}/{b1}] {m1}  {l1!r}…')
+        if (i + 1) % e == 0:
+            z(n, a1, b1)
+        if i < b1 - 1 and (not h):
+            time.sleep(b)
+    n1 = '\n'.join((a1[i] for i in range(b1)))
+    try:
+        out.write_text(n1, encoding='utf-8')
+        f1(n)
+        if i1:
+            print(f'   ⚠️  Done with {i1} chunk(s) untranslated — check {out.name}')
+        else:
+            print(f'   ✅ Saved → {out}')
+        return True
+    except Exception as e:
+        print(f'   ❌ Failed to write output: {e}')
+        return False
+def o1():
+    p1 = [p for p in Path.cwd().glob('*.txt') if p.is_file() and p.name not in f]
+    if not p1:
+        print('No .txt files found to translate.')
+        return
+    for n in sorted(p1):
+        if not h1(n):
+            break
+        time.sleep(c)
+if __name__ == '__main__':
+    try:
+        raise SystemExit(o1())
+    except KeyboardInterrupt:
+        print('\n👋 Processed stopped by user.')
+        sys.exit(1)
+
+# --- File: tkor.py ---
+import argparse
+import sys
+from pathlib import Path
+from deep_translator import GoogleTranslator
+q1 = 2000
+def r1(n):
+    s1 = {'.txt', '.md', '.csv', '.json', '.py'}
+    ext = n.suffix.lower()
+    if ext not in s1:
+        raise ValueError(msg)
+    return n.read_text(encoding='utf-8')
+def t1(q, u1=32768):
+    return [q[i:i + u1] for i in range(0, len(q), u1)]
+def v1(s):
+    w1 = GoogleTranslator(source='ko', target='en')
+    x1 = [w1.translate(j1) for j1 in s]
+    return ''.join(x1)
+def y1(n, z1):
+    n.write_text(z1, encoding='utf-8')
+def a2(b2):
+    return b2.with_name(f'{b2.stem}_eng{b2.suffix}')
+def o1():
+    c2 = argparse.ArgumentParser(description='Translate Korean → English using chunked deep-translator.')
+    c2.add_argument('input_path', type=str, help='Path to input file.')
+    c2.add_argument('-g', '--game', type=str, default=None, help='Optional game argument.')
+    d2 = c2.parse_args()
+    e2 = Path(d2.input_path)
+    if not e2.exists():
+        print(f'Error: File not found: {e2}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        f2 = r1(e2)
+    except Exception as exc:
+        print(f'Read error: {exc}', file=sys.stderr)
+        sys.exit(1)
+    s = t1(f2)
+    try:
+        n1 = v1(s)
+    except Exception as exc:
+        print(f'Translation error: {exc}', file=sys.stderr)
+        sys.exit(1)
+    g2 = a2(e2)
+    try:
+        y1(g2, n1)
+    except Exception as exc:
+        print(f'Write error: {exc}', file=sys.stderr)
+        sys.exit(1)
+    print(f'Saved translated file → {g2}')
+if __name__ == '__main__':
+    raise SystemExit(o1())
+
+# --- File: tchn.py ---
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from deep_translator import GoogleTranslator
+h2 = '.'
+q1 = 2000
+i2 = re.compile('[^\\x00-\\x7F]')
+def j2(n):
+    try:
+        with Path(n).open('rb') as f:
+            j1 = f.read(2048)
+        return b'\x00' not in j1
+    except:
+        return False
+def p(q, u1):
+    return [q[i:i + u1] for i in range(0, len(q), u1)]
+def k2(j1):
+    try:
+        return GoogleTranslator(source='auto', target='en').translate(j1)
+    except Exception as e:
+        print(f'Chunk translation error: {e}')
+        return j1
+def l2(n):
+    try:
+        m2 = Path(n).read_text(encoding='utf-8')
+    except:
+        print(f'Skipping unreadable file: {n}')
+        return
+    if not i2.search(m2):
+        return
+    s = p(m2, 32768)
+    with ThreadPoolExecutor(max_workers=8) as n2:
+        o2 = list(n2.map(k2, s))
+    n1 = ''.join(o2)
+    p2 = f'{n.stem}_eng{n.suffix}'
+    q2 = n.parent / p2
+    try:
+        Path(q2).write_text(n1, encoding='utf-8')
+        print(f'Translated → {q2.name}')
+    except Exception as e:
+        print(f'Error writing {q2}: {e}')
+def r2(s2):
+    t2 = []
+    for n in walker(s2):
+        if n.is_file() and j2(n):
+            t2.append(n)
+    print(f'Found {len(t2)} text files to process')
+    with ThreadPoolExecutor(8) as n2:
+        u2 = {n2.submit(l2, f): f for f in t2}
+        for v2 in as_completed(u2):
+            f = u2[v2]
+            try:
+                v2.result()
+            except Exception as e:
+                print(f'Error processing {f}: {e}')
+if __name__ == '__main__':
+    r2(h2)
+
+# --- File: trans_ru.py ---
+import json
+import random
+import re
+import sys
+import time
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+from deep_translator import GoogleTranslator
+from loguru import logger
+w2 = 8
+x2 = 4
+y2 = 0.6
+z2 = 2000
+a3 = re.compile('[\\u0400-\\u04FF\\u0500-\\u052F\\u2DE0-\\u2DFF\\uA640-\\uA69F\\u1C80-\\u1C8F]')
+def b3(q):
+    return bool(a3.search(q))
+def c3(d3):
+    s = []
+    e3 = []
+    f3 = 0
+    for g3 in d3:
+        h3 = len(g3) + 1
+        if h3 > z2:
+            if e3:
+                s.append(e3)
+                e3 = []
+                f3 = 0
+            s.append([g3])
+            continue
+        if f3 + h3 > z2 and e3:
+            s.append(e3)
+            e3 = []
+            f3 = 0
+        e3.append(g3)
+        f3 += h3
+    if e3:
+        s.append(e3)
+    return s
+def i3(d3):
+    j3 = {}
+    for g3 in d3:
+        try:
+            k1 = GoogleTranslator(source='ru', target='en').translate(g3)
+            j3[g3] = k1 if k1 is not None else g3
+        except Exception as exc:
+            g.error("Per-line fallback failed for '{}': {}", g3[:50], exc)
+            j3[g3] = g3
+    return j3
+def k2(j1):
+    t1 = '\n'.join(j1)
+    w1 = GoogleTranslator(source='ru', target='en')
+    for k3 in range(1, x2 + 1):
+        try:
+            k1 = w1.translate(t1)
+            if k1 is not None:
+                return (j1, k1)
+        except Exception as exc:
+            l3 = y2 * 2 ** (k3 - 1)
+            m3 = random.uniform(0, l3 * 0.25)
+            n3 = l3 + m3
+            g.warning("Translate attempt {}/{} failed for chunk starting '{}...': {}. Retrying in {:.2f}s", k3, x2, j1[0][:60] + '...' if j1 else '', exc, n3)
+            if k3 < x2:
+                time.sleep(n3)
+    return (j1, None)
+def o3(b2):
+    try:
+        with b2.open(encoding='utf-8') as p3:
+            return [raw.rstrip('\n') for raw in p3 if raw.strip() != '']
+    except Exception as exc:
+        g.error('Error reading input file: {}', exc)
+        return None
+def q3(d3):
+    r3 = set()
+    s3 = []
+    for g3 in d3:
+        if g3 not in r3:
+            r3.add(g3)
+            s3.append(g3)
+    return s3
+def t3(u3, n1, v3, w3, b1):
+    if not n1:
+        g.error('Failed to translate chunk starting with: {}', u3[0][:60] + '...' if u3 else '')
+        return
+    x3 = n1.splitlines()
+    if len(x3) == len(u3):
+        for i, y3 in enumerate(u3):
+            v3[y3] = x3[i]
+    else:
+        g.warning('Line-count mismatch in chunk ({} original vs {} translated). Falling back to per-line translation for this chunk.', len(u3), len(x3))
+        v3.update(i3(u3))
+    z3 = u3[0] if u3 else ''
+    print("Translated chunk {}/{} (sample: '{}' → '{}')", w3, b1, z3[:40] + ('...' if len(z3) > 40 else ''), v3.get(z3, '')[:60])
+def a4(v3, b4):
+    try:
+        with b4.open('w', encoding='utf-8') as p3:
+            json.dump(v3, p3, ensure_ascii=False, indent=2)
+        print('Saved {} translations to {}', len(v3), b4.name)
+    except Exception as exc:
+        g.error('Error saving JSON file: {}', exc)
+def c4(b2, d4, v3):
+    try:
+        with b2.open('w', encoding='utf-8') as p3:
+            e4 = 0
+            for g3 in d4:
+                if g3 in v3:
+                    p3.write(f'{v3[g3]}\n')
+                    e4 += 1
+                else:
+                    p3.write(f'{g3}\n')
+        print('Updated {}: translated {} lines, kept {} lines unchanged', b2.name, e4, len(d4) - e4)
+    except Exception as exc:
+        g.error('Error updating input file: {}', exc)
+def o1():
+    if len(sys.argv) < 2:
+        g.error('Usage: {} <input_file.txt>', sys.argv[0])
+        return 1
+    b2 = Path(sys.argv[1].strip())
+    if not b2.exists():
+        g.error('Input file not found: {}', b2)
+        return 1
+    d4 = o3(b2)
+    if d4 is None:
+        return 1
+    if not d4:
+        print('No non-empty lines found in {}', b2.name)
+        return 0
+    f4 = [g3 for g3 in d4 if b3(g3)]
+    g4 = len(d4) - len(f4)
+    print('Loaded {} lines: {} with Cyrillic, {} already non-Cyrillic/skipped', len(d4), len(f4), g4)
+    if not f4:
+        print('No Russian/Cyrillic lines to translate in {}', b2.name)
+        return 0
+    h4 = q3(f4)
+    print('Deduplicated Russian lines: {} unique from {} total', len(h4), len(f4))
+    s = c3(h4)
+    if not s:
+        print('Nothing to translate after chunking.')
+        return 0
+    print('Created {} chunk(s) from {} unique Russian lines (max {} chars per chunk), using {} worker(s)', len(s), len(h4), z2, w2)
+    v3 = {}
+    b1 = len(s)
+    w3 = 0
+    i4 = Pool(processes=w2)
+    try:
+        j4 = [i4.apply_async(k2, (j1,)) for j1 in s]
+        for k4 in j4:
+            w3 += 1
+            l4 = s[w3 - 1]
+            try:
+                u3, n1 = k4.get()
+                t3(u3, n1, v3, w3, b1)
+            except Exception as exc:
+                g.error("Unexpected error processing chunk starting with '{}': {}", l4[0][:60] + '...' if l4 else '', exc)
+    finally:
+        i4.close()
+        i4.join()
+    b4 = b2.with_suffix('.json')
+    a4(v3, b4)
+    c4(b2, d4, v3)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(o1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

@@ -1,0 +1,359 @@
+# filename: brmc.py
+from dh import get_pyfiles
+def b(P):if not P.body:return False
+    K=P.body[0];return isinstance(K,Q.Expr) and isinstance(getattr(K,'value',None),Q.Constant) and isinstance(K.value.value,str)
+def a(v):try:P=Q.parse(v)
+    except SyntaxError:return (v,0)
+    l=[];e=b(P)
+    for K in Q.walk(P):if not isinstance(K,Q.Expr):continue
+        V=getattr(K,'value',None)
+        if not isinstance(V,Q.Constant) or not isinstance(V.value,str):continue
+        if e and P.body and (K is P.body[0]):continue
+        if hasattr(K,'lineno') and hasattr(K,'end_lineno'):l.append((K.lineno,K.col_offset,K.end_lineno,K.end_col_offset))
+    if not l:return (v,0)
+    A=v.splitlines(keepends=True);l.sort(key=lambda r:(r[0],r[1]),reverse=True)
+    for C,N,y,F in l:O=C-1;G=y-1
+        if O<0 or G>=len(A):continue
+        if O==G:I=A[O];A[O]=I[:N]+''+I[F:]
+        else:z=A[O];H=A[G];A[O]=z[:N];A[G]=H[F:]
+            for S in range(O+1,G):A[S]=''
+    h=''.join(A);return (h,len(l))
+def d(v):try:Q.parse(v);return True
+    except SyntaxError:return False
+def c(B,*,k=True):n=[]
+    for w in B:if w.is_file():if w.suffix=='.py':n.append(w)
+        elif w.is_dir():q='**/*.py' if k else '*.py';n.extend(w.glob(q))
+    return sorted({p.resolve() for p in n})
+def g(L,R):T=str(L.relative_to(R))
+    try:v=L.read_text(encoding='utf-8')
+    except UnicodeDecodeError:v=L.read_text(encoding='latin-1')
+    except Exception:return None
+    h,j=a(v)
+    if h==v:return None
+    if not d(h):return None
+    try:L.write_text(h,encoding='utf-8')
+    except Exception:return None
+    return (T,j)
+def J():u=m.ArgumentParser(description='Strip docstrings from Python files (preserves module docstrings).');u.add_argument('targets',nargs='*',help='Files or directories to process (default:current directory,recursive).');E=u.parse_args();R=D.cwd()
+    if E.targets:s=[D(t).resolve() for t in E.targets];n=c(s,k=True)
+    else:n=get_pyfiles(R);n=sorted(set(n))
+    if not n:return
+    o=[]
+    with W.Pool(processes=8) as M:f=[M.apply_async(g,(p,R)) for p in n]
+        for i in f:U=i.get()
+            if U is not None:o.append(U)
+    for T,j in sorted(o,key=lambda x:x[0]):print(T)
+        if j>0:print(f'  docstrings removed:{j}')
+if __name__=='__main__':raise SystemExit(J())
+# filename: brmc2.py
+from loguru import logger;s=8;'Fixed number of worker processes used for concurrent file processing.'
+class h(P.NodeTransformer):def __init__(self):self.is_module=True;self.preserve_module_docstring=True
+    def r(self,J):self.is_module=True
+        if J.body and isinstance(J.body[0],P.Expr) and isinstance(J.body[0].value,P.Constant) and isinstance(J.body[0].value.value,str):i=J.body[0];j=self._visit_body(J.body[1:]);J.body=[i]+j
+        else:J.body=self._visit_body(J.body)
+        self.is_module=False;return J
+    def t(self,G):y=[]
+        for M in G:y.append(self.visit(M))
+        return y
+    def g(self,J):return self._process_function_like(J)
+    def d(self,J):return self._process_function_like(J)
+    def k(self,J):J.body=self._remove_docstring_from_body(J.body);J.decorator_list=[self.visit(Q) for Q in J.decorator_list];return J
+    def c(self,J):J.body=self._remove_docstring_from_body(J.body);J.decorator_list=[self.visit(Q) for Q in J.decorator_list];return J
+    def a(self,G):if not G:return G
+        if isinstance(G[0],P.Expr) and isinstance(G[0].value,P.Constant) and isinstance(G[0].value.value,str):G=G[1:]
+        y=[self.visit(M) for M in G]
+        if not y:y=[P.Pass()]
+        return y
+def b(v):try:N=P.parse(v);w=h();z=w.visit(N);P.fix_missing_locations(z);compile(z,'<transformed>','exec');return P.unparse(z)
+    except SyntaxError as exc:logger.error(f'Syntax error in transformed code:{R}');return None
+    except Exception as exc:logger.error(f'Error processing code:{R}');return None
+def e(H):try:P.parse(H);compile(H,'<string>','exec');return True
+    except (SyntaxError,ValueError) as exc:logger.error(f'Code validation failed:{R}');return False
+def p(K):try:n=K.read_text(encoding='utf-8')
+        if not e(n):return (K,False,'Original code validation failed')
+        m=b(n)
+        if m is None:return (K,False,'Docstring removal failed')
+        if not e(m):return (K,False,'Modified code validation failed')
+        K.write_text(m,encoding='utf-8');return (K,True,None)
+    except Exception as exc:return (K,False,str(R))
+def f(D):q=[]
+    for K in D:if K.is_file() and K.suffix=='.py':q.append(K)
+        elif K.is_dir():q.extend(K.rglob('*.py'))
+    return sorted(set(q))
+def I():if len(S.argv)>1:u=[E(O) for O in S.argv[1:]]
+    else:u=[E.cwd()]
+    for K in u:if not K.exists():logger.error(f'Path does not exist:{K}');return 1
+    q=f(u)
+    if not q:logger.warning('No Python files found to process');return 0
+    print(f'Found {len(q)} Python file(s) to process');x=0;B=0
+    with F(processes=s) as L:l=[L.apply_async(p,(K,)) for K in q]
+        for o in l:K,A,C=o.get()
+            if A:print(f'✓ Processed:{K}');x+=1
+            else:logger.error(f'✗ Failed:{K}-{C}');B+=1
+    print(f"\n{'='*40}");print('Processing complete:');print(f'  Successful:{x}');print(f'  Failed:{B}');print(f'  Total:{len(q)}');print(f"{'='*40}");return 0 if B==0 else 1
+if __name__=='__main__':raise SystemExit(I())
+# filename: check_rmc.py
+class L:O='\x1b[92m';Q='\x1b[97m';M='\x1b[93m';P='\x1b[0m'
+def k(Z):return Z.name in {'.git','__pycache__'}
+def r(ab=T('.')):G=[]
+    def ad(C):try:for V in C.iterdir():if V.is_dir():if not k(V):ad(V)
+                elif V.is_file() and V.suffix=='.py':G.append(V)
+        except (PermissionError,OSError):pass
+    ad(ab);return sorted(G)
+def A(W,F):return F==0 and W.strip().startswith('#!')
+def c(W):I=W.strip();return bool(re.match('#\\s*(type|fmt):',I))
+def g(ac,Y):if not isinstance(Y,ae.Expr):return False
+    if not isinstance(Y.value,ae.Constant):return False
+    if not isinstance(Y.value.value,str):return False
+    return bool(ac.body and ac.body[0] is Y)
+def b(Z):h=[]
+    try:with open(Z,'r',encoding='utf-8',errors='ignore') as f:J=f.read()
+        try:ac=ae.parse(J)
+        except SyntaxError:return h
+        for Y in ae.walk(ac):if isinstance(Y,ae.Expr) and isinstance(Y.value,ae.Constant) and isinstance(Y.value.value,str):if g(ac,Y):continue
+                if hasattr(Y,'lineno'):h.append((Y.lineno-1,None,True))
+        return h
+    except Exception:return h
+def a(Z):E=[]
+    try:with open(Z,'r',encoding='utf-8',errors='ignore') as f:R=f.readlines()
+        d=set();j=b(Z)
+        for F,_,_ in j:d.add(F)
+        for ag,W in enumerate(R):if '#' in W:if A(W,ag):continue
+                if c(W):continue
+                w=W.find('#')
+                if w!=-1:v=W[:w]
+                    if v.count('"')%2==0 and v.count("'")%2==0:E.append((ag,W.rstrip(),False))
+    except Exception:pass
+    return E
+def u(Z):E=a(Z);return (Z,E)
+def o(Z,F,t,B,z=True):Z=T(Z).resolve();q='Comment' if z else 'Docstring';print(f'\n{Z.relative_to(T.cwd().resolve())}:{F+1}');S=max(0,F-2);af=min(len(B),F+3)
+    for i in range(S,af):if i==F:print(f'{L.GREEN}{i+1:4d}|{B[i].rstrip()}{L.RESET}')
+        else:print(f'{L.WHITE}{i+1:4d}|{B[i].rstrip()}{L.RESET}')
+def m(Z,F,B):if F<len(B):B.pop(F)
+    return B
+def X():N=D.ArgumentParser(description='Find comments and docstrings in Python files.');N.add_argument('-a','--auto-remove',action='store_true',help='Automatically remove found comments and docstrings.');N.add_argument('-w','--workers',type=int,default=4,help='Number of worker processes (default:4).');N.add_argument('directory',nargs='?',default='.',help='Directory to scan (default:current directory).');U=N.parse_args();H=T(U.directory)
+    if not H.is_dir():print(f'Error:{H} is not a directory.',file=ah.stderr);ah.exit(1)
+    G=r(H)
+    if not G:print('No Python files found.');return
+    print(f'Scanning {len(G)} Python files with {U.workers} workers...\n')
+    with mp.Pool(U.workers) as aa:K=aa.map(u,G)
+    p={};n=0
+    for Z,E in K:if E:p[Z]=E;n+=len(E)
+    if not p:print('No comments or docstrings found.');return
+    print(f'Found {n} comments/docstrings:\n');print('='*40)
+    for Z in sorted(p.keys()):E=p[Z]
+        try:with open(Z,'r',encoding='utf-8',errors='ignore') as f:y=f.readlines()
+            l=sorted(E,key=lambda x:x[0],reverse=True)
+            for F,t,s in l:o(Z,F,t,y,not s)
+                if U.auto_remove:y=m(Z,F,y)
+            if U.auto_remove:with open(Z,'w',encoding='utf-8') as f:f.writelines(y)
+                print(f'{L.YELLOW}[REMOVED]{L.RESET}',af=' ')
+        except Exception as e:print(f'Error processing {Z}:{e}',file=ah.stderr)
+    print('\n'+'='*40)
+    if U.auto_remove:print(f'{L.YELLOW}Removed {n} comments/docstrings.{L.RESET}')
+    else:print(f'Total findings:{n}');print('Use-a/--auto-remove flag to remove them.')
+if __name__=='__main__':raise SystemExit(X())
+# filename: remc.py
+from dh import cprint,fsz,get_files,gsz
+def v(p):c=0;D=p.split('\n');e=[];i=0
+    while i<len(D):J=D[i]
+        if n in J or o in J:h=n if n in J else o;z=J.count(h)
+            if z>=2:C=J.find(h);w=J.find(h,C+3);s=J[:C].rstrip()
+                if s.endswith(':') or s.strip()=='':e.append(J[:C]+J[w+3:]);c+=1;i+=1;continue
+            s=J[:J.find(h)].rstrip()
+            if s.endswith(':') or s.strip()=='' or '=' not in s:c+=1
+                if s:e.append(s)
+                j=i+1
+                while j<len(D):if h in D[j]:x=D[j][D[j].find(h)+3:].strip()
+                        if x:e.append(x)
+                        i=j+1;break
+                    j+=1
+                else:i=j
+            else:e.append(J);i+=1
+        else:e.append(J);i+=1
+    return ('\n'.join(e),c)
+def u(p):try:O=P.parse(p)
+    except SyntaxError:return v(p)
+    D=p.split('\n');t=a(O)
+    for E,R in sorted(t,reverse=True):del D[E-1:R]
+    return ('\n'.join(D),len(t))
+def a(L):t=[]
+    for y in P.walk(L):if isinstance(y,(P.Module,P.FunctionDef,P.AsyncFunctionDef,P.ClassDef)) and y.body and isinstance(y.body[0],P.Expr):F=y.body[0].value
+            if isinstance(F,P.Constant) and isinstance(F.value,str) and y.body[0].lineno and y.body[0].end_lineno:t.append((y.body[0].lineno,y.body[0].end_lineno))
+    return t
+def b(p):p=U.sub('\\n\\n+','\n',p);return '\n'.join((J.rstrip() for J in p.split('\n')))
+def d(M):G(M)
+    try:m=M.read_text(encoding='utf-8')
+        try:l,r=u(m)
+        except:l,r=v(m)
+        l=b(l)
+        if r:print(f'✓ {M.name} :',R='');cprint(f'{r}','cyan')
+            try:O=P.parse(l);M.write_text(l,encoding='utf-8');del O;return
+            except:cprint(f'{M.name} ast parse error','cyan');return
+    except Exception as exc:print(f'✗ Error processing {M}:{S}');return
+def K():Q=G.cwd();s=gsz(Q);I=T.argv[1:];B=[G(f) for f in I] if I else get_files(Q,ext=['.py'])
+    with H(8) as N:q=A()
+        for f in B:q.append(N.apply_async(d,(f,)))
+            if len(q)>g:q.popleft().get()
+        while q:q.popleft().get()
+    k=s-gsz(Q);print(f'space saved :{fsz(k)}')
+if __name__=='__main__':raise SystemExit(K())
+n='"""';o="'''"
+# filename: rm_moduledoc.py
+from loguru import logger;h=8;k=5
+def c(n):return B.compile(f'^\\s*"""\\s*Module for\\s+{B.escape(n)}\\s*\\.?\\s*"""\\s*$')
+def b(s):try:z.parse(s)
+    except SyntaxError as exc:logger.warning('AST validation failed:{}',A);return False
+    return True
+def a(x):try:t=x.read_text(encoding='utf-8').splitlines(keepends=True)
+    except OSError as exc:logger.error('Error reading {}:{}',x.name,A);return
+    if not t:print('Skipped empty file:{}',x.name);return
+    q=c(x.name);m=min(k,len(t));e=None
+    for i in range(m):if q.match(t[i].strip()):t.pop(i);e=i;break
+    if e is None:print('No automated docstring in top {} lines of:{}',k,x.name);return
+    l=''.join(t)
+    if not b(l):logger.error('Refusing to write {}:modified source failed AST validation',x.name);return
+    try:x.write_text(l,encoding='utf-8')
+    except OSError as exc:logger.error('Error writing {}:{}',x.name,A);return
+    logger.success('Cleaned docstring from line {} of:{}',e+1,x.name)
+def w():j=u('.');o=u(__file__).name;p=[f for f in j.glob('*.py') if f.name!=o]
+    if not p:logger.warning('No Python files found in the current directory.');return 0
+    print('Scanning the top {} lines of {} files with {} workers...',k,len(p),h);y=v(processes=h)
+    try:d=[y.apply_async(a,(r,)) for r in p]
+        for g in d:g.get()
+    finally:y.close();y.join()
+    logger.success('Fast cleanup complete!');return 0
+if __name__=='__main__':raise SystemExit(w())
+# filename: rmccst.py
+import libcst as cst;import libcst.matchers as m;from loguru import logger;A=8
+def f(L):try:I=Y.parse(L)
+    except SyntaxError:return None
+    aa=Y.get_docstring(I)
+    if aa is None:return None
+    if not I.body:return None
+    x=I.body[0]
+    if not isinstance(x,Y.Expr) or not isinstance(getattr(x,'value',None),Y.Constant):return None
+    P=x.value
+    if not isinstance(P.value,str):return None
+    z=getattr(P,'lineno',None);D=getattr(P,'end_lineno',None)
+    if z is None or D is None:return None
+    return (z,D)
+class b(cst.CSTTransformer):def __init__(self,j):super().__init__();self.module_doc_range=j;self.comments_removed=0;self.docstrings_removed=0
+    def d(self,n,s):if s.comment is not None:self.comments_removed+=1;s=s.with_changes(comment=None)
+        return s
+    def k(self,n,s):if s.comment is not None:self.comments_removed+=1;s=s.with_changes(comment=None)
+        return s
+    def g(self,U):if not isinstance(U,cst.SimpleStatementLine):return False
+        if len(U.body)!=1:return False
+        S=U.body[0]
+        if not isinstance(S,cst.Expr):return False
+        P=S.value;return m.matches(P,m.OneOf(m.SimpleString(),m.ConcatenatedString()))
+    def c(self,n,s):if not self._is_docstring_expr(s):return s
+        self.docstrings_removed+=1;return cst.RemovalSentinel
+def r(V):X=V.read_text(encoding='utf-8');G='';B=X
+    if X.startswith('#!'):Z=io.StringIO(X);w=Z.readline();G=w;B=Z.read()
+    j=f(B);I=cst.parse_module(B);v=b(j);E=I.visit(v);F=E.code
+    if G:F=G+F.lstrip('\n')
+    try:Y.parse(F)
+    except SyntaxError as e:return (V,v.comments_removed,v.docstrings_removed,False,str(e))
+    V.write_text(F,encoding='utf-8');return (V,v.comments_removed,v.docstrings_removed,True,None)
+def a(O):K=[]
+    for p in O:if p.is_file() and p.suffix=='.py':K.append(p)
+        elif p.is_dir():K.extend((q for q in p.rglob('*.py') if q.is_file()))
+    return K
+def y():J=C.ArgumentParser(description='Strip comments and non-module docstrings from Python files.');J.add_argument('paths',type=Q,nargs='*',help="Files and/or directories to process. If omitted,'.' is used and searched recursively.");return J.parse_args()
+def t(K):V,i,h,H,M=K
+    if H:print('{}:removed {} comments,{} docstrings',V,i,h)
+    else:logger.warning('{}:INVALID after transform,skipped write (removed {} comments,{} docstrings). Error:{}',V,i,h,M)
+def T():R=y();u=R.paths or [Q('.')];N=a(u)
+    if not N:print('No Python files found to process.');return
+    with l.Pool(processes=A) as W:m=[W.apply_async(r,(V,)) for V in N];W.close();W.join()
+        for o in m:K=o.get();t(K)
+if __name__=='__main__':raise SystemExit(T())
+# filename: rmcst.py
+import libcst as cst;from dh import get_files,mpf_async;from libcst import EmptyLine,Pass,SimpleStatementLine;from libcst.metadata import MetadataWrapper,PositionProvider
+class e(cst.CSTTransformer):b=(PositionProvider,)
+    def __init__(self):self.comments_removed=0;self.docstrings_removed=0
+    @staticmethod
+    def a(I):if not isinstance(I,cst.SimpleStatementLine):return False
+        if len(I.body)!=1:return False
+        F=I.body[0]
+        if not isinstance(F,cst.Expr):return False
+        return isinstance(F.value,cst.SimpleString)
+    @staticmethod
+    def c(z):r=z.lstrip();return r.startswith(('#!','# fmt','# type'))
+    def h(self,i,m):if self._is_preserved_comment(i.value):return m
+        self.comments_removed+=1;return cst.RemoveFromParent()
+    def f(self,i,m):if m.comment is None:return m
+        s=m.comment
+        if self._is_preserved_comment(s.value):return m
+        self.comments_removed+=1;return m.with_changes(s=None)
+    def k(self,i,m):D=list(m.body);y=1 if D and self._is_docstring_statement(D[0]) else 0;q=D[:y]
+        for I in D[y:]:if self._is_docstring_statement(I):self.docstrings_removed+=1
+            else:q.append(I)
+        return m.with_changes(D=q)
+    def j(self,D):o=list(D)
+        if o and self._is_docstring_statement(o[0]):self.docstrings_removed+=1;o=o[1:]
+        if not o:o=[SimpleStatementLine(D=[Pass()])]
+        return tuple(o)
+    def d(self,i,m):D=m.body
+        if isinstance(D,cst.IndentedBlock):return m.with_changes(D=D.with_changes(D=self._strip_suite(D.body)))
+        return m
+    def g(self,i,m):D=m.body
+        if isinstance(D,cst.IndentedBlock):return m.with_changes(D=D.with_changes(D=self._strip_suite(D.body)))
+        return m
+def l(H):H=A(H);w=H.read_text(encoding='utf-8');B=H.parent
+    try:v=cst.parse_module(w)
+    except Exception as exc:print(f'SKIP {H}:parse failed:{K}');return
+    u=MetadataWrapper(v);n=e()
+    try:t=u.visit(n)
+    except Exception as exc:print(f'SKIP {H}:transform failed:{K}');return
+    E=t.code
+    try:cst.parse_module(E)
+    except SyntaxError as exc:print(f'ERROR {H}:transformed code is invalid:{K}');return
+    if E!=w:H.write_text(E,encoding='utf-8')
+    L=N.path.relpath(H,B)
+    if n.comments_removed and n.docstrings_removed:print(f'{L}:{n.comments_removed}/{n.docstrings_removed}')
+    if n.comments_removed and (not n.docstrings_removed):print(f'{L}:{n.comments_removed}/0')
+    if not n.comments_removed and n.docstrings_removed:print(f'{L}:0/{n.docstrings_removed}')
+def G():J=A.cwd();C=M.argv[1:];x=[A(p) for p in C] if C else get_files(J,ext=['.py'])
+    if len(x)==1:l(x[0]);M.exit(0)
+    mpf_async(l,x)
+if __name__=='__main__':raise SystemExit(G())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

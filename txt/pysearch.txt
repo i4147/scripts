@@ -1,0 +1,305 @@
+# filename: exnames.py
+def o(p):u=set()
+    try:with w(p).open('r',encoding='utf-8') as f:for x in f:y=x.strip()
+                if y:v=y.split()
+                    if len(v)>=2:a=D.escape(v[0][0].upper());b=D.escape(v[-1][0].upper());n=f"{a}[\\\\w\\\\s\\\\-r']+\\s+{b}[\\w\\s\\-']+";u.add((y,D.compile(n,D.IGNORECASE)))
+                    else:u.add((y,D.compile(D.escape(y[0].upper())+"[\\w\\s\\-']+",D.IGNORECASE)))
+    except FileNotFoundError:print(f'Error:Names file not found at {p}');C.exit(1)
+    except Exception as e:print(f'Error loading names file:{e}');C.exit(1)
+    return u
+def c(g='names.txt'):h=o(g)
+    if not h:return
+    k={};A=w.cwd()
+    for z in A.rglob('*'):if z.is_file() and z.suffix in {'.txt','.md','.log','.py','.html','.css','.js','.json','.xml','.yml','.yaml'}:try:with w(z).open('r',encoding='utf-8',errors='ignore') as f:q=f.read()
+                    for i,r in h:for t in r.finditer(q):t.span();j=t.group(0);l=j.strip().split()
+                            if len(l)>=2 and (l[0][0].upper()==i.split()[0][0].upper() and l[-1][0].upper()==i.split()[-1][0].upper()):if i not in k:k[i]=[]
+                                s={'file':str(z.relative_to(A)),'match':j}
+                                if s not in k[i]:k[i].append(s)
+            except Exception as e:print(f'Could not read file {z}:{e}')
+    if not k:print('No target names found in the specified files.');return
+    print(f'Found names (from {g}):')
+    for y,m in k.items():print(f'\n-{y}:')
+        for B in m:print(f"-File:{B['file']},Match:'{B['match']}'")
+if __name__=='__main__':d='/sdcard/data/male_names'
+    if len(C.argv)>1:d=C.argv[1]
+    c(d)
+# filename: fdrg.py
+from fastwalk import walk_files;from loguru import logger;x=z.Event();x.set();c={'.git'};d={'.pyc','.bak'};g=('.tar.gz','.tar','.tar.xz','.tar.zst','.tar.bz2','.zip','.whl','.apk');s=8;r=tuple[str,int|None]
+def b():try:import keyboard
+        def u(L):if L.name in {'space','p'} and x.is_set():x.clear();print("PAUSED-press 'c' to continue...")
+            elif L.name=='c' and (not x.is_set()):x.set();print('RESUMED-searching...')
+        keyboard.on_press(u);return True
+    except ImportError:logger.warning("'keyboard' not installed. Pause disabled.");return False
+def w(V,o,h):for U in V.parts:if U in o:return True
+    return any((E.fnmatch(V.name,F) for F in h))
+def i(V):return V.suffix in d
+def k(V,q,j):x.wait();G=[]
+    if not j:if q.lower() in V.name.lower():G.append((str(V),None))
+        return G
+    try:with V.open(encoding='utf-8',errors='ignore') as f:for ln,S in enumerate(f,1):x.wait()
+                if q in S:G.append((str(V),ln))
+    except Exception:pass
+    return G
+def a(t,q,j):G=[]
+    try:if t.suffix=='.zip' or t.name.endswith(('.whl','.apk')):with I.ZipFile(t) as zf:for J in zf.namelist():x.wait();aa=f'{t}::{J}'
+                    if not j:if q.lower() in J.lower():G.append((aa,None))
+                    else:try:D=zf.read(J).decode('utf-8',errors='ignore')
+                            for ln,S in enumerate(D.splitlines(),1):if q in S:G.append((aa,ln))
+                        except Exception:pass
+        else:with H.open(t,'r:*') as tf:for m in tf.getmembers():x.wait()
+                    if not m.isfile():continue
+                    aa=f'{t}::{m.name}'
+                    if not j:if q.lower() in m.name.lower():G.append((aa,None))
+                    else:try:f=tf.extractfile(m)
+                            if f:D=f.read().decode('utf-8',errors='ignore')
+                                for ln,S in enumerate(D.splitlines(),1):if q in S:G.append((aa,ln))
+                        except Exception:pass
+    except Exception:pass
+    return G
+def v(V,q,j):V=O(V)
+    if V.name.endswith(g):return a(V,q,j)
+    return k(V,q,j)
+def n(X,o,h):M=[]
+    for Z in walk_files(X):V=O(Z)
+        if V.is_dir():continue
+        if i(V):continue
+        if w(V,o,h):continue
+        M.append(V)
+    return M
+def C(G):for V,B in G:if B is not None:print(f'[FOUND] {V} (Line:{B})')
+        else:print(f'[FOUND] {V}')
+    return len(G)
+def y(R=None):K=A.ArgumentParser(description='Fast recursive string search');K.add_argument('search_string');K.add_argument('-c','--content',action='store_true');K.add_argument('-d','--directory',default='.');K.add_argument('-o','--output',default='output');K.add_argument('--exclude',action='append',default=[],help='Exclude dir or glob (repeatable)');return K.parse_args(R)
+def T(R=None):Q=y(R);o=c|{e for e in Q.exclude if not any((ch in e for ch in '*?[]'))};h={e for e in Q.exclude if any((ch in e for ch in '*?[]'))};b();X=O(Q.directory).resolve();print(f'Root:{X}');print(f"Mode:{('content' if Q.content else 'filename')}");print(f'Excluded dirs:{sorted(o)}');print(f'Excluded patterns:{sorted(h)}');print('-'*40);M=n(X,o,h);print(f'Files queued:{len(M)}');N=0;W=P(processes=s)
+    try:l=[W.apply_async(v,(p,Q.search_string,Q.content)) for p in M];W.close()
+        for ar in l:try:G=ar.get()
+            except Exception as exc:logger.error(f'Worker failed:{Y}');continue
+            N+=C(G)
+    finally:W.join()
+    print(f'Total results:{N}');return 0
+if __name__=='__main__':raise SystemExit(T())
+# filename: pfind.py
+try:import py7zr
+except ImportError:py7zr=None
+try:import brotli
+except ImportError:brotli=None
+try:import zstandard
+except ImportError:zstandard=None
+def c(o,g=None):if g is None:g={'.git'}
+    z=[]
+    for q in o:p=A(q)
+        for I in p.rglob('*'):if any((H in g for H in I.parts)):continue
+            if I.is_file():z.append(I)
+    return z
+def a(h,t):u=[];e=t.lower();j=h.relative_to(A.cwd())
+    try:if h.suffix in ('.zip','.whl'):with w.ZipFile(h) as P:for G in P.namelist():if e in G.lower():u.append((str(j),G))
+        elif h.name.endswith('.tar.gz'):with v.open(h,'r:gz') as O:for x in O.getmembers():if e in x.name.lower():u.append((str(j),x.name))
+        elif h.name.endswith('.tar.bz2'):with v.open(h,'r:bz2') as O:for x in O.getmembers():if e in x.name.lower():u.append((str(j),x.name))
+        elif h.name.endswith('.tar.xz'):with v.open(h,'r:xz') as O:for x in O.getmembers():if e in x.name.lower():u.append((str(j),x.name))
+        elif h.name.endswith('.tar.7z') and py7zr:with py7zr.SevenZipFile(h,'r') as N:for G in N.getnames():if e in G.lower():u.append((str(j),G))
+        elif h.name.endswith('.tar.br') and brotli:with r.NamedTemporaryFile(delete=False,suffix='.tar') as M:with open(h,'rb') as f:M.write(brotli.decompress(f.read()))
+                s=M.name
+            with v.open(s,'r') as O:for x in O.getmembers():if e in x.name.lower():u.append((str(j),x.name))
+            A(s).unlink()
+        elif h.name.endswith('.tar.zst') and zstandard:with r.NamedTemporaryFile(delete=False,suffix='.tar') as M:D=zstandard.ZstdDecompressor()
+                with open(h,'rb') as f:M.write(D.stream_reader(f).read())
+                s=M.name
+            with v.open(s,'r') as O:for x in O.getmembers():if e in x.name.lower():u.append((str(j),x.name))
+            A(s).unlink()
+    except Exception:pass
+    return u
+def l(I,t):e=t.lower()
+    if e in I.name.lower():return [(str(I.relative_to(A.cwd())),None)]
+    return []
+def i(C):I,t=C
+    if any((I.name.endswith(K) for K in ['.tar.gz','.tar.xz','.tar.bz2','.tar.7z','.tar.br','.tar.zst','.zip','.whl'])):return a(I,t)
+    return l(I,t)
+def y(t,o=None,k=None):if o is None:o=[A.cwd()]
+    else:o=[A(d) for d in o]
+    if k is None:k=n()
+    z=c(o);m=[(E,t) for E in z]
+    with B(k) as J:for u in J.imap_unordered(i,m,chunksize=100):yield from u
+def F():if len(L.argv)<2:print('Usage:python script.py<pattern>[directories...]');L.exit(1)
+    t=L.argv[1];o=L.argv[2:] if len(L.argv)>2 else None
+    for I,b in y(t,o):if b:print(f'{I}:{b}')
+        else:print(I)
+if __name__=='__main__':raise SystemExit(F())
+# filename: prg.py
+from binaryornot import is_binary;from dh import BIN_EXT,TXT_EXT;from fastwalk import walk_files
+def g(x):for l in x:D=z(l)
+        if D.is_file():yield D
+        elif D.is_dir():yield from walk_files(D)
+def e(D,o):try:with open(D,'r',encoding='utf-8',errors='ignore') as f:for k,C in enumerate(f,1):n=list(F.finditer(o,C))
+                if n:h=b(C.rstrip('\n'),n);yield (D,k,h)
+    except OSError:pass
+def b(C,n):if not n:return C
+    w=[];j=0
+    for v in sorted(n,key=lambda m:m.start()):y,E=v.span();w.append(C[j:y]);w.append(f'\x1b[91m{C[y:E]}\x1b[0m');j=E
+    w.append(C[j:]);return ''.join(w)
+def r(x,o,d=8):def c(D):if is_binary(D) or D.suffix not in TXT_EXT or D.suffix in BIN_EXT:return []
+        print(f'->{D.name} ... ');return list(e(D,o))
+    q=[]
+    with A(8) as p:q=p.map(c,u)
+    for t in q:for D,k,a in t:print(f'{D}({k}) {a}')
+if __name__=='__main__':s=i.ArgumentParser(description='Ripgrep-like search tool');s.add_argument('pattern',help='Search pattern (regex)');s.add_argument('paths',nargs='*',default=['.'],help='Files or directories to search');s.add_argument('-w','--workers',type=int,default=4,help='Number of parallel workers');B=s.parse_args();r(B.paths,B.pattern,B.workers)
+# filename: pyfinfo.py
+def e(K='.'):G=[K]
+    while G:S=G.pop()
+        try:with U.scandir(S) as T:for C in T:if C.is_dir(follow_symlinks=False):if C.name!='.git':G.append(C.path)
+                    elif C.is_file(follow_symlinks=False):M=U.path.splitext(C.name)[0];yield M
+        except (PermissionError,OSError):pass
+def c(a,b,s):n,m=(len(a),len(b))
+    if abs(n-m)>s:return s+1
+    if n<m:a,b=(b,a);n,m=(m,n)
+    O=s+1;h=[O]*(m+1)
+    for j in range(min(m,s)+1):h[j]=j
+    for i in range(1,n+1):k=[O]*(m+1);R=max(0,i-s);H=min(m,i+s)
+        if R==0 and i<=s:k[0]=i
+        for j in range(max(R,1),H+1):A=h[j]+1;y=k[j-1]+1;q=h[j-1]+(a[i-1]!=b[j-1]);k[j]=min(A,y,q)
+        x=min(k[R:H+1])
+        if R==0:x=min(x,k[0])
+        if x>s:return s+1
+        h=k
+    return h[m] if h[m]<=s else s+1
+def g(E,r=0.8):n=len(E);N=[False]*n;f=o(list)
+    for Q,J in enumerate(E):f[len(J)].append(Q)
+    z=[]
+    for i,J in enumerate(E):if N[i]:continue
+        N[i]=True;D=[J];L=len(J);w=(L*4+4)//5;v=5*L//4;p=[]
+        for l in range(w,v+1):for Q in f.get(l,()):if not N[Q]:p.append(Q)
+        for j in p:F=E[j];d=max(L,len(F))*2//10
+            if c(J,F,d)<=d:D.append(F);N[j]=True
+        if len(D)>1:z.append(D)
+    return z
+def I():P=U.getcwd();u=t(e(P))
+    for J,B in u.most_common(100):if B>2:print(f'{J}:{B}')
+    print('\n===Similar Filename Groups===');z=g(list(u.keys()),r=0.8)
+    if not z:print('No similar groups found.')
+    else:for i,D in enumerate(z,1):print(f"Group {i}:{','.join(D)}")
+if __name__=='__main__':raise SystemExit(I())
+# filename: pygrex.py
+if len(e.argv)!=2:print('Usage:python script.py<filename>');e.exit(1)
+a=e.argv[1]
+with open(a,encoding='utf-8') as f:c=[d.rstrip('\n') for d in f]
+b='^(?:{})$'.format('|'.join((g.escape(d) for d in c)));print(b)
+# filename: pyrg.py
+from dh import is_binary;from loguru import logger;logger.remove();logger.add('/data/data/com.termux/files/home/tmp/apps/pyrg.log');r={'.git','.hg','.svn','node_modules','__pycache__','.ruff_cache','.pytest_cache','.mypy_cache'};q=8192;c=8;C='\x1b[1m';w='\x1b[0m';B='\x1b[94m';D='\x1b[5;96m';x=bytes(range(32,127))+b'\n\r\t\x08'
+def F(ab,l,k,o,J):for aa in ab:am=af(aa)
+        if am.is_file() and (not am.is_symlink()):if not o and am.name.startswith('.'):continue
+            if J and am.stat().st_size>J:continue
+            if l and (not b(am,l)):continue
+            if k and b(am,k):continue
+            yield am;continue
+        if not am.is_dir() or am.is_symlink():continue
+        for ao,aj,A in am.walk(top_down=True,follow_symlinks=False):if not o:aj[:]=[d for d in aj if not d.startswith('.')]
+            aj[:]=[d for d in aj if d not in r]
+            for f in A:if not o and f.startswith('.'):continue
+                am=ao/f
+                if am.is_symlink():continue
+                try:if J and am.stat().st_size>J:continue
+                except OSError:continue
+                if l and (not b(am,l)):continue
+                if k and b(am,k):continue
+                yield am
+def j(ak,ad):W=list(ak)
+    for s,e in sorted(ad,key=K.itemgetter(0),reverse=True):W.insert(e,w);W.insert(s,B+C)
+    return ''.join(W)
+def b(am,N):H=am.name;M=str(am);return any((Q.fnmatch(M,p) or Q.fnmatch(H,p) for p in N))
+def a(am,aq,ac,Y,u):R=[]
+    try:with am.open(encoding='utf-8',errors='replace') as fh:for T,O in enumerate(fh,ae=1):ak=O.rstrip('\n\r');ad=[]
+                if ac:ad=[(m.start(),m.end()) for m in ac.finditer(ak)]
+                else:ar=ak.lower() if u else ak;U=Y.lower() if u else Y;ae=0
+                    while (at :=ar.find(U,ae))!=-1:ad.append((at,at+len(U)));ae=at+max(1,len(U))
+                if ad:R.append((T,ak,ad))
+    except Exception:pass
+    try:P=str(am.relative_to(aq))
+    except ValueError:P=str(am)
+    return (P,R)
+def V(y):am,aq,n,Y,u=y;h=None
+    if n:Z=re.MULTILINE
+        if u:Z|=re.IGNORECASE
+        h=re.compile(n,Z)
+    if is_binary(am):return (str(am),[])
+    return a(am=am,aq=aq,ac=h,Y=Y,u=u)
+def g():p=G.ArgumentParser(description='ripgrep-like recursive search in Python');p.add_argument('pattern',nargs='?',help='Regex pattern (positional) or use-e');p.add_argument('-e','--regexp',dest='pattern_e',help='Pattern (alternative to positional)');p.add_argument('-i','--ignore-case',action='store_true',help='Case-insensitive search');p.add_argument('-F','--fixed-strings',action='store_true',help='Fixed string search (no regex)');p.add_argument('-n','--line-number',action='store_true',default=True,help='Show line numbers');p.add_argument('-l','--files-with-matches',action='store_true',help='Only print filenames that match');p.add_argument('-c','--count',action='store_true',help='Print count of matches per file');p.add_argument('-w','--workers',type=int,default=c,help='Number of worker processes');p.add_argument('--hidden',action='store_true',help='Search hidden files and directories');p.add_argument('-g','--glob',action='append',help='Include glob; can be repeated');p.add_argument('-x','--exclude',action='append',help='Exclude glob; can be repeated');p.add_argument('-C','--no-color',action='store_true',help='Disable colorized output');p.add_argument('-m','--max-filesize',type=int,default=10000000,help='Skip files larger than size (bytes)');p.add_argument('paths',nargs='*',default=['.'],help='Files or directories to search (default:.)');return p
+def al(ai=None):aq=af.cwd();ah=g().parse_args(ai);S=ah.pattern_e or ah.pattern
+    if not S:print('No pattern provided. Use positional PATTERN or-e PATTERN.',file=au.stderr);return 2
+    I=None
+    if not ah.fixed_strings:Z=re.MULTILINE
+        if ah.ignore_case:Z|=re.IGNORECASE
+        try:I=re.compile(S,Z)
+        except re.error as ex:print(f'Invalid regex:{ex}',file=au.stderr);return 2
+    z=list(F(ab=ah.paths,l=ah.glob or [],k=ah.exclude or [],o=ah.hidden,J=ah.max_filesize));X=not ah.no_color and au.stdout.isatty();E=False;v=[(am,aq,S if not ah.fixed_strings else None,S if ah.fixed_strings else '',ah.ignore_case) for am in z]
+    with ag(processes=ah.workers) as an:i=[an.apply_async(V,(ap,)) for ap in v]
+        try:for t in i:M,R=t.get()
+                if not R:continue
+                E=True
+                if ah.files_with_matches:print(M)
+                elif ah.count:print(f'{M}:{len(R)}')
+                else:for T,ak,ad in R:L=j(ak,ad) if X else ak
+                        if ah.line_number:print(f'{D}{M}{w}:{T}:{L}')
+                        else:print(f'{D}{M}{w}:{L}')
+        except KeyboardInterrupt:print('\nSearch cancelled.',file=au.stderr);an.terminate();an.join();return 130
+    return 0 if E else 1
+if __name__=='__main__':raise SystemExit(al())
+# filename: pyrgtxt.py
+from joblib import Parallel,delayed
+def d(r):try:with open(r,'rb') as f:m=f.read(1024);return b'\x00' not in m
+    except (OSError,PermissionError):return False
+def b(r,c):try:if not d(r):return []
+        with open(r,encoding='utf-8',errors='ignore') as f:h=f.read()
+            if c in h:return [str(r.relative_to(p.cwd()))]
+    except (OSError,PermissionError,UnicodeDecodeError):pass
+    return []
+def a(g,c,l=-1):n=[f for f in g.rglob('*') if f.is_file()];j=Parallel(l=l)((delayed(b)(q,c) for q in n));i=[o for k in j for o in k];return i
+if __name__=='__main__':if len(s.argv)<2:print('Usage:python search_for.py<search_string>');s.exit(1)
+    c=s.argv[1];e=p.cwd();print(f"Searching for '{c}' in text files under:{e}");i=a(e,c)
+    if i:print('\nFound in:')
+        for o in i:print(o)
+    else:print('\nNo matches found.')
+# filename: stringr.py
+from dh import get_files,is_binary,mpf3,runcmd;l=g.cwd();d=l/'all_strings.txt';b=0;c=0
+def a(j):j=g(j);global b;global c;c+=1;print(f'[{c}/{b}] {j.name}')
+    if not j.exists() or not is_binary(j):return
+    _,n,_=runcmd(['strings',str(j)],show_output=False)
+    with d.open('a',encoding='utf-8') as f:f.write(f'\n# filename :{j.name}\n{n}')
+    return
+def i():h=m.argv[1:];global b;e=[g(k) for k in h] if h else get_files(l);b=len(e);mpf3(a,e)
+if __name__=='__main__':raise SystemExit(i())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

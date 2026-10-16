@@ -1,0 +1,719 @@
+# --- File: clone_repos.py ---
+import argparse
+import shutil
+import sys
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from git import GitCommandError, Repo
+from git.exc import InvalidGitRepositoryError
+from loguru import logger
+def a(b):
+    if not b.exists():
+        logger.error(f'Error: {b} does not exist')
+        sys.exit(1)
+    with b.open() as f:
+        c = [d.strip() for d in f if d.strip()]
+    if not c:
+        logger.error(f'Error: No repositories found in {b}')
+        sys.exit(1)
+    return c
+def e(f):
+    g = f.split('/')
+    return len(g) == 2 and all(g)
+def h(f, i):
+    if not e(f):
+        return (f, False, f'Invalid format: {f} (expected user/repo)')
+    g = f.split('/')
+    j = g[0]
+    k = g[1]
+    l = i / j / k
+    if l.exists():
+        try:
+            Repo(l)
+            return (f, True, f'Already exists: {l}')
+        except InvalidGitRepositoryError:
+            return (f, False, f'Directory exists but is not a git repo: {l}')
+    l.parent.mkdir(parents=True, exist_ok=True)
+    m = f'https://github.com/{f}.git'
+    try:
+        Repo.clone_from(m, l, depth=1, single_branch=True)
+        return (f, True, f'Successfully cloned to {l}')
+    except GitCommandError as e:
+        n = str(e).strip()
+        if l.exists():
+            shutil.rmtree(l, ignore_errors=True)
+        return (f, False, f'Clone failed: {n}')
+    except Exception as e:
+        if l.exists():
+            shutil.rmtree(l, ignore_errors=True)
+        return (f, False, f'Error: {e!s}')
+def o():
+    p = argparse.ArgumentParser(description='Clone GitHub repositories in parallel from a text file')
+    p.add_argument('file', nargs='?', default='repos.txt', help='Path to file containing repositories (default: repos.txt)')
+    p.add_argument('-o', '--output', default='repos', help='Output directory for cloned repositories (default: repos)')
+    p.add_argument('--dry-run', action='store_true', help='Show what would be cloned without actually cloning')
+    q = p.parse_args()
+    r = Path(q.file)
+    s = Path(q.output)
+    c = a(r)
+    print(f'Found {len(c)} repositories to clone')
+    if q.dry_run:
+        print('\nDry run - would clone:')
+        for f in c:
+            if e(f):
+                g = f.split('/')
+                j = g[0]
+                k = g[1]
+                t = s / j / k
+                u = 'EXISTS' if t.exists() else 'NEW'
+                print(f'  [{u}] {f} -> {t}')
+            else:
+                print(f'  [INVALID] {f}')
+        return
+    v = 0
+    w = 0
+    x = 0
+    print(f'\nCloning with 8 parallel workers to {s.absolute()}')
+    print('-' * 40)
+    with Pool(processes=8) as y:
+        z = [y.apply_async(h, (f, s)) for f in c]
+        for f, a1 in zip(c, z):
+            try:
+                _, b1, c1 = a1.get()
+                if b1:
+                    if 'Already exists' in c1:
+                        x += 1
+                        print(f'⏭️  {f}: {c1}')
+                    else:
+                        v += 1
+                        print(f'✅ {f}: {c1}')
+                else:
+                    w += 1
+                    print(f'❌ {f}: {c1}')
+            except Exception as e:
+                w += 1
+                logger.error(f'❌ {f}: Unexpected error: {e!s}')
+    print('-' * 40)
+    print('\nSummary:')
+    print(f'  ✅ Successfully cloned: {v}')
+    print(f'  ⏭️  Already existed: {x}')
+    print(f'  ❌ Failed: {w}')
+    print(f'  📊 Total: {len(c)}')
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+# --- File: clonerepos.py ---
+import argparse
+import io
+import shutil
+import sys
+import zipfile
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Final
+import requests
+from loguru import logger
+d1 = 8
+e1 = 30
+def a(f1):
+    if not f1.exists():
+        logger.error(f'Error: {f1} does not exist')
+        sys.exit(1)
+    with open(f1) as f:
+        c = [d.strip() for d in f if d.strip()]
+    if not c:
+        logger.error(f'Error: No repositories found in {f1}')
+        sys.exit(1)
+    return c
+def e(f):
+    g = f.split('/')
+    return len(g) == 2 and all(g)
+def g1(f, i):
+    if not e(f):
+        return (f, False, f'Invalid format: {f}')
+    j, k = f.split('/')
+    l = i / j / k
+    if l.exists():
+        return (f, True, f'Already exists: {l}')
+    l.parent.mkdir(parents=True, exist_ok=True)
+    h1 = f'https://api.github.com/repos/{f}/zipball'
+    try:
+        i1 = requests.get(h1, timeout=e1, stream=True)
+        i1.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(i1.content)) as z:
+            j1 = z.namelist()[0].split('/')[0]
+            k1 = l.parent / f'_temp_{k}'
+            z.extractall(k1)
+            l1 = k1 / j1
+            if l1.exists():
+                l.mkdir(parents=True, exist_ok=True)
+                for m1 in l1.iterdir():
+                    shutil.move(str(m1), str(l / m1.name))
+                shutil.rmtree(k1)
+            else:
+                shutil.move(str(k1), str(l))
+        return (f, True, f'Successfully downloaded to {l}')
+    except requests.RequestException as e:
+        return (f, False, f'Download failed: {e!s}')
+    except zipfile.BadZipFile:
+        return (f, False, 'Invalid ZIP file received')
+    except Exception as e:
+        if l.exists():
+            shutil.rmtree(l, ignore_errors=True)
+        return (f, False, f'Error: {e!s}')
+def o():
+    p = argparse.ArgumentParser(description='Download GitHub repositories as ZIP archives')
+    p.add_argument('file', nargs='?', default='repos.txt', help='Path to file containing repositories (default: repos.txt)')
+    p.add_argument('-o', '--output', default='repos', help='Output directory (default: repos)')
+    p.add_argument('--dry-run', action='store_true', help='Show what would be downloaded without downloading')
+    q = p.parse_args()
+    r = Path(q.file)
+    s = Path(q.output)
+    c = a(r)
+    print(f'Found {len(c)} repositories to download')
+    if q.dry_run:
+        print('\nDry run - would download:')
+        for f in c:
+            if e(f):
+                j, k = f.split('/')
+                t = s / j / k
+                u = 'EXISTS' if t.exists() else 'NEW'
+                print(f'  [{u}] {f} -> {t}')
+            else:
+                print(f'  [INVALID] {f}')
+        return 0
+    v = 0
+    w = 0
+    x = 0
+    print(f'\nDownloading with {d1} parallel workers to {s.absolute()}')
+    print('-' * 40)
+    with Pool(processes=d1) as y:
+        n1 = [y.apply_async(g1, (f, s)) for f in c]
+        y.close()
+        for o1 in n1:
+            try:
+                k, b1, c1 = o1.get()
+                if b1:
+                    if 'Already exists' in c1:
+                        x += 1
+                        print(f'⏭️  {k}: {c1}')
+                    else:
+                        v += 1
+                        print(f'✅ {k}: {c1}')
+                else:
+                    w += 1
+                    logger.error(f'❌ {k}: {c1}')
+            except Exception as e:
+                w += 1
+                logger.error(f'❌ Unexpected error: {e!s}')
+        y.join()
+    print('-' * 40)
+    print('\nSummary:')
+    print(f'  ✅ Successfully downloaded: {v}')
+    print(f'  ⏭️  Already existed: {x}')
+    print(f'  ❌ Failed: {w}')
+    print(f'  📊 Total: {len(c)}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+# --- File: clonerepos_dulwich.py ---
+import argparse
+import shutil
+import sys
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+import requests
+from dulwich import porcelain
+from dulwich.errors import NotGitRepository
+from dulwich.repo import Repo
+from loguru import logger
+p1 = 5
+q1 = p1 * 1024 * 1024
+r1 = 8
+def a(f1):
+    if not f1.exists():
+        logger.error(f'Error: {f1} does not exist')
+        sys.exit(1)
+    with open(f1) as f:
+        c = [d.strip() for d in f if d.strip()]
+    if not c:
+        logger.error(f'Error: No repositories found in {f1}')
+        sys.exit(1)
+    return c
+def e(f):
+    g = f.split('/')
+    return len(g) == 2 and all(g)
+def s1(f):
+    t1 = f'https://api.github.com/repos/{f}'
+    try:
+        i1 = requests.get(t1, timeout=10)
+        if i1.status_code == 200:
+            u1 = i1.json()
+            v1 = u1.get('size', 0)
+            w1 = int(v1) if isinstance(v1, (int, float, str)) else 0
+            x1 = w1 * 1024
+            return (x1 <= q1, x1)
+        return (True, 0)
+    except Exception:
+        return (True, 0)
+def h(f, i):
+    if not e(f):
+        return (f, False, f'Invalid format: {f} (expected user/repo)')
+    j, k = f.split('/')
+    l = i / j / k
+    if l.exists():
+        try:
+            Repo(str(l))
+            return (f, True, f'Already exists: {l}')
+        except NotGitRepository:
+            return (f, False, f'Directory exists but is not a git repo: {l}')
+    y1, x1 = s1(f)
+    if not y1:
+        return (f, False, f'Too large ({fsz(x1)} > {p1}MB)')
+    l.parent.mkdir(parents=True, exist_ok=True)
+    m = f'https://github.com/{f}.git'
+    try:
+        porcelain.clone(m, str(l), depth=1, bare=False)
+        return (f, True, f'Successfully cloned to {l} ({fsz(x1)})')
+    except Exception as e:
+        if l.exists():
+            shutil.rmtree(l, ignore_errors=True)
+        return (f, False, f'Clone failed: {e!s}')
+def z1(f1, a2):
+    if not a2:
+        return
+    b2 = a(f1)
+    c2 = [f for f in b2 if f not in a2]
+    with open(f1, 'w') as f:
+        f.write('\n'.join(c2) + '\n' if c2 else '')
+    print(f'\nRemoved {len(a2)} repos from {f1}')
+def d2():
+    p = argparse.ArgumentParser(description='Clone GitHub repositories using pure Python (dulwich)')
+    p.add_argument('file', nargs='?', default='repos.txt', help='Path to file containing repositories (default: repos.txt)')
+    p.add_argument('-o', '--output', default='repos', help='Output directory (default: repos)')
+    p.add_argument('--max-size', type=int, default=p1, help=f'Maximum repo size in MB (default: {p1})')
+    p.add_argument('--dry-run', action='store_true', help='Show what would be cloned without actually cloning')
+    p.add_argument('--no-cleanup', action='store_true', help="Don't remove cloned repos from repos.txt")
+    return p.parse_args()
+def o():
+    global MAX_SIZE_BYTES
+    q = d2()
+    if q.max_size != p1:
+        q1 = q.max_size * 1024 * 1024
+    r = Path(q.file)
+    s = Path(q.output)
+    c = a(r)
+    print(f'Found {len(c)} repositories to clone')
+    print(f'Max repo size: {q.max_size}MB')
+    if q.dry_run:
+        print('\nDry run - checking sizes:')
+        for f in c:
+            if e(f):
+                j, k = f.split('/')
+                t = s / j / k
+                y1, e2 = s1(f)
+                if t.exists():
+                    print(f'  [EXISTS] {f} -> {t}')
+                elif not y1:
+                    print(f'  [TOO LARGE] {f} ({fsz(e2)})')
+                else:
+                    print(f'  [OK] {f} -> {t} ({fsz(e2)})')
+            else:
+                print(f'  [INVALID] {f}')
+        return 0
+    v = 0
+    w = 0
+    x = 0
+    f2 = set()
+    print(f'\nCloning with {r1} parallel workers to {s.absolute()}')
+    print('-' * 40)
+    with Pool(processes=r1) as y:
+        z = [(f, y.apply_async(h, (f, s))) for f in c]
+        for f, g2 in z:
+            try:
+                k, b1, c1 = g2.get()
+                if b1:
+                    if 'Already exists' in c1:
+                        x += 1
+                        print(f'⏭️  {f}: {c1}')
+                        f2.add(f)
+                    else:
+                        v += 1
+                        print(f'✅ {f}: {c1}')
+                        f2.add(f)
+                else:
+                    w += 1
+                    logger.error(f'❌ {f}: {c1}')
+            except Exception as e:
+                w += 1
+                logger.error(f'❌ {f}: Unexpected error: {e!s}')
+    if not q.no_cleanup and f2:
+        z1(r, f2)
+    print('-' * 40)
+    print('\nSummary:')
+    print(f'  ✅ Successfully cloned: {v}')
+    print(f'  ⏭️  Already existed: {x}')
+    print(f'  ❌ Failed: {w}')
+    print(f'  📊 Total processed: {len(c)}')
+    if not q.no_cleanup and f2:
+        h2 = len(a(r))
+        print(f'  📝 Remaining in {r}: {h2}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+# --- File: forklone.py ---
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+from git import Repo
+from github import Github
+from github.GithubException import GithubException, UnknownObjectException
+def i2():
+    j2 = Path.home() / '.env'
+    if j2.exists():
+        load_dotenv(j2)
+        k2 = os.getenv('GITHUB_TOKEN')
+        if k2:
+            print(f'✓ Loaded GITHUB_TOKEN from {j2}')
+            return k2
+        else:
+            print(f'⚠️  {j2} exists but GITHUB_TOKEN not found')
+    else:
+        print('⚠️  ~/.env file not found')
+    return None
+def l2():
+    k2 = i2()
+    if not k2:
+        print('\nGitHub token required')
+        print('Please add to ~/.env file:')
+        print('GITHUB_TOKEN=your_token_here')
+        print('\nOr set environment variable:')
+        print('  export GITHUB_TOKEN=your_token_here')
+        print('\nGet a token at: https://github.com/settings/tokens')
+        print("Required scope: 'repo' for private repos or 'public_repo' for public")
+        sys.exit(1)
+    try:
+        g = Github(k2)
+        j = g.get_user()
+        print(f'✓ Authenticated as: {j.login}')
+        return (g, j)
+    except GithubException as e:
+        print(f'Authentication failed: {e}')
+        sys.exit(1)
+def m2(g, j, n2):
+    try:
+        o2 = g.get_repo(n2)
+        print(f'✓ Found original repo: {o2.full_name}')
+        try:
+            p2 = j.get_repo(o2.name)
+            print(f'✓ Repository already forked: {p2.clone_url}')
+            return p2
+        except UnknownObjectException:
+            print(f'Forking {n2}...')
+            p2 = o2.create_fork()
+            print(f'✓ Fork created: {p2.clone_url}')
+            return p2
+    except GithubException as e:
+        print(f'Error forking repository: {e}')
+        sys.exit(1)
+def q2(p2, r2):
+    k = p2.name
+    m = p2.clone_url
+    print(f'\nCloning {m}...')
+    try:
+        s2 = Repo.clone_from(m, k)
+        print(f'✓ Cloned to: ./{k}')
+    except Exception as e:
+        print(f'Error cloning: {e}')
+        sys.exit(1)
+    t2 = f'https://github.com/{r2}.git'
+    print(f'Adding upstream remote: {t2}')
+    u2 = s2.create_remote('upstream', t2)
+    v2 = p2.default_branch
+    print('Fetching from upstream...')
+    u2.fetch()
+    s2.git.branch(f'--set-upstream-to=upstream/{v2}', v2)
+    return (s2, v2)
+def w2():
+    j2 = Path.home() / '.env'
+    if not j2.exists():
+        print('\n📝 Creating ~/.env template...')
+        with open(j2, 'w') as f:
+            f.write('# GitHub Personal Access Token\n')
+            f.write('# Get one at: https://github.com/settings/tokens\n')
+            f.write('# Required scopes: repo, public_repo\n')
+            f.write('GITHUB_TOKEN=your_token_here\n')
+        print(f'✓ Created {j2}')
+        print('⚠️  Please edit the file and add your actual token')
+        return False
+    return True
+def o():
+    if len(sys.argv) < 2:
+        print('Usage: python script.py user/repo')
+        print('Example: python script.py octocat/Hello-World')
+        print('\nAlso supports full GitHub URLs:')
+        print('  python script.py https://github.com/user/repo')
+        sys.exit(1)
+    x2 = sys.argv[1]
+    if x2.startswith('https://github.com/'):
+        n2 = x2.replace('https://github.com/', '').rstrip('/')
+    else:
+        n2 = x2
+    if '/' not in n2:
+        print("Error: Use format 'user/repo'")
+        print('Example: octocat/Hello-World')
+        sys.exit(1)
+    w2()
+    g, j = l2()
+    p2 = m2(g, j, n2)
+    s2, v2 = q2(p2, n2)
+    print('\n✓ Setup complete!')
+    print('\nRemotes configured:')
+    for y2 in s2.remotes:
+        print(f'  {y2.name}: {y2.url}')
+    print(f'\nTo pull from original repo: git pull upstream {v2}')
+    print(f'To push to your fork: git push origin {v2}')
+    print(f'\nRepo location: ./{p2.name}')
+    print('\nRepository info:')
+    print(f'  Original: {n2}')
+    print(f'  Your fork: {p2.full_name}')
+    print(f'  Default branch: {v2}')
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+# --- File: gclone1.py ---
+import os
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+import requests
+from dh import runcmd
+z2 = 'https://api.github.com/repos'
+a3 = []
+b3 = None
+def c3(d3):
+    if '/' in d3 and (not d3.startswith('http')):
+        g = d3.strip().split('/')
+        if len(g) == 2 and g[0] and g[1]:
+            return (g[0], g[1])
+        return (None, None)
+    try:
+        e3 = urlparse(d3.strip())
+        if e3.netloc.lower() in {'github.com', 'www.github.com'}:
+            f3 = [p for p in e3.path.split('/') if p]
+            if len(f3) == 2:
+                return (f3[0], f3[1])
+    except Exception:
+        pass
+    return (None, None)
+def g3(j, f):
+    h3 = f'{z2}/{j}/{f}'
+    i3 = {'Accept': 'application/vnd.github.v3+json'}
+    if b3:
+        i3['Authorization'] = f'token {b3}'
+    try:
+        i1 = requests.get(h3, headers=i3)
+        i1.raise_for_status()
+        u1 = i1.json()
+        x1 = u1.get('size')
+        if x1 is not None:
+            j3 = x1 / 1024.0
+            return round(j3, 2)
+        print(f'⚠️ Warning: Could not retrieve size for {j}/{f} from API.')
+        return None
+    except requests.exceptions.HTTPError as e:
+        print(f'❌ API Error: {e.response.status_code} for {j}/{f}')
+        if e.response.status_code == 404:
+            print('   Repository not found or access denied.')
+        elif e.response.status_code == 403:
+            print('   Rate limit exceeded or insufficient permissions.')
+        else:
+            print(f'   Response: {e.response.text}')
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f'❌ Network Error: Could not connect to GitHub API: {e}')
+        return None
+    except Exception as e:
+        print(f'❌ An unexpected error occurred while fetching size: {e}')
+        return None
+def k3(j, f):
+    k = f'{j}/{f}'
+    l3 = f'https://github.com/{k}.git'
+    m3 = os.path.join(Path.cwd(), f)
+    if Path(m3).exists():
+        return False
+    print(f'\n🚀 Cloning {k} (shallow clone)...')
+    n3 = ['git', 'clone', l3, m3]
+    try:
+        runcmd(n3, show_output=True)
+        print('✅ Successfully cloned repository.')
+        print(f'   Cloned into: {m3}')
+        return True
+    except FileNotFoundError:
+        print("❌ Error: 'git' command not found. Please ensure Git is installed and in your PATH.")
+        return False
+    except Exception as e:
+        print(f'❌ An unexpected error occurred during cloning: {e}')
+        return False
+def o3(url):
+    global remained
+    j, f = c3(url)
+    if not j or not f:
+        print(f"❌ Invalid GitHub repository format: '{x2}'")
+        sys.exit(1)
+    print(f'🔍 Analyzing repository: {j}/{f}')
+    p3 = g3(j, f)
+    if p3 is not None and p3 <= 100:
+        print(f'ℹ️ size: {p3} MB')
+        if k3(j, f):
+            print('\n🎉 Done!')
+            return
+        print('\nScript finished with errors during cloning.')
+        return
+    a3.append(url)
+if __name__ == '__main__':
+    q3 = Path('repos.txt')
+    r3 = q3.read_text(encoding='utf-8')
+    s3 = r3.splitlines(keepends=False)
+    i = 0
+    ll = len(s3)
+    for d in s3:
+        print(f'{i}/{ll}')
+        i += 1
+        o3(d)
+    Path('remained').write_text('\n'.join(a3), encoding='utf-8')
+
+# --- File: get_zipped_repo.py ---
+import argparse
+import os
+import sys
+from pathlib import Path
+import requests
+from dotenv import load_dotenv
+from github import Github
+from tqdm import tqdm
+j2 = Path.home() / '.env'
+load_dotenv(j2)
+def g1(t3, f, u3='main', v3=None):
+    g = Github(os.getenv('GITHUB_TOKEN'))
+    w3 = g.get_repo(f'{t3}/{f}')
+    h1 = w3.get_zipball_url(u3)
+    k2 = os.getenv('GITHUB_TOKEN')
+    i3 = {'Authorization': f'token {k2}', 'Accept': 'application/vnd.github.v3.raw'}
+    i1 = requests.get(h1, headers=i3, stream=True)
+    i1.raise_for_status()
+    x3 = int(i1.headers.get('content-length', 0))
+    j3 = x3 / (1024 * 1024)
+    print(f'📦 Download size: {j3:.2f} MB ({x3:,} bytes)')
+    if v3 is None:
+        v3 = f'{f}-{u3}.zip'
+    y3 = 8192
+    with open(v3, 'wb') as f, tqdm(total=x3, unit='B', unit_scale=True, desc='Downloading') as z3:
+        for a4 in i1.iter_content(chunk_size=y3):
+            if a4:
+                f.write(a4)
+                z3.update(len(a4))
+    print(f'✅ Downloaded: {v3}')
+    return v3
+def o():
+    p = argparse.ArgumentParser(description='Download a GitHub repository as ZIP')
+    p.add_argument('repo', help='Repository in format "username/repo"')
+    p.add_argument('--branch', '-b', default='main', help='Branch name (default: main)')
+    p.add_argument('--output', '-o', help='Output filename')
+    q = p.parse_args()
+    try:
+        t3, f = q.repo.split('/')
+    except ValueError:
+        print("❌ Error: Repository must be in format 'username/repo'")
+        sys.exit(1)
+    g1(t3, f, q.branch, q.output)
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+# --- File: sparse_clone.py ---
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from urllib.parse import urlparse
+def b4(l3, s, c4):
+    try:
+        e3 = urlparse(l3)
+        k = Path(e3.path).stem
+        d4 = s / k
+        subprocess.run(['git', 'clone', '--filter=blob:none', '--sparse', l3, str(d4)], check=True, capture_output=True, timeout=300)
+        subprocess.run(['git', '-C', str(d4), 'sparse-checkout', 'init', '--no-cone'], check=True, capture_output=True)
+        e4 = [f"**/*{(ext if ext.startswith('.') else f'.{ext}')}" for ext in c4]
+        subprocess.run(['git', '-C', str(d4), 'sparse-checkout', 'set'] + e4, check=True, capture_output=True)
+        return (l3, True, f'Successfully cloned {k}')
+    except Exception as e:
+        return (l3, False, f'Failed: {e!s}')
+def o():
+    if len(sys.argv) < 3:
+        print('Usage: python script.py <extension1> [extension2] ... <repo_url1> [repo_url2] ...')
+        print('Example: python script.py .py .txt .md https://github.com/user/repo.git')
+        sys.exit(1)
+    q = sys.argv[1:]
+    c4 = []
+    f4 = []
+    for arg in q:
+        if arg.startswith(('http://', 'https://')) or arg.endswith('.git'):
+            f4.append(arg)
+        else:
+            c4.append(arg)
+    if not c4 or not f4:
+        print('Error: Must provide at least one extension and one repository URL')
+        sys.exit(1)
+    s = Path.cwd() / 'cloned_repos'
+    s.mkdir(exist_ok=True)
+    print(f"Extensions to clone: {', '.join(c4)}")
+    print(f'Repositories: {len(f4)}\n')
+    with ThreadPoolExecutor(max_workers=4) as g4:
+        h4 = {g4.submit(b4, url, s, c4): url for url in f4}
+        for i4 in as_completed(h4):
+            url, b1, c1 = i4.result()
+            u = '✓' if b1 else '✗'
+            print(f'{u} {url}: {c1}')
+if __name__ == '__main__':
+    raise SystemExit(o())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

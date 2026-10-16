@@ -1,0 +1,965 @@
+# --- File: copy_pkg_files.py ---
+import multiprocessing as mp
+import shutil
+import sys
+from pathlib import Path
+from loguru import logger
+def a():
+    for b in Path('.').glob('*.dist-info'):
+        c = b / 'RECORD'
+        if c.exists():
+            d = c.read_text().splitlines()
+            e = []
+            for f in d:
+                if f.strip():
+                    g = f.split(',')
+                    if g[0].endswith('.pyc'):
+                        continue
+                e.append(f)
+            c.write_text('\n'.join(e) + ('\n' if e else ''))
+def h(i, j, k):
+    try:
+        src = Path(i)
+        if not src.is_absolute():
+            src = j / src
+        if src.exists() and src.is_file():
+            rel = src.relative_to(j)
+            dst = k / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    except Exception as e:
+        k2.error(f'Error copying {i}: {e}')
+def l():
+    j = Path.cwd()
+    k = Path('~/tmp/packages').expanduser().resolve()
+    k.mkdir(parents=True, exist_ok=True)
+    a()
+    m = []
+    for pkg in sys.argv[1:]:
+        n = pkg.replace('-', '_')
+        o = set(j.glob(f'{n}-*.dist-info')) | set(j.glob(f'{pkg}-*.dist-info'))
+        for b in o:
+            c = b / 'RECORD'
+            if c.exists():
+                for f in c.read_text().splitlines():
+                    if f.strip():
+                        p = f.split(',')[0]
+                        if p and (not p.endswith('.pyc')):
+                            m.append(p)
+    q = mp.Pool(4)
+    r = []
+    for f in m:
+        res = q.apply_async(h, (f, j, k))
+        r.append(res)
+    for res in r:
+        try:
+            res.get()
+        except Exception as e:
+            k2.error(f'Worker exception: {e}')
+    q.close()
+    q.join()
+if __name__ == '__main__':
+    l()
+
+# --- File: cpkg.py ---
+import csv
+import shutil
+import sys
+from pathlib import Path
+from loguru import logger
+def s(t, n):
+    u = list(t.glob(f'{n}-*.dist-info'))
+    if not u:
+        v = n.replace('-', '_')
+        u = list(t.glob(f'{v}-*.dist-info'))
+    if not u:
+        raise FileNotFoundError(msg)
+    if len(u) > 1:
+        k2.warning("Multiple dist-info directories found for '{}', using: {}", n, u[0])
+    return u[0]
+def w(n):
+    t = Path.cwd()
+    x = s(t, n)
+    y = x / 'RECORD'
+    if not y.is_file():
+        raise FileNotFoundError(msg)
+    z = Path.home() / 'tmp' / '1' / n
+    z.mkdir(parents=True, exist_ok=True)
+    print('Destination root: {}', z)
+    a1 = 0
+    b1 = 0
+    c1 = 0
+    with y.open('r', encoding='utf-8', newline='') as f:
+        d1 = csv.reader(f)
+        for row in d1:
+            try:
+                if not row:
+                    continue
+                e1 = row[0]
+                if not e1:
+                    continue
+                f1 = t / e1
+                if not f1.exists() and 'dist-info' in str(f1):
+                    a1 += 1
+                    continue
+                if not f1.exists() and f1.suffix != '.pyc':
+                    k2.warning('Missing file listed in RECORD: {}', f1)
+                    a1 += 1
+                    continue
+                if not f1.exists():
+                    continue
+                g1 = z / e1
+                g1.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(f1, g1)
+                k2.debug('Copied {} -> {}', f1, g1)
+                b1 += 1
+            except Exception as e:
+                k2.exception('Error while processing RECORD entry {}: {}', row, e)
+                c1 += 1
+    print('\nMissing files (ignored, warned): {}', a1)
+    print('\nErrors: {}', c1)
+def l():
+    if len(sys.argv) != 2:
+        print(f'Usage: {sys.argv[0]} <package-name>', file=sys.stderr)
+        sys.exit(1)
+    n = sys.argv[1].strip()
+    if not n:
+        print('Package name must not be empty', file=sys.stderr)
+        sys.exit(1)
+    k2.remove()
+    k2.add(sys.stderr, level='INFO', format='<green>{level}</green>|{message}')
+    try:
+        w(n)
+    except Exception as e:
+        k2.exception("Fatal error while copying package '{}': {}", n, e)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(l())
+
+# --- File: deepack.py ---
+import argparse
+import shutil
+import site
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+from loguru import logger
+h1 = Path('~/tmp/pkgs').expanduser()
+i1 = 8
+def j1():
+    k1 = []
+    for i in site.getsitepackages():
+        k1.append(Path(i))
+    l1 = site.getusersitepackages()
+    if l1:
+        m1 = Path(l1)
+        if m1.exists():
+            k1.append(m1)
+    return k1
+def n1(o1, p1):
+    for q1 in p1:
+        r1 = q1 / o1
+        if r1.exists() and r1.is_dir():
+            return r1
+        s1 = o1.replace('-', '_')
+        r1 = q1 / s1
+        if r1.exists() and r1.is_dir():
+            return r1
+        for t1 in q1.iterdir():
+            if t1.is_dir() and t1.name.lower().replace('-', '_') == o1.lower().replace('-', '_'):
+                return t1
+    return None
+def u1(v1):
+    o1, w1, p1 = v1
+    try:
+        r1 = n1(o1, p1)
+        if not r1:
+            return (o1, False, 'Package directory not found')
+        g1 = w1 / o1
+        if g1.exists():
+            shutil.rmtree(g1)
+        g1.mkdir(parents=True)
+        for p in r1.rglob('*'):
+            if p.suffix == '.pyc':
+                continue
+            e1 = p.relative_to(r1)
+            x1 = g1 / e1
+            if p.is_dir():
+                x1.mkdir(parents=True, exist_ok=True)
+            else:
+                x1.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, x1)
+        return (o1, True, f'Copied to {g1}')
+    except Exception as e:
+        return (o1, False, f'Error: {e!s}')
+def l():
+    y1 = argparse.ArgumentParser(description='Copy installed Python packages into separate folders under ~/tmp/pkgs/<pkgname>')
+    y1.add_argument('packages', nargs='+', help='Names of packages to copy')
+    y1.add_argument('-o', '--output', default=str(h1), help=f'Output base directory (default: {h1})')
+    z1 = y1.parse_args()
+    w1 = Path(z1.output).expanduser().resolve()
+    w1.mkdir(parents=True, exist_ok=True)
+    print(f'Output directory: {w1}')
+    p1 = j1()
+    print(f'Site-packages paths: {[str(p) for p in p1]}')
+    a2 = [(pkg, w1, p1) for pkg in z1.packages]
+    b2 = []
+    c2 = []
+    with Pool(processes=i1) as q:
+        d2 = [q.apply_async(u1, (arg,)) for arg in a2]
+        e2 = len(d2)
+        for idx, f2 in enumerate(d2, 1):
+            n, g2, h2 = f2.get()
+            if g2:
+                b2.append((n, h2))
+                print(f'[{idx}/{e2}] ✓ {n}: {h2}')
+            else:
+                c2.append((n, h2))
+                k2.error(f'[{idx}/{e2}] ✗ {n}: {h2}')
+    print('\n' + '=' * 40)
+    print('SUMMARY')
+    print('=' * 40)
+    print(f'Total packages processed: {len(a2)}')
+    print(f'✓ Successfully copied: {len(b2)}')
+    print(f'✗ Failed: {len(c2)}')
+    if c2:
+        k2.error('\nFailed packages:')
+        for pkg, msg in c2:
+            k2.error(f'  ✗ {pkg}: {msg}')
+    return 1 if c2 else 0
+if __name__ == '__main__':
+    raise SystemExit(l())
+
+# --- File: mpkg.py ---
+import argparse
+import csv
+import shutil
+import sys
+from pathlib import Path
+from loguru import logger
+def s(t, n):
+    u = list(t.glob(f'{n}-*.dist-info'))
+    if not u:
+        v = n.replace('-', '_')
+        u = list(t.glob(f'{v}-*.dist-info'))
+    if not u:
+        raise FileNotFoundError(msg)
+    if len(u) > 1:
+        k2.warning("Multiple dist-info directories found for '{}', using: {}", n, u[0])
+    return u[0]
+def w(n, t):
+    x = s(t, n)
+    y = x / 'RECORD'
+    if not y.is_file():
+        print(f'RECORD file not found: {y}')
+    z = Path.home() / 'tmp' / '1' / n
+    z.mkdir(parents=True, exist_ok=True)
+    print('Destination root: {}', z)
+    a1 = b1 = c1 = 0
+    with y.open('r', encoding='utf-8', newline='') as f:
+        d1 = csv.reader(f)
+        for row in d1:
+            try:
+                if not row:
+                    continue
+                e1 = row[0]
+                if not e1:
+                    continue
+                f1 = t / e1
+                if not f1.exists() and 'dist-info' in str(f1):
+                    a1 += 1
+                    continue
+                if not f1.exists() and f1.suffix != '.pyc':
+                    k2.warning('Missing file listed in RECORD: {}', f1)
+                    a1 += 1
+                    continue
+                if not f1.exists():
+                    continue
+                g1 = z / e1
+                g1.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(f1, g1)
+                b1 += 1
+            except Exception as e:
+                k2.exception('Error while processing RECORD entry {}: {}', row, e)
+                c1 += 1
+    print('Missing files (warned): {}', a1)
+    print('Copied: {} | Errors: {}', b1, c1)
+def l():
+    y1 = argparse.ArgumentParser(description='Copy (or move) package files based on RECORD metadata.')
+    y1.add_argument('pkg', nargs='?', help='Package name to process')
+    y1.add_argument('-a', '--all', action='store_true', help='Process all packages in current directory')
+    z1 = y1.parse_args()
+    if not z1.pkg and (not z1.all):
+        y1.error('You must specify a package name or use --all')
+    k2.remove()
+    k2.add(sys.stderr, level='INFO', format='<green>{level}</green>|{message}')
+    t = Path.cwd()
+    try:
+        if z1.all:
+            i2 = list(t.glob('*.dist-info'))
+            if not i2:
+                k2.error('No .dist-info directories found in {}', t)
+                sys.exit(1)
+            for j2 in i2:
+                n = j2.stem.split('-')[0]
+                print('Processing package: {}', n)
+                try:
+                    w(n, t)
+                except Exception:
+                    k2.exception('Failed to copy package {}', n)
+                    continue
+        else:
+            w(z1.pkg, t)
+    except Exception as e:
+        k2.exception('Fatal error: {}', e)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(l())
+
+# --- File: repacopy.py ---
+import argparse
+import logging
+import shutil
+import sys
+from pathlib import Path
+from loguru import logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+k2 = logging.getLogger(__name__)
+class l2:
+    def __init__(self, m2='~/tmp/repack'):
+        self.output_base = Path(m2).expanduser()
+        self.output_base.mkdir(parents=True, exist_ok=True)
+        self.found_site_packages = []
+    def n2(self):
+        o2 = []
+        p2 = [Path.cwd()]
+        q2 = ['.venv', 'venv', 'env', 'virtualenv']
+        for r2 in p2:
+            if not r2.exists():
+                continue
+            try:
+                for s2 in q2:
+                    for t2 in r2.rglob(s2):
+                        if t2.is_dir():
+                            u2 = [t2 / 'lib' / 'python*' / 'site-packages', t2 / 'lib' / 'site-packages', t2 / 'Lib' / 'site-packages']
+                            for v2 in u2:
+                                for w2 in v2.parent.glob(v2.name):
+                                    if w2.exists() and w2.is_dir():
+                                        if w2 not in o2:
+                                            o2.append(w2)
+                                            print('Found virtualenv site-packages: %s', w2)
+                for w2 in r2.rglob('site-packages'):
+                    if w2.is_dir() and w2 not in o2:
+                        o2.append(w2)
+                        print('Found site-packages: %s', w2)
+                for x2 in r2.rglob('dist-packages'):
+                    if x2.is_dir() and x2 not in o2:
+                        o2.append(x2)
+                        print('Found dist-packages: %s', x2)
+            except (PermissionError, OSError) as e:
+                k2.debug('Permission denied scanning %s: %s', r2, e)
+        y2 = list(set(o2))
+        y2.sort()
+        self.found_site_packages = y2
+        return y2
+    def z2(self, x):
+        a3 = {'name': x.name.split('-')[0], 'version': None, 'requires_python': None, 'dependencies': []}
+        g = x.stem.split('-')
+        if len(g) >= 2:
+            a3['version'] = g[-1]
+        b3 = x / 'METADATA'
+        if b3.exists():
+            try:
+                with Path(b3).open(encoding='utf-8') as f:
+                    for f in f:
+                        f = f.strip()
+                        if f.startswith('Version:'):
+                            a3['version'] = f.split(':', 1)[1].strip()
+                        elif f.startswith('Requires-Python:'):
+                            a3['requires_python'] = f.split(':', 1)[1].strip()
+                        elif f.startswith('Requires-Dist:'):
+                            dep = f.split(':', 1)[1].strip()
+                            a3['dependencies'].append(dep)
+            except Exception as e:
+                k2.warning('Could not read metadata from %s: %s', b3, e)
+        return a3
+    def c3(self, o1, a3, d3, e3, f3, g3, h3):
+        i3 = a3['version'] or '0.0.0'
+        if h3:
+            j3 = 'py3'
+            k3 = 'none'
+            l3 = 'any'
+            m3 = 'true'
+        else:
+            print('Detected C extensions for %s; generating platform-specific tags.', o1)
+            m3 = 'false'
+            try:
+                from packaging.tags import sys_tags
+                n3 = next(sys_tags())
+                j3 = n3.interpreter
+                k3 = n3.abi
+                l3 = n3.platform
+                k2.debug("Using 'packaging' lib. Tags: %s-%s-%s", j3, k3, l3)
+            except ImportError:
+                k2.warning('`packaging` library not found. (Install with: pip install packaging)')
+                k2.warning('Falling back to best-guess tags based on current system.')
+                import platform
+                o3 = sys.version_info
+                j3 = f'cp{o3.major}{o3.minor}'
+                k3 = j3
+                l3 = f'{platform.system().lower()} _{platform.machine()} '
+                k2.debug('Fallback tags: %s-%s-%s', j3, k3, l3)
+        p3 = f"{o1.replace('-', '_')} -{i3} -{j3} -{k3} -{l3} "
+        q3 = f3 / p3
+        x = q3 / f'{o1}-{i3}.dist-info'
+        q3 / f'{o1}-{i3}.data'
+        x.mkdir(parents=True, exist_ok=True)
+        for p in d3:
+            r3 = p
+            if '.dist-info' in str(r3):
+                s3 = x / r3.name
+            else:
+                s3 = q3 / r3
+            s3.parent.mkdir(parents=True, exist_ok=True)
+            t3 = e3 / p
+            if t3.exists():
+                shutil.copy2(t3, s3)
+            else:
+                k2.warning('File from RECORD not found at %s', t3)
+        u3 = x / 'WHEEL'
+        with Path(u3).open('w', encoding='utf-8') as f:
+            f.write('Wheel-Version: 1.0\n')
+            f.write('Generator: auto-repacker 1.0\n')
+            f.write(f'Root-Is-Purelib: {m3}\n')
+            f.write(f'Tag: {j3}-{k3}-{l3}\n')
+        v3 = g3 / 'METADATA'
+        w3 = x / 'METADATA'
+        if not w3.exists() and v3.exists():
+            shutil.copy2(v3, w3)
+        elif not w3.exists():
+            with Path(w3).open('w', encoding='utf-8') as f:
+                f.write('Metadata-Version: 2.1\n')
+                f.write(f'Name: {o1}\n')
+                f.write(f'Version: {i3}\n')
+        x3 = g3 / 'RECORD'
+        if x3.exists():
+            shutil.copy2(x3, x / 'RECORD')
+        else:
+            k2.warning('Could not find original RECORD file at %s', x3)
+        return q3
+    def w(self, x, e3, w1):
+        try:
+            c = x / 'RECORD'
+            if not c.exists():
+                k2.warning(f'Skipping {x.name}: RECORD file not found')
+                return False
+            a3 = self.get_package_info_from_dist_info(x)
+            o1 = a3['name']
+            if not o1:
+                k2.warning('Could not determine package name for %s', x)
+                return False
+            y3 = []
+            h3 = True
+            with Path(c).open(encoding='utf-8') as f:
+                for f in f:
+                    i = f.split(',')[0].strip()
+                    if i and (not i.endswith('.dist-info/RECORD')):
+                        if i.endswith('.so'):
+                            h3 = False
+                        z3 = e3 / i
+                        if z3.exists():
+                            y3.append(Path(i))
+            if not y3:
+                k2.warning('No files found for package %s', o1)
+                return False
+            a4 = self.create_wheel_structure(o1, a3, y3, e3, w1, x, h3)
+            if a4:
+                print('Copied package files to: %s', a4)
+                return True
+            return False
+        except Exception as e:
+            k2.exception(f'Error copying files for {x.name}: {e}')
+            return False
+    def b4(self):
+        c4 = 0
+        for d4 in self.found_site_packages:
+            print('Processing site-packages: %s', d4)
+            e4 = 'local_env'
+            try:
+                if '.venv' in str(d4) or 'venv' in str(d4) or 'env' in str(d4):
+                    e4 = d4.parent.parent.name
+            except Exception:
+                pass
+            w1 = self.output_base / e4
+            w1.mkdir(parents=True, exist_ok=True)
+            f4 = list(d4.glob('*.dist-info'))
+            g4 = 0
+            for x in f4:
+                if x.is_dir() and self.copy_package_files(x, d4, w1):
+                    g4 += 1
+                    c4 += 1
+            print('Copied %s packages from %s', g4, d4)
+        print('Total packages copied: %s', c4)
+        print(f'Package files saved to: {self.output_base}')
+def l():
+    y1 = argparse.ArgumentParser(description='Automatically find and copy Python packages to a wheel structure')
+    y1.add_argument('--output', '-o', default='~/tmp/repack', help='Output directory (default: ~/tmp/repack)')
+    y1.add_argument('--verbose', '-v', action='store_true', help='Enable verbose output')
+    y1.add_argument('--skip-scan', action='store_true', help='Skip local scan and use current active environment only')
+    z1 = y1.parse_args()
+    if z1.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    try:
+        h4 = l2(output_base=z1.output)
+        if z1.skip_scan:
+            import site
+            i4 = site.getsitepackages()
+            l1 = site.getusersitepackages()
+            if l1:
+                i4.append(l1)
+            h4.found_site_packages = [Path(p) for p in i4 if Path(p).exists()]
+            print(f'Using current active environment site-packages: {h4.found_site_packages}')
+        else:
+            print('Scanning current directory for site-packages directories...')
+            o2 = h4.find_site_packages_dirs()
+            print(f'Found {len(o2)} site-packages directories')
+        if not h4.found_site_packages:
+            k2.error('No site-packages directories found!')
+            return 1
+        h4.copy_all_packages()
+    except Exception as e:
+        k2.exception('Fatal error: %s', e)
+        return 1
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(l())
+
+# --- File: repacopy_entry_point.py ---
+import contextlib
+import csv
+import shutil
+import site
+import sys
+from functools import lru_cache
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+from loguru import logger
+j4 = 8
+k4 = Path.home() / 'tmp' / 'packages'
+def l4():
+    import os
+    k1 = []
+    k1.extend((Path(p) for p in site.getsitepackages()))
+    l1 = site.getusersitepackages()
+    if l1:
+        k1.append(Path(l1))
+    m4 = os.environ.get('PYTHONPATH', '')
+    if m4:
+        k1.extend((Path(p) for p in m4.split(os.pathsep) if p))
+    return [p for p in k1 if p.exists()]
+def n4(p2):
+    f4 = []
+    for p in p2:
+        if not p.exists():
+            continue
+        print(f'Searching in {p}')
+        f4.extend(p.glob('*.dist-info'))
+    print(f'Found {len(f4)} dist-info directories')
+    return f4
+def o4(x):
+    p4 = x / 'entry_points.txt'
+    if p4.exists():
+        return True
+    b3 = x / 'METADATA'
+    if b3.exists():
+        try:
+            with open(b3, 'r', encoding='utf-8') as f:
+                q4 = f.read()
+                if 'entry_points' in q4.lower():
+                    return True
+        except Exception as e:
+            k2.debug(f'Error reading {b3}: {e}')
+    return bool((x / 'top_level.txt').exists() and any(x.glob('scripts*')))
+def r4(x):
+    c = x / 'RECORD'
+    if not c.exists():
+        k2.warning(f'No RECORD file found in {x}')
+        return []
+    d3 = []
+    try:
+        with open(c, 'r', encoding='utf-8') as f:
+            d1 = csv.reader(f)
+            for row in d1:
+                if row and len(row) >= 1:
+                    r3 = row[0]
+                    s4 = row[1] if len(row) > 1 else ''
+                    if not r3.endswith('.pyc') and '__pycache__' not in r3:
+                        d3.append((Path(r3), s4))
+    except Exception as e:
+        k2.error(f'Error parsing RECORD file {c}: {e}')
+    return d3
+@lru_cache(maxsize=128)
+def t4(r3, p2):
+    if Path(r3).is_absolute():
+        u4 = Path(r3)
+        return u4 if u4.exists() else None
+    if '.data/' in r3:
+        g = r3.split('.data/', 1)
+        v4 = g[1] if len(g) > 1 else r3
+        w4 = {'purelib/': lambda p: p, 'platlib/': lambda p: p, 'headers/': lambda p: p, 'scripts/': lambda p: p, 'data/': lambda p: p}
+        for x4 in w4:
+            if v4.startswith(x4):
+                y4 = v4[len(x4):]
+                for z4 in p2:
+                    a5 = z4 / y4
+                    if a5.exists():
+                        return a5
+                break
+    for z4 in p2:
+        a5 = z4 / r3
+        if a5.exists():
+            return a5
+    a5 = Path(r3)
+    if a5.exists():
+        return a5
+    return None
+def w(b5):
+    o1, x, p2 = b5
+    try:
+        c5 = k4 / o1
+        c5.parent.mkdir(parents=True, exist_ok=True)
+        d5 = r4(x)
+        if not d5:
+            return (o1, False, 'No files in RECORD')
+        e5 = tuple((Path(p) for p in p2))
+        f5 = 0
+        for r3, _ in d5:
+            if '.dist-info' in str(r3):
+                continue
+            t3 = t4(str(r3), e5)
+            if t3 is None:
+                k2.debug(f'Could not find: {r3}')
+                continue
+            g1 = c5
+            g5 = str(r3)
+            if r3.is_absolute():
+                g1 = c5 / r3.name
+            else:
+                g = Path(g5).parts
+                h5 = [p for p in g if p not in ('..', '.')]
+                if h5:
+                    g1 = c5 / Path(*h5)
+                else:
+                    g1 = c5 / Path(g5).name
+            g1.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if t3.is_file():
+                    shutil.copy2(t3, g1)
+                    f5 += 1
+                elif t3.is_dir():
+                    if not g1.exists():
+                        shutil.copytree(t3, g1, dirs_exist_ok=True)
+                        f5 += 1
+            except Exception as e:
+                k2.debug(f'Error copying {t3}: {e}')
+        i5 = c5 / x.name
+        if x.exists() and (not i5.exists()):
+            with contextlib.suppress(Exception):
+                shutil.copytree(x, i5, dirs_exist_ok=True)
+        j5 = f'Copied {f5} files'
+        print(f'{o1}: {j5}')
+        return (o1, True, j5)
+    except Exception as e:
+        k5 = f'Error: {e!s}'
+        k2.error(f'{o1}: {k5}')
+        return (o1, False, k5)
+def l():
+    print('Starting package copy process...')
+    p2 = l4()
+    print(f'Search paths: {p2}')
+    f4 = n4(p2)
+    if not f4:
+        k2.error('No dist-info directories found!')
+        return 1
+    l5 = []
+    for x in f4:
+        if o4(x):
+            o1 = x.name.replace('.dist-info', '')
+            if '-' in o1:
+                print(f'Found package with entry points: {o1}')
+            l5.append((o1, x))
+    print(f'Found {len(l5)} packages with entry points')
+    if not l5:
+        k2.warning('No packages with entry points found!')
+        return 1
+    m5 = [str(p) for p in p2]
+    n5 = [(o5, d, m5) for o5, d in l5]
+    print(f'Processing {len(n5)} packages using {j4} workers...')
+    r = []
+    with Pool(processes=j4) as q:
+        d2 = [q.apply_async(w, (p5,)) for p5 in n5]
+        for f2 in d2:
+            try:
+                q5 = f2.get()
+                r.append(q5)
+            except Exception as e:
+                k2.error(f'Exception processing package: {e}')
+                r.append(('unknown', False, str(e)))
+    print('=' * 40)
+    print('SUMMARY')
+    print('-' * 40)
+    b2 = [r for r in r if r[1]]
+    c2 = [r for r in r if not r[1]]
+    print(f'✅ Successfully processed: {len(b2)} packages')
+    for n, _, msg in b2:
+        print(f'  - {n}: {msg}')
+    if c2:
+        print(f'❌ Failed: {len(c2)} packages')
+        for n, _, msg in c2:
+            print(f'  - {n}: {msg}')
+    print(f'📁 Packages copied to: {k4}')
+    print('-' * 40)
+    return 0
+if __name__ == '__main__':
+    try:
+        raise SystemExit(l())
+    except KeyboardInterrupt:
+        print('\nProcess interrupted by user')
+        sys.exit(1)
+    except Exception as e:
+        k2.error(f'Unexpected error: {e}', exc_info=True)
+        sys.exit(1)
+
+# --- File: xuser_pkgs.py ---
+import argparse
+import concurrent.futures
+import csv
+import fnmatch
+import importlib.metadata
+import shutil
+import site
+from pathlib import Path
+def r5():
+    if not site.USER_SITE:
+        site.main()
+    return Path(site.USER_SITE).resolve()
+def s5():
+    t5 = []
+    for u5 in importlib.metadata.distributions():
+        if u5.entry_points:
+            t5.append(u5.metadata['Name'])
+    return sorted(t5)
+def v5(s2):
+    w5 = []
+    for u5 in importlib.metadata.distributions():
+        o5 = u5.metadata['Name']
+        if fnmatch.fnmatch(o5.lower(), s2.lower()):
+            w5.append(o5)
+    return w5
+def x5(y5, z5=False):
+    if z5:
+        t5 = s5()
+        if not y5:
+            return (t5, [])
+        a6 = []
+        b6 = []
+        for s2 in y5:
+            if any((c in s2 for c in '*?[]')):
+                c6 = [pkg for pkg in t5 if fnmatch.fnmatch(pkg.lower(), s2.lower())]
+                if c6:
+                    a6.extend(c6)
+                else:
+                    b6.append(s2)
+            elif s2 in t5:
+                a6.append(s2)
+            else:
+                b6.append(s2)
+        return (a6, b6)
+    else:
+        t5 = s5()
+        a6 = []
+        b6 = []
+        for s2 in y5:
+            if any((c in s2 for c in '*?[]')):
+                d6 = v5(s2)
+                c6 = [pkg for pkg in d6 if pkg in t5]
+                if c6:
+                    a6.extend(c6)
+                else:
+                    b6.append(s2)
+            elif s2 in t5:
+                a6.append(s2)
+            else:
+                b6.append(s2)
+        return (a6, b6)
+def e6(f6, g6, h6):
+    if not f6:
+        return False
+    i6 = f6[0]
+    j6 = (g6 / i6).resolve()
+    if not j6.is_file():
+        return False
+    if not j6.is_relative_to(g6):
+        return False
+    k6 = h6 / i6
+    k6.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(j6, k6)
+        return True
+    except Exception as e:
+        print(f'   ❌ Error copying {i6}: {e}')
+        return False
+def l6(n, l1, m6):
+    try:
+        u5 = importlib.metadata.distribution(n)
+    except importlib.metadata.PackageNotFoundError:
+        return f"❌ Package '{n}' is not installed in this environment."
+    g6 = Path(u5.locate_file('')).resolve()
+    if not g6.is_relative_to(l1):
+        return f"ℹ️  Package '{n}' found, but it is not installed in the user site folder (Location: {g6}). Skipping."
+    try:
+        d3 = u5.files
+        if d3 is None:
+            return f"❌ Package '{n}' has no file information available."
+        c = None
+        for n6 in d3:
+            if n6.name == 'RECORD':
+                c = n6.locate()
+                break
+        if not c:
+            return f"❌ Package '{n}' RECORD file not found."
+        y = Path(c)
+        if not y.is_file():
+            return f"❌ Package '{n}' RECORD file exists but is not accessible."
+    except Exception as e:
+        return f"❌ Failed to locate RECORD file for '{n}': {e}"
+    o6 = m6 / n
+    o6.mkdir(parents=True, exist_ok=True)
+    try:
+        with y.open('r', encoding='utf-8', newline='') as f:
+            d1 = csv.reader(f)
+            p6 = list(d1)
+    except Exception as e:
+        return f"❌ Failed to parse RECORD file for '{n}': {e}"
+    b1 = 0
+    with concurrent.futures.ThreadPoolExecutor() as q6:
+        r6 = [q6.submit(e6, row, g6, o6) for row in p6]
+        for s6 in concurrent.futures.as_completed(r6):
+            if s6.result():
+                b1 += 1
+    eps = u5.entry_points
+    t6 = ''
+    if eps:
+        u6 = []
+        for ep in eps:
+            u6.append(f'{ep.group}:{ep.name}')
+        t6 = f" | Entry points: {', '.join(u6)}"
+    return f"✅ Package '{n}' completely extracted! Copied {b1} files to {o6}{t6}"
+def l():
+    y1 = argparse.ArgumentParser(description='Extract installed user-site Python packages that have entry points to ~/tmp/pkgs/<pkgname>', epilog='Examples:\n  python script.py requests              # Extract \'requests\' if it has entry points\n  python script.py "req*"                 # Extract packages starting with "req" that have entry points\n  python script.py -e                     # Extract ALL packages with entry points\n  python script.py -e "django*"           # Extract django packages with entry points\n  python script.py -e --list-only         # List all packages with entry points', formatter_class=argparse.RawDescriptionHelpFormatter)
+    y1.add_argument('patterns', nargs='*', help='Package names or wildcard patterns (e.g., "a*" for all packages starting with "a")')
+    y1.add_argument('-e', '--entry-points', action='store_true', help='Extract only packages that have entry points (console scripts, plugins, etc.)')
+    y1.add_argument('--list-only', action='store_true', help='Only list matching packages without extracting')
+    y1.add_argument('--show-entry-points', action='store_true', help='Show detailed entry point information when listing')
+    z1 = y1.parse_args()
+    if not z1.entry_points and (not z1.patterns):
+        y1.error('Either provide package patterns or use -e flag for entry point packages')
+    a6, b6 = x5(z1.patterns if z1.patterns else [], z1.entry_points)
+    v6 = set()
+    a6 = [x for x in a6 if not (x in v6 or v6.add(x))]
+    if b6:
+        print(f"⚠️  No packages found matching: {', '.join(b6)}")
+    if not a6:
+        if z1.entry_points:
+            print('❌ No packages with entry points found.')
+        else:
+            print('❌ No matching packages with entry points found.')
+        return
+    l1 = r5()
+    m6 = Path.home() / 'tmp' / 'pkgs'
+    print(f'🔍 System User-Site Path: {l1}')
+    print(f'📁 Destination Folder:   {m6}')
+    if z1.entry_points:
+        print(f'📦 Found {len(a6)} package(s) with entry points:')
+    else:
+        print(f'📦 Found {len(a6)} matching package(s) with entry points:')
+    for pkg in a6:
+        if z1.show_entry_points or z1.list_only:
+            try:
+                u5 = importlib.metadata.distribution(pkg)
+                eps = u5.entry_points
+                if eps:
+                    print(f'   - {pkg}')
+                    for ep in sorted(eps, key=lambda x: (x.group, x.name)):
+                        print(f'     [{ep.group}] {ep.name} = {ep.value}')
+                else:
+                    print(f'   - {pkg} (no entry points)')
+            except Exception:
+                print(f'   - {pkg}')
+        else:
+            print(f'   - {pkg}')
+    print('-' * 40)
+    if z1.list_only:
+        return
+    w6 = []
+    for pkg in a6:
+        try:
+            u5 = importlib.metadata.distribution(pkg)
+            if u5.entry_points:
+                w6.append(pkg)
+            else:
+                print(f"ℹ️  Package '{pkg}' has no entry points. Skipping.")
+        except Exception:
+            print(f"⚠️  Could not verify entry points for '{pkg}'. Skipping.")
+    if not w6:
+        print('❌ No packages with entry points to extract.')
+        return
+    print(f'🔄 Extracting {len(w6)} packages with entry points...')
+    with concurrent.futures.ThreadPoolExecutor() as x6:
+        y6 = {x6.submit(l6, pkg, l1, m6): pkg for pkg in w6}
+        for s6 in concurrent.futures.as_completed(y6):
+            n = y6[s6]
+            try:
+                z6 = s6.result()
+                print(z6)
+            except Exception as exc:
+                print(f"❌ Package '{n}' generated an unhandled exception: {exc}")
+if __name__ == '__main__':
+    raise SystemExit(l())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,1602 @@
+# --- File: repack_pkgs.py ---
+import base64
+import hashlib
+import json
+import shutil
+import sys
+import tempfile
+import zipfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+@dataclass
+class a:
+    b = '2.1'
+class c:
+    def __init__(self, d=False):
+        self.verbose = d
+    def log(self, e):
+        if self.verbose:
+            print(f'[DETECT] {e}')
+    def f(self, g):
+        h = list(g.rglob('*.so'))
+        i = list(g.rglob('*.pyd'))
+        j = list(g.rglob('*.dll'))
+        k = bool(h or i or j)
+        l = not k
+        if k:
+            self.log(f'Found C extensions: {len(h)} .so, {len(i)} .pyd, {len(j)} .dll')
+        m = {'.exe', '.bin', '.dylib', '.so', '.pyd', '.dll'}
+        n = any((o.suffix.lower() in m for o in g.rglob('*') if o.is_file()))
+        return (l, k, n)
+    @staticmethod
+    def p():
+        q, r = sys.version_info[:2]
+        return f'py{q}{r}'
+    @staticmethod
+    def s():
+        q, r = sys.version_info[:2]
+        t = sys.abiflags if hasattr(sys, 'abiflags') else ''
+        if hasattr(sys, 'implementation') and sys.implementation.name == 'cpython':
+            return f'cp{q}{r}{t}'
+        return f'cp{q}{r}'
+    @staticmethod
+    def u():
+        import platform
+        v = platform.system().lower()
+        w = platform.machine().lower()
+        x = {'linux': f'linux_{w}', 'darwin': f'macosx_10_9_{w}', 'windows': f'win_{w}'}
+        return x.get(v, f'{v}_{w}')
+    @staticmethod
+    def y(z):
+        a1 = {}
+        b1 = z / 'METADATA'
+        if not b1.exists():
+            b1 = z / 'PKG-INFO'
+        if b1.exists():
+            try:
+                c1 = b1.read_text(encoding='utf-8')
+                for d1 in c1.splitlines():
+                    if ':' in d1:
+                        key, e1 = d1.split(':', 1)
+                        a1[key.strip()] = e1.strip()
+            except Exception:
+                pass
+        return a1
+    def f1(self, g1, h1):
+        g = g1 / h1
+        if not g.is_dir():
+            self.log(f'Package not found: {h1}')
+            return None
+        try:
+            i1, j1, n = self.detect_package_type(g)
+            k1 = list(g1.glob(f'{h1}*.dist-info'))
+            if not k1:
+                self.log(f'No dist-info found for {h1}')
+                return None
+            z = k1[0]
+            a1 = self.read_dist_info(z)
+            l1 = a1.get('Version', '0.0.0')
+            m1 = 'py3' if i1 else self.get_python_version()
+            n1 = 'none' if i1 else self.get_abi_tag()
+            o1 = 'any' if i1 else self.get_platform_tag()
+            p1 = h1.lower().replace('-', '_').replace('.', '_')
+            q1 = f'{p1}-{l1}-{m1}-{n1}-{o1}.whl'
+            return a(name=h1, version=l1, location=str(g), is_pure_python=i1, has_c_extension=j1, has_binary=n, py_version=m1, abi_tag=n1, platform_tag=o1, wheel_filename=q1)
+        except Exception as e:
+            self.log(f'Error analyzing {h1}: {e!s}')
+            return None
+class r1:
+    def __init__(self, d=False):
+        self.verbose = d
+    def log(self, e):
+        if self.verbose:
+            print(f'[BUILD] {e}')
+    @staticmethod
+    def s1(o, t1='sha256'):
+        u1 = hashlib.new(t1)
+        with o.open('rb') as f:
+            for v1 in iter(lambda: f.read(4096), b''):
+                u1.update(v1)
+        w1 = u1.digest()
+        return base64.urlsafe_b64encode(w1).decode('ascii').rstrip('=')
+    @staticmethod
+    def x1(o):
+        return o.stat().st_size
+    def y1(self, z1, z):
+        a2 = []
+        with zipfile.ZipFile(z1, 'r') as zf:
+            for b2 in zf.infolist():
+                if b2.filename.endswith('RECORD'):
+                    continue
+                c1 = zf.read(b2.filename)
+                u1 = hashlib.sha256()
+                u1.update(c1)
+                w1 = u1.digest()
+                c2 = base64.urlsafe_b64encode(w1).decode('ascii').rstrip('=')
+                a2.append(f'{b2.filename},sha256={c2},{len(c1)}')
+        a2.append(f'{z}/RECORD,,')
+        return '\n'.join(a2) + '\n'
+    def d2(self, e2, f2, g2):
+        try:
+            g2.mkdir(parents=True, exist_ok=True)
+            z1 = g2 / e2.wheel_filename
+            self.log(f'Creating wheel: {z1}')
+            with tempfile.TemporaryDirectory() as h2:
+                i2 = Path(h2)
+                j2 = e2.name.lower().replace('-', '_')
+                k2 = i2 / j2
+                if not f2.is_dir():
+                    return (False, f'Source directory not found: {f2}')
+                shutil.copytree(f2, k2, dirs_exist_ok=True)
+                p1 = e2.name.lower().replace('-', '_').replace('.', '_')
+                l2 = f'{p1}-{e2.version}.dist-info'
+                z = i2 / l2
+                z.mkdir(parents=True, exist_ok=True)
+                m2 = f"Wheel-Version: 1.0\nGenerator: repack_venv_packages\nRoot-Is-Purelib: {('true' if e2.is_pure_python else 'false')}\nTag: {e2.py_version}-{e2.abi_tag}-{e2.platform_tag}\n"
+                (z / 'WHEEL').write_text(m2)
+                n2 = f'Metadata-Version: {e2.metadata_version}\nName: {e2.name}\nVersion: {e2.version}\nSummary: Repacked wheel from site-packages\nHome-page: UNKNOWN\nAuthor: UNKNOWN\nAuthor-email: UNKNOWN\nLicense: UNKNOWN\nPlatform: UNKNOWN\n'
+                (z / 'METADATA').write_text(n2)
+                o2 = j2.split('-')[0]
+                (z / 'top_level.txt').write_text(o2 + '\n')
+                with zipfile.ZipFile(z1, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for o in i2.rglob('*'):
+                        if o.is_file():
+                            p2 = o.relative_to(i2)
+                            zf.write(o, p2)
+                q2 = self.create_record(z1, l2)
+                r2 = z1.with_suffix('.whl.tmp')
+                shutil.move(z1, r2)
+                with zipfile.ZipFile(r2, 'r') as s2, zipfile.ZipFile(z1, 'w', zipfile.ZIP_DEFLATED) as t2:
+                    for u2 in s2.infolist():
+                        t2.writestr(u2, s2.read(u2.filename))
+                    v2 = f'{l2}/RECORD'
+                    t2.writestr(v2, q2)
+                r2.unlink()
+            w2 = z1.stat().st_size / (1024 * 1024)
+            self.log(f'Wheel created successfully: {z1} ({w2:.2f} MB)')
+            return (True, f'Successfully created {e2.wheel_filename}')
+        except Exception as e:
+            return (False, f'Error creating wheel: {e!s}')
+class x2:
+    def __init__(self, y2=None, g2=None, d=False, z2=False):
+        self.verbose = d
+        self.dry_run = z2
+        self.site_packages = Path(y2 or Path.cwd()).resolve()
+        if not self.site_packages.exists():
+            raise ValueError(f'Site-packages directory not found: {self.site_packages}')
+        self.output_dir = Path(g2 or Path.home() / 'tmp' / 'whl').resolve()
+        self.detector = c(verbose=d)
+        self.builder = r1(verbose=d)
+        self.stats = {'total_packages': 0, 'pure_python_packages': 0, 'packages_with_c_extensions': 0, 'successfully_repacked': 0, 'failed_packages': 0, 'total_size_before': 0, 'total_size_after': 0}
+        self.results = []
+    def log(self, e, a3='INFO'):
+        if self.verbose or a3 in {'ERROR', 'WARNING'}:
+            b3 = datetime.now().strftime('%H:%M:%S')
+            print(f'[{b3}] [{a3}] {e}')
+    def c3(self):
+        d3 = {'.dist-info', '.egg-info', '.egg', '__pycache__'}
+        e3 = {u2.name for u2 in self.site_packages.iterdir() if u2.is_dir() and (not u2.name.startswith('.')) and (not any((u2.name.endswith(p) for p in d3)))}
+        self.log(f'Found {len(e3)} packages')
+        return sorted(e3)
+    def f3(self, h1):
+        try:
+            e2 = self.detector.analyze_package(self.site_packages, h1)
+            if not e2:
+                return (False, 'Failed to analyze package', None)
+            self.log(f'Repacking: {h1} v{e2.version}')
+            self.log(f"  Type: {('Pure Python' if e2.is_pure_python else 'With C extensions')}")
+            self.log(f'  Wheel: {e2.wheel_filename}')
+            if self.dry_run:
+                self.log('DRY RUN: Would create wheel')
+                return (True, 'Dry run - wheel not created', e2)
+            g = self.site_packages / h1
+            g3, e = self.builder.create_wheel(e2, g, self.output_dir)
+            return (g3, e, e2)
+        except Exception as e:
+            return (False, f'Error: {e!s}', None)
+    def h3(self):
+        print('\n╔════════════════════════════════════════════════════════════╗')
+        print('║         Virtual Environment Package Repacker               ║')
+        print('╚════════════════════════════════════════════════════════════╝\n')
+        print(f'Site-packages: {self.site_packages}')
+        print(f'Output directory: {self.output_dir}')
+        print(f"Mode: {('DRY RUN' if self.dry_run else 'NORMAL')}")
+        print('-' * 40)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        e3 = self.find_packages()
+        if not e3:
+            print('No packages found to repack')
+            return self.stats
+        print(f'\nRepacking {len(e3)} packages...\n')
+        for i, h1 in enumerate(e3, 1):
+            print(f'[{i}/{len(e3)}] {h1}...', end=' ', flush=True)
+            g3, e, e2 = self.repack_package(h1)
+            self.stats['total_packages'] += 1
+            if g3 and e2:
+                self.stats['successfully_repacked'] += 1
+                if e2.is_pure_python:
+                    self.stats['pure_python_packages'] += 1
+                else:
+                    self.stats['packages_with_c_extensions'] += 1
+                print(f'✓ {e}')
+                self.results.append({'package': h1, 'version': e2.version, 'is_pure_python': e2.is_pure_python, 'wheel_filename': e2.wheel_filename, 'success': True})
+            else:
+                self.stats['failed_packages'] += 1
+                print(f'✗ {e}')
+                self.results.append({'package': h1, 'success': False, 'error': e})
+        return self.stats
+    def i3(self):
+        print('\n' + '=' * 40)
+        print('STATISTICS')
+        print('-' * 40)
+        print(f"Total packages: {self.stats['total_packages']}")
+        print(f"Successfully repacked: {self.stats['successfully_repacked']}")
+        print(f"Failed: {self.stats['failed_packages']}")
+        print()
+        print(f"Pure Python packages: {self.stats['pure_python_packages']}")
+        print(f"Packages with C extensions: {self.stats['packages_with_c_extensions']}")
+        print('-' * 40)
+    def j3(self, k3='repack_report.json'):
+        l3 = {'timestamp': datetime.now().isoformat(), 'site_packages': str(self.site_packages), 'output_directory': str(self.output_dir), 'statistics': self.stats, 'results': self.results}
+        try:
+            m3 = self.output_dir / k3
+            m3.write_text(json.dumps(l3, indent=2), encoding='utf-8')
+            print(f'\n✓ Report saved: {m3}')
+        except Exception as e:
+            print(f'\n✗ Error saving report: {e!s}')
+    def n3(self):
+        o3 = list(self.output_dir.glob('*.whl'))
+        if not o3:
+            print('No .whl files found')
+            return
+        print(f'\nGenerated {len(o3)} .whl files:')
+        print('-' * 40)
+        p3 = 0
+        for q3 in sorted(o3):
+            w2 = q3.stat().st_size / (1024 * 1024)
+            p3 += q3.stat().st_size
+            print(f'  {q3.name:<50} {w2:>8.2f} MB')
+        r3 = p3 / (1024 * 1024)
+        print('-' * 40)
+        print(f'Total size: {r3:.2f} MB')
+def s3():
+    import argparse
+    t3 = argparse.ArgumentParser(description='Repack Python packages from site-packages into .whl files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  python repack_venv_packages.py\n  python repack_venv_packages.py --site-packages /path/to/site-packages\n  python repack_venv_packages.py --output /path/to/output\n  python repack_venv_packages.py --dry-run\n  python repack_venv_packages.py -v\n  python repack_venv_packages.py --report repack_report.json\n  python repack_venv_packages.py --list-wheels\n        ')
+    t3.add_argument('--site-packages', default=None, help='Path to site-packages directory (default: current dir)')
+    t3.add_argument('--output', default=None, help='Output directory for .whl files (default: ~/tmp/whl)')
+    t3.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    t3.add_argument('--dry-run', action='store_true', help='Show what would be done without creating files')
+    t3.add_argument('--report', metavar='FILE', help='Save detailed report to JSON file')
+    t3.add_argument('--list-wheels', action='store_true', help='List generated .whl files')
+    u3 = t3.parse_args()
+    try:
+        v3 = x2(site_packages_dir=u3.site_packages, output_dir=u3.output, verbose=u3.verbose, dry_run=u3.dry_run)
+        v3.repack_all()
+        v3.print_stats()
+        if u3.report:
+            v3.save_report(u3.report)
+        if u3.list_wheels:
+            v3.list_wheels()
+    except Exception as e:
+        print(f'Error: {e!s}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: rpack.py ---
+import argparse
+import os
+import re
+import shutil
+import sysconfig
+from pathlib import Path
+from wheel.wheelfile import WheelFile
+def w3():
+    return Path(sysconfig.get_paths()['purelib'])
+def x3(y3):
+    z3 = {}
+    for u2 in y3.iterdir():
+        if u2.name.endswith('.dist-info'):
+            a4 = u2.name[:-10]
+            m = re.match('(.+)-([\\w\\.]+)', a4)
+            if not m:
+                continue
+            pkg, l1 = (m.group(1), m.group(2))
+            z3[pkg.lower()] = (pkg, l1)
+    return z3
+def b4(c4):
+    d4 = c4 / 'WHEEL'
+    if not d4.exists():
+        return ['py3-none-any']
+    c1 = d4.read_text()
+    e4 = [d1.split(':', 1)[1].strip() for d1 in c1.splitlines() if d1.startswith('Tag:')]
+    return e4 or ['py3-none-any']
+def f4(pkg, y3, dst):
+    g4 = [y3 / pkg, y3 / f'{pkg}.py', y3 / f"{pkg.replace('-', '_')}", y3 / f"{pkg.replace('-', '_')}.py"]
+    for c in g4:
+        if c.exists():
+            if c.is_dir():
+                shutil.copytree(c, dst / c.name)
+            else:
+                shutil.copy2(c, dst / c.name)
+            break
+def h4(pkg, l1, y3, dst):
+    i4 = y3 / f'{pkg}-{l1}.dist-info'
+    out = dst / i4.name
+    shutil.copytree(i4, out)
+    return out
+def j4(pkg, dst):
+    k4 = Path(sysconfig.get_paths()['scripts'])
+    if not k4.exists():
+        return
+    l4 = re.compile(f'^{pkg}(-.+)?$')
+    for m4 in k4.iterdir():
+        if m4.is_file() and l4.match(m4.name):
+            shutil.copy2(m4, dst / m4.name)
+def n4(pkg, l1, tag, o4, p4):
+    q4 = f'{pkg}-{l1}-{tag}.whl'
+    z1 = p4 / q4
+    with WheelFile(str(z1), 'w') as wf:
+        for r4, s4, t4 in os.walk(o4):
+            for u4 in t4:
+                v4 = Path(r4) / u4
+                p2 = v4.relative_to(o4)
+                wf.write(str(v4), str(p2))
+    return z1
+def w4(pkg, y3, x4, y4):
+    z4 = pkg.lower()
+    a5 = x3(y3)
+    if z4 not in a5:
+        print(f"Package '{pkg}' not found.")
+        return
+    b5, l1 = a5[z4]
+    c5 = x4 / b5
+    c5.mkdir(parents=True, exist_ok=True)
+    f4(b5, y3, c5)
+    c4 = h4(b5, l1, y3, c5)
+    j4(b5, c5)
+    e4 = b4(c4)
+    tag = e4[0]
+    q3 = n4(b5, l1, tag, c5, y4)
+    print(f'Repacked: {b5} → {q3}')
+def s3():
+    t3 = argparse.ArgumentParser(description='Repack installed Python packages')
+    t3.add_argument('packages', nargs='*', help='Package names')
+    t3.add_argument('-a', '--all', action='store_true', help='Repack all installed pkgs')
+    u3 = t3.parse_args()
+    y3 = w3()
+    x4 = Path.home() / 'tmp' / 'repack'
+    y4 = Path.home() / 'tmp' / 'whl'
+    x4.mkdir(parents=True, exist_ok=True)
+    y4.mkdir(parents=True, exist_ok=True)
+    if u3.all:
+        z3 = x3(y3)
+        for pkg, (d5, _) in z3.items():
+            w4(d5, y3, x4, y4)
+    else:
+        for pkg in u3.packages:
+            w4(pkg, y3, x4, y4)
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: rwheel.py ---
+import argparse
+import email.parser
+import platform
+import sys
+import zipfile
+from functools import partial
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+def b4():
+    e5 = f'{sys.version_info.major}{sys.version_info.minor}'
+    n1 = f'cp{e5}'
+    v = platform.system().lower()
+    f5 = platform.machine().lower()
+    if v == 'linux' and 'android' in platform.platform().lower():
+        o1 = 'android'
+    elif v == 'linux':
+        o1 = 'linux_x86_64' if f5 == 'x86_64' else f5
+    else:
+        o1 = 'any'
+    return f'cp{e5}-{n1}-{o1}'
+def g5(h5):
+    b2 = {'name': h5.name, 'version': '0.0.0', 'files': [], 'data_files': [], 'scripts': [], 'has_so': False}
+    for i4 in h5.parent.glob(f'{h5.name}*.dist-info'):
+        i5 = i4 / 'METADATA'
+        if i5.exists():
+            c1 = i5.read_text(encoding='utf-8', errors='ignore')
+            t3 = email.parser.Parser()
+            msg = t3.parsestr(c1)
+            b2['version'] = msg.get('Version', '0.0.0')
+            b2['name'] = msg.get('Name', h5.name)
+            break
+    for j5 in h5.parent.glob(f'{h5.name}*.egg-info'):
+        i5 = j5 / 'PKG-INFO'
+        if i5.exists():
+            c1 = i5.read_text(encoding='utf-8', errors='ignore')
+            t3 = email.parser.Parser()
+            msg = t3.parsestr(c1)
+            b2['version'] = msg.get('Version', '0.0.0')
+            b2['name'] = msg.get('Name', h5.name)
+            break
+    if h5.is_dir() and any(h5.rglob('*.so')):
+        b2['has_so'] = True
+    return b2
+def k5(h5, d=False):
+    t4 = []
+    g1 = h5.parent
+    if h5.is_dir():
+        for o in h5.rglob('*'):
+            if o.is_file() and (not o.suffix == '.pyc'):
+                l5 = o.relative_to(g1)
+                t4.append((l5, o))
+    elif h5.is_file() and h5.suffix == '.py':
+        l5 = h5.relative_to(g1)
+        t4.append((l5, h5))
+    m5 = ['share', 'etc', 'lib']
+    for n5 in m5:
+        o5 = g1.parent / n5 / h5.name
+        if o5.exists():
+            for o in o5.rglob('*'):
+                if o.is_file():
+                    l5 = o.relative_to(g1.parent)
+                    t4.append((l5, o))
+    p5 = g1.parent / 'bin'
+    if p5.exists():
+        for q5 in p5.glob('*'):
+            if q5.is_file() and (q5.name.startswith(h5.name) or q5.name == h5.name):
+                l5 = q5.relative_to(g1.parent)
+                t4.append((l5, q5))
+    if d:
+        print(f'  Collected {len(t4)} files for {h5.name}')
+    return t4
+def d2(h5, r5, s5=False, d=False):
+    try:
+        t5 = g5(h5)
+        j2 = t5['name']
+        u5 = t5['version']
+        v5 = b4() if t5['has_so'] else 'py3-none-any'
+        q4 = f'{j2}-{u5}-{v5}.whl'
+        z1 = r5 / q4
+        if z1.exists():
+            if d:
+                print(f'  Wheel already exists: {q4} (skipping)')
+            return True
+        if s5:
+            print(f'[DRYRUN] Would repack {j2}-{u5} -> {z1}')
+            return True
+        if d:
+            print(f'Creating {q4}...')
+        t4 = k5(h5, d)
+        if not t4:
+            print(f'Warning: No files found for {j2}')
+            return False
+        with zipfile.ZipFile(z1, 'w', zipfile.ZIP_DEFLATED) as q3:
+            z = f'{j2}-{u5}.dist-info'
+            a1 = f'Metadata-Version: 2.1\nName: {j2}\nVersion: {u5}\nGenerator: custom-repacker\n'
+            q3.writestr(f'{z}/METADATA', a1)
+            w5 = f"Wheel-Version: 1.0\nGenerator: custom-repacker\nRoot-Is-Purelib: {str(not t5['has_so']).lower()}\nTag: {v5}\n"
+            q3.writestr(f'{z}/WHEEL', w5)
+            if h5.is_dir():
+                o2 = [h5.name]
+                q3.writestr(f'{z}/top_level.txt', '\n'.join(o2))
+            x5 = []
+            for l5, y5 in t4:
+                z5 = str(l5)
+                q3.write(y5, z5)
+                a6 = y5.stat().st_size
+                x5.append(f'{z5},sha256=,{a6}')
+                if d:
+                    print(f'  Added: {z5}')
+            v2 = f'{z}/RECORD'
+            q2 = '\n'.join(x5) + f'\n{v2},,\n'
+            q3.writestr(v2, q2)
+        if d:
+            print(f'✓ Created {q4} ({len(t4)} files, {z1.stat().st_size} bytes)')
+        return True
+    except Exception as e:
+        print(f'Error repacking {h5.name}: {e}')
+        if d:
+            import traceback
+            traceback.print_exc()
+        return False
+def b6(y2, c6=None):
+    e3 = []
+    d6 = {'__pycache__', 'pip', 'setuptools', 'wheel', '_distutils_hack', 'pkg_resources'}
+    for u2 in y2.iterdir():
+        if u2.name in d6:
+            continue
+        if u2.name.startswith('_'):
+            continue
+        if u2.is_dir():
+            if (u2 / '__init__.py').exists() or any(u2.parent.glob(f'{u2.name}*.dist-info')):
+                e3.append(u2)
+        elif u2.suffix == '.py' and u2.name != '__init__.py':
+            e3.append(u2)
+    if c6:
+        e6 = []
+        for pkg in e3:
+            j2 = pkg.stem if pkg.suffix == '.py' else pkg.name
+            if j2 in c6:
+                e6.append(pkg)
+        e3 = e6
+    return e3
+def f6(e3, r5, s5, d):
+    g6 = []
+    for pkg in e3:
+        g6.append(d2(pkg, r5, s5, d))
+    return g6
+def h6(e3, r5, s5, d):
+    i6 = partial(d2, wheels_dir=r5, dryrun=s5, verbose=d)
+    with Pool(processes=cpu_count()) as j6:
+        g6 = j6.map(i6, e3)
+    return g6
+def s3():
+    t3 = argparse.ArgumentParser(description='Repack site-packages packages as wheel files')
+    t3.add_argument('-a', '--all', action='store_true', help='Repack all packages (uses multiprocessing)')
+    t3.add_argument('--dryrun', action='store_true', help='Show what would be done without actual repacking')
+    t3.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    t3.add_argument('packages', nargs='*', help='Package names to repack (sequential mode)')
+    u3 = t3.parse_args()
+    r5 = Path.home() / 'tmp' / 'wheels'
+    r5.mkdir(parents=True, exist_ok=True)
+    if not u3.dryrun:
+        print(f'Wheels will be stored in: {r5}')
+    k6 = [Path(sys.executable).parent / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages', Path(sys.prefix) / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages', Path(__file__).parent if '__file__' in dir() else Path.cwd()]
+    g1 = None
+    for o in k6:
+        if o.exists() and o.is_dir():
+            g1 = o
+            break
+    if not g1:
+        print('Could not find site-packages directory')
+        return
+    print(f'Using site-packages: {g1}')
+    if u3.packages:
+        e3 = b6(g1, u3.packages)
+    elif u3.all or not u3.packages:
+        e3 = b6(g1)
+    else:
+        e3 = []
+    if not e3:
+        print('No packages found to repack')
+        return
+    print(f'Found {len(e3)} package(s) to repack')
+    if u3.dryrun:
+        print('\n[DRYRUN MODE] No files will be created')
+    l6 = u3.all and len(e3) > 1
+    if l6:
+        print(f'Using parallel mode with {cpu_count()} processes')
+        g6 = h6(e3, r5, u3.dryrun, u3.verbose)
+    else:
+        if len(e3) > 1:
+            print('Using sequential mode (use -a for parallel)')
+        g6 = f6(e3, r5, u3.dryrun, u3.verbose)
+    m6 = sum(g6)
+    print(f'\nComplete: {m6}/{len(e3)} packages repacked successfully')
+    if m6 > 0 and (not u3.dryrun):
+        print(f'\nWheels saved in: {r5}')
+        n6 = list(r5.glob('*.whl'))
+        if n6:
+            print('\nCreated wheels:')
+            for q3 in sorted(n6, key=lambda x: x.stat().st_mtime, reverse=True)[:10]:
+                w2 = q3.stat().st_size / (1024 * 1024)
+                print(f'  {q3.name} ({w2:.2f} MB)')
+            if len(n6) > 10:
+                print(f'  ... and {len(n6) - 10} more')
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: siter.py ---
+import argparse
+import base64
+import csv
+import hashlib
+import shutil
+import sys
+import tempfile
+import zipfile
+from multiprocessing import cpu_count
+from pathlib import Path
+class r1:
+    def __init__(self, g1, g2, o6=False, p6=True, q6=None):
+        self.site_packages = g1.resolve()
+        self.output_dir = g2.resolve()
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.force_all = o6
+        self.parallel = p6
+        self.max_workers = q6 or min(cpu_count(), 8)
+        self.venv_root = self._find_venv_root()
+        self.bin_dir = self._find_bin_dir()
+        self.share_dir = self.venv_root / 'share' if self.venv_root else None
+        self.processed_packages = set()
+    def r6(self):
+        s6 = self.site_packages
+        for _ in range(5):
+            if (s6 / 'pyvenv.cfg').exists():
+                return s6
+            if (s6 / 'bin' / 'activate').exists():
+                return s6
+            if (s6 / 'Scripts' / 'activate.bat').exists():
+                return s6
+            s6 = s6.parent
+        return None
+    def t6(self):
+        if not self.venv_root:
+            return None
+        for u6 in ['bin', 'Scripts']:
+            d = self.venv_root / u6
+            if d.exists() and d.is_dir():
+                return d
+        return None
+    def v6(self, o):
+        h = hashlib.sha256()
+        with o.open('rb') as f:
+            for v1 in iter(lambda: f.read(8192), b''):
+                h.update(v1)
+        w1 = h.digest()
+        return f"sha256={base64.urlsafe_b64encode(w1).decode().rstrip('=')} "
+    def w6(self, c4):
+        x6 = c4 / 'RECORD'
+        if not x6.exists():
+            return {}
+        a2 = {}
+        with x6.open(encoding='utf-8', newline='') as f:
+            y6 = csv.reader(f)
+            for row in y6:
+                if not row or not row[0]:
+                    continue
+                o = row[0]
+                a2[o] = {'hash': row[1] if len(row) > 1 else '', 'size': row[2] if len(row) > 2 else ''}
+        return a2
+    def z6(self, a2):
+        if not self.bin_dir or not self.bin_dir.exists():
+            return []
+        a7 = []
+        b7 = None
+        for c7 in a2:
+            if c7.endswith('entry_points.txt'):
+                b7 = self.site_packages / c7
+                break
+        if b7 and b7.exists():
+            d7 = set()
+            e7 = False
+            for d1 in b7.read_text().splitlines():
+                d1 = d1.strip()
+                if d1 == '[console_scripts]':
+                    e7 = True
+                    continue
+                if d1.startswith('['):
+                    e7 = False
+                elif e7 and '=' in d1:
+                    f7 = d1.split('=')[0].strip()
+                    d7.add(f7)
+            for f7 in d7:
+                for ext in ['', '.exe', '.bat', '.cmd']:
+                    q5 = self.bin_dir / f'{f7}{ext}'
+                    if q5.exists() and q5.is_file():
+                        a7.append(q5)
+                        break
+        return a7
+    def g7(self, h1):
+        if not self.share_dir or not self.share_dir.exists():
+            return []
+        h7 = []
+        i7 = h1.lower().replace('-', '_')
+        for u2 in self.share_dir.rglob('*'):
+            if not u2.is_file():
+                continue
+            if any((i7 in p.name.lower() for p in u2.parents)):
+                try:
+                    l5 = u2.relative_to(self.share_dir)
+                    h7.append((u2, str(l5)))
+                except ValueError:
+                    pass
+        return h7
+    def j7(self):
+        try:
+            from packaging.tags import sys_tags
+            tag = next(sys_tags())
+            return (tag.interpreter, tag.abi, tag.platform)
+        except ImportError:
+            import platform
+            k7 = sys.version_info
+            l7 = f'cp{k7.major}{k7.minor}'
+            n1 = l7
+            m7 = platform.system().lower()
+            w = platform.machine().lower()
+            o1 = f'{m7}_{w}'
+            return (l7, n1, o1)
+    def n7(self, a2):
+        return all((not o.endswith(('.so', '.pyd', '.dll')) for o in a2))
+    def n4(self, z):
+        if not z.is_dir():
+            return None
+        o7 = z.stem.split('-')
+        if len(o7) < 2:
+            print(f'⚠️  Invalid dist-info name: {z.name}')
+            return None
+        j2 = o7[0]
+        l1 = o7[1] if len(o7) > 1 else '0.0.0'
+        p7 = f'{j2}-{l1}'
+        if p7 in self.processed_packages:
+            return None
+        self.processed_packages.add(p7)
+        print(f'📦 Building {j2} {l1}')
+        a2 = self._read_record(z)
+        if not a2:
+            print(f'  ⚠️  No RECORD file for {j2}')
+            return None
+        i1 = self._detect_purity(a2)
+        if i1:
+            l7, n1, o1 = ('py3', 'none', 'any')
+        else:
+            l7, n1, o1 = self._get_wheel_tags()
+        a7 = self._find_scripts_for_package(a2)
+        h7 = self._find_data_for_package(j2)
+        if a7:
+            print(f'  📎 Found {len(a7)} script(s)')
+        if h7:
+            print(f'  📁 Found {len(h7)} data file(s)')
+        q4 = f"{j2.replace('-', '_')}-{l1}-{l7}-{n1}-{o1}.whl"
+        z1 = self.output_dir / q4
+        if z1.exists() and (not self.force_all):
+            print(f'  ⏭️  Skipping {z1.name} (already exists)')
+            return z1
+        try:
+            with tempfile.TemporaryDirectory() as q7:
+                r7 = Path(q7)
+                l2 = f'{j2}-{l1}.dist-info'
+                s7 = r7 / l2
+                s7.mkdir(parents=True)
+                t7 = f'{j2}-{l1}.data'
+                n5 = None
+                u7 = []
+                for c7 in a2:
+                    src = self.site_packages / c7
+                    if not src.exists():
+                        continue
+                    if '.dist-info' in c7:
+                        v7 = s7 / Path(c7).name
+                    else:
+                        v7 = r7 / c7
+                    v7.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, v7)
+                    l5 = v7.relative_to(r7)
+                    w7 = self._compute_hash(v7)
+                    a6 = v7.stat().st_size
+                    u7.append((str(l5), w7, str(a6)))
+                if a7:
+                    n5 = r7 / t7
+                    k4 = n5 / 'scripts'
+                    k4.mkdir(parents=True, exist_ok=True)
+                    for m4 in a7:
+                        if not m4.exists():
+                            continue
+                        v7 = k4 / m4.name
+                        shutil.copy2(m4, v7)
+                        l5 = v7.relative_to(r7)
+                        w7 = self._compute_hash(v7)
+                        a6 = v7.stat().st_size
+                        u7.append((str(l5), w7, str(a6)))
+                if h7:
+                    if not n5:
+                        n5 = r7 / t7
+                    x7 = n5 / 'data'
+                    x7.mkdir(parents=True, exist_ok=True)
+                    for src, y7 in h7:
+                        v7 = x7 / y7
+                        v7.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, v7)
+                        l5 = v7.relative_to(r7)
+                        w7 = self._compute_hash(v7)
+                        a6 = v7.stat().st_size
+                        u7.append((str(l5), w7, str(a6)))
+                d4 = s7 / 'WHEEL'
+                with d4.open('w', encoding='utf-8') as f:
+                    f.write('Wheel-Version: 1.0\n')
+                    f.write('Generator: wheel-builder 1.0\n')
+                    f.write(f"Root-Is-Purelib: {('true' if i1 else 'false')}\n")
+                    f.write(f'Tag: {l7}-{n1}-{o1}\n')
+                l5 = d4.relative_to(r7)
+                w7 = self._compute_hash(d4)
+                a6 = d4.stat().st_size
+                u7.append((str(l5), w7, str(a6)))
+                x6 = s7 / 'RECORD'
+                with x6.open('w', newline='', encoding='utf-8') as f:
+                    z7 = csv.writer(f)
+                    for row in u7:
+                        z7.writerow(row)
+                    z7.writerow([f'{l2}/RECORD', '', ''])
+                with zipfile.ZipFile(z1, 'w', zipfile.ZIP_DEFLATED) as whl:
+                    for u4 in r7.rglob('*'):
+                        if u4.is_file():
+                            p2 = u4.relative_to(r7)
+                            whl.write(u4, p2)
+            print(f'  ✅ Created: {z1.name}')
+            return z1
+        except Exception as e:
+            print(f'  ❌ Failed to build {j2}: {e}')
+            return None
+    def a8(self, c4):
+        try:
+            b8 = self.build_wheel(c4)
+            return (c4.name, b8)
+        except Exception as e:
+            print(f'❌ Worker failed for {c4.name}: {e}')
+            return (c4.name, None)
+    def c8(self):
+        d8 = sorted(self.site_packages.glob('*.dist-info'))
+        if not d8:
+            print(f'❌ No packages found in {self.site_packages}')
+            return 0
+        print(f'📂 Found {len(d8)} package(s) in {self.site_packages}')
+        if self.venv_root:
+            print(f'🐍 Virtual environment: {self.venv_root}')
+        if self.parallel and len(d8) > 1:
+            print(f'🚀 Using parallel processing with {self.max_workers} workers')
+            return self._build_parallel(d8)
+        else:
+            if len(d8) > 1:
+                print('📝 Using serial processing')
+            return self._build_serial(d8)
+    def e8(self, d8):
+        f8 = 0
+        for c4 in d8:
+            try:
+                if self.build_wheel(c4):
+                    f8 += 1
+            except Exception as e:
+                print(f'  ❌ Failed to build {c4.name}: {e}')
+        print(f'\n✅ Built {f8}/{len(d8)} wheels in {self.output_dir}')
+        return f8
+    def g8(self, d8):
+        self.processed_packages.clear()
+        from multiprocessing import get_context
+        ctx = get_context('spawn')
+        h8 = self._build_wheel_worker
+        with ctx.Pool(processes=self.max_workers) as j6:
+            g6 = j6.map(h8, d8)
+        f8 = sum((1 for _, b8 in g6 if b8 is not None))
+        print(f'\n✅ Built {f8}/{len(d8)} wheels in {self.output_dir}')
+        return f8
+def s3():
+    t3 = argparse.ArgumentParser(description='Build proper wheel files from installed packages (run from site-packages)', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  # Run from inside site-packages directory:\n  cd /path/to/venv/lib/python3.x/site-packages\n  python /path/to/script.py\n\n  # Force rebuild all packages with parallel processing (default)\n  python /path/to/script.py -a\n\n  # Build with serial processing (no parallel)\n  python /path/to/script.py --no-parallel\n\n  # Build specific package\n  python /path/to/script.py -p requests\n\n  # Force rebuild specific package\n  python /path/to/script.py -a -p requests\n\n  # Specify number of workers\n  python /path/to/script.py -a -w 4\n\n  # Specify output directory\n  python /path/to/script.py -o /path/to/wheels\n        ')
+    t3.add_argument('--output', '-o', type=Path, default=Path('./wheels'), help='Output directory for wheels (default: ./wheels)')
+    t3.add_argument('--package', '-p', help='Build only this package (by name)')
+    t3.add_argument('--all', '-a', action='store_true', help='Repack all packages (overwrite existing wheels)')
+    t3.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (use serial mode)')
+    t3.add_argument('--workers', '-w', type=int, default=None, help='Number of worker processes (default: CPU count, max 8)')
+    t3.add_argument('--site-packages', '-s', type=Path, help='Path to site-packages directory (default: current directory)')
+    u3 = t3.parse_args()
+    if u3.site_packages:
+        g1 = u3.site_packages.resolve()
+    else:
+        g1 = Path.cwd()
+    if not g1.exists():
+        print(f'❌ Site-packages not found: {g1}')
+        return 1
+    d8 = list(g1.glob('*.dist-info'))
+    if not d8:
+        print(f'⚠️  No .dist-info directories found in {g1}')
+        print("   Make sure you're running this script from a site-packages directory")
+        i8 = input('   Continue anyway? [y/N]: ')
+        if i8.lower() != 'y':
+            return 1
+    print(f'📂 Using site-packages: {g1}')
+    p6 = not u3.no_parallel
+    j8 = r1(g1, u3.output, u3.all, parallel=p6, max_workers=u3.workers)
+    if u3.package:
+        k8 = list(g1.glob(f'{u3.package}*.dist-info'))
+        if not k8:
+            print(f'❌ Package not found: {u3.package}')
+            return 1
+        if len(k8) > 1:
+            print(f"📦 Multiple matches for '{u3.package}':")
+            for m in k8:
+                print(f'  - {m.name}')
+            print('Building all matches...')
+        j8.parallel = False
+        f8 = 0
+        for c4 in k8:
+            if j8.build_wheel(c4):
+                f8 += 1
+        return 0 if f8 > 0 else 1
+    f8 = j8.build_all()
+    return 0 if f8 > 0 else 1
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+    raise SystemExit(s3())
+
+# --- File: sr.py ---
+import argparse
+import base64
+import hashlib
+import os
+import sys
+import sysconfig
+import zipfile
+from email.parser import Parser
+from pathlib import Path
+def l8():
+    p = os.environ.get('PREFIX')
+    if p:
+        return Path(p)
+    return Path(sysconfig.get_paths()['purelib'])
+def m8(n8):
+    o8 = f'python{sys.version_info.major}.{sys.version_info.minor}'
+    g4 = [n8 / 'lib' / o8 / 'site-packages']
+    for p in sys.path:
+        try:
+            p8 = Path(p)
+        except Exception:
+            continue
+        if (n8 in p8.parents or p8 == n8) and p8.exists():
+            g4.append(p8)
+    q8 = set()
+    out = []
+    for c in g4:
+        if c.exists() and c not in q8:
+            q8.add(c)
+            out.append(c)
+    return out
+def r8(s8):
+    t8 = {}
+    for sd in s8:
+        if not sd.exists():
+            continue
+        for p in sd.iterdir():
+            if p.is_dir() and (p.name.endswith('.dist-info') or p.name.endswith('.egg-info')):
+                key = p.name.rsplit('.', 1)[0].lower()
+                t8[key] = p
+    return t8
+def u8(v8):
+    md = {}
+    for w8 in ('METADATA', 'PKG-INFO'):
+        p = v8 / w8
+        if p.exists():
+            txt = p.read_text(encoding='utf-8', errors='ignore')
+            x8 = Parser().parsestr(txt)
+            md['Name'] = x8.get('Name')
+            md['Version'] = x8.get('Version')
+            md['Summary'] = x8.get('Summary')
+            break
+    ep = v8 / 'entry_points.txt'
+    if ep.exists():
+        y8 = []
+        z8 = ep.read_text(encoding='utf-8', errors='ignore').splitlines()
+        a9 = None
+        for ln in z8:
+            ln = ln.strip()
+            if ln.startswith('[') and ln.endswith(']'):
+                a9 = ln[1:-1].strip()
+                continue
+            if a9 == 'console_scripts' and ln and (not ln.startswith('#')):
+                b9 = ln.split('=', 1)[0].strip()
+                y8.append(b9)
+        md['console_scripts'] = y8
+    return md
+def c9(v8):
+    rec = v8 / 'RECORD'
+    if rec.exists():
+        return [d1.strip().split(',', 1)[0] for d1 in rec.read_text(encoding='utf-8', errors='ignore').splitlines() if d1.strip()]
+    return None
+def d9(n8, d7):
+    e9 = n8 / 'bin'
+    out = []
+    if not e9.exists():
+        return out
+    for s in d7:
+        for alt in (s, s + '.py', s + '-script.py', s + '.sh'):
+            ap = e9 / alt
+            if ap.exists():
+                out.append(ap)
+                break
+    return out
+def f9(o):
+    h = hashlib.sha256()
+    with Path(o).open('rb') as f:
+        for v1 in iter(lambda: f.read(8192), b''):
+            h.update(v1)
+    w1 = base64.urlsafe_b64encode(h.digest()).rstrip(b'=').decode('ascii')
+    return (f'sha256={w1}', str(o.stat().st_size))
+def g9():
+    h9 = sys.implementation.name
+    mj, mn = (sys.version_info.major, sys.version_info.minor)
+    if h9 == 'cpython':
+        i9, n1 = (f'cp{mj}{mn}', f'cp{mj}{mn}')
+    else:
+        j9 = getattr(sys.implementation, 'cache_tag', None)
+        i9, n1 = j9.split('-', 1) if j9 and '-' in j9 else (f'py{mj} ', 'none')
+    m7 = sysconfig.get_platform().replace('-', '_').replace('.', '_')
+    return (i9, n1, m7)
+def k9(l9, n8, m9):
+    n9 = l9.parent
+    o9 = c9(l9)
+    if not o9:
+        print(f'[-] Error: Could not find RECORD for {l9.name}. Skipping.')
+        return
+    md = u8(l9)
+    p9 = (md.get('Name') or l9.name.split('-', 1)[0]).replace('-', '_')
+    md.get('Version') or '0.0.0'
+    q9 = []
+    r9 = []
+    for rel in o9:
+        if not rel or rel.endswith('RECORD') or rel.startswith(('..', '/')):
+            continue
+        src = n9 / rel
+        if not src.exists():
+            src = n8 / rel
+        if src.exists():
+            if src.is_dir():
+                for r4, _, t4 in os.walk(src):
+                    for fn in t4:
+                        s9 = Path(r4) / fn
+                        q9.append((s9, s9.relative_to(n9).as_posix()))
+            else:
+                q9.append((src, rel))
+        else:
+            r9.append(rel)
+    if 'console_scripts' in md:
+        q9.extend(((sp, f'bin/{sp.name}') for sp in d9(n8, md['console_scripts'])))
+    if r9:
+        print(f'[!] Error: Missing files for {p9}:')
+        for m in r9:
+            print(f'    - {m}')
+        print(f'[*] Aborting wheel build for {p9}.')
+        return
+    i9, n1, t9 = g9()
+    u9 = {'.so', '.pyd', '.dll', '.dylib', '.sl'}
+    v9 = any((s.suffix.lower() in u9 for s, _ in q9))
+    v5 = f'{i9}-{n1}-{t9}' if v9 else 'py3-none-any'
+    m9.parent.mkdir(parents=True, exist_ok=True)
+    w9 = []
+    with zipfile.ZipFile(m9, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for src, rel in q9:
+            zf.write(src, arcname=rel)
+            h, x9 = f9(src)
+            w9.append(f'{rel},{h},{x9}')
+        m2 = f"Wheel-Version: 1.0\nGenerator: repack_tool\nRoot-Is-Purelib: {('false' if v9 else 'true')}\nTag: {v5}\n"
+        zf.writestr(f'{l9.name}/WHEEL', m2)
+        w9.extend((f'{l9.name}/WHEEL,,', f'{l9.name}/RECORD,,'))
+        zf.writestr(f'{l9.name}/RECORD', '\n'.join(w9) + '\n')
+    print(f'[+] Successfully built: {m9.name}')
+def s3():
+    t3 = argparse.ArgumentParser(description='Repack packages into .whl files directly.')
+    t3.add_argument('packages', nargs='*', help='Distribution names to repack.')
+    t3.add_argument('-a', '--all', action='store_true', help='Repack all.')
+    u3 = t3.parse_args()
+    n8 = l8()
+    s8 = [Path.cwd(), *m8(n8)]
+    t8 = r8(s8)
+    y9 = []
+    if u3.all or not u3.packages:
+        y9 = list(t8.values())
+    else:
+        for u6 in u3.packages:
+            key = u6.lower()
+            if key in t8:
+                y9.append(t8[key])
+    z9 = Path.home() / 'tmp' / 'wheels'
+    print(f'[*] Saving wheels to: {z9}')
+    for a10 in y9:
+        try:
+            md = u8(a10)
+            u6 = (md.get('Name') or a10.name.split('-', 1)[0]).replace('-', '_')
+            ver = md.get('Version') or '0'
+            b10, c10, d10 = g9()
+            e10 = f'{u6}-{ver}-py3-none-any.whl'
+            k9(a10, n8, z9 / e10)
+        except Exception as e:
+            print(f'[!] Critical error repacking {a10.name}: {e}')
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: usrpack.py ---
+import logging
+import multiprocessing
+import site
+import sys
+import zipfile
+from pathlib import Path
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('wheel_repack.log', mode='w', encoding='utf-8')])
+def f10(z):
+    v2 = z / 'RECORD'
+    if not v2.exists():
+        logging.error(f'Missing RECORD file in metadata directory: {z.name}')
+        return None
+    g10 = z.parent
+    h10 = []
+    with open(v2, encoding='utf-8') as f:
+        for d1 in f:
+            if not d1.strip():
+                continue
+            o7 = d1.split(',')
+            i10 = o7[0]
+            l5 = Path(i10.replace('\\', '/'))
+            y5 = (g10 / l5).resolve()
+            if l5.name == 'RECORD' or l5.suffix == '.pyc':
+                continue
+            if not y5.exists() and (not y5.is_dir()):
+                logging.warning(f'Aborting {z.name}: Missing file -> {l5}')
+                return None
+            h10.append((y5, l5))
+    return h10
+def j10(u3):
+    k10, l10 = u3
+    z = Path(k10)
+    g2 = Path(l10)
+    m10 = z.stem
+    if '-' not in m10:
+        logging.error(f'Skipping invalid metadata folder format: {z.name}')
+        return False
+    u6, l1 = m10.split('-', 1)
+    q1 = f'{u6}-{l1}-py3-none-any.whl'
+    n10 = g2 / q1
+    h10 = f10(z)
+    if h10 is None:
+        return False
+    try:
+        logging.info(f'📦 Packaging {u6} ({l1})...')
+        with zipfile.ZipFile(n10, 'w', compression=zipfile.ZIP_DEFLATED) as whl:
+            for y5, l5 in h10:
+                whl.write(y5, l5)
+        logging.info(f'✅ Successfully created: {q1}')
+        return True
+    except Exception as e:
+        logging.error(f'❌ Failed to archive {u6}: {e}')
+        if n10.exists():
+            n10.unlink()
+        return False
+def s3():
+    o10 = y3.getusersitepackages()
+    p10 = Path(o10).resolve()
+    if not p10.exists():
+        logging.error(f'User site-packages directory does not exist: {p10}')
+        return
+    g2 = Path('~/tmp/whl').expanduser().resolve()
+    g2.mkdir(parents=True, exist_ok=True)
+    logging.info(f'Source Directory: {p10}')
+    logging.info(f'Destination Directory: {g2}\n')
+    k1 = list(p10.glob('*.dist-info'))
+    if not k1:
+        logging.info('No packages found in user site-packages to repack.')
+        return
+    q10 = [(str(d), str(g2)) for d in k1]
+    r10 = multiprocessing.cpu_count()
+    logging.info(f'Spawning pool with {r10} parallel workers...\n')
+    with multiprocessing.Pool(processes=r10) as j6:
+        g6 = j6.map(j10, q10)
+    s10 = sum((1 for r in g6 if r))
+    logging.info('\n=== REPACKING TASK COMPLETE ===')
+    logging.info(f'Total evaluated packages: {len(k1)}')
+    logging.info(f'Successfully compiled:    {s10}')
+    logging.info(f'Skipped / Failed:         {len(k1) - s10}')
+    logging.info("Check 'wheel_repack.log' for detailed warnings or error reports.")
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: vsr3.py ---
+import argparse
+import csv
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+try:
+    from tqdm import tqdm
+except ImportError:
+    print('Error: tqdm is required. Install it with: pip install tqdm')
+    sys.exit(1)
+def t10(g1):
+    u10 = []
+    u10.extend(g1.glob('*.dist-info'))
+    u10.extend(g1.glob('*.egg-info'))
+    return sorted(u10)
+def v10(i4):
+    u6 = i4.name
+    if u6.endswith('.dist-info'):
+        u6 = u6[:-10]
+    elif u6.endswith('.egg-info'):
+        u6 = u6[:-9]
+    o7 = u6.rsplit('-', 1)
+    if len(o7) == 2:
+        return (o7[0], o7[1])
+    return (o7[0], '0.0.0')
+def w10(i4, g1):
+    x6 = i4 / 'RECORD'
+    if not x6.exists():
+        return ([], set())
+    x10 = []
+    r9 = set()
+    with x6.open(newline='', encoding='utf-8') as f:
+        y6 = csv.reader(f)
+        for row in y6:
+            if not row or not row[0]:
+                continue
+            o = row[0]
+            y10 = Path(o) if Path(o).is_absolute() else g1 / o
+            if y10.suffix == '.pyc':
+                continue
+            if y10.exists():
+                x10.append(y10)
+            else:
+                r9.add(y10)
+    return (x10, r9)
+def z10(i4):
+    d4 = i4 / 'WHEEL'
+    if not d4.exists():
+        return None
+    with d4.open(encoding='utf-8') as f:
+        for d1 in f:
+            if d1.startswith('Tag:'):
+                return d1.split(':', 1)[1].strip()
+    return None
+def a11(t4, g1, h2):
+    for o in t4:
+        try:
+            l5 = o.relative_to(g1)
+        except ValueError:
+            l5 = Path(o.name)
+        b11 = h2 / l5
+        b11.parent.mkdir(parents=True, exist_ok=True)
+        if o.is_file():
+            shutil.copy2(o, b11)
+        elif o.is_dir():
+            shutil.copytree(o, b11, dirs_exist_ok=True)
+def d2(j2, u5, h2, g2, v5):
+    try:
+        q4 = f'{j2}-{u5}'
+        q4 += f'-{v5}' if v5 else '-py3-none-any'
+        d4 = g2 / f'{q4}.whl'
+        cmd = [sys.executable, '-m', 'wheel', 'pack', str(h2), '-d', str(g2)]
+        b8 = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if b8.returncode == 0:
+            return True
+        with zipfile.ZipFile(d4, 'w', zipfile.ZIP_DEFLATED) as whl:
+            for o in h2.rglob('*'):
+                if o.is_file():
+                    p2 = o.relative_to(h2)
+                    whl.write(o, p2)
+        return True
+    except Exception as e:
+        print(f'Error creating wheel: {e}')
+        return False
+def f3(i4, g1, g2, c11):
+    j2, u5 = v10(i4)
+    x10, r9 = w10(i4, g1)
+    if not x10:
+        return False
+    d11 = any((f.suffix in {'.py', ''} or f.is_dir() for f in r9))
+    if d11:
+        e11 = c11 / j2
+        e11.mkdir(parents=True, exist_ok=True)
+        for o in x10:
+            try:
+                l5 = o.relative_to(g1)
+                v7 = e11 / l5
+                v7.parent.mkdir(parents=True, exist_ok=True)
+                if o.is_file():
+                    shutil.copy2(o, v7)
+            except Exception as e:
+                print(f'Error copying {o}: {e}')
+        return False
+    v5 = z10(i4)
+    with tempfile.TemporaryDirectory() as f11:
+        i2 = Path(f11)
+        a11(x10, g1, i2)
+        return d2(j2, u5, i2, g2, v5)
+def s3():
+    t3 = argparse.ArgumentParser(description='Repack installed Python packages as wheels')
+    t3.add_argument('packages', nargs='*', help='Package names to repack')
+    t3.add_argument('-a', '--all', action='store_true', help='Repack all installed packages')
+    u3 = t3.parse_args()
+    if not u3.all and (not u3.packages):
+        t3.error('Specify package names or use -a/--all')
+    g1 = Path.cwd()
+    g2 = Path.home() / 'tmp' / 'whl'
+    c11 = Path.home() / 'tmp' / 'not_repacked'
+    g2.mkdir(parents=True, exist_ok=True)
+    c11.mkdir(parents=True, exist_ok=True)
+    g11 = t10(g1)
+    if not u3.all:
+        h11 = set(u3.packages)
+        g11 = [d for d in g11 if v10(d)[0] in h11]
+    m6 = 0
+    i11 = 0
+    with tqdm(total=len(g11), desc='Repacking packages') as j11:
+        for i4 in g11:
+            j2, _ = v10(i4)
+            j11.set_description(f'Repacking {j2}')
+            if f3(i4, g1, g2, c11):
+                m6 += 1
+            else:
+                i11 += 1
+            j11.update(1)
+    print(f'\n✓ Successfully repacked: {m6}')
+    print(f'✗ Failed to repack: {i11}')
+    print(f'\nWheels saved to: {g2}')
+    if i11 > 0:
+        print(f'Failed packages copied to: {c11}')
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: wheelpackdirs.py ---
+import argparse
+import subprocess
+from multiprocessing import Pool
+from pathlib import Path
+from loguru import logger
+k11 = 8
+def l11(m11):
+    try:
+        subprocess.run(['wheel', 'pack', str(m11)], capture_output=True, text=True, check=True)
+        return (True, f'✓ {m11.name}')
+    except subprocess.CalledProcessError as e:
+        return (False, f'✗ {m11.name}: {e.stderr.strip()}')
+def n11():
+    t3 = argparse.ArgumentParser(description='Pack wheel directories in parallel')
+    t3.add_argument('-d', '--directory', type=Path, default=Path.cwd(), help='Directory containing wheel dirs (default: current)')
+    return t3.parse_args()
+def s3():
+    u3 = n11()
+    o11 = [d for d in u3.directory.iterdir() if d.is_dir()]
+    if not o11:
+        logger.warning('No directories found')
+        return 1
+    print('Processing {} directories using {} workers', len(o11), k11)
+    m6 = 0
+    p11 = 0
+    with Pool(processes=k11) as j6:
+        q11 = [(m11, j6.apply_async(l11, (m11,))) for m11 in o11]
+        for m11, r11 in q11:
+            try:
+                g3, e = r11.get()
+                print(e)
+                if g3:
+                    m6 += 1
+                else:
+                    p11 += 1
+            except Exception as e:
+                logger.error('✗ {}: Exception - {}', m11.name, e)
+                p11 += 1
+    print('Done: {} successful, {} failed', m6, p11)
+    return 0 if p11 == 0 else 1
+if __name__ == '__main__':
+    raise SystemExit(s3())
+
+# --- File: wpack.py ---
+import asyncio
+import multiprocessing
+import sys
+import zipfile
+from pathlib import Path
+from wheel.archive import wheel_load
+from wheel.wheelfile import WheelFile
+s11 = Path.cwd()
+t11 = None
+def u11(v11):
+    g4 = [p for p in v11.iterdir() if p.is_dir() and p.name.endswith('.dist-info')]
+    if not g4:
+        return None
+    if len(g4) > 1:
+        print(f'Warning: Multiple .dist-info dirs found in {v11}, using the first: {g4[0].name}', file=sys.stderr)
+    return g4[0]
+def w11(v11, x11=None):
+    c4 = u11(v11)
+    if c4 is None:
+        print(f'Skipping {v11}: no *.dist-info dir found.')
+        return (v11.name, False)
+    try:
+        a1 = wheel_load(c4)
+        q1 = a1.WheelFilename
+    except Exception as e:
+        print(f'Error loading metadata from {c4}: {e}')
+        return (v11.name, False)
+    y11 = x11 / q1 if x11 else Path(q1)
+    if x11:
+        x11.mkdir(parents=True, exist_ok=True)
+    try:
+        with WheelFile(str(y11), 'w', compression=zipfile.ZIP_DEFLATED) as wf:
+            for u2 in v11.rglob('*'):
+                if u2.is_file():
+                    p2 = u2.relative_to(v11).as_posix()
+                    wf.write_to(str(u2), p2)
+        return (q1, True)
+    except Exception as e:
+        print(f'Error creating wheel for {v11}: {e}')
+        if y11.exists():
+            y11.unlink()
+        return (q1, False)
+async def z11(v11, x11, a12):
+    b12 = asyncio.get_running_loop()
+    q1, g3 = await b12.run_in_executor(None, w11, v11, x11)
+    await a12.put_nowait((q1, g3))
+async def c12():
+    if t11:
+        t11.mkdir(parents=True, exist_ok=True)
+        print(f'Output directory for wheels: {t11}')
+    q10 = []
+    a12 = asyncio.Queue()
+    d12 = []
+    for e12 in s11.iterdir():
+        if e12.is_dir() and (not e12.name.endswith('.dist-info')):
+            c4 = u11(e12)
+            if c4:
+                d12.append(e12)
+    if not d12:
+        print('No valid unpacked wheel directories found.')
+        return
+    print(f'Found {len(d12)} directories to process.')
+    for v11 in d12:
+        f12 = asyncio.create_task(z11(v11, t11, a12))
+        q10.append(f12)
+    await asyncio.gather(*q10)
+    g12 = []
+    h12 = []
+    while not a12.empty():
+        q1, g3 = await a12.get()
+        if g3:
+            g12.append(q1)
+        else:
+            h12.append(q1)
+    print('\n--- Wheel Packing Summary ---')
+    print(f'Successfully created wheels: {len(g12)}')
+    if g12:
+        print('  - ' + '\n  - '.join(g12))
+    if h12:
+        print(f'Failed to create wheels: {len(h12)}')
+        print('  - ' + '\n  - '.join(h12))
+    print('\nDone.')
+def i12():
+    if t11:
+        t11.mkdir(parents=True, exist_ok=True)
+        print(f'Output directory for wheels: {t11}')
+    d12 = []
+    for e12 in s11.iterdir():
+        whl = Path(str(e12.name) + '.whl')
+        if whl.exists():
+            continue
+        if e12.is_dir() and (not e12.name.endswith('.dist-info')):
+            c4 = u11(e12)
+            if c4:
+                d12.append(e12)
+    if not d12:
+        print('No valid unpacked wheel directories found.')
+        return
+    print(f'Found {len(d12)} directories to process.')
+    j12 = multiprocessing.cpu_count()
+    print(f'Using {j12} worker processes.')
+    g6 = []
+    with multiprocessing.Pool(processes=j12) as j6:
+        k12 = [(v11, t11) for v11 in d12]
+        g6 = j6.starmap(w11, k12)
+    g12 = [res[0] for res in g6 if res[1]]
+    h12 = [res[0] for res in g6 if not res[1]]
+    print('\n--- Wheel Packing Summary ---')
+    print(f'Successfully created wheels: {len(g12)}')
+    if g12:
+        print('  - ' + '\n  - '.join(g12))
+    if h12:
+        print(f'Failed to create wheels: {len(h12)}')
+        print('  - ' + '\n  - '.join(h12))
+    print('\nDone.')
+if __name__ == '__main__':
+    try:
+        pass
+    except ImportError:
+        print("Error: The 'wheel' library is not installed.")
+        print('Please install it using: pip install wheel')
+        sys.exit(1)
+    i12()
+
+# --- File: wrepack.py ---
+import sys
+import zipfile
+from pathlib import Path
+from wheel.archive import wheel_load
+from wheel.wheelfile import WheelFile
+s11 = Path.cwd()
+t11 = None
+def u11(v11):
+    g4 = [p for p in v11.iterdir() if p.is_dir() and p.name.endswith('.dist-info')]
+    if not g4:
+        return None
+    if len(g4) > 1:
+        print(f'Warning: Multiple .dist-info dirs found in {v11}, using the first: {g4[0].name}', file=sys.stderr)
+    return g4[0]
+def l12(v11, x11=None):
+    c4 = u11(v11)
+    if c4 is None:
+        print(f'Skipping {v11}: no *.dist-info dir found.')
+        return
+    try:
+        a1 = wheel_load(c4)
+        q1 = a1.WheelFilename
+    except Exception as e:
+        print(f'Error loading metadata from {c4}: {e}')
+        print('Skipping this directory.')
+        return
+    y11 = x11 / q1 if x11 else Path(q1)
+    if x11:
+        x11.mkdir(parents=True, exist_ok=True)
+    print(f'Packing {v11} -> {y11}')
+    try:
+        with WheelFile(str(y11), 'w', compression=zipfile.ZIP_DEFLATED) as wf:
+            for u2 in v11.rglob('*'):
+                if u2.is_file():
+                    p2 = u2.relative_to(v11).as_posix()
+                    wf.write_to(str(u2), p2)
+                elif u2.is_dir() and u2.name.endswith('.dist-info'):
+                    pass
+        print(f'Successfully created wheel: {y11}')
+    except Exception as e:
+        print(f'Error creating wheel for {v11}: {e}')
+        if y11.exists():
+            y11.unlink()
+def s3():
+    if t11:
+        t11.mkdir(parents=True, exist_ok=True)
+        print(f'Output directory for wheels: {t11}')
+    m12 = 0
+    for e12 in s11.iterdir():
+        if e12.is_dir() and (not e12.name.endswith('.dist-info')):
+            c4 = u11(e12)
+            if c4:
+                try:
+                    l12(e12, dest_dir=t11)
+                    m12 += 1
+                except Exception as e:
+                    print(f'Critical error while processing {e12}: {e}', file=sys.stderr)
+    print(f'\nDone. Processed {m12} directories.')
+if __name__ == '__main__':
+    try:
+        pass
+    except ImportError:
+        print("Error: The 'wheel' library is not installed.")
+        print('Please install it using: pip install wheel')
+        sys.exit(1)
+    raise SystemExit(s3())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

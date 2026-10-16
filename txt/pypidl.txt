@@ -1,0 +1,318 @@
+# filename: pd.py
+import requests;from packaging import tags
+def e(d):return d is None or all((x.interpreter=='py' and x.abi=='none' and (x.platform=='any') for x in tags.sys_tags()))
+def c(o):y=f'https://pypi.org/pypi/{o}/json';q=requests.get(y)
+    if q.status_code!=200:w=f'Failed to fetch package info for {o}';raise ValueError(w)
+    v=q.json();p=v.get('releases',{});g=max(p.keys());print(f'latest version :{g}');h=p[g];return (h,g)
+def b(o):h,l=c(o);k=[f for f in h if f['packagetype']=='bdist_wheel'];j=[f for f in h if f['packagetype']=='sdist'];a=None
+    for s in k:if s['python_version']=='py3' and 'any' in s['filename']:a=s;break
+    if a:i=a['url'];n=a['filename']
+    else:i=j[0]['url'];n=j[0]['filename']
+    print(f'Downloading {n}...');q=requests.get(i)
+    if q.status_code!=200:w=f'Failed to download {n}';raise ValueError(w)
+    t(n).write_bytes(q.content);print(f'Downloaded {n}')
+if __name__=='__main__':r=m.ArgumentParser(description='Download a Python package from PyPI.');r.add_argument('pkg_name',help='Name of the package to download');u=r.parse_args();b(u.pkg_name)
+# filename: pdown.py
+import requests
+def b(g,s=None):A=f'https://pypi.org/pypi/{g}/json'
+    try:q=requests.get(A);q.raise_for_status();x=q.json();p=x.get('releases',{})
+        if not p:raise ValueError(f'No releases found for {g}')
+        if s:if s not in p:raise ValueError(f'Version {s} not found for {g}')
+            h=p[s]
+        else:c=x.get('info',{}).get('version');h=p.get(c,[])
+        if not h:raise ValueError('No downloadable files found')
+        for m in h:if m.get('packagetype')=='bdist_wheel':return (m['url'],m['filename'])
+        for m in h:if m.get('packagetype')=='sdist':return (m['url'],m['filename'])
+        if h:return (h[0]['url'],h[0]['filename'])
+        raise ValueError('No downloadable files found')
+    except requests.exceptions.RequestException as e:print(f'Error fetching package information:{e}');z.exit(1)
+def a(A,o,k='.'):try:i=v(k)/o;i.parent.mkdir(parents=True,exist_ok=True);print(f'Downloading {o}...');q=requests.get(A,stream=True);q.raise_for_status();l=int(q.headers.get('content-length',0));j=0
+        with i.open('wb') as f:for u in q.iter_content(chunk_size=8192):if u:f.write(u);j+=len(u)
+                    if l>0:r=j/l*40;print(f'\rProgress:{r:.1f}%({j}/{l} bytes)',end='')
+        print(f'\n✓ Downloaded to:{i}');return i
+    except requests.exceptions.RequestException as e:print(f'Error downloading package:{e}');z.exit(1)
+def y():t=n.ArgumentParser(description='Download a Python package from PyPI.org (skips Python version compatibility check)');t.add_argument('package',help='Package name to download');t.add_argument('-v','--version',help='Specific version to download (default:latest)');t.add_argument('-o','--output',default='.',help='Output directory (default:current directory)');w=t.parse_args()
+    try:print(f"Fetching {w.package} (version:{w.version or 'latest'})...");d,o=b(w.package,w.version);print(f'Found:{o}');print(f'URL:{d}');a(d,o,w.output)
+    except Exception as e:print(f'Error:{e}');z.exit(1)
+if __name__=='__main__':raise SystemExit(y())
+# filename: pdown2.py
+def i(B,F=10):T=f'https://pypi.org/pypi/{B}/json'
+    try:with I.request.urlopen(T,F=F) as y:return P.loads(y.read())
+    except (I.error.HTTPError,I.error.URLError,TimeoutError) as e:print(f'  ❌ Error fetching {B}:{e}');return None
+def b(k,d='3.12'):w=k.get('releases',{})
+    if not w:return None
+    c=max(w.keys());L=w[c];J=[]
+    for O in L:if not O.get('packagetype')=='bdist_wheel':continue
+        v=O['filename'].lower();U=O.get('python_version','').lower();M=0
+        if f"cp{d.replace('.','')}" in v:M+=100
+        if U==f'=={d}':M+=100
+        if U.startswith(f'>={d}'):M+=90
+        if 'py3' in v and 'none' in v:M+=80
+        if 'abi3' in v:M+=70
+        if U.startswith('>=3.'):M+=60
+        if M>0:J.append((M,O))
+    if not J:return None
+    _,m=max(J,key=lambda x:x[0]);return (m['url'],m['size'])
+def g(T,l,h,n=8192):print(f'  📥 Downloading {l.name} ({h/1024/1024:.2f} MB)...')
+    try:with I.request.urlopen(T) as y:q=int(y.headers.get('content-length',h));p=0
+            with open(l,'wb') as f:while 1:K=y.read(n)
+                    if not K:break
+                    f.write(K);p+=len(K);D=p/q*40;print(f'    ⬇ {p/1024/1024:.2f} MB/{q/1024/1024:.2f} MB ({D:.1f}%)',end='\r')
+            print(f'    ✅ Downloaded {l.name} ({p/1024/1024:.2f} MB)');return (True,'')
+    except Exception as e:return (False,f'Failed:{e!s}')
+def a(B,s,d='3.12'):print(f'🔍 Fetching info for:{B}');k=i(B)
+    if not k:return (B,False,'Failed to fetch package info from PyPI')
+    r=b(k,d)
+    if not r:return (B,False,'No compatible wheel found for Python '+d)
+    T,R=r;v=T.split('/')[-1];l=s/v;print(f'  📊 Package:{B}');print(f'  🔗 URL:{T}');print(f'  💾 Size:{R/1024/1024:.2f} MB');E,A=g(T,l,R);return (B,E,A)
+def Q():H=t.ArgumentParser(description='Download Python packages from PyPI as wheels');H.add_argument('packages',nargs='+',help='Package name(s) to download');H.add_argument('--python',default='3.12',help='Python version (default:3.12)');H.add_argument('--workers',type=int,default=4,help='Number of download workers (default:4)');H.add_argument('--output',type=C.Path,default=C.Path('wheels'),help='Output directory (default:wheels)');N=H.parse_args();s=N.output.resolve();s.mkdir(parents=True,exist_ok=True);print(f'📁 Saving wheels to:{s}\n')
+    with o.futures.ThreadPoolExecutor(max_workers=N.workers) as u:z={u.submit(a,S,s,N.python):S for S in N.packages};j=0
+        for G in o.futures.as_completed(z):B,E,A=G.result()
+            if E:j+=1
+            else:print(f'  ⚠️  {B}:{A}')
+    print(f'\n✅ Downloaded {j}/{len(N.packages)} packages successfully.')
+if __name__=='__main__':raise SystemExit(Q())
+# filename: pip_get.py
+from rich.console import Console;from rich.progress import BarColumn,DownloadColumn,Progress,TextColumn,TimeElapsedColumn,TimeRemainingColumn,TransferSpeedColumn;aa=Console();W=['https://pypi.org/pypi','https://pypi.tuna.tsinghua.edu.cn/pypi','https://mirror-pypi.runflare.com/pypi'];u=3;X=30;n=5242880
+def j(Q):A=Q.split('==')[0].split('>=')[0].split('<=')[0].strip()
+    for ak in W:aG=f'{ak}/{A}/json'
+        for _ in range(u):try:aD=al.request.Request(aG,ad={'User-Agent':'PyPIDownloader/1.0'})
+                with al.request.urlopen(aD,timeout=X) as V:if V.status==200:return av.loads(V.read().decode('utf-8'))
+            except Exception:continue
+    raise RuntimeError(f"Failed to fetch metadata for '{Q}' from all mirrors.")
+def a(O,p=None):U=O.get('releases',{});ag=p or O.get('info',{}).get('version')
+    if not ag or ag not in U:raise ValueError(f"Version '{ag}' not found in package metadata.")
+    an=U[ag];y=[]
+    for J in an:N=J['filename'].lower()
+        if any((aF in N for aF in ['darwin','win32','win_amd64','win_'])):continue
+        if N.endswith('.whl') and 'none-any' not in N:continue
+        y.append(J)
+    if not y:raise RuntimeError(f'No suitable source or neutral wheel release files found for version {ag}.')
+    ao=[f for f in y if f['filename'].endswith('.tar.gz')]
+    if ao:return ao[0]
+    aH=[f for f in y if f['filename'].endswith('.whl')]
+    if aH:return aH[0]
+    return y[0]
+def m(H,l):if 'sha256' in l:ar,s=('sha256',l['sha256'])
+    elif 'md5' in l:ar,s=('md5',l['md5'])
+    else:aa.print('[yellow]No known hash provided in metadata. Skipping hash verification.[/yellow]');return True
+    ah=ac.new(ar)
+    with open(H,'rb') as f:while (am :=f.read(1048576)):ah.update(am)
+    o=ah.hexdigest().lower()
+    if o==s.lower():aa.print(f'[bold green]✓ Integrity check passed ({ar.upper()})[/bold green]');return True
+    aa.print(f'[bold red]✗ Hash verification failed! Expected:{s},Got:{o}[/bold red]');return False
+def k():return Progress(TextColumn('[bold blue]{task.fields[filename]}',justify='right'),BarColumn(bar_width=None),'[progress.percentage]{task.percentage:>3.1f}%','•',DownloadColumn(),'•',TransferSpeedColumn(),'•',TextColumn('[cyan]Elapsed:[/cyan]'),TimeElapsedColumn(),'•',TextColumn('[cyan]ETA:[/cyan]'),TimeRemainingColumn(),aa=aa)
+def h(aG,H,M):import pycurl;w=H.stat().st_size if H.exists() else 0;ay='ab' if w>0 else 'wb'
+    with k() as S:af=S.add_task('download',N=H.name,total=M,completed=w)
+        def q(au):az=len(au);S.update(af,advance=az);return I.write(au)
+        for Y in range(1,u+1):try:with open(H,ay) as I:c=pycurl.Curl();c.setopt(c.URL,aG);c.setopt(c.WRITEFUNCTION,q);c.setopt(c.TIMEOUT,X);c.setopt(c.CONNECTTIMEOUT,X);c.setopt(c.FOLLOWLOCATION,True)
+                    if w>0:c.setopt(c.RESUME_FROM,w)
+                    c.perform();c.close()
+                return
+            except pycurl.Error as e:w=H.stat().st_size if H.exists() else 0;ay='ab'
+                if Y==u:raise
+def d(aG,H,M,G):import requests;w=H.stat().st_size if H.exists() else 0;ay='ab' if w>0 else 'wb';ad={}
+    if w>0:ad['Range']=f'bytes={w}-'
+    with k() as S:af=S.add_task('download',N=H.name,total=M,completed=w)
+        for Y in range(1,u+1):try:V=requests.get(aG,ad=ad,stream=True,timeout=X)
+                if V.status_code==200 and w>0:ay='wb';w=0;S.update(af,completed=0)
+                V.raise_for_status();z=1048576 if G else 65536
+                with open(H,ay) as f:for am in V.iter_content(z=z):if am:f.write(am);S.update(af,advance=len(am))
+                return
+            except requests.RequestException as e:w=H.stat().st_size if H.exists() else 0;ay='ab'
+                if w>0:ad['Range']=f'bytes={w}-'
+                if Y==u:raise
+def g(aG,H):aB=['aria2c','--continue=true',f'--max-tries={u}',f'--timeout={X}',f'--dir={H.parent.resolve()}',f'--out={H.name}',aG];E.run(aB,check=True)
+def r(aG,H,M,Z):C=M>n;ae=M/1048576;aa.print(f'File size:[cyan]{ae:.2f} MB[/cyan]|Chunked mode:[cyan]{C}[/cyan]')
+    if H.exists() and H.stat().st_size==M:aa.print('[yellow]Local file matches full size. Skipping download...[/yellow]');return
+    if Z=='pycurl':h(aG,H,M)
+    elif Z=='requests':d(aG,H,M,C)
+    elif Z=='aria2c':g(aG,H)
+    else:raise ValueError(f'Unsupported backend engine:{Z}')
+def b(L):if not L.exists():raise FileNotFoundError(f'Package list file not found:{L}')
+    if not L.is_file():raise ValueError(f'Path is not a regular file:{L}')
+    P=[]
+    with L.open('r',encoding='utf-8') as f:for ai,T in enumerate(f,start=1):aw=T.strip()
+            if not aw or aw.startswith('#'):continue
+            if '#' in aw:aw=aw.split('#',1)[0].strip()
+            if not aw:continue
+            for ap in aw.split():P.append(ap)
+    return P
+def v():aa.print("[red]Usage:[/red]\n  python script.py<pkg1>[pkg2==1.0.0 ...] [options]\n  python script.py-f packages.txt [options]\n\n[bold]Options:[/bold]\n-f,--file<path>Read package specifiers from a file (one per line).\n                         Blank lines and lines starting with '#' are ignored.\n                         Can be combined with positional package args.\n--backend=<engine>Download backend:pycurl|requests|aria2c\n                         (default:pycurl)\n-h,--help             Show this help message and exit.\n")
+def ax():at=aE.argv[1:];Z='pycurl';P=[];B=[];i=0
+    while i<len(at):aA=at[i]
+        if aA in ('-h','--help'):v();aE.exit(0)
+        else:if aA in ('-f','--file'):if i+1>=len(at):aa.print('[red]Error:-f/--file requires a path argument.[/red]');aE.exit(1)
+                B.append(aq(at[i+1]));i+=2;continue
+            if aA.startswith('--file='):B.append(aq(aA.split('=',1)[1].strip()))
+            elif aA.startswith('--backend='):Z=aA.split('=',1)[1].strip()
+            elif aA.startswith('-'):aa.print(f"[red]Error:Unknown option '{aA}'.[/red]");v();aE.exit(1)
+            else:P.append(aA)
+        i+=1
+    for fp in B:try:aj=b(fp);aa.print(f'[cyan]Loaded {len(aj)} package(s) from {fp}[/cyan]');P.extend(aj)
+        except Exception as e:aa.print(f"[bold red]Failed to read '{fp}':{e}[/bold red]");aE.exit(1)
+    if not P:aa.print('[red]Error:No package name specified.[/red]');v();aE.exit(1)
+    if Z not in ('pycurl','requests','aria2c'):aa.print(f"[red]Error:Unknown backend '{Z}'. Choose from:pycurl,requests,aria2c.[/red]");aE.exit(1)
+    D=aq.cwd()
+    for R in P:aa.print(f'\n[bold underline]Processing Package Specifier:{R}[/bold underline]')
+        if '==' in R:Q,F=R.split('==',1)
+        else:Q,F=(R,None)
+        try:O=j(Q);K=a(O,F);t=K['url'];N=K['filename'];M=K.get('size',0);ab=K.get('digests',{});x=D/N;aa.print(f'Selected file :[green]{N}[/green]');aa.print(f'Target URL    :{t}');r(t,x,M,Z)
+            if not m(x,ab):aa.print('[bold red]Deleting corrupted/incomplete file...[/bold red]');x.unlink(missing_ok=True)
+        except Exception as err:aa.print(f"[bold red]Failed to process '{R}':{aC}[/bold red]")
+if __name__=='__main__':ax()
+# filename: pipget.py
+import pycurl;from bs4 import BeautifulSoup;from dh import cprint;ab={'runflare':'https://mirror-pypi.runflare.com','pypi':'https://pypi.org/simple','tsinghua':'https://pypi.tuna.tsinghua.edu.cn/simple'};r='runflare';ac=30;y=ar.cwd();C=3;D=2;O=['win32','win_amd64','win_arm64','win32','windows','manylinux','musllinux','linux_i686','linux_x86_64','linux_armv7l','linux_aarch64','linux_armv6l','linux_armv8l','macosx','darwin','x86_64','amd64','i686','i386','aarch64','armv7l','armv6l','armv8l','ppc64','ppc64le','s390x','riscv64','cp36','cp37','cp38','cp39','cp310','cp311','cp312','cp313','cp27','cp35','pp27','pp36','pp37','pp38','pp39','pypy','jython','32','64'];i=re.compile('-(cp\\d+|pp\\d+|py\\d+)(-(cp\\d+|pp\\d+|py\\d+))?-(manylinux|musllinux|win|macosx|linux|darwin)',re.IGNORECASE)
+def t(aI):aq=aI.lower();return 'win32' in aq or 'win_amd64' in aq or 'win_arm64' in aq or ('-win-' in aq)
+def A(aI):aq=aI.lower()
+    if i.search(aq):return True
+    for aH in ['manylinux','musllinux','macosx','darwin','x86_64','amd64','i686','aarch64','armv7l','armv6l','armv8l','ppc64','s390x','riscv64']:if aH in aq:return True
+    return False
+def U(aI):return aI.lower().endswith('.tar.gz')
+def w(aI):aq=aI.lower()
+    if not aq.endswith('.whl'):return False
+    return 'py3-none-any' in aq or 'py2.py3-none-any' in aq
+def o(ap,W):k=[];g=[];z=[]
+    for ay in ap:av=ay.get('href','').strip()
+        if not av:continue
+        aI=av.split('#')[0];T=ay.get_text().strip() or aI.split('/')[-1]
+        if t(aI):continue
+        if A(aI):z.append((aI,T));continue
+        if U(aI):k.append((aI,T))
+        elif w(aI):g.append((aI,T))
+    if k:aI,T=k[-1];return (aI,T,'download')
+    if g:aI,T=g[-1];return (aI,T,'download')
+    if z:aI,T=z[-1];return (aI,T,'skip')
+    return None
+def d(W):L=W.lower().replace('-','_').replace('.','_');ag=re.compile('^'+re.escape(L)+'[-_.]v?\\d',re.IGNORECASE)
+    for f in y.iterdir():if not f.is_file() or f.stat().st_size==0:continue
+        ao=f.name.lower().replace('-','_')
+        if ag.match(ao):return True
+    return False
+def h(W,F,l):if l:aI=f"{F.rstrip('/')}/{W}/"
+    else:aI=f"{F.rstrip('/')}/{W}"
+    ak=aa();au=pycurl.Curl();au.setopt(au.URL,aI);au.setopt(au.WRITEDATA,ak);au.setopt(au.FOLLOWLOCATION,1);au.setopt(au.TIMEOUT,ac);au.setopt(au.USERAGENT,'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML,like Gecko) Chrome/120.0.0.0 Safari/537.36');au.setopt(au.ACCEPT_ENCODING,'gzip,deflate');au.setopt(au.HTTPHEADER,['Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language:en-US,en;q=0.5'])
+    try:au.perform();x=au.getinfo(au.RESPONSE_CODE)
+        if x!=200:if x==402:print('  HTTP 402:Payment Required-The mirror might require authentication')
+            elif x==403:print('  HTTP 403:Forbidden-Access denied')
+            elif x==404:print(f"  Package '{W}' not found on mirror")
+            elif x==429:print('  HTTP 429:Too Many Requests-Rate limited')
+            return ''
+        return ak.getvalue().decode('utf-8',errors='replace')
+    except Exception:return ''
+    finally:au.close()
+def a(aw,W):try:aC=BeautifulSoup(aw,'html.parser');P=aC.find_all('a',av=True)
+        if not P:return None
+        return o(P,W)
+    except Exception:return None
+def b(aI,T,E=C):for ad in range(E):if ad>0:aD.sleep(D*ad)
+        if u(aI,T):return True
+    return False
+def u(aI,T,ai=''):y.mkdir(parents=True,exist_ok=True);G=y/T
+    if G.exists() and G.stat().st_size>0:return True
+    print(f'  Downloading:{T}')
+    with open(G,'wb') as f:au=pycurl.Curl();au.setopt(au.URL,aI);au.setopt(au.WRITEDATA,f);au.setopt(au.FOLLOWLOCATION,1);au.setopt(au.TIMEOUT,120);au.setopt(au.USERAGENT,'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML,like Gecko) Chrome/120.0.0.0 Safari/537.36');au.setopt(au.ACCEPT_ENCODING,'gzip,deflate');af=['Accept:*/*','Accept-Language:en-US,en;q=0.5']
+        if ai:af.append(f'Referer:{ai}')
+        au.setopt(au.HTTPHEADER,af);au.setopt(au.NOPROGRESS,0)
+        def j(J,I,Z,Y):if J>0:ah=I*40/J
+                if int(ah)%10==0:cprint(f'  Progress:{ah:.1f}%({I:,}/{J:,} bytes)',end='\r')
+            else:cprint(f'  Downloaded:{I:,} bytes',end='\r')
+            return 0
+        au.setopt(au.XFERINFOFUNCTION,j)
+        try:au.perform();x=au.getinfo(au.RESPONSE_CODE)
+            if x==200:print();return True
+            if x==402:print('  HTTP 402:Payment Required-The mirror might require authentication or has usage limits')
+            elif x==403:print('  HTTP 403:Forbidden-Access denied')
+            elif x==404:print('  HTTP 404:File not found on mirror')
+            elif x==429:print('  HTTP 429:Too Many Requests-Rate limited,try again later')
+            if G.exists():G.unlink()
+            return False
+        except Exception:return False
+        finally:au.close()
+def n(W,F,l):aw=h(W,F,l)
+    if not aw:return (False,False)
+    v=a(aw,W)
+    if not v:return (False,False)
+    aI,T,an=v
+    if an=='skip':return (True,True)
+    print(f'Download URL:{aI}');ok=b(aI,T);return (ok,False)
+def c(Q):aA=ar(Q)
+    if not aA.is_file():print(f'Error:file not found:{Q}',file=aG.stderr);aG.exit(1)
+    V=[]
+    try:with open(aA,'r',encoding='utf-8') as f:for X in f:ax=X.split('#',1)[0].strip()
+                if not ax:continue
+                m=re.match('^([A-Za-z0-9_.\\-]+)',ax)
+                if m:V.append(m.group(1))
+    except OSError as e:print(f'Error reading file {Q}:{e}',file=aG.stderr);aG.exit(1)
+    return V
+def az():am=S.ArgumentParser(prog='pypi-mirror-dl',description='Download packages from a PyPI mirror (source distributions and pure-Python wheels preferred; arch-specific wheels skipped).',epilog='Mirror selection:default is runflare. Use-p for official PyPI,-c for Tsinghua (China).-p and-c are mutually exclusive.');am.add_argument('packages',nargs='*',help='Package name(s) to download.');am.add_argument('-f','--file',dest='file',metavar='FILE',help="Read package names from FILE (one per line; blank lines and '#' comments are ignored).");am.add_argument('-d','--dir',dest='directory',metavar='DIR',help='Download directory (default:current directory).');B=am.add_mutually_exclusive_group();B.add_argument('-p','--pypi',action='store_true',help='Download from official PyPI (https://pypi.org/simple).');B.add_argument('-c','--china',action='store_true',help='Download from Tsinghua PyPI mirror (China).');B.add_argument('-m','--mirror',choices=list(ab.keys()),help='Explicitly choose a mirror by name (default:runflare).');at=am.parse_args()
+    if at.pypi:K='pypi'
+    elif at.china:K='tsinghua'
+    elif at.mirror:K=at.mirror
+    else:K=r
+    F=ab[K];l=K in ('pypi','tsinghua');global y
+    if at.directory:y=ar(at.directory).expanduser().resolve()
+        if not y.is_dir():print(f'Error:download directory does not exist:{y}',file=aG.stderr);aG.exit(1)
+    V=list(at.packages)
+    if at.file:R=c(at.file);print(f'Loaded {len(R)} package(s) from {at.file}');V.extend(R)
+    if not V:am.print_help();aG.exit(1)
+    aB=set();q=[]
+    for p in V:aE=p.lower()
+        if aE not in aB:aB.add(aE);q.append(p)
+    V=q;print(f'Mirror:{K} ({F})');print(f'Download dir:{y}');print(f'Processing {len(V)} package(s)...\n');M=aD.time();N=[];al=[];aj=[];s=[]
+    for W in V:print(f'[{W}]')
+        try:if d(W):print(f'  Already exists,skipping');s.append(W);continue
+            ok,H=n(W,F,l)
+            if H:aj.append(W)
+            elif ok:N.append(W)
+            else:al.append(W)
+        except Exception as e:print(f'  Error:{e}');al.append(W)
+    ae=aD.time()-M
+    if N:print(f'\nSuccessfully downloaded:')
+        for aF in N:print(f'  ✓ {aF}')
+    if s:print(f'\nAlready present:')
+        for aF in s:print(f'  • {aF}')
+    if aj:print(f'\nSkipped (arch-specific,no pure source/wheel available):')
+        for aF in aj:print(f'  ⚠ {aF}')
+    if al:print(f'\nFailed to download:')
+        for aF in al:print(f'  ✗ {aF}')
+    print(f'\nDone in {ae:.1f}s — {len(N)} downloaded,{len(s)} already present,{len(aj)} skipped,{len(al)} failed')
+    if al:aG.exit(1)
+if __name__=='__main__':az()
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

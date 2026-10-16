@@ -1,0 +1,246 @@
+# filename: clean_req.py
+b=r.compile('\\s*(?:===|==|!=|>=|<=|~=|>|<)\\s*')
+def a(m):m=m.split('#',1)[0].strip()
+    if not m:return ''
+    m=m.split(';',1)[0].strip()
+    if not m:return ''
+    m=r.sub('\\[.*?\\]','',m).strip()
+    if not m:return ''
+    j=b.split(m,maxsplit=1);return j[0].strip()
+def d(o):g=o[0]
+    if g.isupper():return (0,o)
+    if g.islower():return (1,o)
+    return (2,o)
+def n():if len(q.argv)!=2:print(f'Usage:{q.argv[0]} requirements.txt',file=q.stderr);q.exit(1)
+    h=q.argv[1]
+    try:with k(h).open(encoding='utf-8') as f:i=f.readlines()
+    except FileNotFoundError:print(f"Error:File '{h}' not found.",file=q.stderr);q.exit(1)
+    e=[];p=set()
+    for m in i:c=a(m)
+        if c and c not in p:e.append(c);p.add(c)
+    e=sorted(e,key=d)
+    with k(h).open('w',encoding='utf-8') as f:f.writelines((l+'\n' for l in e))
+    print('\n===Cleaned Requirements===')
+    for l in e:print(l)
+if __name__=='__main__':raise SystemExit(n())
+# filename: clean_version.py
+b=r.compile('\n^\\s*\n    (?:\n-e\\s+\n    )?\n    (?P<name>[A-Za-z0-9_.\\-]+)\n    ',r.VERBOSE)
+def a(k):k=k.strip()
+    if not k or k.startswith('#'):return None
+    if k.startswith(('git+','http://','https://')):return None
+    if '@' in k:m=k.split('@',1)[0].strip();return m or None
+    h=b.match(k)
+    if h:return h.group('name')
+    return None
+def l():f=c.ArgumentParser(description='Clean pip freeze output and keep only package names (overwrite file).');f.add_argument('file',help='pip freeze output file');j=f.parse_args();n=i(j.file)
+    if not n.is_file():raise SystemExit(q)
+    g=n.read_text(encoding='utf-8',errors='ignore').splitlines();d=[]
+    for k in g:m=a(k)
+        if m:d.append(m)
+    o=set();e=[p for p in d if not (p in o or o.add(p))];n.write_text('\n'.join(e)+'\n',encoding='utf-8')
+if __name__=='__main__':raise SystemExit(l())
+# filename: cleanver.py
+def b(f):c=f.read_text(enconding='utf-8').splitlines(keepends=False);a=[]
+    for e in c:if not e or e.startswith('#'):continue
+        g=e.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].split(' @ ')[0].split(' ')[0];a.append(g.strip());f.write_text('\n'.join(a)+'\n',encoding='utf-8')
+if __name__=='__main__':i=d(h.argv[1]);b(i)
+# filename: keeppure.py
+def c():h=[]
+    for q in [*C.getsitepackages(),C.getusersitepackages()]:if w(q).exists():h.extend((J.path.join(q,z) for z in J.listdir(q) if z.endswith('.dist-info')))
+    return h
+def d(i):l=J.path.join(i,'RECORD');o=w(i).name.replace('.dist-info','').split('-')[0].lower()
+    if w(l).exists():try:with w(l).open(encoding='utf-8') as f:u=D.reader(f)
+                for H in u:if H and any((H[0].endswith(E) for E in ['.so','.pyd'])):return o
+        except:pass
+    return None
+def a():h=c()
+    with x(processes=m()) as B:t=B.map(d,h)
+    return {F for F in t if F}
+def b(e='requirements.txt'):if not w(e).exists():print(f'Error:{e} not found');return
+    g=a()
+    with w('/sdcard/data/binary').open('w',encoding='utf-8') as y:y.write('\n'.join(g));print('binary_pkgs created.')
+    with w(e).open(encoding='utf-8') as f:v=[A.rstrip() for A in f]
+    n=[A for A in v if A.startswith('#')];j=[A for A in v if A and (not A.startswith('#'))];k=[];s=[]
+    for G in j:o=G.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].strip().lower()
+        if o in g:s.append(G)
+        else:k.append(G)
+    with w(e).open('w',encoding='utf-8') as f:f.writelines((f'{r}\n' for r in n));f.writelines((f'{F}\n' for F in sorted(k)))
+    if s:print(f'\n🗑️  Removed binary packages ({len(s)}):')
+        for F in sorted(s):print(f'-{F}')
+    else:print('✅ No binary packages found in requirements.txt')
+if __name__=='__main__':p=I.argv[1] if len(I.argv)>1 else 'requirements.txt';b(p)
+# filename: noreq.py
+def u(af):try:with Q.ZipFile(af,'r') as V:s=V.testzip();return not s
+    except Q.BadZipFile:return False
+    except FileNotFoundError:return False
+    except Exception:return False
+def n(af):af=X(af)
+    try:if not af.is_file():return False
+        if not af.stat().st_size:return False
+        U=af.name.lower()
+        if U.endswith(('.zip','.whl')):return u(af)
+        if U.endswith('.tar'):return y(af,ae='r:')
+        if U.endswith(('.tar.gz','.tgz')):return y(af,ae='r:gz')
+        if U.endswith(('.tar.xz','.txz')):return y(af,ae='r:xz')
+        if U.endswith(('.tar.bz2','.tbz2','.tbz')):return y(af,ae='r:bz2')
+        if U.endswith('.tar.br'):return b(af)
+        if U.endswith('.tar.zst'):return e(af)
+        if U.endswith('.tar.lz4'):return g(af)
+        if U.endswith('.tar.lzma'):return d(af)
+        if U.endswith('.br'):return h(af)
+        if U.endswith('.zst'):return k(af)
+        if U.endswith('.lz4'):return o(af)
+        if U.endswith('.lzma'):return i(af)
+        return False
+    except Exception:return False
+def y(af,ae):af=X(af)
+    with N.open(af,ae) as tf:ai=tf.badfile()
+        if ai is not None:return False
+        tf.getmembers();return True
+def h(af):from brotlicffi import decompress as brotli_decompress;af=X(af)
+    try:Z=X(af).read_bytes();_=brotli_decompress(Z);return True
+    except:return False
+def k(af):from zstandard import ZstdDecompressor as zstd_ZstdDecompressor;af=X(af)
+    try:aa=zstd_ZstdDecompressor()
+        with open(af,'rb') as f:_=aa.decompress(f.read())
+        return True
+    except:return False
+def o(af):from lz4.frame import decompress as lz4_decompress;af=X(af)
+    try:with open(af,'rb') as f:_=lz4_decompress(f.read())
+        return True
+    except:return False
+def i(af):af=X(af)
+    try:with open(af,'rb') as f:_=q(f.read())
+        return True
+    except:return False
+def b(af):from brotlicffi import decompress as brotli_decompress;af=X(af)
+    try:with open(af,'rb') as f:aj=brotli_decompress(f.read())
+        return j(aj)
+    except:return False
+def e(af):af=X(af).resolve();W=af.with_name(af.name.replace('.tar.zst',''))
+    try:with N.open(af,'r:zst') as f:f.extractall(af=W,filter='data')
+        return True
+    except:return False
+def g(af):from lz4.frame import decompress as lz4_decompress;af=X(af)
+    try:with open(af,'rb') as f:aj=lz4_decompress(f.read())
+        return j(aj)
+    except:return False
+def d(af):af=X(af)
+    try:with open(af,'rb') as f:aj=q(f.read())
+        return j(aj)
+    except:return False
+def j(aj):try:with N.open(fileobj=C(aj),ae='r:') as tf:tf.getmembers()
+        return True
+    except:return False
+r={'METADATA','PKGINFO','PKG-INFO'};R='Requires-Dist:';E=X('/sdcard/reqz.txt');a=[]
+def A(ag):T=ag.splitlines();L=[];M=[]
+    for ac in T:if ac.startswith(R):M.append(ac)
+        else:L.append(ac)
+    B='\n'.join(L)
+    if ag.endswith('\n'):B+='\n'
+    return (B,M)
+def z(af):try:F=af.read_text(encoding='utf-8',errors='ignore')
+    except Exception:return
+    L,M=A(F)
+    if M:a.extend(M);af.write_text(L,encoding='utf-8')
+def w(af):with I.NamedTemporaryFile(suffix='.zip',delete=False) as J:K=X(J.name)
+    try:with Q.ZipFile(af,'r') as al,Q.ZipFile(K,'w') as ah:for ab in al.infolist():Z=al.read(ab.filename);Y=X(ab.filename).name
+                if Y in r:try:ag=Z.decode('utf-8',errors='ignore');L,M=A(ag)
+                        if M:a.extend(M)
+                        Z=L.encode('utf-8')
+                    except Exception:pass
+                ah.writestr(ab,Z)
+        S.move(str(K),str(af))
+    finally:K.unlink(missing_ok=True)
+def v(af):with I.TemporaryDirectory() as O:H=X(O);P=H/'temp.tar.gz'
+        with N.open(af,'r:*') as ak:ak.extractall(H,filter='data')
+        for x in r:for af in H.rglob(x):if af.is_file():z(af)
+        with N.open(P,'w:gz') as ak:ak.add(H,arcname='')
+        S.move(str(P),str(af))
+def l(af):if not n(str(af)):print(f'{af} is not valid archive');return
+    G=str(af).lower()
+    if G.endswith('.whl'):print(f'processing ... {af}');w(af)
+    elif G.endswith(('.tar.gz','.tgz','.tar')):v(af)
+def c():m=[];t=X.cwd()
+    for af in t.rglob('*'):if not af.is_file():continue
+        D=af.name;p=D.lower()
+        if D in r or D.endswith('.metadata') or p.endswith(('.zip','.whl','.tar.gz','.tgz','.tar')):m.append(af)
+    return m
+def ad():m=c()
+    for af in m:D=af.name;p=D.lower()
+        if D in r or D.endswith('.metadata'):z(af)
+        elif p.endswith(('.zip','.whl','.tar.gz','.tgz','.tar')):l(af)
+    if a:try:with E.open('a',encoding='utf-8') as f:f.writelines((ac+'\n' for ac in a))
+            print(f'---Saved {len(a)} lines to {E}---')
+        except PermissionError:pass
+        print('\nRemoved Lines:');print('-'*40)
+        for ac in a:print(ac)
+        print('-'*40)
+    else:print('No matching lines were found or removed.')
+if __name__=='__main__':raise SystemExit(ad())
+# filename: remove_req.py
+def a(k,l):k=i(k);d=k.read_text();e='Requires-Dist:'+l
+    if e in d:f=d.splitlines();o=[j for j in f if e not in j];b='\n'.join(o);k.write_text(b,encoding='utf-8');print(f'{k.parent.name} updated.')
+if __name__=='__main__':g,h,_,_,_=n.version_info;c=f'{g}{h}';m=i(f'/data/data/com.termux/files/usr/lib/python{c}/site-packages');e=n.argv[1]
+    for k in m.rglob('METADATA'):a(k,e)
+# filename: rmversions.py
+def a(c):with e(c).open(encoding='utf-8') as f:d=f.readlines()
+    b=set()
+    for g in d:g=g.strip()
+        if not g or g.startswith('#'):continue
+        h=g.split('>')[0].split('<')[0].split('=')[0].split('~')[0].strip()
+        if h:b.add(h)
+    e(c).write_text('\n'.join(sorted(b)),encoding='utf-8');print(f'Updated  {c} with {len(b)} unique packages.')
+if __name__=='__main__':j=i.argv[1];a(j)
+# filename: strip_installed_pkgs.py
+from dh import STDLIB,get_installed_pkgs
+def b(e):g=k(e)
+    with g.open(encoding='utf-8') as f:return [l.strip().replace('-','_').lower() for l in f if l.strip() and (not l.startswith('#'))]
+def a(i):c=get_installed_pkgs();c=[p.lower().replace('-','_') for p in c if p];j=b(i);d=[l for l in j if l not in c];d=[l for l in d if l not in STDLIB];d=sorted(set(d));k(i).write_text('\n'.join(d)+'\n',encoding='utf-8');h=len(j)-len(d);print(f'Removed {h} packages')
+if __name__=='__main__':n='requirements.txt'
+    if len(m.argv)>1:n=m.argv[1]
+    a(n)
+# filename: strip_stdlib.py
+from dh import STDLIB
+def a(d):e=j(d)
+    with j(e).open(encoding='utf-8') as f:return [k.strip().replace('-','_').lower() for k in f if k.strip() and (not k.startswith('#'))]
+def b(h):i=a(h);c=[k for k in i if k not in STDLIB];j(h).write_text('\n'.join(c)+'\n',encoding='utf-8');g=len(i)-len(c);print(f'Removed {g} packages')
+if __name__=='__main__':m=l.argv[1];b(m)
+# filename: trimpo.py
+from loguru import logger;logger.add('/sdcard/allimport.log',diagnose=True)
+def e(f):try:b(f);print(f'✓ {f}');return True
+    except Exception:logger.debug(f'X {f}');return d.format_exc()
+def c():for i in a():j=i.metadata['name']
+        try:b(j);print(f'✓ {j}')
+        except Exception:logger.debug(f'X {j}')
+if __name__=='__main__':g=k.argv[1:]
+    if g:h=list(g)
+        for i in h:e(i)
+    else:c()
+    k.exit(0)
+# filename: uvreq.py
+def a(i):i=e(i);c=i.read_text(encoding='utf-8');d=c.splitlines()
+    for g in d:if 'name="' in g:b=g.split('name="')[1].split('"')[0];print(b)
+            with e('requirements.txt').open('a',encoding='utf-8') as f:f.write(b+'\n')
+def h():a('uv.lock')
+if __name__=='__main__':raise SystemExit(h())
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

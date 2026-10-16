@@ -1,0 +1,1482 @@
+# --- File: fix_ext.py ---
+import argparse
+import concurrent.futures
+import sys
+from pathlib import Path
+from dh import get_files
+try:
+    import puremagic
+except ImportError:
+    print("Error: This script requires the 'puremagic' library.")
+    print('Please install it by running: pip install puremagic')
+    sys.exit(1)
+def a(b):
+    c = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp', 'image/tiff': '.tiff', 'image/bmp': '.bmp', 'application/pdf': '.pdf', 'application/zip': '.zip', 'application/x-tar': '.tar', 'application/gzip': '.gz', 'application/x-7z-compressed': '.7z', 'application/x-rar': '.rar', 'video/mp4': '.mp4', 'video/x-msvideo': '.avi', 'video/quicktime': '.mov', 'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'text/plain': '.txt', 'application/octet-stream': ''}
+    return c.get(b, '')
+def d(e):
+    try:
+        f = puremagic.magic_string(e.read_bytes())
+        if f:
+            g = f[0]
+            ext = g.extension
+            if ext and ext != '':
+                return ext if ext.startswith('.') else f'.{ext}'
+            h = a(g.mime_type)
+            if h:
+                return h
+    except puremagic.main.PureError:
+        pass
+    except Exception as e:
+        print(f'Error reading {e}: {e}')
+    return ''
+def i(e):
+    j = e.suffix.lower()
+    if not j:
+        return None
+    k = d(e)
+    if not k:
+        return None
+    k = k.lower()
+    if j != k:
+        l = {'.jpeg': '.jpg', '.htm': '.html', '.tif': '.tiff'}
+        m = l.get(j, j)
+        n = l.get(k, k)
+        if m != n:
+            return (e, j, k)
+    return None
+def o(e, j, k):
+    p = e.stem + k
+    q = e.with_name(p)
+    r = 1
+    s = q
+    while q.exists() and q != e:
+        q = s.with_name(f'{s.stem}_{r}{k}')
+        r += 1
+    if q != e:
+        e.rename(q)
+        return q
+    return e
+def t():
+    u = argparse.ArgumentParser(description='Recursively detect and optionally fix file extension mismatches based on file headers (magic numbers).')
+    u.add_argument('directory', type=str, help='The directory to recursively scan.')
+    u.add_argument('-a', '--autofix', action='store_true', help='Automatically rename files to fix detected mismatches in place.')
+    u.add_argument('-w', '--workers', type=int, default=4, help='Number of parallel worker threads (default: 4).')
+    v = u.parse_args()
+    w = Path(v.directory)
+    if not w.is_dir():
+        print(f"Error: '{w}' is not a valid directory.")
+        sys.exit(1)
+    print(f"Scanning '{w}' for extension mismatches...")
+    if v.autofix:
+        print('Autofix is ENABLED. Files will be renamed.')
+    cwd = Path.cwd()
+    x = get_files(cwd)
+    y = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=v.workers) as z:
+        a1 = {z.submit(i, f): f for f in x}
+        for b1 in concurrent.futures.as_completed(a1):
+            c1 = b1.result()
+            if c1:
+                y.append(c1)
+    if not y:
+        print('No extension mismatches found!')
+        return
+    print(f'\nFound {len(y)} mismatches:')
+    for e, j, k in sorted(y):
+        print(f"[MISMATCH] '{e}' | Current: '{j}' | Detected: '{k}'")
+        if v.autofix:
+            try:
+                q = o(e, j, k)
+                if q != e:
+                    print(f"  -> Fixed: Renamed to '{q.name}'")
+                else:
+                    print('  -> Skipped fix: Filename collision or identical.')
+            except Exception as e:
+                print(f'  -> Error fixing file: {e}')
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: fix_extension_mismatch_Version1.py ---
+import argparse
+import shutil
+import sys
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+d1 = 8192
+e1 = [(lambda b: b.startswith(b'\x89PNG\r\n\x1a\n'), '.png', 'PNG image'), (lambda b: b.startswith(b'\xff\xd8\xff'), '.jpg', 'JPEG image'), (lambda b: b.startswith((b'GIF87a', b'GIF89a')), '.gif', 'GIF image'), (lambda b: b.startswith(b'BM'), '.bmp', 'BMP image'), (lambda b: b.startswith((b'II*\x00', b'I\x00*\x00', b'MM\x00*')), '.tif', 'TIFF image'), (lambda b: b.startswith(b'%PDF-'), '.pdf', 'PDF document'), (lambda b: b.startswith((b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08')), '.zip', 'ZIP archive'), (lambda b: b.startswith(b'\x1f\x8b\x08'), '.gz', 'GZIP compressed'), (lambda b: b.startswith(b'BZh'), '.bz2', 'BZIP2 compressed'), (lambda b: b.startswith(b"7z\xbc\xaf'\x1c"), '.7z', '7-Zip archive'), (lambda b: b.startswith(b'Rar!\x1a\x07\x00'), '.rar', 'RAR archive'), (lambda b: len(b) > 262 and b[257:262] == b'ustar', '.tar', 'TAR archive'), (lambda b: b.startswith(b'ID3') or (len(b) >= 2 and (b[0] == 255 and b[1] & 224 == 224)), '.mp3', 'MP3 audio'), (lambda b: len(b) > 8 and b[4:8] == b'ftyp', '.mp4', 'MP4/ISO-BMFF'), (lambda b: b.startswith(b'\x1aE\xdf\xa3'), '.mkv', 'Matroska (MKV/WebM)'), (lambda b: b.startswith(b'RIFF') and len(b) > 8 and (b[8:12] == b'WAVE'), '.wav', 'WAV audio'), (lambda b: b.startswith(b'OggS'), '.ogg', 'OGG container'), (lambda b: b.startswith(b'fLaC'), '.flac', 'FLAC audio'), (lambda b: b.lstrip().startswith(b'<') and (b.lstrip()[:10].lower().startswith(b'<!doctype') or b.lstrip()[:6].lower().startswith(b'<html')), '.html', 'HTML document'), (lambda b: b.lstrip().startswith(b'{') or b.lstrip().startswith(b'['), '.json', 'JSON-ish text (heuristic)'), (lambda b: b.startswith(b'\x7fELF'), '.elf', 'ELF binary'), (lambda b: b.startswith(b'MZ'), '.exe', 'PE/EXE binary')]
+f1 = {'.jpeg': '.jpg', '.tiff': '.tif', '.htm': '.html'}
+g1 = {'.py', '.pyc', '.pyo', '.so', '.dll'}
+def h1(e, i1=d1):
+    try:
+        with e.open('rb') as f:
+            j1 = f.read(i1)
+    except PermissionError:
+        return None
+    except OSError:
+        return None
+    for k1, ext, l1 in e1:
+        try:
+            if k1(j1):
+                m1 = f1.get(ext, ext)
+                return (m1, l1)
+        except Exception:
+            continue
+    try:
+        import zipfile
+        if zipfile.is_zipfile(e):
+            with zipfile.ZipFile(e, 'r') as z:
+                for nm in z.namelist():
+                    if nm.endswith('.dist-info/'):
+                        return ('.whl', 'Python wheel (zip)')
+                    if nm.endswith('.egg-info/'):
+                        return ('.zip', 'Python egg archive')
+            return ('.zip', 'ZIP archive')
+    except Exception:
+        pass
+    try:
+        import tarfile
+        if tarfile.is_tarfile(e):
+            return ('.tar', 'TAR archive')
+    except Exception:
+        pass
+    try:
+        with e.open('rb') as f:
+            n1 = f.read(1024)
+        if not n1:
+            return None
+        o1 = sum((1 for c in n1 if 32 <= c <= 126 or c in (9, 10, 13)))
+        if o1 / max(1, len(n1)) > 0.9:
+            return ('.txt', 'Plain text (heuristic)')
+    except Exception:
+        pass
+    return None
+def p1(src, dst):
+    if src.samefile(dst) if dst.exists() and src.exists() else False:
+        return (False, 'source and destination are identical')
+    if not dst.exists():
+        try:
+            src.rename(dst)
+            return (True, str(dst))
+        except OSError:
+            try:
+                shutil.move(str(src), str(dst))
+                return (True, str(dst))
+            except Exception as e:
+                return (False, f'rename/move failed: {e}')
+    q1 = dst.stem
+    r1 = dst.suffix
+    s1 = dst.parent
+    for i in range(1, 1000):
+        t1 = s1 / f'{q1}_{i}{r1}'
+        if not t1.exists():
+            try:
+                src.rename(t1)
+                return (True, str(t1))
+            except OSError:
+                try:
+                    shutil.move(str(src), str(t1))
+                    return (True, str(t1))
+                except Exception as e:
+                    return (False, f'rename/move failed for candidate: {e}')
+    return (False, 'failed to find non-conflicting name')
+def u1(v):
+    v1, w1, x1 = v
+    e = Path(v1)
+    c1 = {'path': str(e), 'action': 'skipped', 'reason': None, 'detected': None, 'target': None}
+    if not e.is_file():
+        c1['reason'] = 'not a file'
+        return c1
+    try:
+        y1 = h1(e)
+    except Exception as e:
+        c1['reason'] = f'detection error: {e}'
+        return c1
+    if not y1:
+        c1['reason'] = 'unknown type'
+        return c1
+    ext, l1 = y1
+    c1['detected'] = {'ext': ext, 'desc': l1}
+    z1 = e.suffix.lower()
+    a2 = f1.get(z1, z1)
+    if a2 == ext:
+        c1['action'] = 'ok'
+        return c1
+    if a2 in g1:
+        c1['action'] = 'skipped'
+        c1['reason'] = f'skipped extension {a2}'
+        return c1
+    if e.suffix:
+        b2 = e.with_name(e.stem + ext)
+    else:
+        b2 = e.with_name(e.name + ext)
+    if b2 == e:
+        c1['action'] = 'skipped'
+        c1['reason'] = 'target equals source'
+        return c1
+    if not w1:
+        c1['action'] = 'would-rename'
+        c1['target'] = str(b2)
+        c1['reason'] = f'{l1}'
+        return c1
+    ok, c2 = p1(e, b2)
+    if ok:
+        c1['action'] = 'renamed'
+        c1['target'] = c2
+    else:
+        c1['action'] = 'error'
+        c1['reason'] = c2
+    return c1
+def d2(e2, f2=False, g2=True):
+    h2 = []
+    for p in e2.rglob('*'):
+        try:
+            if p.is_file():
+                if g2 and any((i2.startswith('.') for i2 in p.relative_to(e2).parts)):
+                    continue
+                h2.append(p)
+        except Exception:
+            continue
+    return h2
+def j2(k2, l2=False):
+    m2 = [r for r in k2 if r['action'] == 'renamed']
+    n2 = [r for r in k2 if r['action'] == 'would-rename']
+    o2 = [r for r in k2 if r['action'] in ('skipped', 'ok')]
+    p2 = [r for r in k2 if r['action'] == 'error']
+    print()
+    print('Summary:')
+    print(f'  files scanned: {len(k2)}')
+    print(f'  would-rename (dry-run): {len(n2)}')
+    print(f'  renamed: {len(m2)}')
+    print(f'  skipped/ok: {len(o2)}')
+    print(f'  errors: {len(p2)}')
+    if l2:
+        if n2:
+            print('\nWould-rename examples:')
+            for r in n2[:10]:
+                print(f"  {r['path']} -> {r.get('target')}  ({r.get('detected')})")
+        if m2:
+            print('\nRenamed examples:')
+            for r in m2[:10]:
+                print(f"  {r['path']} -> {r.get('target')}")
+        if p2:
+            print('\nErrors:')
+            for r in p2[:10]:
+                print(f"  {r['path']}: {r.get('reason')}")
+def t():
+    ap = argparse.ArgumentParser(prog='fix_extension_mismatch.py', description='Fix extension mismatches using file signatures')
+    ap.add_argument('path', nargs='?', default='.', help='Root path to scan (default: .)')
+    ap.add_argument('--workers', '-j', type=int, default=max(1, cpu_count() - 1), help='Number of worker processes (default: cpu_count()-1)')
+    ap.add_argument('--commit', action='store_true', help='Perform renames. Without this flag the script runs in dry-run mode.')
+    ap.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    ap.add_argument('--follow-symlinks', action='store_true', help='Follow symlinks when scanning')
+    ap.add_argument('--no-skip-hidden', action='store_true', help='Do not skip hidden files/directories (default: skip)')
+    v = ap.parse_args()
+    e2 = Path(v.path).resolve()
+    if not e2.exists():
+        print(f'Error: path {e2} does not exist', file=sys.stderr)
+        sys.exit(2)
+    h2 = d2(e2, follow_symlinks=v.follow_symlinks, skip_hidden=not v.no_skip_hidden)
+    if not h2:
+        print('No files found to scan.')
+        return
+    print(f'Scanning {len(h2)} files under {e2} using {v.workers} workers. Commit mode: {v.commit}')
+    q2 = [(str(p), v.commit, v.verbose) for p in h2]
+    k2 = []
+    try:
+        with Pool(processes=v.workers) as r2:
+            for res in r2.imap_unordered(u1, q2):
+                k2.append(res)
+                if v.verbose:
+                    p = res['path']
+                    act = res['action']
+                    if act in ('would-rename', 'renamed'):
+                        print(f"{act}: {p} -> {res.get('target')} ({res.get('detected')})")
+                    elif act == 'ok':
+                        print(f'ok: {p} (already matched)')
+                    else:
+                        print(f"{act}: {p} ({res.get('reason')})")
+    except KeyboardInterrupt:
+        print('Interrupted by user.', file=sys.stderr)
+        sys.exit(1)
+    j2(k2, verbose=v.verbose)
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: fix_extension_mismatch_Version2.py ---
+import argparse
+import shutil
+import sys
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+d1 = 8192
+s2 = False
+try:
+    import magic
+    s2 = True
+except ImportError:
+    pass
+e1 = [(lambda b: b.startswith(b'\x89PNG\r\n\x1a\n'), '.png', 'PNG image'), (lambda b: b.startswith(b'\xff\xd8\xff'), '.jpg', 'JPEG image'), (lambda b: b.startswith((b'GIF87a', b'GIF89a')), '.gif', 'GIF image'), (lambda b: b.startswith(b'BM'), '.bmp', 'BMP image'), (lambda b: b.startswith((b'II*\x00', b'I\x00*\x00', b'MM\x00*')), '.tif', 'TIFF image'), (lambda b: b.startswith(b'WEBP'), '.webp', 'WebP image'), (lambda b: b.startswith(b'%PDF-'), '.pdf', 'PDF document'), (lambda b: b.startswith((b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08')), '.zip', 'ZIP archive'), (lambda b: b.startswith(b'\x1f\x8b\x08'), '.gz', 'GZIP compressed'), (lambda b: b.startswith(b'BZh'), '.bz2', 'BZIP2 compressed'), (lambda b: b.startswith(b"7z\xbc\xaf'\x1c"), '.7z', '7-Zip archive'), (lambda b: b.startswith(b'Rar!\x1a\x07\x00'), '.rar', 'RAR archive'), (lambda b: len(b) > 262 and b[257:262] == b'ustar', '.tar', 'TAR archive'), (lambda b: b.startswith(b'ID3') or (len(b) >= 2 and (b[0] == 255 and b[1] & 224 == 224)), '.mp3', 'MP3 audio'), (lambda b: len(b) > 8 and b[4:8] == b'ftyp', '.mp4', 'MP4/ISO-BMFF'), (lambda b: b.startswith(b'\x1aE\xdf\xa3'), '.mkv', 'Matroska (MKV/WebM)'), (lambda b: b.startswith(b'RIFF') and len(b) > 8 and (b[8:12] == b'WAVE'), '.wav', 'WAV audio'), (lambda b: b.startswith(b'OggS'), '.ogg', 'OGG container'), (lambda b: b.startswith(b'fLaC'), '.flac', 'FLAC audio'), (lambda b: b.lstrip().startswith(b'<') and (b.lstrip()[:10].lower().startswith(b'<!doctype') or b.lstrip()[:6].lower().startswith(b'<html')), '.html', 'HTML document'), (lambda b: b.lstrip().startswith(b'{') or b.lstrip().startswith(b'['), '.json', 'JSON-ish text (heuristic)'), (lambda b: b.startswith(b'\x7fELF'), '.elf', 'ELF binary'), (lambda b: b.startswith(b'MZ'), '.exe', 'PE/EXE binary')]
+f1 = {'.jpeg': '.jpg', '.tiff': '.tif', '.htm': '.html'}
+t2 = {'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/bmp': '.bmp', 'image/x-ms-bmp': '.bmp', 'image/tiff': '.tif', 'image/x-tiff': '.tif', 'image/webp': '.webp', 'image/x-icon': '.ico', 'image/x-portable-bitmap': '.pbm', 'image/x-portable-graymap': '.pgm', 'image/x-portable-pixmap': '.ppm', 'application/pdf': '.pdf', 'application/msword': '.doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx', 'application/vnd.ms-excel': '.xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx', 'application/vnd.ms-powerpoint': '.ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx', 'application/zip': '.zip', 'application/x-zip-compressed': '.zip', 'application/gzip': '.gz', 'application/x-gzip': '.gz', 'application/x-tar': '.tar', 'application/x-tar+gzip': '.tar.gz', 'application/x-bzip2': '.bz2', 'application/x-7z-compressed': '.7z', 'application/x-rar-compressed': '.rar', 'application/x-rar': '.rar', 'audio/mpeg': '.mp3', 'audio/x-mpeg': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/ogg': '.ogg', 'audio/x-ogg': '.ogg', 'audio/flac': '.flac', 'audio/x-flac': '.flac', 'audio/aac': '.aac', 'audio/x-m4a': '.m4a', 'audio/mp4': '.mp4', 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/x-msvideo': '.avi', 'video/x-matroska': '.mkv', 'video/webm': '.webm', 'video/x-flv': '.flv', 'video/x-ms-wmv': '.wmv', 'video/x-m4v': '.m4v', 'text/html': '.html', 'application/json': '.json', 'text/json': '.json', 'text/plain': '.txt', 'text/xml': '.xml', 'application/xml': '.xml', 'text/csv': '.csv', 'text/markdown': '.md', 'text/x-python': '.py', 'text/x-shellscript': '.sh', 'text/x-c': '.c', 'text/x-java': '.java', 'text/javascript': '.js', 'application/x-elf': '.elf', 'application/x-executable': '.elf', 'application/x-sharedlib': '.so', 'application/x-mach-binary': '.macho', 'application/x-dosexec': '.exe', 'application/x-pe-executable': '.exe'}
+g1 = {'.py', '.pyc', '.pyo', '.so', '.dll', '.c', '.h', '.cc', '.cpp', '.java', '.rs', '.go', '.rb', '.js', '.ts'}
+def u2(e):
+    if not s2:
+        return None
+    try:
+        v2 = magic.from_file(str(e), mime=True)
+        l1 = magic.from_file(str(e), mime=False) or v2
+        ext = t2.get(v2.lower())
+        if ext:
+            m1 = f1.get(ext, ext)
+            return (m1, f'{l1} (MIME: {v2})')
+        return None
+    except Exception:
+        return None
+def h1(e, i1=d1):
+    try:
+        with e.open('rb') as f:
+            j1 = f.read(i1)
+    except PermissionError:
+        return None
+    except OSError:
+        return None
+    for k1, ext, l1 in e1:
+        try:
+            if k1(j1):
+                m1 = f1.get(ext, ext)
+                return (m1, l1)
+        except Exception:
+            continue
+    try:
+        import zipfile
+        if zipfile.is_zipfile(e):
+            with zipfile.ZipFile(e, 'r') as z:
+                for nm in z.namelist():
+                    if nm.endswith('.dist-info/'):
+                        return ('.whl', 'Python wheel (zip)')
+                    if nm.endswith('.egg-info/'):
+                        return ('.zip', 'Python egg archive')
+            return ('.zip', 'ZIP archive')
+    except Exception:
+        pass
+    try:
+        import tarfile
+        if tarfile.is_tarfile(e):
+            w2 = e.name.lower()
+            if w2.endswith(('.tar.gz', '.tgz')):
+                return ('.tar.gz', 'TAR.GZ archive')
+            return ('.tar', 'TAR archive')
+    except Exception:
+        pass
+    try:
+        with e.open('rb') as f:
+            n1 = f.read(1024)
+        if not n1:
+            return None
+        o1 = sum((1 for c in n1 if 32 <= c <= 126 or c in (9, 10, 13)))
+        if o1 / max(1, len(n1)) > 0.9:
+            return ('.txt', 'Plain text (heuristic)')
+    except Exception:
+        pass
+    return None
+def x2(e):
+    if s2:
+        c1 = u2(e)
+        if c1:
+            return c1
+    return h1(e)
+def p1(src, dst):
+    if src.samefile(dst) if dst.exists() and src.exists() else False:
+        return (False, 'source and destination are identical')
+    if not dst.exists():
+        try:
+            src.rename(dst)
+            return (True, str(dst))
+        except OSError:
+            try:
+                shutil.move(str(src), str(dst))
+                return (True, str(dst))
+            except Exception as e:
+                return (False, f'rename/move failed: {e}')
+    q1 = dst.stem
+    r1 = dst.suffix
+    s1 = dst.parent
+    for i in range(1, 1000):
+        t1 = s1 / f'{q1}_{i}{r1}'
+        if not t1.exists():
+            try:
+                src.rename(t1)
+                return (True, str(t1))
+            except OSError:
+                try:
+                    shutil.move(str(src), str(t1))
+                    return (True, str(t1))
+                except Exception as e:
+                    return (False, f'rename/move failed for candidate: {e}')
+    return (False, 'failed to find non-conflicting name')
+def u1(v):
+    v1, w1, x1 = v
+    e = Path(v1)
+    c1 = {'path': str(e), 'action': 'skipped', 'reason': None, 'detected': None, 'target': None}
+    if not e.is_file():
+        c1['reason'] = 'not a file'
+        return c1
+    try:
+        y1 = x2(e)
+    except Exception as e:
+        c1['reason'] = f'detection error: {e}'
+        return c1
+    if not y1:
+        c1['reason'] = 'unknown type'
+        return c1
+    ext, l1 = y1
+    c1['detected'] = {'ext': ext, 'desc': l1}
+    z1 = e.suffix.lower()
+    a2 = f1.get(z1, z1)
+    if a2 == ext:
+        c1['action'] = 'ok'
+        return c1
+    if a2 in g1:
+        c1['action'] = 'skipped'
+        c1['reason'] = f'skipped extension {a2}'
+        return c1
+    if e.suffix:
+        b2 = e.with_name(e.stem + ext)
+    else:
+        b2 = e.with_name(e.name + ext)
+    if b2 == e:
+        c1['action'] = 'skipped'
+        c1['reason'] = 'target equals source'
+        return c1
+    if not w1:
+        c1['action'] = 'would-rename'
+        c1['target'] = str(b2)
+        c1['reason'] = f'{l1}'
+        return c1
+    ok, c2 = p1(e, b2)
+    if ok:
+        c1['action'] = 'renamed'
+        c1['target'] = c2
+    else:
+        c1['action'] = 'error'
+        c1['reason'] = c2
+    return c1
+def d2(e2, f2=False, g2=True):
+    h2 = []
+    for p in e2.rglob('*'):
+        try:
+            if p.is_file():
+                if g2 and any((i2.startswith('.') for i2 in p.relative_to(e2).parts)):
+                    continue
+                h2.append(p)
+        except Exception:
+            continue
+    return h2
+def j2(k2, l2=False):
+    m2 = [r for r in k2 if r['action'] == 'renamed']
+    n2 = [r for r in k2 if r['action'] == 'would-rename']
+    o2 = [r for r in k2 if r['action'] in ('skipped', 'ok')]
+    p2 = [r for r in k2 if r['action'] == 'error']
+    print()
+    print('Summary:')
+    print(f'  files scanned: {len(k2)}')
+    print(f'  would-rename (dry-run): {len(n2)}')
+    print(f'  renamed: {len(m2)}')
+    print(f'  skipped/ok: {len(o2)}')
+    print(f'  errors: {len(p2)}')
+    if l2:
+        if n2:
+            print('\nWould-rename examples:')
+            for r in n2[:10]:
+                print(f"  {r['path']} -> {r.get('target')}  ({r.get('detected')})")
+        if m2:
+            print('\nRenamed examples:')
+            for r in m2[:10]:
+                print(f"  {r['path']} -> {r.get('target')}")
+        if p2:
+            print('\nErrors:')
+            for r in p2[:10]:
+                print(f"  {r['path']}: {r.get('reason')}")
+def y2():
+    print('fix_extension_mismatch.py')
+    print(f"  Detection: python-magic {('✓ available' if s2 else '✗ not available (using fallback signatures)')}")
+    if not s2:
+        print('    Install with: pip install python-magic (Linux/macOS) or python-magic-bin (Windows)')
+    print()
+def t():
+    ap = argparse.ArgumentParser(prog='fix_extension_mismatch.py', description='Fix extension mismatches using file signatures or MIME types')
+    ap.add_argument('path', nargs='?', default='.', help='Root path to scan (default: .)')
+    ap.add_argument('--workers', '-j', type=int, default=max(1, cpu_count() - 1), help='Number of worker processes (default: cpu_count()-1)')
+    ap.add_argument('--commit', action='store_true', help='Perform renames. Without this flag the script runs in dry-run mode.')
+    ap.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    ap.add_argument('--follow-symlinks', action='store_true', help='Follow symlinks when scanning')
+    ap.add_argument('--no-skip-hidden', action='store_true', help='Do not skip hidden files/directories (default: skip)')
+    v = ap.parse_args()
+    y2()
+    e2 = Path(v.path).resolve()
+    if not e2.exists():
+        print(f'Error: path {e2} does not exist', file=sys.stderr)
+        sys.exit(2)
+    h2 = d2(e2, follow_symlinks=v.follow_symlinks, skip_hidden=not v.no_skip_hidden)
+    if not h2:
+        print('No files found to scan.')
+        return
+    print(f'Scanning {len(h2)} files under {e2} using {v.workers} workers. Commit mode: {v.commit}')
+    q2 = [(str(p), v.commit, v.verbose) for p in h2]
+    k2 = []
+    try:
+        with Pool(processes=v.workers) as r2:
+            for res in r2.imap_unordered(u1, q2):
+                k2.append(res)
+                if v.verbose:
+                    p = res['path']
+                    act = res['action']
+                    if act in ('would-rename', 'renamed'):
+                        print(f"{act}: {p} -> {res.get('target')} ({res.get('detected')})")
+                    elif act == 'ok':
+                        print(f'ok: {p} (already matched)')
+                    else:
+                        print(f"{act}: {p} ({res.get('reason')})")
+    except KeyboardInterrupt:
+        print('Interrupted by user.', file=sys.stderr)
+        sys.exit(1)
+    j2(k2, verbose=v.verbose)
+if __name__ == '__main__':
+    raise SystemExit(t())
+
+# --- File: fixext.py ---
+import argparse
+import logging
+import multiprocessing as mp
+import subprocess
+import sys
+from collections.abc import Iterable
+from pathlib import Path
+from dh import MIME2EXT, SHEBANG_MAP, get_files
+z2 = logging.getLogger(__name__)
+a3 = {'.css', '.js', '.min.js', '.min.css', '.md', '.json', '.yaml', '.yml', '.xml'}
+def b3(c3=False):
+    logging.basicConfig(level=logging.DEBUG if c3 else logging.WARNING, format='%(levelname)s | %(message)s')
+def d3(b):
+    e3 = MIME2EXT.get(b)
+    if isinstance(e3, list):
+        return e3[0] if e3 else None
+    return e3
+def f3(e):
+    try:
+        import magic
+        v2 = magic.Magic(mime=True)
+        return d3(v2.from_file(str(e)))
+    except Exception as exc:
+        z2.debug('pure-magic failed for %s: %s', e, exc)
+        return None
+def g3(e):
+    try:
+        import magic
+        b = magic.from_file(str(e), mime=True)
+        return d3(b)
+    except Exception as exc:
+        z2.debug('python-magic failed for %s: %s', e, exc)
+        return None
+def h3(e):
+    try:
+        import filetype
+        i3 = filetype.guess(str(e))
+        return f'.{i3.extension}' if i3 else None
+    except Exception as exc:
+        z2.debug('filetype failed for %s: %s', e, exc)
+        return None
+def j3(e):
+    try:
+        c1 = subprocess.run(['file', '--brief', '--mime-type', str(e)], capture_output=True, text=True, timeout=5, check=False)
+        if c1.returncode == 0:
+            return d3(c1.stdout.strip())
+    except Exception as exc:
+        z2.debug('file command failed for %s: %s', e, exc)
+    return None
+def k3(e):
+    try:
+        with e.open('rb') as l3:
+            m3 = l3.readline()
+        if not m3.startswith(b'#!'):
+            return None
+        n3 = m3.decode('utf-8', errors='ignore').strip()
+        for key, o3 in SHEBANG_MAP.items():
+            if key in n3:
+                return o3
+    except Exception as exc:
+        z2.debug('shebang detection failed for %s: %s', e, exc)
+    return None
+def p3(e):
+    q3 = (k3, f3, g3, h3, j3)
+    for r3 in q3:
+        o3 = r3(e)
+        if o3:
+            if not o3.startswith('.'):
+                o3 = f'.{o3}'
+            return o3.lower()
+    return None
+def s3(e):
+    t3 = e.name.lower()
+    for o3 in sorted(a3, key=len, reverse=True):
+        if t3.endswith(o3):
+            return o3
+    return e.suffix.lower()
+def u3(o3):
+    return o3.lower() in a3
+def v3(e, w3):
+    p = e.with_suffix(w3)
+    if p == e:
+        return (e, False)
+    if p.exists():
+        z2.debug('Destination already exists; skipping: %s', p)
+        return (e, False)
+    try:
+        e.rename(p)
+        return (p, True)
+    except OSError as exc:
+        z2.debug('Could not rename %s: %s', e, exc)
+        return (e, False)
+def i(e, x3=False):
+    if not e.is_file():
+        return (e, False, None, None)
+    j = s3(e)
+    w3 = p3(e)
+    if not w3:
+        return (e, False, j or None, None)
+    if j == w3:
+        return (e, False, j or None, w3)
+    if u3(j) and w3 == '.txt':
+        z2.debug('Protected extension; skipping %s', e)
+        return (e, False, j, w3)
+    if not x3:
+        return (e, True, j or None, w3)
+    y3, m2 = v3(e, w3)
+    return (y3, m2, j or None, w3)
+def z3(a4):
+    h2 = []
+    for b4 in a4:
+        b4 = b4.expanduser()
+        if b4.is_file():
+            h2.append(b4)
+        elif b4.is_dir():
+            h2.extend((e for e in b4.rglob('*') if e.is_file()))
+        else:
+            print(f'Warning: not found or unsupported: {b4}', file=sys.stderr)
+    return list(dict.fromkeys(h2))
+def t():
+    u = argparse.ArgumentParser(description='Detect and optionally fix file extension mismatches.')
+    u.add_argument('inputs', nargs='*', type=Path, help='Files or directories to scan. Defaults to the current directory.')
+    u.add_argument('-a', '--auto-fix', action='store_true', help='Rename files to their detected extensions.')
+    u.add_argument('--debug', action='store_true', help='Enable debug logging.')
+    v = u.parse_args()
+    b3(v.debug)
+    cwd = Path.cwd()
+    h2 = z3(v.inputs) or get_files(cwd)
+    if not h2:
+        print('No files found.', file=sys.stderr)
+        return
+    y = 0
+    c4 = 0
+    with mp.Pool(processes=8) as r2:
+        d4 = [r2.apply_async(i, (e, v.auto_fix)) for e in h2]
+        for e, job in zip(h2, d4, strict=False):
+            try:
+                e4, f4, g4, h4 = job.get()
+                if v.auto_fix:
+                    if f4 and e4 != e:
+                        c4 += 1
+                        print(f'renamed: {e} -> {e4}')
+                elif f4:
+                    y += 1
+                    print(f"{e}: {g4 or 'none'} -> {h4}")
+            except Exception as exc:
+                z2.debug('Error processing %s: %s', e, exc)
+                print(f'{e} -> error: {exc}', file=sys.stderr)
+    if not v.auto_fix:
+        print()
+        print(f'Total files scanned: {len(h2)}')
+        print(f'Mismatches found: {y}')
+    elif c4:
+        print()
+        print(f'Files fixed: {c4}')
+if __name__ == '__main__':
+    mp.freeze_support()
+    raise SystemExit(t())
+
+# --- File: fixext2.py ---
+import os
+from pathlib import Path
+import magic
+t2 = {'text/html': 'html', 'application/json': 'json', 'application/javascript': 'js', 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'application/zip': 'zip', 'application/gzip': 'gz', 'application/x-tar': 'tar', 'text/xml': 'xml'}
+def i4(j4):
+    j4 = j4.strip()
+    if j4.startswith('#!') and 'python' in j4:
+        return 'py'
+    if any((k in j4 for k in ['def ', 'class ', 'import ', 'from ', '__main__'])):
+        return 'py'
+    if j4.startswith('#!') and ('sh' in j4 or 'bash' in j4):
+        return 'sh'
+    if j4.startswith(('# ', '## ')) or '---' in j4:
+        return 'md'
+    if j4.startswith('---') or (': ' in j4 and '\n' in j4):
+        return 'yaml'
+    if '=' in j4 and '[' in j4 and (']' in j4):
+        return 'toml'
+    if j4.startswith('[') and ']' in j4:
+        return 'ini'
+    if any((j4.lower().startswith(cmd) for cmd in ['select ', 'insert ', 'update ', 'delete ', 'create '])):
+        return 'sql'
+    if '{' in j4 and '}' in j4 and (':' in j4):
+        return 'css'
+    if ',' in j4 and '\n' in j4:
+        return 'csv'
+    if j4.startswith('<?xml'):
+        return 'xml'
+    return None
+def p3(e, b):
+    if b in t2:
+        return t2[b]
+    if b == 'text/plain':
+        try:
+            with Path(e).open(encoding='utf-8', errors='ignore') as f:
+                n1 = f.read(4096)
+            k4 = i4(n1)
+            if k4:
+                return k4
+        except:
+            pass
+    return None
+def p1(src, dst):
+    dst = Path(dst)
+    src = Path(src)
+    if not dst.exists():
+        src.rename(dst)
+        return dst
+    q1, ext = (dst.stem, dst.suffix)
+    r = 1
+    q = Path(f'{q1} ({r}){ext}')
+    while q.exists():
+        r += 1
+        q = Path(f'{q1} ({r}){ext}')
+    src.rename(q)
+    return q
+def l4(e2='.'):
+    v2 = magic.Magic(mime=True)
+    for m4, _, n4 in os.walk(e2):
+        for t3 in n4:
+            e = os.path.join(m4, t3)
+            if Path(e).is_symlink():
+                continue
+            try:
+                b = v2.from_file(e)
+            except:
+                print(f'Skipping unreadable: {e}')
+                continue
+            h4 = p3(e, b)
+            if not h4:
+                continue
+            o4 = t3.rsplit('.', 1)
+            j = o4[1].lower() if len(o4) == 2 else ''
+            if j == h4:
+                continue
+            q1 = o4[0] if len(o4) == 2 else t3
+            p = f'{q1}.{h4}'
+            q = os.path.join(m4, p)
+            print(f'Renaming: {t3}  →  {p}')
+            p4 = p1(e, q)
+            if p4 != q:
+                print(f' ⚠  Collision detected. Saved as: {Path(p4).name}')
+if __name__ == '__main__':
+    l4()
+
+# --- File: fixext3.py ---
+import subprocess
+from pathlib import Path
+q4 = {'xz compressed data': '.xz', 'jpeg image data': '.jpg', 'png image data': '.png', 'gif image data': '.gif', 'tiff image data': '.tiff', 'bitmap image data': '.bmp', 'svg image data': '.svg', 'pdf document': '.pdf', 'microsoft word document': '.doc', 'microsoft office document': '.docx', 'excel spreadsheet': '.xls', 'microsoft excel (openxml) spreadsheet': '.xlsx', 'powerpoint presentation': '.ppt', 'microsoft powerpoint (openxml) presentation': '.pptx', 'zip archive data': '.zip', 'gzip compressed data': '.gz', 'tar archive data': '.tar', 'bzip2 compressed data': '.bz2', 'gzip compressed data, from Unix, original size': '.gz', 'shared object (linux)': '.so', 'python script': '.py', 'javascript (ECMAScript)': '.js', 'html document': '.html', 'xml document': '.xml', 'json data': '.json', 'c source, ascii text': '.c', 'c++ source, ascii text': '.cpp', 'assembly language, ascii text': '.s', 'makefile': '.mk', 'ascii text': '.txt', 'utf-8 unicode text': '.txt', 'iso-8859 text': '.txt', 'data': '.bin', 'java class file': '.class', 'executable file': '.exe', 'elf 64-bit lsb executable': '.elf', 'mach-o executable': '.dylib', 'png image,': '.png', 'jpeg image,': '.jpg', 'mpeg sequence': '.mpeg', 'mpeg adts,': '.aac', 'midi': '.mid', 'wave sound data': '.wav', 'mpeg audio': '.mp3', 'java serialized data': '.ser', 'pkcs#7': '.p7'}
+r4 = {'.xz': ['xz compressed data'], '.jpg': ['jpeg image data'], '.png': ['png image data'], '.gif': ['gif image data'], '.pdf': ['pdf document'], '.doc': ['microsoft word document'], '.docx': ['microsoft office document'], '.xls': ['excel spreadsheet'], '.xlsx': ['microsoft excel (openxml) spreadsheet'], '.ppt': ['powerpoint presentation'], '.pptx': ['microsoft powerpoint (openxml) presentation'], '.zip': ['zip archive data'], '.gz': ['gzip compressed data'], '.tar': ['tar archive data'], '.bz2': ['bzip2 compressed data'], '.py': ['python script'], '.js': ['javascript (ecmascript)'], '.html': ['html document'], '.xml': ['xml document'], '.json': ['json data'], '.c': ['c source'], '.cpp': ['c++ source'], '.txt': ['ascii text', 'utf-8 unicode text', 'iso-8859 text'], '.exe': ['executable file'], '.elf': ['elf 64-bit lsb executable'], '.dylib': ['mach-o executable'], '.mp3': ['mpeg audio'], '.wav': ['wave sound data'], '.mp4': ['mpeg sequence'], '.mov': ['quicktime movie'], '.avi': ['avi video']}
+def s4(e):
+    try:
+        c1 = subprocess.run(['file', '-b', str(e)], capture_output=True, text=True, check=True, encoding='utf-8', errors='replace')
+        return c1.stdout.strip()
+    except FileNotFoundError:
+        print("Error: 'file' command not found. Please ensure it's installed and in your PATH.")
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"Error running 'file' command on {e}: {e}")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred while running 'file' command on {e}: {e}")
+        return None
+def t4(u4):
+    v4 = u4.lower().strip()
+    if v4.endswith(','):
+        v4 = v4[:-1].strip()
+    if v4.endswith('.'):
+        v4 = v4[:-1].strip()
+    return q4.get(v4)
+def s3(e):
+    return e.suffix.lower()
+def w4(x4, y4=None, f2=False):
+    if y4 is None:
+        y4 = ['.git', '__pycache__', 'node_modules', '.venv', 'venv']
+    for z4 in x4.rglob('*'):
+        if z4.is_dir() and any((a5 == z4.name for a5 in y4)):
+            continue
+        if z4.is_symlink() and (not f2):
+            continue
+        if z4.is_file():
+            yield z4
+def b5(c5=Path(), d5=70, e5=True):
+    print('--- Starting File Type Mismatch Detection ---')
+    print(f'Scanning directory: {c5.resolve()}')
+    if e5:
+        print('--- Running in DRY-RUN mode. No files will be renamed. ---')
+    else:
+        print('--- WARNING: Running in LIVE mode. Files WILL be renamed. Ensure you have backups! ---')
+    f5 = []
+    g5 = []
+    h5 = list(w4(c5))
+    print(f'Found {len(h5)} files to analyze.')
+    for e in h5:
+        j = s3(e)
+        if not j or j in {'.log', '.tmp', '.bak'}:
+            continue
+        i5 = s4(e)
+        if not i5:
+            continue
+        w3 = t4(i5)
+        j5 = any((k5 in i5.lower() for k5 in ['ascii text', 'utf-8 unicode text', 'iso-8859 text', 'plain text']))
+        if j5 and j in {'.txt', '.log', '.csv', '.md', '.ini', '.cfg', '.yml', '.yaml'}:
+            continue
+        if not w3:
+            continue
+        if w3.lower() != j.lower():
+            f5.append({'path': e, 'current_extension': j, 'detected_type': i5, 'detected_extension': w3})
+            q = e.with_suffix(w3)
+            if q.exists():
+                print(f"  SKIP RENAME: Target file '{q}' already exists. Cannot rename '{e}'.")
+            else:
+                g5.append({'source': e, 'destination': q, 'type_description': i5})
+                print(f"  MISMATCH FOUND: '{e}' detected as '{i5}' (suggested extension: {w3}).")
+    print('\n--- Analysis Complete ---')
+    if not f5:
+        print('No file extension mismatches detected.')
+        return
+    print(f'Found {len(f5)} files with potential extension mismatches.')
+    if not g5:
+        print('No safe rename operations could be planned (e.g., due to existing files or no clear extension mapping).')
+        return
+    print(f'\nIdentified {len(g5)} files that can be safely renamed:')
+    for op in g5:
+        print(f"  - '{op['source']}' -> '{op['destination']}' (Detected as: {op['type_description']})")
+    if e5:
+        print('\n--- DRY-RUN MODE ACTIVE ---')
+        print("No files were renamed. To perform renames, set 'dry_run=False' in the script.")
+    else:
+        print('\n--- LIVE RENAME MODE ACTIVE ---')
+        l5 = input('Are you sure you want to proceed with renaming these files? (yes/no): ')
+        if l5.lower() == 'yes':
+            m5 = 0
+            for op in g5:
+                try:
+                    op['source'].rename(op['destination'])
+                    print(f"  Renamed '{op['source']}' to '{op['destination']}'")
+                    m5 += 1
+                except OSError as e:
+                    print(f"  ERROR renaming '{op['source']}' to '{op['destination']}': {e}")
+                except Exception as e:
+                    print(f"  UNEXPECTED ERROR renaming '{op['source']}' to '{op['destination']}': {e}")
+            print(f'\nSuccessfully renamed {m5} out of {len(g5)} planned operations.')
+        else:
+            print('Rename operation cancelled by user.')
+    print('\n--- Script Finished ---')
+if __name__ == '__main__':
+    n5 = Path()
+    o5 = False
+    b5(start_directory=n5, dry_run=o5)
+
+# --- File: fixfileext.py ---
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+try:
+    from dh import MIME2EXT, SHEBANG_MAP
+except ImportError:
+    print('Error: Could not import from dh module. Please ensure dh.py exists with MIME2EXT and SHEBANG_MAP.', file=sys.stderr)
+    sys.exit(1)
+def p5(e):
+    try:
+        out = subprocess.check_output(['file', '-b', '--mime', str(e)], text=True).strip()
+        return out.split(';', 1)[0].strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        print(f'Error detecting MIME for {e}: {e}', file=sys.stderr)
+        return ''
+def q5(e):
+    try:
+        with open(e, 'rb') as f:
+            m3 = f.readline()
+            if not m3.startswith(b'#!'):
+                return None
+            n3 = m3.decode('utf-8', errors='ignore').strip()
+            o4 = n3.split()
+            if len(o4) < 2:
+                return None
+            r5 = o4[1]
+            if 'env' in r5:
+                if len(o4) >= 3:
+                    r5 = o4[2]
+                else:
+                    return None
+            s5 = os.path.basename(r5)
+            for key in SHEBANG_MAP:
+                if key in s5 or s5 in key:
+                    return SHEBANG_MAP[key].lstrip('.')
+            return None
+    except (OSError, UnicodeDecodeError) as e:
+        print(f'Error reading shebang from {e}: {e}', file=sys.stderr)
+        return None
+def t5(v2):
+    v = MIME2EXT.get(v2)
+    if v is None:
+        return None
+    if isinstance(v, (list, tuple)):
+        v = v[0] if v else None
+    if not v:
+        return None
+    return str(v).lstrip('.')
+def u5(e):
+    return q5(e)
+def v5(e):
+    v2 = p5(e)
+    if v2:
+        ext = t5(v2)
+        if ext is not None:
+            return (ext, 'mime')
+    if not e.suffix or e.suffix == '':
+        ext = u5(e)
+        if ext is not None:
+            return (ext, 'shebang')
+    return (None, 'none')
+def t():
+    u = argparse.ArgumentParser(description='Rename files based on their detected MIME type or shebang', epilog='Without --apply, this runs in dry-run mode (only shows what would be renamed).')
+    u.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    u.add_argument('-a', '--apply', action='store_true', help='Actually apply the renames (dry run by default)')
+    u.add_argument('-v', '--verbose', action='store_true', help='Show detailed output including MIME type and detection source')
+    v = u.parse_args()
+    e2 = Path(v.directory).resolve()
+    if not e2.is_dir():
+        print(f'Error: {e2} is not a directory', file=sys.stderr)
+        sys.exit(1)
+    print(f"{('APPLYING' if v.apply else 'DRY RUN')} - Scanning: {e2}")
+    print('-' * 60)
+    m5 = 0
+    w5 = 0
+    x5 = 0
+    y5 = 0
+    z5 = 0
+    a6 = 0
+    for e in e2.rglob('*'):
+        if not e.is_file():
+            continue
+        ext, b6 = v5(e)
+        if ext is None:
+            y5 += 1
+            continue
+        c6 = e.suffix.lstrip('.').lower()
+        if c6 == ext.lower():
+            continue
+        q = e.with_suffix('.' + ext)
+        if q.exists():
+            print(f'SKIP  {e} -> {q} (target exists)')
+            w5 += 1
+            continue
+        if b6 == 'shebang':
+            z5 += 1
+        elif b6 == 'mime':
+            a6 += 1
+        if v.verbose:
+            print(f'REN   {e} -> {q}  [{b6}: {ext}]')
+        else:
+            print(f'REN   {e} -> {q}')
+        if v.apply:
+            if q.suffix == '.txt' and e.suffix in {'.js', '.css'}:
+                continue
+            try:
+                e.rename(q)
+                m5 += 1
+            except OSError as e:
+                print(f'ERROR: Failed to rename {e}: {e}', file=sys.stderr)
+        else:
+            m5 += 1
+    print('-' * 60)
+    print(f"Summary ({('APPLIED' if v.apply else 'DRY RUN')}):")
+    print(f'  Would rename / Renamed: {m5}')
+    print(f'  Skipped (target exists): {w5}')
+    print(f'  No extension found: {y5}')
+    print(f'  Detection sources:')
+    print(f'    - MIME type: {a6}')
+    print(f'    - Shebang: {z5}')
+    print(f'  Total files processed: {m5 + w5 + y5}')
+if __name__ == '__main__':
+    t()
+
+# --- File: fpy.py ---
+import re
+import sys
+import tokenize
+from io import StringIO
+from pathlib import Path
+d6 = {'def', 'class', 'import', 'from', 'lambda', 'yield', 'async', 'await'}
+def e6(f6):
+    g6 = 0
+    for h6 in f6:
+        if any((kw in h6 for kw in d6)):
+            g6 += 1
+        if re.search(':\\s*$', h6):
+            g6 += 1
+        if re.match('\\s{4}', h6):
+            g6 += 1
+    return g6 >= 2
+def i6(j6):
+    try:
+        tokenize.generate_tokens(StringIO(j6).readline)
+        return True
+    except tokenize.TokenError:
+        return False
+def k6(h6):
+    if re.match('\\s*(def|class|if|elif|else|for|while|try|except|with)\\b.*:', h6):
+        return True
+    if re.match('\\s*@[A-Za-z_]\\w*', h6):
+        return True
+    return bool(re.match('\\s*import\\b|\\s*from\\b', h6))
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print('Usage: python fpy.py <filename>')
+        sys.exit(1)
+    w2 = sys.argv[1]
+    try:
+        with Path(w2).open(encoding='utf-8') as f:
+            f6 = f.readlines()
+        l6 = [h6 for h6 in f6 if k6(h6) or i6(h6) or e6(h6)]
+        print(l6)
+        with Path('out.py').open('w', encoding='utf-8') as f:
+            for l in l6:
+                f.write(l)
+                f.write('\n')
+    except FileNotFoundError:
+        print(f"Error: File '{w2}' not found.")
+    except Exception as e:
+        print('An error occurred:', e)
+
+# --- File: validate_binary_extensions.py ---
+import logging
+import mimetypes
+import os
+import sys
+from collections.abc import Iterator
+from functools import lru_cache
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from dh import BIN_EXT, is_binary
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+m6 = logging.getLogger(__name__)
+class n6:
+    def __init__(self, o6=True, p6=True):
+        self.skip_symlinks = o6
+        self.skip_mount_points = p6
+        self.visited_inodes = set()
+        self.root_dev = None
+        self._is_symlink = os.path.islink
+        self._stat = os.stat
+        self._scandir = os.scandir if hasattr(os, 'scandir') else None
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def q6(e3):
+        return {ext.lower() for ext in e3}
+    def r6(self, w, e3, s6=None):
+        t6 = self._get_extensions_lower(tuple(e3))
+        u6 = 0
+        if self.skip_mount_points:
+            try:
+                self.root_dev = self._stat(w).st_dev
+            except OSError:
+                self.root_dev = None
+        try:
+            yield from self._walk_recursive(w, t6, s6, u6)
+        except KeyboardInterrupt:
+            print('Traversal interrupted by user')
+            raise
+    def v6(self, w6, t6, s6, u6):
+        if self.skip_symlinks:
+            try:
+                x6 = self._stat(w6)
+                y6 = (x6.st_dev, x6.st_ino)
+                if y6 in self.visited_inodes:
+                    return
+                self.visited_inodes.add(y6)
+                if self.skip_mount_points and self.root_dev is not None and (x6.st_dev != self.root_dev):
+                    return
+            except (OSError, FileNotFoundError):
+                return
+        try:
+            if self._scandir:
+                with self._scandir(w6) as z6:
+                    a7 = []
+                    for b7 in z6:
+                        try:
+                            if b7.is_file():
+                                if b7.name.lower().endswith(tuple(t6)):
+                                    u6 += 1
+                                    if s6 and u6 % 500 == 0:
+                                        s6(w6, u6)
+                                    yield Path(b7.path)
+                            elif b7.is_dir() and (not self._is_symlink(b7.path)):
+                                a7.append(b7.path)
+                        except (OSError, FileNotFoundError):
+                            continue
+                    for c7 in a7:
+                        yield from self._walk_recursive(c7, t6, s6, u6)
+            else:
+                for b7 in os.listdir(w6):
+                    d7 = os.path.join(w6, b7)
+                    try:
+                        if os.path.isfile(d7):
+                            if b7.lower().endswith(tuple(t6)):
+                                u6 += 1
+                                if s6 and u6 % 500 == 0:
+                                    s6(w6, u6)
+                                yield Path(d7)
+                        elif os.path.isdir(d7) and (not self._is_symlink(d7)):
+                            yield from self._walk_recursive(d7, t6, s6, u6)
+                    except (OSError, FileNotFoundError):
+                        continue
+        except PermissionError:
+            m6.debug(f'Permission denied: {w6}')
+        except OSError as e:
+            m6.debug(f'Error accessing {w6}: {e}')
+class e7:
+    def __init__(self, l2=True):
+        self.verbose = l2
+        self.last_count = 0
+        self.spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        self.spinner_index = 0
+    def __call__(self, f7, u6):
+        if not self.verbose:
+            return
+        if u6 - self.last_count >= 500:
+            self.last_count = u6
+            self.spinner_index = (self.spinner_index + 1) % len(self.spinner)
+            g7 = f7[:60] + '...' if len(f7) > 60 else f7
+            msg = f'\r{self.spinner[self.spinner_index]} Files: {u6:8d} | {g7}'
+            print(msg, end='', flush=True)
+def i(e):
+    try:
+        o3 = e.suffix.lower()
+        h7 = is_binary(e)
+        b, _ = mimetypes.guess_type(str(e))
+        b = b or 'unknown'
+        return (e, o3, h7, b)
+    except Exception as e:
+        m6.error(f'Error processing {e}: {e}')
+        return (e, e.suffix.lower(), None, 'error')
+def i7(w='/', j7=None, l2=True, p6=True):
+    if j7 is None:
+        j7 = max(1, cpu_count() - 1)
+    k7 = Path(w)
+    if not k7.exists():
+        m6.error(f'Root directory {w} does not exist')
+        return {}
+    print(f'Starting optimized filesystem traversal from {w}...')
+    print(f'Looking for extensions: {sorted(BIN_EXT)}')
+    print(f'Using {j7} worker processes')
+    if p6:
+        print('Skipping different filesystems/mount points')
+    print()
+    l7 = n6(skip_symlinks=True, skip_mount_points=p6)
+    m7 = e7(verbose=l2)
+    n7 = list(l7.walk(w, BIN_EXT, progress_callback=m7))
+    print()
+    if not n7:
+        m6.warning('No files found with specified extensions')
+        return {'total_files': 0, 'binary_files': 0, 'text_files': 0, 'access_errors': 0, 'mismatches': [], 'by_extension': {}}
+    print(f'Found {len(n7)} files with target extensions')
+    print('Checking file types (parallel processing)...')
+    with Pool(j7) as r2:
+        k2 = r2.map(i, n7, chunksize=100)
+    o7 = 0
+    p7 = 0
+    q7 = 0
+    y = []
+    r7 = {}
+    for e, ext, h7, b in k2:
+        if ext not in r7:
+            r7[ext] = {'binary': 0, 'text': 0, 'error': 0, 'files': []}
+        r7[ext]['files'].append({'path': str(e), 'is_binary': h7, 'mime_type': b})
+        if h7 is True:
+            o7 += 1
+            r7[ext]['binary'] += 1
+        elif h7 is False:
+            p7 += 1
+            r7[ext]['text'] += 1
+            y.append({'path': str(e), 'extension': ext, 'mime_type': b})
+        else:
+            q7 += 1
+            r7[ext]['error'] += 1
+    return {'total_files': len(n7), 'binary_files': o7, 'text_files': p7, 'access_errors': q7, 'mismatches': y, 'by_extension': r7}
+def s7(k2):
+    print('\n' + '=' * 40)
+    print('BINARY EXTENSION VALIDATION REPORT')
+    print('-' * 40)
+    print('\nSummary:')
+    print(f"  Total files found:    {k2['total_files']}")
+    print(f"  Actual binary files:  {k2['binary_files']}")
+    print(f"  Text files:           {k2['text_files']}")
+    print(f"  Access errors:        {k2['access_errors']}")
+    if k2.get('mismatches'):
+        print(f"\n⚠️  MISMATCHES FOUND: {len(k2['mismatches'])} files with binary extension are actually TEXT files")
+        print('-' * 40)
+        for i, t7 in enumerate(k2['mismatches'][:20], 1):
+            print(f"  {i}. {t7['path']}")
+            print(f"     └─ Extension: {t7['extension']} | MIME: {t7['mime_type']}")
+        if len(k2['mismatches']) > 20:
+            print(f"  ... and {len(k2['mismatches']) - 20} more")
+    else:
+        print('\n✓ No mismatches found! All files match their extensions.')
+    print('\nBreakdown by extension:')
+    print('-' * 40)
+    for ext, u7 in sorted(k2['by_extension'].items()):
+        print(f"  {ext:12} - Binary: {u7['binary']:6}  Text: {u7['text']:6}  Errors: {u7['error']:6}")
+    print('\n' + '=' * 40)
+if __name__ == '__main__':
+    w = '/data/data/com.termux'
+    v7 = True
+    if len(sys.argv) > 1:
+        w = sys.argv[1]
+    if len(sys.argv) > 2:
+        v7 = sys.argv[2].lower() in ('true', '1', 'yes')
+    try:
+        k2 = i7(w, verbose=True, skip_mount_points=v7)
+        s7(k2)
+        sys.exit(1 if k2.get('mismatches') else 0)
+    except KeyboardInterrupt:
+        print('\n\n⚠️  Validation stopped by user')
+        sys.exit(130)
+    except Exception as e:
+        print(f'\n❌ Error: {e}')
+        m6.exception('Validation failed')
+        sys.exit(1)
+
+# --- File: validate_text_extensions.py ---
+import logging
+import mimetypes
+import os
+from collections.abc import Iterator
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from dh import TXT_EXT
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+m6 = logging.getLogger(__name__)
+class e7:
+    def __init__(self, l2=True):
+        self.verbose = l2
+        self.last_count = 0
+        self.spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        self.spinner_index = 0
+    def __call__(self, f7, u6):
+        if not self.verbose:
+            return
+        if u6 - self.last_count >= 500:
+            self.last_count = u6
+            self.spinner_index = (self.spinner_index + 1) % len(self.spinner)
+            g7 = f7[:60] + '...' if len(f7) > 60 else f7
+            msg = f'\r{self.spinner[self.spinner_index]} Files: {u6:8d} | {g7}'
+            print(msg, end='', flush=True)
+def w7(w, e3, s6=None, o6=True, p6=True):
+    t6 = {ext.lower() for ext in e3}
+    x7 = set()
+    u6 = 0
+    try:
+        for m4, y7, n4 in os.walk(w, topdown=True, onerror=lambda e: m6.warning(f'Walk error: {e}')):
+            try:
+                x6 = os.stat(m4)
+                y6 = (x6.st_dev, x6.st_ino)
+                if o6 and y6 in x7:
+                    y7[:] = []
+                    continue
+                x7.add(y6)
+                if p6 and m4 != w:
+                    try:
+                        z7 = os.stat(w)
+                        if x6.st_dev != z7.st_dev:
+                            y7[:] = []
+                            continue
+                    except OSError:
+                        pass
+            except (OSError, FileNotFoundError):
+                y7[:] = []
+                continue
+            if s6 and u6 % 500 == 0:
+                s6(m4, u6)
+            for a8 in n4:
+                try:
+                    e = Path(m4) / a8
+                    if e.suffix.lower() in t6:
+                        u6 += 1
+                        yield e
+                except (OSError, FileNotFoundError):
+                    continue
+    except KeyboardInterrupt:
+        print('Traversal interrupted by user')
+        raise
+    except Exception as e:
+        m6.error(f'Unexpected error during traversal: {e}')
+def b8(e):
+    try:
+        with open(e, 'rb') as f:
+            c8 = f.read(8192)
+        if not c8:
+            return True
+        if b'\x00' in c8:
+            return False
+        try:
+            c8.decode('utf-8')
+            return True
+        except UnicodeDecodeError:
+            for d8 in ['latin-1', 'iso-8859-1', 'cp1252']:
+                try:
+                    c8.decode(d8)
+                    return True
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return False
+    except (OSError, PermissionError):
+        return None
+def i(e):
+    try:
+        o3 = e.suffix.lower()
+        e8 = b8(e)
+        b, _ = mimetypes.guess_type(str(e))
+        b = b or 'unknown'
+        return (e, o3, e8, b)
+    except Exception as e:
+        m6.error(f'Error processing {e}: {e}')
+        return (e, e.suffix.lower(), None, 'error')
+def i7(w='/', j7=None, l2=True):
+    if j7 is None:
+        j7 = max(1, cpu_count() - 1)
+    k7 = Path(w)
+    if not k7.exists():
+        m6.error(f'Root directory {w} does not exist')
+        return {}
+    print(f'Starting filesystem traversal from {w}...')
+    print(f'Looking for extensions: {sorted(TXT_EXT)}')
+    print(f'Using {j7} worker processes')
+    print()
+    m7 = e7(verbose=l2)
+    n7 = list(w7(w, TXT_EXT, progress_callback=m7, skip_symlinks=True, skip_mount_points=True))
+    print()
+    print(f'Found {len(n7)} files with target extensions')
+    if not n7:
+        m6.warning('No files found with specified extensions')
+        return {'total_files': 0, 'text_files': 0, 'binary_files': 0, 'access_errors': 0, 'mismatches': [], 'by_extension': {}}
+    print('Checking file types (parallel processing)...')
+    with Pool(j7) as r2:
+        k2 = r2.map(i, n7)
+    p7 = 0
+    o7 = 0
+    q7 = 0
+    y = []
+    r7 = {}
+    for e, ext, e8, b in k2:
+        if ext not in r7:
+            r7[ext] = {'text': 0, 'binary': 0, 'error': 0, 'files': []}
+        r7[ext]['files'].append({'path': str(e), 'is_text': e8, 'mime_type': b})
+        if e8 is True:
+            p7 += 1
+            r7[ext]['text'] += 1
+        elif e8 is False:
+            o7 += 1
+            r7[ext]['binary'] += 1
+            y.append({'path': str(e), 'extension': ext, 'mime_type': b})
+        else:
+            q7 += 1
+            r7[ext]['error'] += 1
+    return {'total_files': len(n7), 'text_files': p7, 'binary_files': o7, 'access_errors': q7, 'mismatches': y, 'by_extension': r7}
+def s7(k2):
+    print('\n' + '=' * 40)
+    print('TEXT EXTENSION VALIDATION REPORT')
+    print('-' * 40)
+    print('\nSummary:')
+    print(f"  Total files found:    {k2['total_files']}")
+    print(f"  Actual text files:    {k2['text_files']}")
+    print(f"  Binary files:         {k2['binary_files']}")
+    print(f"  Access errors:        {k2['access_errors']}")
+    if k2['mismatches']:
+        print(f"\n⚠️  MISMATCHES FOUND: {len(k2['mismatches'])} files with .txt extension are NOT text files")
+        print('-' * 40)
+        for i, t7 in enumerate(k2['mismatches'][:20], 1):
+            print(f"  {i}. {t7['path']}")
+            print(f"     └─ Extension: {t7['extension']} | MIME: {t7['mime_type']}")
+        if len(k2['mismatches']) > 20:
+            print(f"  ... and {len(k2['mismatches']) - 20} more")
+    else:
+        print('\n✓ No mismatches found! All files match their extensions.')
+    print('\nBreakdown by extension:')
+    print('-' * 40)
+    for ext, u7 in sorted(k2['by_extension'].items()):
+        print(f"  {ext:12} - Text: {u7['text']:6}  Binary: {u7['binary']:6}  Errors: {u7['error']:6}")
+    print('\n' + '=' * 40)
+if __name__ == '__main__':
+    import sys
+    w = sys.argv[1] if len(sys.argv) > 1 else '/data/data/com.termux'
+    try:
+        k2 = i7(w, verbose=True)
+        s7(k2)
+        sys.exit(1 if k2['mismatches'] else 0)
+    except KeyboardInterrupt:
+        print('\n\n⚠️  Validation stopped by user')
+        sys.exit(130)
+    except Exception as e:
+        print(f'\n❌ Error: {e}')
+        sys.exit(1)
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

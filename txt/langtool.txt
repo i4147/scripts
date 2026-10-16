@@ -1,0 +1,574 @@
+# --- File: fchin.py ---
+import shutil
+import sys
+from pathlib import Path
+a = 'chinese_files'
+def b(c):
+    for ch in c:
+        d = ord(ch)
+        if 13312 <= d <= 19903 or 19968 <= d <= 40959 or 63744 <= d <= 64255 or (131072 <= d <= 173791) or (173824 <= d <= 177983) or (177984 <= d <= 178207) or (178208 <= d <= 183983) or (183984 <= d <= 191471):
+            return True
+    return False
+def e(f):
+    g = ('utf-8', 'utf-8-sig', 'gb18030', 'gbk', 'cp1252')
+    for enc in g:
+        try:
+            return f.read_text(encoding=enc, errors='strict')
+        except UnicodeDecodeError:
+            continue
+    return f.read_bytes().decode('utf-8', errors='replace')
+def h(i, j):
+    k = i / j
+    if not k.exists():
+        return k
+    l = k.stem
+    ext = k.suffix
+    i = 1
+    while True:
+        m = i / f'{l}__{i}{ext}'
+        if not m.exists():
+            return m
+        i += 1
+def n():
+    o = Path.cwd() if len(sys.argv) < 2 else Path(sys.argv[1])
+    o = o.resolve()
+    p = (o / a).resolve()
+    p.mkdir(exist_ok=True)
+    for f in o.iterdir():
+        if not f.is_file():
+            continue
+        q = f.resolve()
+        if q.is_relative_to(p):
+            continue
+        try:
+            c = e(f)
+        except Exception as e:
+            print(f'Skipped (read error): {f.name} ({e})')
+            continue
+        if b(c):
+            k = h(p, f.name)
+            shutil.move(str(f), str(k))
+            print(f'Moved: {k.relative_to(o)}')
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: filter_noneng.py ---
+import argparse
+import sys
+from pathlib import Path
+import gcld3
+def r(s, t):
+    if not s.is_file():
+        print(f"❌ Error: The file '{s}' does not exist or is not a file.")
+        sys.exit(1)
+    u = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
+    try:
+        v = s.read_text(encoding='utf-8').splitlines()
+    except Exception as e:
+        print(f'❌ Error reading file: {e}')
+        sys.exit(1)
+    w = []
+    x = []
+    print(f"🔍 Analyzing {len(v)} lines from '{s.name}'...")
+    print('-' * 40)
+    for i, y in enumerate(v, start=1):
+        z = y.strip()
+        if not z:
+            w.append(y)
+            continue
+        a1 = u.FindLanguage(z)
+        if a1.language == 'en' and a1.is_reliable:
+            w.append(y)
+        else:
+            x.append(y)
+            b1 = f'[{a1.language.upper()} (Prob: {a1.probability:.2f})]' if a1.language != 'und' else '[UNKNOWN]'
+            print(f'Line {i} {b1}: {z}')
+    print('-' * 40)
+    print(f'📊 Summary: Found {len(x)} non-English lines.')
+    if t:
+        if not x:
+            print('ℹ️  No non-English lines found to extract. Base file left unchanged.')
+            return
+        c1 = Path('noneng.txt')
+        try:
+            c1.write_text('\n'.join(x) + '\n', encoding='utf-8')
+            print(f'💾 Extracted lines written safely to: {c1.resolve()}')
+            s.write_text('\n'.join(w) + '\n', encoding='utf-8')
+            print('🔄 Original file updated in-place (non-English elements removed).')
+        except Exception as e:
+            print(f'❌ Error during file write operations: {e}')
+def n():
+    d1 = argparse.ArgumentParser(description='Scan text files and isolate non-English strings using Google CLD3.')
+    d1.add_argument('file', type=str, help='The target file path to inspect line by line.')
+    d1.add_argument('-m', '--move', action='store_true', help='Move identified non-English lines to noneng.txt and drop them from the source file.')
+    e1 = d1.parse_args()
+    r(Path(e1.file), e1.move)
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: find_non_eng.py ---
+import argparse
+import os
+import sys
+from collections import Counter
+from pathlib import Path
+import pycld2
+from dh import is_binary
+class f1:
+    def __init__(self, g1=100, h1=10000):
+        self.min_bytes = g1
+        self.max_bytes = h1
+        self.stats = {'total_files': 0, 'skipped_binary': 0, 'skipped_small': 0, 'skipped_error': 0, 'non_english': [], 'languages': Counter()}
+    def i1(self, f):
+        return not is_binary(f)
+    def j1(self, f):
+        try:
+            with Path(f).open(encoding='utf-8', errors='ignore') as f:
+                k1 = f.read(self.max_bytes)
+            if len(k1) < self.min_bytes:
+                return (False, 'TOO_SHORT', None, None)
+            l1, _, m1 = pycld2.detect(k1)
+            if m1 and len(m1) > 0:
+                n1, o1, p1, _ = m1[0]
+                return (l1, n1, o1, p1)
+            return (False, 'UNKNOWN', None, None)
+        except pycld2.error as e:
+            return (False, f'CLD2_ERROR: {e}', None, None)
+        except Exception as e:
+            return (False, f'ERROR: {e}', None, None)
+    def q1(self, r1, s1=True, t1=True):
+        r1 = Path(r1)
+        if not r1.exists():
+            print(f"Error: Directory '{r1}' does not exist")
+            return
+        print(f'🔍 Scanning directory: {r1.absolute()}')
+        print('-' * 40)
+        for u1, v1, w1 in os.walk(r1):
+            x1 = Path(u1)
+            v1[:] = [d for d in v1 if not d.startswith('.')]
+            for y1 in w1:
+                f = x1 / y1
+                if y1.startswith('.'):
+                    continue
+                self.stats['total_files'] += 1
+                if s1:
+                    print(f"\n{f} [Files: {self.stats['total_files']}]", end='', flush=True)
+                if not self.is_text_file(f):
+                    self.stats['skipped_binary'] += 1
+                    continue
+                l1, n1, o1, p1 = self.detect_language(f)
+                if n1 in {'TOO_SHORT', 'UNKNOWN', None} or n1.startswith(('ERROR:', 'CLD2_ERROR:')):
+                    self.stats['skipped_small' if n1 == 'TOO_SHORT' else 'skipped_error'] += 1
+                    continue
+                self.stats['languages'][n1] += 1
+                if (o1 != 'en' or not t1) and (o1 == 'en' and (not l1) and t1 or o1 != 'en'):
+                    self.stats['non_english'].append({'file': f, 'language': n1, 'code': o1, 'reliable': l1, 'confidence': p1})
+        print('\n' + '=' * 40)
+        self.report_results(t1)
+    def z1(self, t1=True):
+        print('\n📊 SCAN RESULTS')
+        print('-' * 40)
+        print(f"📁 Total files processed: {self.stats['total_files']}")
+        print(f"⏭️  Skipped binary files: {self.stats['skipped_binary']}")
+        print(f"📏 Skipped small files (<100 bytes): {self.stats['skipped_small']}")
+        print(f"❌ Skipped (errors): {self.stats['skipped_error']}")
+        if t1:
+            print(f"🌍 Non-English files found: {len(self.stats['non_english'])}")
+        else:
+            print(f"🌍 Total text files analyzed: {sum(self.stats['languages'].values())}")
+        if self.stats['languages']:
+            print('\n📈 Language Distribution:')
+            for a2, b2 in self.stats['languages'].most_common():
+                print(f'  • {a2}: {b2} files')
+        if self.stats['non_english']:
+            print(f"\n📝 Non-English Files ({len(self.stats['non_english'])}):")
+            print('-' * 40)
+            c2 = {}
+            for d2 in self.stats['non_english']:
+                a2 = d2['language']
+                if a2 not in c2:
+                    c2[a2] = []
+                c2[a2].append(d2)
+            for a2, w1 in sorted(c2.items()):
+                print(f'\n  [{a2}] - {len(w1)} files:')
+                for d2 in w1[:10]:
+                    e2 = '✓' if d2['reliable'] else '?'
+                    f2 = d2['confidence'] or 0
+                    g2 = f'[{e2} {f2}%]' if f2 else '[?]'
+                    print(f"    {g2} {d2['file']}")
+                if len(w1) > 10:
+                    print(f'    ... and {len(w1) - 10} more')
+        else:
+            print('\n✅ No non-English files found!')
+def n():
+    d1 = argparse.ArgumentParser(description='Recursively find non-English files using pycld2')
+    d1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    d1.add_argument('--min-bytes', type=int, default=100, help='Minimum bytes to read for language detection (default: 100)')
+    d1.add_argument('--max-bytes', type=int, default=10000, help='Maximum bytes to read from each file (default: 10000)')
+    d1.add_argument('--all', '-a', action='store_true', help='Report all files, including English ones')
+    d1.add_argument('--no-progress', '-np', action='store_true', help="Don't show progress")
+    d1.add_argument('--output', '-o', type=str, help='Output results to file')
+    e1 = d1.parse_args()
+    u = f1(min_bytes=e1.min_bytes, max_bytes=e1.max_bytes)
+    u.scan_directory(e1.directory, show_progress=not e1.no_progress, only_report_non_english=not e1.all)
+    if e1.output:
+        from contextlib import redirect_stdout
+        with Path(e1.output).open('w', encoding='utf-8') as f, redirect_stdout(f):
+            u.report_results(only_report_non_english=not e1.all)
+        print(f'\n✅ Results saved to: {e1.output}')
+if __name__ == '__main__':
+    try:
+        import pycld2
+    except ImportError:
+        print('Error: pycld2 is not installed. Install it with:')
+        print('  pip install pycld2')
+        print('\nOn Termux, you might need:')
+        print('  pkg install clang')
+        print('  pip install pycld2')
+        sys.exit(1)
+    raise SystemExit(n())
+
+# --- File: find_noneng.py ---
+import argparse
+import csv
+import os
+from collections.abc import Iterable
+from cld import detect_language, is_probably_text_bytes, read_file_bytes, safe_text_from_bytes
+h2 = 4096
+i2 = 2 * 1024 * 1024
+def j2(u1='.', k2=True, l2=None, m2=True):
+    n2 = {e.lower().lstrip('.') for e in l2} if l2 else None
+    for o2, p2, q2 in os.walk(u1):
+        if m2:
+            p2[:] = [d for d in p2 if not d.startswith('.')]
+        for fn in q2:
+            if m2 and fn.startswith('.'):
+                continue
+            r2 = os.path.join(o2, fn)
+            if n2 and os.path.splitext(fn)[1].lstrip('.').lower() not in n2:
+                continue
+            yield r2
+        if not k2:
+            break
+def i1(f, s2=h2):
+    try:
+        t2 = read_file_bytes(f, max_bytes=s2)
+        return is_probably_text_bytes(t2)
+    except Exception:
+        return False
+def u2(f, v2=0.6):
+    w2 = []
+    try:
+        raw = read_file_bytes(f, max_bytes=i2)
+    except Exception:
+        return w2
+    if not is_probably_text_bytes(raw):
+        return w2
+    c = safe_text_from_bytes(raw)
+    for i, x2 in enumerate(c.splitlines(), start=1):
+        y = x2.strip()
+        if not y:
+            continue
+        if len(y) < 3:
+            continue
+        res = j1(y, filename=os.path.basename(f))
+        a2 = (res.get('language_code') or 'und').lower()
+        y2 = float(res.get('confidence') or 0.0)
+        if a2 != 'en' and a2 != 'und' and (y2 >= v2):
+            w2.append((f, i, a2, y2, x2))
+    return w2
+def n(z2=None):
+    d1 = argparse.ArgumentParser(description='Find non-English lines in text files and save to noneng.txt')
+    d1.add_argument('--root', '-r', default='.', help='Root directory to scan (default: .)')
+    d1.add_argument('--ext', '-e', default='', help='Comma-separated extensions to include (e.g. py,md,txt). Default: all text files.')
+    d1.add_argument('--min', '-m', type=float, default=0.6, help='Minimum confidence to report (0..1). Default: 0.6')
+    d1.add_argument('--out', '-o', default='noneng.txt', help='Output filename (default: noneng.txt)')
+    d1.add_argument('--no-recursive', action='store_true', help='Do not recurse into subdirectories')
+    d1.add_argument('--skip-hidden', action='store_true', default=True, help='Skip hidden files and directories (default: True)')
+    e1 = d1.parse_args(z2)
+    l2 = [e.strip().lower() for e in e1.ext.split(',') if e.strip()] if e1.ext else None
+    a3 = e1.out
+    with open(a3, 'w', encoding='utf-8', newline='') as b3:
+        c3 = csv.writer(b3, delimiter='\t', quoting=csv.QUOTE_MINIMAL)
+        c3.writerow(['file', 'line_no', 'lang', 'confidence', 'text'])
+        d3 = 0
+        e3 = 0
+        for fp in j2(root=e1.root, recursive=not e1.no_recursive, exts=l2, skip_hidden=e1.skip_hidden):
+            try:
+                if not i1(fp):
+                    continue
+            except Exception:
+                continue
+            e3 += 1
+            f3 = u2(fp, min_confidence=e1.min)
+            for f, g3, a2, y2, x2 in f3:
+                h3 = x2.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
+                c3.writerow([f, str(g3), a2, f'{y2:.3f}', h3])
+                d3 += 1
+    print(f'Scanned files: {e3}; non-English lines found: {d3}; results saved to {a3}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: find_nonenglish_files.py ---
+import os
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+import pycld2
+from dh import TXT_EXT
+i3 = 20
+j3 = TXT_EXT
+k3 = {'en', 'en_US', 'en_GB'}
+l3 = 1024 * 1024
+def j1(c):
+    if not c or len(c) < i3:
+        return (None, 0)
+    try:
+        m3, _, m1 = pycld2.detect(c)
+        if m3 and m1:
+            n3 = m1[0][0]
+            f2 = m1[0][2]
+            return (n3, f2)
+    except Exception:
+        pass
+    return (None, 0)
+def o3(c, p3=70.0):
+    a2, f2 = j1(c)
+    if a2 is None:
+        return False
+    return a2 in k3 and f2 >= p3
+def q3(f):
+    try:
+        return f.read_text(encoding='utf-8')
+    except UnicodeDecodeError:
+        for r3 in ['latin-1', 'cp1252', 'iso-8859-1']:
+            try:
+                return f.read_text(encoding=r3)
+            except UnicodeDecodeError:
+                continue
+    except Exception:
+        pass
+    return None
+def s3(c, t3=50, u3=5000):
+    v = c.split('\n')[:t3]
+    t2 = '\n'.join(v)
+    if len(t2) > u3:
+        t2 = t2[:u3]
+    return t2
+def v3(r1='.', w3=False):
+    r1 = Path(r1).resolve()
+    print(f'🔍 Scanning directory: {r1}')
+    print('-' * 40)
+    w2 = {'total_files': 0, 'checked_files': 0, 'skipped_small': 0, 'skipped_binary': 0, 'skipped_encoding': 0, 'non_english': defaultdict(list), 'english': [], 'undetermined': [], 'language_stats': Counter(), 'directory_stats': defaultdict(lambda: {'total': 0, 'non_english': 0})}
+    for u1, v1, w1 in os.walk(r1):
+        v1[:] = [d for d in v1 if not d.startswith('.') and d not in {'__pycache__', 'node_modules'}]
+        cwd = Path(u1)
+        x3 = cwd.relative_to(r1)
+        for y1 in w1:
+            f = cwd / y1
+            if f.suffix.lower() not in j3:
+                continue
+            if f.stat().st_size > l3:
+                w2['skipped_binary'] += 1
+                continue
+            w2['total_files'] += 1
+            w2['directory_stats'][str(x3)]['total'] += 1
+            k1 = q3(f)
+            if k1 is None:
+                w2['skipped_encoding'] += 1
+                continue
+            t2 = s3(k1)
+            if len(t2) < i3:
+                w2['skipped_small'] += 1
+                continue
+            a2, f2 = j1(t2)
+            if a2 is None:
+                w2['undetermined'].append(f)
+                continue
+            w2['checked_files'] += 1
+            w2['language_stats'][a2] += 1
+            if a2 in k3 and f2 >= 70:
+                w2['english'].append(f)
+            else:
+                w2['non_english'][a2].append(f)
+                w2['directory_stats'][str(x3)]['non_english'] += 1
+    return w2
+def y3(w2, z3=False):
+    print('\n' + '=' * 40)
+    print('📊 LANGUAGE DETECTION RESULTS')
+    print('-' * 40)
+    a4 = w2['total_files']
+    b4 = w2['checked_files']
+    c4 = sum((len(w1) for w1 in w2['non_english'].values()))
+    d4 = len(w2['english'])
+    e4 = len(w2['undetermined'])
+    print(f'\n📁 Files scanned: {a4}')
+    print(f'   ├─ Successfully analyzed: {b4} ({b4 / a4 * 40:.1f}%)')
+    print(f"   ├─ Skipped (too small): {w2['skipped_small']}")
+    print(f"   ├─ Skipped (binary/large): {w2['skipped_binary']}")
+    print(f"   └─ Skipped (encoding issues): {w2['skipped_encoding']}")
+    print('\n🌍 Language breakdown:')
+    print(f'   ├─ 🇺🇸 English files: {d4}')
+    for a2, w1 in sorted(w2['non_english'].items(), key=lambda x: len(x[1]), reverse=True):
+        f4 = len(w1) / b4 * 40 if b4 > 0 else 0
+        print(f'   ├─ 🌐 {a2.upper()}: {len(w1)} files ({f4:.1f}%)')
+    if e4 > 0:
+        print(f'   └─ ❓ Undetermined: {e4}')
+    if w2['directory_stats']:
+        print('\n📂 Directories with most non-English files:')
+        g4 = [(h4, i4) for h4, i4 in w2['directory_stats'].items() if i4['non_english'] > 0]
+        g4.sort(key=lambda x: x[1]['non_english'], reverse=True)
+        for h4, i4 in g4[:10]:
+            f4 = i4['non_english'] / i4['total'] * 40
+            print(f"   ├─ {(h4 if h4 != '.' else '(root)')}:")
+            print(f"   │   {i4['non_english']}/{i4['total']} files ({f4:.1f}% non-English)")
+    if z3 and w2['non_english']:
+        print('\n📄 Non-English files by language:')
+        for a2, w1 in sorted(w2['non_english'].items()):
+            if w1:
+                print(f'\n   🌐 {a2.upper()} ({len(w1)} files):')
+                for f in w1[:20]:
+                    j4 = f.relative_to(Path.cwd()) if f.is_absolute() else f
+                    print(f'      └─ {j4}')
+                if len(w1) > 20:
+                    print(f'      └─ ... and {len(w1) - 20} more')
+    print('\n' + '=' * 40)
+    print('🎯 RECOMMENDATION')
+    print('-' * 40)
+    if c4 == 0:
+        print('✅ All files appear to be in English! No translation needed.')
+    else:
+        print(f'📢 Found {c4} non-English files that may need translation.')
+        k4 = [(h4, i4) for h4, i4 in w2['directory_stats'].items() if i4['non_english'] > 0]
+        if k4:
+            print('\n📌 Directories to translate (by priority):')
+            for h4, i4 in sorted(k4, key=lambda x: x[1]['non_english'], reverse=True):
+                print(f"   └─ {(h4 if h4 != '.' else 'current directory')}:")
+                print(f"       {i4['non_english']} non-English files to translate")
+    print('-' * 40)
+def n():
+    import argparse
+    d1 = argparse.ArgumentParser(description='Find non-English files in directory recursively using pycld2')
+    d1.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory)')
+    d1.add_argument('-v', '--verbose', action='store_true', help='Show detailed file listing')
+    d1.add_argument('-l', '--list-languages', action='store_true', help='List all detected languages and their counts')
+    e1 = d1.parse_args()
+    try:
+        w2 = v3(e1.directory)
+        y3(w2, show_files=e1.verbose or e1.list_languages)
+    except KeyboardInterrupt:
+        print('\n\n⚠️  Scan interrupted by user')
+        sys.exit(1)
+    except Exception as e:
+        print(f'\n❌ Error: {e}')
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+# --- File: strict_filter_noneng.py ---
+import argparse
+import re
+import sys
+from pathlib import Path
+import gcld3
+from nltk.corpus import words
+def l4(y, u, m4, n4=0.5):
+    z = y.strip()
+    if not z:
+        return (True, 'Empty')
+    a1 = u.FindLanguage(z)
+    o4 = a1.language == 'en' and a1.is_reliable
+    p4 = re.findall('\\b[a-zA-Z]+\\b', z.lower())
+    if not p4:
+        return (o4, f'CLD3:{a1.language.upper()}(No Words)')
+    q4 = sum((1 for r4 in p4 if r4 in m4))
+    s4 = q4 / len(p4)
+    if o4 and s4 >= n4:
+        return (True, 'EN')
+    t4 = f'NLTK Ratio: {s4:.2f}'
+    if a1.language != 'en':
+        t4 += f' | CLD3: {a1.language.upper()}'
+    return (False, t4)
+def r(s, t, u4):
+    if not s.is_file():
+        print(f"❌ Error: The file '{s}' does not exist.")
+        sys.exit(1)
+    u = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
+    print('🧠 Loading NLTK English vocabulary corpus...')
+    m4 = {w.lower() for w in words.words()}
+    try:
+        v = s.read_text(encoding='utf-8').splitlines()
+    except Exception as e:
+        print(f'❌ Error reading file: {e}')
+        sys.exit(1)
+    w = []
+    x = []
+    print(f"🔍 Strictly scanning {len(v)} lines from '{s.name}'...")
+    print('-' * 40)
+    for i, y in enumerate(v, start=1):
+        v4, w4 = l4(y, u, m4, u4)
+        if v4:
+            w.append(y)
+        else:
+            x.append(y)
+            print(f'Line {i} [{w4}]: {y.strip()}')
+    print('-' * 40)
+    print(f'📊 Strict Filter Summary: Identified {len(x)} non-English lines.')
+    if t:
+        if not x:
+            print('ℹ️  No non-English lines crossed the strict detection threshold.')
+            return
+        c1 = Path('noneng.txt')
+        try:
+            c1.write_text('\n'.join(x) + '\n', encoding='utf-8')
+            print(f'💾 Extracted text written safely to: {c1.resolve()}')
+            s.write_text('\n'.join(w) + '\n', encoding='utf-8')
+            print('🔄 In-place clean file written back to original location.')
+        except Exception as e:
+            print(f'❌ Storage error: {e}')
+def n():
+    d1 = argparse.ArgumentParser(description='Filter non-English lines strictly using a hybrid GCLD3 and NLTK dictionary method.')
+    d1.add_argument('file', type=str, help='The text file to scan.')
+    d1.add_argument('-m', '--move', action='store_true', help='Isolate non-English lines into noneng.txt and update source in-place.')
+    d1.add_argument('-t', '--threshold', type=float, default=0.5, help='Minimum ratio (0.0 to 1.0) of tokens that must be valid NLTK English words (default: 0.50).')
+    e1 = d1.parse_args()
+    r(Path(e1.file), e1.move, e1.threshold)
+if __name__ == '__main__':
+    raise SystemExit(n())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

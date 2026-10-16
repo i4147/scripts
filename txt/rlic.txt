@@ -1,0 +1,290 @@
+# filename: mlic.py
+O=3;N=100
+def b(ar,S=2,R=10):try:with open(ar,encoding='utf-8',errors='ignore') as f:ai=f.readlines()
+    except Exception as e:print(f'Error reading {ar}:{e}',file=ax.stderr);return {}
+    ad=C(list);i=0
+    while i<len(ai):if ai[i].strip():aj=i;A=[ai[i]];i+=1
+            while i<len(ai) and ai[i].strip():A.append(ai[i]);i+=1
+            aw=i-1;D=''.join(A)
+            if len(A)>=S and len(D.strip())>=R:M=l(D);ad[M].append((aj,aw))
+        else:i+=1
+    return ad
+def l(at):return '\n'.join((ap.rstrip() for ap in at.splitlines()))
+def c(am):try:av.parse(am);return (True,'')
+    except SyntaxError as e:return (False,f'Syntax error at line {e.lineno},column {e.offset}:{e.msg}')
+def L(P,K=None):if K is None:K={'.txt','.md','.py','.js','.html','.css','.xml','.json','.yaml','.yml','.csv','.log','.ini','.cfg','.conf','.sh','.bat','.ps1','.java','.cpp','.c','.h','.rb','.php','.sql'}
+    ah=[]
+    try:for ao in P.rglob('*'):if ao.is_file() and ao.suffix.lower() in K:ah.append(ao)
+    except PermissionError:print(f'Permission denied accessing {P}',file=ax.stderr)
+    return ah
+def z(al):ar,S,R=al;ad=b(ar,S,R);return (ar,ad)
+def d(P,S=2,R=10,E=None,an=False):ah=L(P)
+    if not ah:print('No text files found in directory',file=ax.stderr);return {}
+    print(f'Found {len(ah)} files to process...');B=C(list)
+    with J.futures.ProcessPoolExecutor(E=E) as V:al=[(f,S,R) for f in ah];aa={V.submit(z,au):au[0] for au in al}
+        for ae in J.futures.as_completed(aa):ar=aa[ae]
+            try:ar,ad=ae.result()
+                for X,T in ad.items():B[X].append((ar,T))
+            except Exception as e:print(f'Error processing {ar}:{e}',file=ax.stderr)
+    Y={k:v for k,v in B.items() if len(v)>1}
+    if an:I=len(ah);s=I/2;Y={k:v for k,v in Y.items() if len(v)>=s}
+        if Y:print(f'Filtered to strings appearing in at least 50%of files ({int(s)} files)')
+        else:print('No strings found that appear in at least 50%of files')
+    return Y
+def a(o,u=None,Z=True):r=C(set)
+    if u:p={}
+        for i,(X,G) in enumerate(o.items(),1):if i in u:p[X]=G
+    else:p=o
+    for X,G in p.items():for ar,T in G:r[ar].update(T)
+    w=[];t=[]
+    for ar,T in r.items():try:with open(ar,encoding='utf-8',errors='ignore') as f:m=f.read();ai=f.seek(0) or m.splitlines(True)
+            ai=m.splitlines(True);q=sorted(T,key=lambda x:x[0],reverse=True)
+            for aj,aw in q:del ai[aj:aw+1]
+            F=''.join(ai)
+            if ar.suffix.lower()=='.py' and Z:W,Q=c(F)
+                if not W:print(f'SKIPPED:{ar}-Syntax validation failed:{Q}',file=ax.stderr);w.append((ar,Q));continue
+            with open(ar,'w',encoding='utf-8') as f:f.write(F)
+            print(f'Modified:{ar}-Removed {len(T)} string(s)');t.append(ar)
+        except Exception as e:print(f'Error modifying {ar}:{e}',file=ax.stderr)
+    if w:print(f'\nSkipped {len(w)} file(s) due to syntax errors:')
+        for ar,ag in w:print(f'-{ar}:{ag}')
+    return (t,w)
+def g(o,H):try:with open(H,'w',encoding='utf-8') as f:f.write('Repeated Multiline Strings Report\n');f.write('='*40+'\n\n')
+            for i,(X,G) in enumerate(o.items(),1):f.write(f'String #{i} (found {len(G)} times):\n');f.write('-'*30+'\n');f.write(X);f.write('\n\n')
+        print(f'Report saved to {H}')
+    except Exception as e:print(f'Error saving report:{e}',file=ax.stderr)
+def aq():af=U.ArgumentParser(description='Find repeated multiline strings in text files recursively');af.add_argument('directory',nargs='?',default='.',help='Directory to search (default:current directory)');af.add_argument('-r','--remove',nargs='*',type=int,help='Remove found repeated strings. Optionally specify string numbers (e.g.,-r 2 4 to remove strings #2 and #4)');af.add_argument('-H','--half',action='store_true',help='Only show strings found in at least 50 percent of files');af.add_argument('--no-validate',action='store_true',help='Skip Python syntax validation (use with caution)');af.add_argument('--min-lines',type=int,default=O,help=f'Minimum number of lines for a multiline string (default:{O})');af.add_argument('--min-chars',type=int,default=N,help=f'Minimum number of characters for a multiline string (default:{N})');af.add_argument('--workers',type=int,default=None,help='Number of parallel workers (default:CPU count)');af.add_argument('--extensions',nargs='+',help='File extensions to process (e.g.,.txt .md .py)');al=af.parse_args();P=ak(al.directory)
+    if not P.exists():print(f'Directory {P} does not exist',file=ax.stderr);ax.exit(1)
+    print(f'Searching for repeated multiline strings in {P}...')
+    if al.extensions:K=set(al.extensions);global L;j=L
+        def h(P,_=None):return j(P,K)
+        L=h
+    if al.half:print('Filtering:Only strings appearing in at least 50%of files will be shown')
+    Y=d(P,S=al.min_lines,R=al.min_chars,E=al.workers,an=al.half);H=ak.cwd()/'lic.txt';g(Y,H)
+    if not Y:print('No repeated multiline strings found.');return
+    print(f'\nFound {len(Y)} repeated multiline strings:')
+    for i,(X,G) in enumerate(Y.items(),1):ac=X[:100]+'...' if len(X)>100 else X;ac=ac.replace('\n','\\n');print(f'\n{i}. Found in {len(G)} files:');print(f'   Preview:{ac}')
+        for ar,T in G:print(f'-{ar}')
+            for aj,aw in T:print(f'     Lines {aj+1}-{aw+1}')
+    if al.remove is not None:u=al.remove if al.remove else None
+        if u:ab=len(Y);y=[n for n in u if n<1 or n>ab]
+            if y:print(f'\nError:Invalid string numbers:{y}. Valid range:1-{ab}',file=ax.stderr);ax.exit(1)
+            print(f'\nRemoving strings:{u}...')
+        else:print('\nRemoving all repeated strings from files...')
+        Z=not al.no_validate
+        if Z:print('Python syntax validation enabled. Use--no-validate to skip validation.')
+        t,w=a(Y,u,Z)
+        if t:print(f'\nSuccessfully modified {len(t)} file(s).')
+        if w:print(f'Skipped {len(w)} file(s) due to syntax errors.');print('These files were NOT modified. Review the strings manually or use--no-validate.')
+if __name__=='__main__':raise SystemExit(aq())
+# filename: mlic2.py
+k={'.py','.txt','.md','.rst','.json','.yaml','.yml','.toml','.ini','.cfg','.conf','.csv','.html','.css','.js','.ts','.jsx','.tsx','.xml','.svg','.sh','.bash','.zsh','.fish','.ps1','.bat','.cmd','.c','.cpp','.h','.hpp','.java','.go','.rs','.rb','.php','.lua','.r','.swift','.kt','.scala','.clj','.groovy'};g={'.pyc','.pyo','.pyd','.so','.dll','.dylib','.exe','.jpg','.jpeg','.png','.gif','.bmp','.ico','.webp','.mp3','.mp4','.avi','.mov','.mkv','.flv','.wmv','.zip','.tar','.gz','.bz2','.xz','.7z','.rar','.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx'}
+def m(Z):if Z.suffix in g:return False
+    if Z.suffix in k:return True
+    if '.' not in Z.name:try:with open(Z,'rb') as f:S=f.read(1024)
+                if not S:return True
+                v=sum((1 for b in S if 32<=b<=126 or b in (9,10,13)));return v/len(S)>0.8
+        except OSError:return False
+    return False
+def h(Z):try:with open(Z,encoding='utf-8') as f:U=f.readlines()
+        return (Z,U,''.join(U))
+    except UnicodeDecodeError:try:with open(Z,encoding='latin-1') as f:U=f.readlines()
+            return (Z,U,''.join(U))
+        except (OSError,UnicodeDecodeError) as e:print(f'Warning:cannot read {Z}:{e}',file=ag.stderr);return (Z,[],'')
+    except OSError as e:print(f'Warning:cannot read {Z}:{e}',file=ag.stderr);return (Z,[],'')
+def d(ac,z=3):U=ac.splitlines()
+    if len(U)<z:return {}
+    N=o(list);t=set()
+    for V in range(len(U)-z+1):for ad in range(V+z,len(U)+1):T='\n'.join(U[V:ad]);l=T.strip()
+            if not l or len(l)<10:continue
+            if not any((c.isalnum() for c in l)):continue
+            x=l
+            if x in t:continue
+            q=[];af=ac.find(T)
+            while af!=-1:J=ac.count('\n',0,af)+1;I=af+len(T);u=ac.rfind('\n',0,af)+1;F=ac.find('\n',I)
+                if F==-1:F=len(ac)
+                H=ac[u:F];q.append((J,H.strip()));af=ac.find(T,I)
+            if len(q)>=2:N[x]=q;t.add(x)
+            if len(x)>5000:break
+    return dict(N)
+def A(Z,z=3):if not m(Z):return {}
+    Z,M,ac=h(Z)
+    if not ac:return {}
+    N=d(ac,z);R={}
+    for T,q in N.items():R[T]=[(Z,J,H) for J,H in q]
+    return R
+def a(ab,z=3,p=None):if p is None:p=mp.cpu_count()
+    w=[]
+    for Z in ab.rglob('*'):if Z.is_file() and m(Z) and (not Z.is_symlink()) and ('.git' not in Z.parts):w.append(Z)
+    if not w:return {}
+    print(f'Scanning {len(w)} text files using {p} workers...')
+    with mp.Pool(processes=p) as aa:B=K(A,z=z);L=aa.map(B,w)
+    D=o(list)
+    for R in L:for T,q in R.items():D[T].extend(q)
+    E={}
+    for T,q in D.items():j=o(list)
+        for Z,J,H in q:j[Z].append((J,H))
+        if len(j)>=2 or any((len(ae)>=2 for ae in j.values())):E[T]=q
+    return E
+def Q(G):if not G:print('No repeated multiline blocks found.');return
+    print(f'Found {len(G)} repeated multiline blocks:')
+    for i,(T,q) in enumerate(G.items(),1):print(f'\n---Block {i}---');print(T[:200]+('...' if len(T)>200 else ''));print(f'Found in {len(q)} locations:')
+        for Z,O,H in q:print(f'  {Z}:{O}->{H[:100]}...')
+        print('-'*40)
+def n(G,r):if not G:return
+    try:with open(r,'w',encoding='utf-8') as f:f.write('REPEATED MULTILINE BLOCKS FOUND\n');f.write(f"{'='*40}\n\n")
+            for y,(T,q) in enumerate(G.items(),1):f.write(f'BLOCK #{y}\n');f.write(f"{'-'*40}\n");f.write(T);f.write('\n\nLOCATIONS:\n')
+                for Z,O,H in q:f.write(f'  {Z}:{O}\n');f.write(f'->{H}\n')
+                f.write(f"\n{'='*40}\n\n")
+        print(f'Results saved to {r}')
+    except OSError as e:print(f'Error writing to {r}:{e}',file=ag.stderr)
+def Y():P=C.ArgumentParser(description='Find repeated multiline blocks in text files',epilog='Example:python script.py-m 4-o output.txt');P.add_argument('-m','--min-lines',type=int,default=3,help='Minimum lines for a block to be considered (default:3)');P.add_argument('-o','--output',type=str,default='output.txt',help='Output file for findings (default:output.txt)');P.add_argument('-w','--workers',type=int,default=None,help='Number of worker processes (default:CPU count)');P.add_argument('-d','--directory',type=str,default='.',help='Directory to scan (default:current directory)');X=P.parse_args();ab=W(X.directory)
+    if not ab.exists():print(f'Error:Directory {ab} does not exist',file=ag.stderr);ag.exit(1)
+    print(f'Scanning directory:{ab}');print(f'Minimum block size:{X.min_lines} lines');print(f'Using {X.workers or mp.cpu_count()} workers');print();G=a(ab,X.min_lines,X.workers);s=W(X.output);n(G,s);Q(G)
+if __name__=='__main__':raise SystemExit(Y())
+# filename: pylic.py
+g=['#!','# type','# fmt','# pylint','# ruff','# mypy']
+def h(F):if not F.startswith('#'):return False
+    return not any((F.startswith(L) for L in g))
+def b(O,y):H=[];i=0
+    while i<len(O):C=O[i];B=C.rstrip('\n\r');F=B.strip()
+        if h(F):s=i;r=[];k=[]
+            while i<len(O):C=O[i];B=C.rstrip('\n\r');F=B.strip()
+                if h(F):r.append(B);k.append(F);i+=1
+                else:break
+            if len(k)>=2:x='\n'.join(k);H.append((x,y+s,r))
+            else:i+=1
+        else:i+=1
+    return H
+def a(U):H=t(list)
+    for G in U.rglob('*.py'):try:with open(G,encoding='utf-8') as f:O=f.readlines()
+        except (OSError,UnicodeDecodeError) as e:print(f'Warning:cannot read {G}:{e}',file=W.stderr);continue
+        u=b(O,1)
+        for x,q,l in u:H[x].append((G,q,l))
+    return H
+def d(H):return {N:w for N,w in H.items() if len(w)>=2}
+def M(E):if not E:print('No repeated multi-line comment blocks found.');return
+    print(f'Found {len(E)} repeated multi-line comment block(s):')
+    for i,(x,w) in enumerate(E.items(),1):print(f'\n---Block {i} ({len(w)} occurrences,{x.count(chr(10))+1} lines)---')
+        for R in x.split('\n'):print(f'  {R}')
+        print('  Found in:')
+        for T,I,_ in w:print(f'    {P(T).name}:{I}')
+def c(E):m=t(list)
+    for w in E.values():for T,q,l in w:m[T].append((q,l))
+    o=0;n=0
+    for T,D in m.items():try:with open(T,encoding='utf-8') as f:l=f.readlines()
+        except OSError as e:print(f'Warning:cannot read {T} for removal:{e}',file=W.stderr);continue
+        j=set()
+        for q,r in D:for J in range(len(r)):j.add(q+J)
+        z=[];p=0
+        for I,C in enumerate(l,start=1):if I in j:p+=1;continue
+            z.append(C)
+        if p==0:continue
+        try:v=''.join(z);_=V.parse(v)
+            with open(T,'w',encoding='utf-8') as f:f.writelines(z)
+            o+=p;n+=1;print(f'Removed {p} line(s) from {T.name}')
+        except SyntaxError as e:print(f'Warning:Removing blocks from {T} would create invalid Python,skipping:{e}',file=W.stderr)
+        except Exception as e:print(f'Error:cannot write {T}:{e}',file=W.stderr)
+    print(f'\nDone. Removed {o} repeated comment line(s) from {n} file(s).')
+def S():K=A.ArgumentParser(description=__doc__);K.add_argument('-r','--remove',action='store_true',help='Remove found repeated multi-line comment blocks from files');K.add_argument('--min-lines',type=int,default=2,help='Minimum number of consecutive comment lines to consider a block (default:2)');Q=K.parse_args();U=P.cwd();H=a(U);E=d(H)
+    if Q.remove:if not E:print('No repeated multi-line comment blocks to remove.')
+        else:c(E)
+    else:M(E)
+if __name__=='__main__':raise SystemExit(S())
+# filename: tlic.py
+from joblib import Parallel,delayed
+def q(ae):try:with open(ae,'rb') as f:Y=f.read(1024);return b'\x00' not in Y
+    except OSError:return False
+def a(ae,H=2):try:with open(ae,encoding='utf-8',errors='replace') as f:Z=f.readlines()
+    except OSError as e:print(f'Warning:cannot read {ae}:{e}',file=ak.stderr);return []
+    R=[];i=0
+    while i<len(Z):O=Z[i].strip()
+        if O.startswith('#!'):i+=1;continue
+        w=i;v=[];j=[]
+        while i<len(Z):O=Z[i].strip()
+            if O.startswith('#!'):break
+            v.append(Z[i].rstrip('\n\r'));j.append(O);i+=1
+        if len(j)>=H:C='\n'.join(j);R.append((C,w+1,v))
+    return R
+def b(af,H=2,T=8):F=[ae for ae in af.rglob('*') if ae.is_file() and q(ae)];A=len(F)
+    if not A:return y(list)
+    print(f'Scanning {A} files...',file=ak.stderr);B=100;x=y(list)
+    for u in range(0,A,B):G=min(u+B,A);t=F[u:G];P=Parallel(T=T,prefer='threads',verbose=0)((delayed(a)(ae,H) for ae in t))
+        for ae,R in zip(t,P,strict=False):for C,r,k in R:x[C].append((ae,r,k))
+    return x
+def d(R):return {X:aj for X,aj in R.items() if len(aj)>=2}
+def W(N,af):if not N:print('No repeated multi-line blocks found.');return
+    print(f'Found {len(N)} repeated multi-line block(s):')
+    for i,(C,z) in enumerate(N.items(),1):D=C.count('\n')+1;s={aj[0] for aj in z};print(f'\n---Block {i} ({len(z)} occurrences in {len(s)} files,{D} lines)---')
+        for ac in C.split('\n'):print(f'  {ac}')
+        print('  Found in:')
+        for ae,S,_ in z:try:L=ae.relative_to(af)
+            except ValueError:L=ae
+            print(f'    {L}:{S}')
+def g(ae,M,af):try:with open(ae,encoding='utf-8',errors='replace') as f:k=f.readlines()
+    except OSError as e:print(f'Warning:cannot read {ae}:{e}',file=ak.stderr);return (ae,0,False)
+    h=set()
+    for r,v in M:for U in range(len(v)):h.add(r+U-1)
+    if any((ai>=len(k) for ai in h)):print(f'Warning:Invalid line numbers in {ae}',file=ak.stderr);return (ae,0,False)
+    I=[ac for ai,ac in enumerate(k) if ai not in h];n=len(k)-len(I)
+    if n==0:return (ae,0,False)
+    if ae.suffix=='.py':try:ah.parse(''.join(I))
+        except SyntaxError as e:try:L=ae.relative_to(af)
+            except ValueError:L=ae
+            print(f'Warning:Removing blocks from {L} would create invalid Python:{e}',file=ak.stderr);return (ae,0,False)
+    try:with open(ae,'w',encoding='utf-8') as f:f.writelines(I)
+        return (ae,n,True)
+    except OSError as e:print(f'Error:cannot write {ae}:{e}',file=ak.stderr);return (ae,0,False)
+def c(N,af,T=8):l=y(list)
+    for z in N.values():for ae,r,k in z:l[ae].append((r,k))
+    if not l:print('No files to modify.');return
+    print(f'Removing blocks from {len(l)} files...',file=ak.stderr);P=Parallel(T=T,prefer='threads',verbose=0)((delayed(g)(ae,M,af) for ae,M in l.items()));o=0;m=0
+    for ae,p,Q in P:if Q and p>0:o+=p;m+=1
+            try:L=ae.relative_to(af)
+            except ValueError:L=ae
+            print(f'Removed {p} line(s) from {L}')
+    if m>0:print(f'\nDone. Removed {o} repeated line(s) from {m} file(s).')
+    else:print('No files were modified.')
+def ad():V=K.ArgumentParser(description=__doc__);V.add_argument('-r','--remove',action='store_true',help='Remove found repeated multi-line blocks from files');V.add_argument('--min-lines',type=int,default=2,help='Minimum consecutive lines to consider a block (default:2)');V.add_argument('-j','--jobs',type=int,default=8,help='Number of parallel jobs (default:8)');ab=V.parse_args();af=aa.cwd();E=ag.time();R=b(af,ab.min_lines,ab.jobs);J=ag.time()-E;print(f'Scan completed in {J:.2f}s,found {len(R)} unique blocks',file=ak.stderr);N=d(R)
+    if ab.remove:if not N:print('No repeated multi-line blocks to remove.')
+        else:print(f'Found {len(N)} repeated blocks to remove');c(N,af,ab.jobs)
+    else:W(N,af)
+if __name__=='__main__':raise SystemExit(ad())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

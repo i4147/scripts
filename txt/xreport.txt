@@ -1,0 +1,233 @@
+# filename: xreport.py
+from dh import fsz
+try:import py7zr;z=True
+except ImportError:z=False
+try:import zstandard as zstd;D=True
+except ImportError:D=False
+try:import lz4.frame;H=True
+except ImportError:H=False
+try:import snappy;u=True
+except ImportError:u=False
+d='\n    ___               __     _             _____\n/|_____ _____//_   (_)_  _____/___/_________ _____\n//||/___/___/__ \\//|//_ \\  \\__ \\/___/__ `/__ \\\n/___|////__//////||//__/___///__//_/////\n/_/|_/_/\\___/_//_//_/|___/\\___//____/\\___/\\__,_/_//_/\n  [ INTEGRITY VALIDATION&EXTRACTED SIZE SCANNER v1.4.2 ]\n';o={'.tar':'TAR Archive (.tar)','.tar.gz':'GZip Tarball (.tar.gz)','.tgz':'GZip Tarball (.tgz)','.tar.xz':'XZ Tarball (.tar.xz)','.txz':'XZ Tarball (.txz)','.tar.bz2':'BZip2 Tarball (.tar.bz2)','.tbz2':'BZip2 Tarball (.tbz2)','.tar.lz4':'LZ4 Tarball (.tar.lz4)','.tar.zst':'Zstandard Tarball (.tar.zst)','.tzst':'Zstandard Tarball (.tzst)','.tar.br':'Brotli Tarball (.tar.br)','.tar.7z':'7-Zip Tarball (.tar.7z)','.tar.bz3':'BZip3 Tarball (.tar.bz3)','.tar.snappy':'Snappy Tarball (.tar.snappy)','.zip':'ZIP Archive (.zip)','.whl':'Python Wheel (.whl)','.7z':'7-Zip Archive (.7z)','.snappy':'Snappy Stream (.snappy)','.zst':'Zstandard Stream (.zst)','.gz':'GZip Stream (.gz)','.bz3':'BZip3 Stream (.bz3)','.bz2':'BZip2 Stream (.bz2)','.xz':'XZ Compressed (.xz)','.br':'Brotli Stream (.br)','.lz4':'LZ4 Frame (.lz4)'};c=tuple(o.keys())
+def b(aj):ai=aj.name.lower()
+    for ak in sorted(c,key=len,reverse=True):if ai.endswith(ak):return (ak,o.get(ak))
+    return (None,None)
+def a(aj):try:with open(aj,'rb') as f:f.seek(-4,os.SEEK_END);return S.unpack('<I',f.read(4))[0]
+    except Exception:return int(aj.stat().st_size*2.8)
+def g(aj):if D:try:with open(aj,'rb') as f:O=zstd.get_frame_parameters(f.read(1024))
+                if O.content_size>0:return O.content_size
+        except Exception:pass
+    return int(aj.stat().st_size*3.2)
+def h(aj):aj=Y(aj);ak,q=b(aj);A=aj.stat().st_size;F,v,s,B=(0,0,None,'')
+    try:if ak in ('.zip','.whl'):with N.ZipFile(aj,'r') as zf:X=zf.infolist();F=sum((i.file_size for i in X));v=len(X);s=zf.testzip() is None
+        elif ak and (ak.startswith('.tar') or ak in ('.tgz','.txz','.tbz2','.tzst')):ah='r:*'
+            if ak in ('.tar.gz','.tgz'):ah='r:gz'
+            elif ak in ('.tar.bz2','.tbz2'):ah='r:bz2'
+            elif ak in ('.tar.xz','.txz'):ah='r:xz'
+            try:with L.open(aj,ah) as tf:I=tf.getmembers();F=sum((m.size for m in I));v=len(I);s=True
+            except Exception as te:if D and ak in ('.tar.zst','.tzst'):aa=zstd.ZstdDecompressor()
+                    with open(aj,'rb') as f,aa.stream_reader(f) as sr,L.open(fileobj=sr,ah='r|*') as tf:F=sum((m.size for m in tf));v=1;s=True
+                else:F,s,B=(int(A*3.5),False,str(te))
+        elif ak=='.7z':if z:with py7zr.SevenZipFile(aj,ah='r') as sz:F=sz.archive_info().uncompressed;v=len(sz.getnames());s=True
+            else:F,s=(int(A*4.1),True)
+        elif ak=='.gz':F,v,s=(a(aj),1,True)
+        elif ak=='.zst':F,v,s=(g(aj),1,True)
+        elif ak in ('.bz2','.xz','.lz4','.br','.snappy','.bz3','.tar.bz3','.tar.snappy'):t={'.bz2':2.9,'.xz':3.8,'.lz4':2.4,'.br':3.1};F=int(A*t.get(ak,3.0));v,s=(1,True)
+        else:F,v,s=(int(A*2.5),1,True)
+    except Exception as e:s,B,F=(False,str(e),A)
+    return {'path':str(aj),'filename':aj.name,'ext':ak or 'unknown','archive_type':q or 'Unknown Archive','compressed_size':A,'extracted_size':F,'file_count':v,'ratio':F/A if A>0 else 1.0,'integrity':s,'error':B}
+def j(aj,J):aj=Y(aj);ak,_=b(aj);ab=Y(J)/f'{aj.name}_extracted';ab.mkdir(parents=True,exist_ok=True)
+    try:if ak in ('.zip','.whl'):with N.ZipFile(aj,'r') as zf:zf.extractall(ab)
+            return (True,str(ab))
+        if ak and (ak.startswith('.tar') or ak in ('.tgz','.txz','.tbz2')):with L.open(aj,'r:*') as tf:tf.extractall(ab)
+            return (True,str(ab))
+        if ak=='.7z' and z:with py7zr.SevenZipFile(aj,ah='r') as sz:sz.extractall(aj=ab)
+            return (True,str(ab))
+        if ak=='.gz':G=ab/aj.stem
+            with ad.open(aj,'rb') as ac,open(G,'wb') as W:while (U :=ac.read(65536)):W.write(U)
+            return (True,str(ab))
+        V=ab/f'{aj.name}.decompressed';V.write_bytes(aj.read_bytes());return (True,str(ab))
+    except Exception as e:return (False,str(e))
+def l(x,r=False,n=False,M=False):T=Y(x).resolve();print(f'\x1b[38;5;39mScanning directory recursively:\x1b[0m {T}')
+    if n:print(f'\x1b[38;5;82m{d}\x1b[0m')
+    k=[]
+    for p in T.rglob('*'):if p.is_file():ak,_=b(p)
+            if ak:al=h(p);k.append(al)
+                if M:R='\x1b[32m[PASS]\x1b[0m' if al['integrity'] else '\x1b[31m[FAIL]\x1b[0m';print(f"->Found:{al['filename']}|Type:{al['archive_type']}|Comp:{fsz(al['compressed_size'])}->Ext:{fsz(al['extracted_size'])}|{R}")
+    print('-'*40);print(f"\x1b[1;37m{'FILENAME':<32} {'ARCHIVE TYPE':<26} {'COMPRESSED':<12} {'EXTRACTED':<12} {'INTEGRITY':<10}\x1b[0m");print('-'*40);y=sum((i['compressed_size'] for i in k));C=sum((i['extracted_size'] for i in k))
+    for ae in k:R='\x1b[32mPASSED\x1b[0m' if ae['integrity'] is True else '\x1b[31mFAILED\x1b[0m' if ae['integrity'] is False else '\x1b[90mSKIP\x1b[0m';print(f"{ae['filename'][:31]:<32} {ae['archive_type'][:25]:<26} {fsz(ae['compressed_size']):<12} {fsz(ae['extracted_size']):<12} {R}")
+    print('='*40);print(f'\x1b[1;36mSUMMARY:\x1b[0m Found {len(k)} archive files.');print(f'Total Compressed Size :{fsz(y)}');print(f'Total Extracted Size  :\x1b[1;32m{fsz(C)}\x1b[0m')
+    if y>0:print(f'Overall Expansion     :{C/y:.2f}x ({fsz(C-y)} saved)')
+    if r and k:w=T/'extracted_archives';print(f'\n\x1b[38;5;214m[-a] Auto-extracting {len(k)} archives into:\x1b[0m {w}')
+        for ae in k:ok,Q=j(ae['path'],w);print(f"  \x1b[32m[✓]\x1b[0m Extracted {ae['filename']}->{Q}" if ok else f"  \x1b[31m[✗]\x1b[0m Failed {ae['filename']}:{Q}")
+    return k
+def ag():P=E.ArgumentParser(description='ArchiveScan CLI v1.4.2');P.add_argument('directory',nargs='?',default='.',help='Directory to scan');P.add_argument('-a','--auto-extract-all',action='store_true');P.add_argument('-t','--test-integrity',action='store_true');P.add_argument('-v','--verbose',action='store_true');P.add_argument('-j','--json',action='store_true');Z=P.parse_args()
+    if Z.json:T=Y(Z.directory).resolve();K=[h(p) for p in T.rglob('*') if p.is_file() and b(p)[0]];print(af.dumps(K,indent=2))
+    else:l(Z.directory,Z.auto_extract_all,Z.test_integrity,Z.verbose)
+if __name__=='__main__':raise SystemExit(ag())
+# filename: xreport2.py
+from dh import fsz
+try:import py7zr;F=True
+except ImportError:F=False
+try:import zstandard as zstd;I=True
+except ImportError:I=False
+try:import lz4.frame;O=True
+except ImportError:O=False
+try:y=True
+except ImportError:y=False
+try:import snappy;z=True
+except ImportError:z=False
+h='\n    ___               __     _             _____\n/|_____ _____//_   (_)_  _____/___/_________ _____\n//||/___/___/__ \\//|//_ \\  \\__ \\/___/__ `/__ \\\n/___|////__//////||//__/___///__//_/////\n/_/|_/_/\\___/_//_//_/|___/\\___//____/\\___/\\__,_/_//_/\n  [ INTEGRITY VALIDATION&EXTRACTED SIZE SCANNER v1.4.2 ]\n';c=('.tar','.tar.gz','.tgz','.tar.xz','.txz','.tar.bz2','.tbz2','.tar.lz4','.tar.zst','.tzst','.tar.br','.tar.7z','.tar.bz3','.tar.snappy','.zip','.whl','.7z','.snappy','.zst','.gz','.bz3','.bz2','.xz','.br','.lz4');s={'.tar':'TAR Archive (.tar)','.tar.gz':'GZip Tarball (.tar.gz)','.tgz':'GZip Tarball (.tgz)','.tar.xz':'XZ Tarball (.tar.xz)','.txz':'XZ Tarball (.txz)','.tar.bz2':'BZip2 Tarball (.tar.bz2)','.tbz2':'BZip2 Tarball (.tbz2)','.tar.lz4':'LZ4 Tarball (.tar.lz4)','.tar.zst':'Zstandard Tarball (.tar.zst)','.tzst':'Zstandard Tarball (.tzst)','.tar.br':'Brotli Tarball (.tar.br)','.tar.7z':'7-Zip Tarball (.tar.7z)','.tar.bz3':'BZip3 Tarball (.tar.bz3)','.tar.snappy':'Snappy Tarball (.tar.snappy)','.zip':'ZIP Archive (.zip)','.whl':'Python Wheel (.whl)','.7z':'7-Zip Archive (.7z)','.snappy':'Snappy Stream (.snappy)','.zst':'Zstandard Stream (.zst)','.gz':'GZip Stream (.gz)','.bz3':'BZip3 Stream (.bz3)','.bz2':'BZip2 Stream (.bz2)','.xz':'XZ Compressed (.xz)','.br':'Brotli Stream (.br)','.lz4':'LZ4 Frame (.lz4)'}
+def b(ar):ad=str(ar).lower()
+    for av in sorted(c,key=len,reverse=True):if ad.endswith(av):E=s.get(av,f'Archive ({av})');return (av,E)
+    return (None,None)
+def a(ar):try:with open(ar,'rb') as f:f.seek(-4,os.SEEK_END);ae=Y.unpack('<I',f.read(4))[0];return ae
+    except Exception:return int(ar.stat().st_size*2.8)
+def g(ar):try:with open(ar,'rb') as f:V=f.read(16)
+            if len(V)>=4:return ar.stat().st_size*3
+    except Exception:pass
+    return int(ar.stat().st_size*2.5)
+def i(ar):if I:try:with open(ar,'rb') as f:ai=zstd.ZstdDecompressor();at=zstd.get_frame_parameters(f.read(1024)).content_size
+                if at and at>0:return at
+        except Exception:pass
+    return int(ar.stat().st_size*3.2)
+def k(ar):ar=ag(ar);av,t=b(ar);G=ar.stat().st_size;L=0;A=0;v=None;H=''
+    try:if av in ('.zip','.whl'):with U.ZipFile(ar,'r') as zf:L=sum((am.file_size for am in zf.infolist()));A=len(zf.infolist());v=zf.testzip() is None
+        elif av and (av.startswith('.tar') or av in ('.tgz','.txz','.tbz2','.tzst')):aq='r:*'
+            if av in ('.tar.gz','.tgz'):aq='r:gz'
+            elif av in ('.tar.bz2','.tbz2'):aq='r:bz2'
+            elif av in ('.tar.xz','.txz'):aq='r:xz'
+            try:with S.open(ar,aq) as tf:P=tf.getmembers();L=sum((m.size for m in P));A=len(P);v=True
+            except Exception as te:if I and av in ('.tar.zst','.tzst'):ai=zstd.ZstdDecompressor()
+                    with open(ar,'rb') as f,ai.stream_reader(f) as sr,S.open(fileobj=sr,aq='r|*') as tf:L=sum((m.size for m in tf));A=1;v=True
+                else:L=int(G*3.5);v=False;H=str(te)
+        elif av=='.7z':if F:with py7zr.SevenZipFile(ar,aq='r') as sz:L=sz.archive_info().uncompressed;A=len(sz.getnames());v=True
+            else:L=int(G*4.1);v=True
+        elif av=='.gz':L=a(ar);A=1;v=True
+        elif av=='.bz2':L=int(G*2.9);A=1;v=True
+        elif av=='.xz':L=int(G*3.8);A=1;v=True
+        elif av=='.zst':L=i(ar);A=1;v=True
+        elif av=='.lz4':L=int(G*2.4);A=1;v=True
+        elif av=='.br':L=int(G*3.1);A=1;v=True
+        elif av in ('.snappy','.bz3','.tar.bz3','.tar.snappy'):L=g(ar);A=1;v=True
+        else:L=int(G*2.5);A=1;v=True
+    except Exception as e:v=False;H=str(e);L=G
+    return {'path':str(ar),'filename':ar.name,'ext':av or 'unknown','archive_type':t or 'Unknown Archive','compressed_size':G,'extracted_size':L,'file_count':A,'ratio':L/G if G>0 else 1.0,'integrity':v,'error':H}
+def d(N,K,w=65536):with open(N,'rb') as ax,open(K,'wb') as au:while 1:aa=ax.read(w)
+            if not aa:break
+            au.write(aa)
+def l(ar,Q):ar=ag(ar);Q=ag(Q);av,_=b(ar);aj=Q/(ar.name+'_extracted');aj.mkdir(parents=True,exist_ok=True)
+    try:if av in ('.zip','.whl'):with U.ZipFile(ar,'r') as zf:zf.extractall(aj)
+            return (True,str(aj))
+        if av and (av.startswith('.tar') or av in ('.tgz','.txz','.tbz2')):with S.open(ar,'r:*') as tf:tf.extractall(aj,filter='data')
+            return (True,str(aj))
+        if av=='.7z' and F:with py7zr.SevenZipFile(ar,aq='r') as sz:sz.extractall(ar=str(aj))
+            return (True,str(aj))
+        if av=='.gz':M=aj/ar.name[:-3]
+            with al.open(ar,'rb') as ak,open(M,'wb') as ac:d(str(ak),str(ac))
+            return (True,str(aj))
+        ab=aj/(ar.name+'.decompressed');d(ar,ab);return (True,str(aj))
+    except Exception as e:return (False,str(e))
+def q(D,u=False,r=False,T=False):Z=ag(D).resolve();print(f'\x1b[38;5;39mScanning directory recursively:\x1b[0m {Z}')
+    if r:print('\x1b[38;5;82m'+h+'\x1b[0m')
+    o=[]
+    for ar in Z.rglob('*'):if ar.is_file():av,_=b(ar)
+            if av:aw=k(ar);o.append(aw)
+                if T:C='\x1b[32m[PASS]\x1b[0m' if aw['integrity'] else '\x1b[31m[FAIL]\x1b[0m';print(f"->Found:{aw['filename']}|Type:{aw['archive_type']}|Comp:{fsz(aw['compressed_size'])}->Ext:{fsz(aw['extracted_size'])}|{C}")
+    print('-'*40);print(f"\x1b[1;37m{'FILENAME':<32} {'ARCHIVE TYPE':<26} {'COMPRESSED':<12} {'EXTRACTED':<12} {'INTEGRITY':<10}\x1b[0m");print('-'*40);j=0;n=0
+    for an in o:j+=an['compressed_size'];n+=an['extracted_size']
+        if an['integrity'] is True:X='\x1b[32mPASSED\x1b[0m'
+        elif an['integrity'] is False:X='\x1b[31mFAILED\x1b[0m'
+        else:X='\x1b[90mSKIP\x1b[0m'
+        print(f"{an['filename'][:31]:<32} {an['archive_type'][:25]:<26} {fsz(an['compressed_size']):<12} {fsz(an['extracted_size']):<12} {X}")
+    print('='*40);print(f'\x1b[1;36mSUMMARY:\x1b[0m Found {len(o)} archive files.');print(f'Total Compressed Size :{fsz(j)}');print(f'Total Extracted Size  :\x1b[1;32m{fsz(n)}\x1b[0m')
+    if j>0:af=n/j;print(f'Overall Expansion     :{af:.2f}x ({fsz(n-j)} saved)')
+    if u and o:B=Z/'extracted_archives';print(f'\n\x1b[38;5;214m[-a] Auto-extracting {len(o)} archives into:\x1b[0m {B}')
+        for an in o:ok,x=l(an['path'],str(B))
+            if ok:print(f"  \x1b[32m[✓]\x1b[0m Extracted {an['filename']}->{x}")
+            else:print(f"  \x1b[31m[✗]\x1b[0m Failed to extract {an['filename']}:{x}")
+    return o
+def ap():W=J.ArgumentParser(description='ArchiveScan CLI v1.4.2');W.add_argument('directory',nargs='?',default='.',help='Directory to scan');W.add_argument('-a','--auto-extract-all',action='store_true');W.add_argument('-t','--test-integrity',action='store_true');W.add_argument('-v','--verbose',action='store_true');W.add_argument('-j','--json',action='store_true');ah=W.parse_args()
+    if ah.json:Z=ag(ah.directory).resolve();R=[k(p) for p in Z.rglob('*') if p.is_file() and b(p)[0]];print(ao.dumps(R,indent=2))
+    else:q(ah.directory,ah.auto_extract_all,ah.test_integrity,ah.verbose)
+if __name__=='__main__':raise SystemExit(ap())
+# filename: zreport.py
+from dh import fsz;w=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'})
+def j(q):try:return A.import_module(q)
+    except ImportError:return None
+ai=j('zstandard');ab=j('lz4.frame');K=j('brotli');Q=j('py7zr')
+def a(E,O=1<<20):S=0
+    while 1:W=E.read(O)
+        if not W:break
+        S+=len(W)
+    return S
+def x(G,ae='r:*'):try:with I.open(G=G,ae=ae) as tf:return sum((m.size for m in tf.getmembers() if m.isfile()))
+    except Exception:return None
+def d(ag):if not ai:return (None,'zstandard not installed')
+    try:with ag.open('rb') as f:X=ai.ZstdDecompressor();L=X.frame_parameters(f.read(32))
+            if L.uncompressed_size:return (L.uncompressed_size,None)
+            f.seek(0);return (a(X.stream_reader(f)),None)
+    except Exception as e:return (None,str(e))
+def o(ag):try:with ac.open(ag,'rb') as f:return (a(f),None)
+    except Exception as e:return (None,str(e))
+def n(ag):try:with Z.open(ag,'rb') as f:return (a(f),None)
+    except Exception as e:return (None,str(e))
+def b(ag):try:with aj.open(ag,'rb') as f:return (a(f),None)
+    except Exception as e:return (None,str(e))
+def l(ag):if not Q:return (None,'py7zr not installed')
+    try:with Q.SevenZipFile(ag,ae='r') as z:return (sum((f.uncompressed for f in z.list() if f.uncompressed is not None)),None)
+    except Exception as e:return (None,str(e))
+def c(ag):try:with J.ZipFile(ag,'r') as z:return (sum((i.file_size for i in z.infolist())),None)
+    except Exception as e:return (None,str(e))
+C={'.zst':('zstd',d),'.xz':('xz',o),'.gz':('gzip',n),'.bz2':('bzip2',b),'.7z':('7zip',l),'.zip':('zip',c),'.whl':('wheel',c),'.tar':('tar',lambda p:(x(p.open('rb'),'r:'),None))}
+def ad():M=D.ArgumentParser(description='Report uncompressed sizes of compressed files');M.add_argument('path',type=T,nargs='?',default=T.cwd());V=M.parse_args();ah=V.path.resolve()
+    if not ah.is_dir():print(f'Error:{ah} is not a directory');ak.exit(1)
+    print(f'Scanning {ah}...\n');t=g=r=0;F='{:<30} {:<10} {:>15} {:>15} {:>8}';print(F.format('File','Format','Compressed','Uncompressed','Ratio'));print('-'*40)
+    for aa in sorted(ah.rglob('*')):if not aa.is_file() or any((af in w for af in aa.parts)):continue
+        h=next((v for k,v in C.items() if aa.name.endswith(k)),None)
+        if not h:continue
+        P,H=h;y=aa.stat().st_size;s,U=H(aa);r+=1;t+=y
+        if s is not None:g+=s;R=s/y if y>0 else 0;B=f'{R:.2f}x'
+        else:B='Error'
+        u=aa.name[:27]+'...' if len(aa.name)>30 else aa.name;print(F.format(u,P,fsz(y),fsz(s) if s else 'Error',B))
+    print('-'*40);print(f'Total files:{r}');print(f'Total compressed:{fsz(t)}');print(f'Total uncompressed:{fsz(g)}');_,_,Y=N.disk_usage(ah);print(f'Free disk space:{fsz(Y)}')
+    if g>Y:print(f'\n⚠️  WARNING:Not enough space to extract all files! (Shortfall:{fsz(g-Y)})')
+if __name__=='__main__':raise SystemExit(ad())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,649 @@
+# --- File: image2text.py ---
+import sys
+from pathlib import Path
+from dh import fsz, get_files, gsz, mpf3
+from PIL import Image
+from PIL.Image import Image
+try:
+    import cv2
+    a = True
+except ImportError:
+    a = False
+    try:
+        from skimage import color, filters, io
+        from skimage.util import img_as_ubyte
+        b = True
+    except ImportError:
+        print('Error: Neither OpenCV nor scikit-image is available.')
+        print('Install one of them: pip install opencv-python or pip install scikit-image')
+        sys.exit(1)
+c = 16
+def d(e):
+    img = cv2.imread(str(e))
+    if img is None:
+        print(f'Error: Could not load image from {e}')
+        return None
+    f = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    g = cv2.GaussianBlur(f, (5, 5), 0)
+    h = cv2.GaussianBlur(g, (0, 0), 3)
+    i = cv2.addWeighted(g, 1.5, h, -0.5, 0)
+    j = cv2.adaptiveThreshold(i, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    k = Image.fromarray(j)
+    l = e.with_stem(e.stem + '_enhanced_pil')
+    cv2.imwrite(str(l), j)
+    return k
+def m(e):
+    try:
+        img = io.imread(str(e))
+    except Exception as e:
+        print(f'Error: Could not load image from {e}: {e}')
+        return None
+    if len(img.shape) == 3:
+        f = color.rgb2gray(img)
+    else:
+        f = img
+    g = filters.gaussian(f, sigma=5 / 3)
+    h = filters.gaussian(g, sigma=3 / 3)
+    i = 1.5 * g - 0.5 * h
+    i = np.clip(i, 0, 1)
+    from skimage.filters import threshold_local
+    j = i > threshold_local(i, 11, 'gaussian')
+    n = img_as_ubyte(j)
+    k = Image.fromarray(n)
+    l = e.with_stem(e.stem + '_enhanced_pil')
+    io.imsave(str(l), n)
+    return k
+def o(e):
+    if a:
+        return d(e)
+    else:
+        return m(e)
+def p(e):
+    if a:
+        img = cv2.imread(str(e))
+        if img is None:
+            print(f'Error: Could not load image from {e}')
+            return None
+        f = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        g = cv2.GaussianBlur(f, (5, 5), 0)
+        h = cv2.GaussianBlur(g, (0, 0), 3)
+        i = cv2.addWeighted(g, 1.5, h, -0.5, 0)
+        j = cv2.adaptiveThreshold(i, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        l = e.with_stem(e.stem + '_enhanced_cv')
+        cv2.imwrite(str(l), j)
+        return j
+    else:
+        import numpy as np
+        try:
+            img = io.imread(str(e))
+        except Exception as e:
+            print(f'Error: Could not load image from {e}: {e}')
+            return None
+        if len(img.shape) == 3:
+            f = color.rgb2gray(img)
+        else:
+            f = img
+        g = filters.gaussian(f, sigma=5 / 3)
+        h = filters.gaussian(g, sigma=1.0)
+        i = 1.5 * g - 0.5 * h
+        i = np.clip(i, 0, 1)
+        from skimage.filters import threshold_local
+        j = i > threshold_local(i, 11, 'gaussian')
+        n = img_as_ubyte(j)
+        l = e.with_stem(e.stem + '_enhanced_cv')
+        io.imsave(str(l), n)
+        return n
+def q():
+    print(f"Using {('OpenCV' if a else 'scikit-image')} for image processing")
+    cwd = Path.cwd()
+    r = gsz(cwd)
+    s = sys.argv[1:]
+    t = [Path(p) for p in s] if s else get_files(cwd, ext=['.png', '.jpg'])
+    if not t:
+        print('No image files found to process')
+        sys.exit(0)
+    if len(t) == 1:
+        o(t[0])
+        sys.exit(0)
+    mpf3(o, t)
+    mpf3(p, t)
+    u = r - gsz(cwd)
+    print(f'space saved : {fsz(u)}')
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: ocr_prepare.py ---
+import argparse
+import sys
+from multiprocessing import Pool
+from pathlib import Path
+from loguru import logger
+try:
+    import cv2
+    v = True
+    print('Using OpenCV for image processing')
+except ImportError:
+    try:
+        from PIL import Image, ImageEnhance, ImageFilter
+        v = False
+        print('OpenCV not found, using Pillow for image processing')
+    except ImportError:
+        logger.error('Neither OpenCV nor Pillow found. Please install at least one.')
+        sys.exit(1)
+w = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.gif'}
+x = 8
+def d(e):
+    try:
+        img = cv2.imread(str(e))
+        if img is None:
+            logger.error(f'Failed to read image: {e}')
+            return False
+        f = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        g = cv2.GaussianBlur(f, (5, 5), 0)
+        y = cv2.adaptiveThreshold(g, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        z = cv2.fastNlMeansDenoising(y, None, 10, 7, 21)
+        cv2.imwrite(str(e), z)
+        return True
+    except Exception as e:
+        logger.error(f'Error processing {e}: {e}')
+        return False
+def a1(e):
+    try:
+        with Image.open(e) as img:
+            if img.mode != 'L':
+                img = img.convert('L')
+            b1 = ImageEnhance.Contrast(img)
+            img = b1.enhance(2.0)
+            b1 = ImageEnhance.Sharpness(img)
+            img = b1.enhance(2.0)
+            img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+            c1 = 128
+            img = img.point(lambda p: p > c1 and 255)
+            img.save(str(e))
+            return True
+    except Exception as e:
+        logger.error(f'Error processing {e}: {e}')
+        return False
+def d1(e):
+    logger.debug(f'Processing: {e}')
+    if v:
+        e1 = d(e)
+    else:
+        e1 = a1(e)
+    return (e, e1)
+def f1(g1, h1=False):
+    i1 = []
+    for j1 in g1:
+        if j1.is_file() and j1.suffix.lower() in w:
+            i1.append(j1)
+        elif j1.is_dir():
+            if h1:
+                for ext in w:
+                    i1.extend(j1.rglob(f'*{ext}'))
+                    i1.extend(j1.rglob(f'*{ext.upper()}'))
+            else:
+                for ext in w:
+                    i1.extend(j1.glob(f'*{ext}'))
+                    i1.extend(j1.glob(f'*{ext.upper()}'))
+    k1 = set()
+    l1 = []
+    for f in i1:
+        if f not in k1:
+            k1.add(f)
+            l1.append(f)
+    return l1
+def m1(i1):
+    if not i1:
+        logger.warning('No image files found to process')
+        return {'success': 0, 'failed': 0}
+    n1 = min(x, len(i1))
+    print(f'Processing {len(i1)} images using {n1} workers')
+    o1 = {'success': 0, 'failed': 0}
+    with Pool(processes=n1) as p1:
+        q1 = [(j1, p1.apply_async(d1, (j1,))) for j1 in i1]
+        for j1, r1 in q1:
+            try:
+                _, e1 = r1.get()
+                if e1:
+                    o1['success'] += 1
+                    print(f'✓ Processed: {j1}')
+                else:
+                    o1['failed'] += 1
+                    logger.error(f'✗ Failed: {j1}')
+            except Exception as e:
+                o1['failed'] += 1
+                logger.error(f'✗ Error processing {j1}: {e}')
+    return o1
+def q():
+    s1 = argparse.ArgumentParser(description='Prepare images for Tesseract OCR (in-place processing)', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s image1.png image2.jpg     # Process specific files\n  %(prog)s /path/to/folder           # Process images in folder\n  %(prog)s -r /path/to/folder        # Process images recursively\n  %(prog)s                           # Process all images in current directory\n  %(prog)s -r                        # Process all images recursively\n        ')
+    s1.add_argument('paths', nargs='*', type=Path, help='Files or folders to process (if empty, process current directory)')
+    s1.add_argument('-r', '--recursive', action='store_true', help='Process subdirectories recursively')
+    s1.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
+    s = s1.parse_args()
+    if s.verbose:
+        logger.remove()
+        logger.add(sys.stderr, level='DEBUG')
+    g1 = s.paths if s.paths else [Path.cwd()]
+    if not s.paths:
+        print(f'No input specified, processing current directory: {Path.cwd()}')
+    i1 = f1(g1, s.recursive)
+    if not i1:
+        logger.error('No supported image files found')
+        print(f"Supported extensions: {', '.join(sorted(w))}")
+        return 1
+    print(f'Found {len(i1)} image(s) to process')
+    o1 = m1(i1)
+    print('=' * 40)
+    print('Processing complete:')
+    print(f"  ✓ Success: {o1['success']}")
+    print(f"  ✗ Failed:  {o1['failed']}")
+    print(f'  Total:     {len(i1)}')
+    return 0 if o1['failed'] == 0 else 1
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: ocrgrid.py ---
+import argparse
+import json
+from pathlib import Path
+import cv2
+import numpy as np
+import pytesseract
+from PIL import Image
+def t1(img):
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+def u1(img):
+    return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+def v1(img):
+    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def w1(img, x1=2.0):
+    h, w = img.shape[:2]
+    return cv2.resize(img, (int(w * x1), int(h * x1)), interpolation=cv2.INTER_CUBIC)
+def y1(img):
+    f = v1(img)
+    z1 = np.column_stack(np.where(f > 0))
+    a2 = cv2.minAreaRect(z1)[-1]
+    a2 = -(90 + a2) if a2 < -45 else -a2
+    h, w = img.shape[:2]
+    b2 = (w // 2, h // 2)
+    m = cv2.getRotationMatrix2D(b2, a2, 1.0)
+    return cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+def c2(img, a2):
+    h, w = img.shape[:2]
+    b2 = (w // 2, h // 2)
+    m = cv2.getRotationMatrix2D(b2, a2, 1.0)
+    return cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_CUBIC)
+def d2(img, psm, oem, dpi):
+    e2 = f'--psm {psm} --oem {oem} -c user_defined_dpi={dpi}'
+    f2 = pytesseract.image_to_string(img, config=e2)
+    return {'psm': psm, 'oem': oem, 'dpi': dpi, 'config': e2, 'text': f2}
+def q():
+    s1 = argparse.ArgumentParser()
+    s1.add_argument('fname', type=Path)
+    s1.add_argument('-o', '--out', type=Path, default=Path('ocr_output'))
+    s = s1.parse_args()
+    s.out.mkdir(parents=True, exist_ok=True)
+    g2 = Image.open(s.fname).convert('RGB')
+    h2 = t1(g2)
+    i2 = {'original': g2, 'grayscale': u1(v1(h2)), 'rescaled': u1(w1(h2)), 'deskewed': u1(y1(h2)), 'rotated_90': u1(c2(h2, 90))}
+    j2 = [3, 4, 6, 11]
+    k2 = [1, 3]
+    l2 = [150, 300]
+    m2 = []
+    for n2, img in i2.items():
+        o2 = s.out / n2
+        o2.mkdir(exist_ok=True)
+        for psm in j2:
+            for oem in k2:
+                for dpi in l2:
+                    p2 = d2(img, psm, oem, dpi)
+                    tag = f'psm{psm}_oem{oem}_dpi{dpi}'
+                    q2 = o2 / f'{tag}.txt'
+                    r2 = o2 / f'{tag}.json'
+                    q2.write_text(p2['text'], encoding='utf-8')
+                    r2.write_text(json.dumps({'image_variant': n2, 'source_file': str(s.fname), 'tesseract': p2}, indent=2), encoding='utf-8')
+                    m2.append({'variant': n2, 'psm': psm, 'oem': oem, 'dpi': dpi, 'text_file': str(q2)})
+    (s.out / 'index.json').write_text(json.dumps(m2, indent=2), encoding='utf-8')
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: ocrgrid2.py ---
+import itertools
+import time
+from pathlib import Path
+import cv2
+import pytesseract
+from dh import IMGEXT
+s2 = Path('ocr_results')
+s2.mkdir(exist_ok=True)
+t2 = [0, 1, 2, 3]
+u2 = [3, 4, 6, 11, 12, 13]
+def v2(w2):
+    img = cv2.imread(str(w2))
+    if img is None:
+        msg = f'Could not read image: {w2}'
+        raise ValueError(msg)
+    f = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    f = cv2.fastNlMeansDenoising(f, h=15)
+    y = cv2.adaptiveThreshold(f, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 2)
+    z1 = cv2.findNonZero(y)
+    x2 = cv2.minAreaRect(z1)
+    a2 = x2[-1]
+    if a2 < -45:
+        a2 += 90
+    h, w = y.shape
+    M = cv2.getRotationMatrix2D((w // 2, h // 2), a2, 1.0)
+    return cv2.warpAffine(y, M, (w, h), flags=cv2.INTER_CUBIC)
+def y2(img, oem, psm):
+    e2 = f'--oem {oem} --psm {psm} -l eng'
+    z2 = time.time()
+    try:
+        f2 = pytesseract.image_to_string(img, config=e2)
+    except Exception as e:
+        return ('', e2, 0.0, str(e))
+    a3 = time.time() - z2
+    return (f2, e2, a3, '')
+def q():
+    i1 = [f for f in Path().iterdir() if f.suffix.lower() in IMGEXT]
+    b3 = []
+    for w2 in i1:
+        print(f'Processing: {w2}')
+        c3 = v2(w2)
+        for oem, psm in itertools.product(t2, u2):
+            f2, e2, a3, d3 = y2(c3, oem, psm)
+            p2 = {'image': w2.name, 'config': e2, 'oem': oem, 'psm': psm, 'duration_sec': a3, 'error': d3, 'text': f2}
+            b3.append(p2)
+            e3 = s2 / f'{w2.stem}__oem{oem}_psm{psm}.txt'
+            e3.write_text(f2)
+    df = pd.DataFrame(b3)
+    df.to_csv(s2 / 'ocr_summary.csv', index=False)
+    print('\nDone. All results saved in:', s2)
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: pyocr.py ---
+import sys
+from pathlib import Path
+import cv2
+import pytesseract
+f3 = {'.png', '.bmp', '.tiff', '.webp', '.jpg', '.jpeg'}
+def g3(j1):
+    j1 = Path(j1)
+    if not j1.is_file() or j1.suffix.lower() not in f3:
+        print(f"Error: '{j1.name}' is not a supported image file.")
+        return False
+    h3 = j1.with_suffix('.txt')
+    try:
+        img = cv2.imread(str(j1))
+        if img is None:
+            print(f'Error: Could not read {j1.name}')
+            return False
+        f = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        print(f"Processing '{j1.name}'...")
+        f2 = pytesseract.image_to_string(f)
+        if not f2.strip():
+            print(f"Warning: No text detected in '{j1.name}'.")
+        Path(h3).write_text(f2, encoding='utf-8')
+        print(f"Success! Text saved to '{h3.name}'")
+        return True
+    except Exception as e:
+        print(f'An error occurred: {e}')
+        return False
+def q():
+    if len(sys.argv) != 2:
+        print(f'Usage: {sys.argv[0]} <image_file>')
+        sys.exit(1)
+    if g3(sys.argv[1]):
+        sys.exit(0)
+    else:
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: ruimg.py ---
+import argparse
+import json
+import sys
+from dataclasses import dataclass
+from datetime import datetime
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+try:
+    import pytesseract
+    from PIL import Image
+except ImportError:
+    print('Error: Required packages not installed.')
+    print('Install with: pip install pillow pytesseract')
+    sys.exit(1)
+@dataclass
+class i3:
+    f2 = ''
+    d3 = ''
+    j3 = 0
+    k3 = 0
+class l3:
+    w = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.gif'}
+    @staticmethod
+    def m3(e):
+        try:
+            if not e.exists():
+                return i3(path=e, success=False, error='File not found')
+            n3 = Image.open(e)
+            f2 = pytesseract.image_to_string(n3, lang='rus+eng')
+            print(f2)
+            q2 = e.with_suffix('.txt')
+            q2.write_text(f2, encoding='utf-8')
+            if not f2.strip():
+                return i3(path=e, success=True, text='', char_count=0, line_count=0)
+            j3 = len(f2)
+            k3 = len(f2.strip().split('\n'))
+            return i3(path=e, success=True, text=f2, char_count=j3, line_count=k3)
+        except Exception as e:
+            return i3(path=e, success=False, error=str(e))
+    @staticmethod
+    def f1(o3):
+        p3 = []
+        for q3 in o3:
+            if not q3.is_dir():
+                print(f'⚠ Warning: {q3} is not a directory, skipping')
+                continue
+            for ext in l3.IMAGE_EXTENSIONS:
+                p3.extend(q3.rglob(f'*{ext}'))
+                p3.extend(q3.rglob(f'*{ext.upper()}'))
+        return sorted(set(p3))
+class r3:
+    @staticmethod
+    def s3(t3):
+        print('\n' + '=' * 40)
+        print('📄 TEXT EXTRACTION REPORT')
+        print(f"⏱  Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f'📊 Total files to process: {t3}')
+        print('-' * 40)
+    @staticmethod
+    def u3(p2, v3):
+        if p2.success:
+            w3 = '✓ SUCCESS'
+            x3 = f'│ Characters: {p2.char_count:,} | Lines: {p2.line_count}'
+        else:
+            w3 = '✗ ERROR'
+            x3 = f'│ Error: {p2.error}'
+        print(f'{w3:12} │ {v3}')
+        print(f'{x3}')
+        print()
+    @staticmethod
+    def y3(o1, z3):
+        for r in o1:
+            print(r)
+        a4 = sum((1 for r in o1 if r.success))
+        b4 = sum((1 for r in o1 if not r.success))
+        c4 = sum((r.char_count for r in o1 if r.success))
+        d4 = sum((r.line_count for r in o1 if r.success))
+        print('-' * 40)
+        print('📊 SUMMARY')
+        print('-' * 40)
+        print(f'✓ Successful: {a4}/{len(o1)}')
+        print(f'✗ Failed:     {b4}/{len(o1)}')
+        print(f'📝 Total characters extracted: {c4:,}')
+        print(f'📄 Total lines extracted:      {d4:,}')
+        print('-' * 40)
+    @staticmethod
+    def e4(o1, h3):
+        f4 = {'timestamp': datetime.now().isoformat(), 'total_files': len(o1), 'successful': sum((1 for r in o1 if r.success)), 'failed': sum((1 for r in o1 if not r.success)), 'results': [{'file': str(r.path), 'success': r.success, 'char_count': r.char_count, 'line_count': r.line_count, 'error': r.error if not r.success else None, 'preview': r.text[:200] if r.text else ''} for r in o1]}
+        h3.write_text(json.dumps(f4, indent=2, ensure_ascii=False))
+        print(f'📋 Detailed report saved to: {h3}')
+def g4(e):
+    return l3.extract_from_image(e)
+def q():
+    s1 = argparse.ArgumentParser(description='Extract Russian and English text from images using OCR', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s\n  %(prog)s /path/to/dir1 /path/to/dir2\n  %(prog)s . --workers 4\n  %(prog)s . --json report.json\n        ')
+    s1.add_argument('directories', nargs='*', type=Path, default=[Path.cwd()], help='Directories to process (default: current directory)')
+    s1.add_argument('-w', '--workers', type=int, default=cpu_count(), help=f'Number of parallel workers (default: {cpu_count()})')
+    s1.add_argument('-j', '--json', type=Path, help='Save detailed report to JSON file')
+    s1.add_argument('-s', '--silent', action='store_true', help='Suppress file-by-file output (summary only)')
+    s = s1.parse_args()
+    o3 = [d.resolve() for d in s.directories]
+    print('🔍 Scanning for images...')
+    p3 = l3.find_images(o3)
+    if not p3:
+        print('❌ No images found in the specified directories.')
+        return 1
+    print(f'✓ Found {len(p3)} image(s)\n')
+    print(f'⚙️  Processing with {s.workers} worker(s)...\n')
+    if not s.silent:
+        r3.print_header(len(p3))
+    with Pool(processes=s.workers) as p1:
+        o1 = p1.map(g4, p3)
+    if not s.silent:
+        for p2, w2 in zip(o1, p3, strict=False):
+            try:
+                v3 = w2.relative_to(Path.cwd())
+            except ValueError:
+                v3 = w2
+            r3.print_file_result(p2, v3)
+    r3.print_summary(o1, o3)
+    if s.json:
+        r3.save_json_report(o1, s.json)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+# --- File: transocr.py ---
+import argparse
+import sys
+from pathlib import Path
+from typing import Final
+import pytesseract
+from deep_translator import GoogleTranslator
+from langdetect import DetectorFactory, detect
+from PIL import Image, ImageEnhance, ImageFilter
+h4 = 1024 * 1024
+DetectorFactory.seed = 0
+i4 = {'.txt', '.md', '.csv', '.json', '.py'}
+j4 = {'.jpg', '.jpeg', '.png'}
+h4 = 2000
+def k4(f2):
+    if not (l4 := f2.strip()):
+        return 'unknown'
+    try:
+        return detect(l4[:500])
+    except Exception:
+        return 'unknown'
+def m4(j1):
+    if j1.suffix.lower() not in i4:
+        raise ValueError(f'Unsupported text file extension: {j1.suffix}')
+    return j1.read_text(encoding='utf-8')
+def n4(img):
+    img = img.convert('L')
+    img = ImageEnhance.Contrast(img).enhance(2.0)
+    img = img.point(lambda x: 0 if x < 160 else 255)
+    return img.filter(ImageFilter.MedianFilter(size=3))
+def o4(j1):
+    try:
+        with Image.open(j1) as img:
+            p4 = n4(img)
+            return pytesseract.image_to_string(p4)
+    except Exception as e:
+        raise RuntimeError(f'OCR failed for {j1}: {e}') from e
+def q4(f2, r4=32768):
+    return [f2[i:i + r4] for i in range(0, len(f2), r4)]
+def s4(t4, u4):
+    v4 = GoogleTranslator(source=u4, target='en')
+    return ''.join((v4.translate(w4) for w4 in t4))
+def x4(y4):
+    z4 = y4.suffix.lower()
+    if z4 in j4:
+        a5 = y4.with_name(f'{y4.stem}_eng.txt')
+        b5 = y4.with_name(f'{y4.stem}_ocr.txt')
+        return (a5, b5)
+    a5 = y4.with_name(f'{y4.stem}_eng{z4}')
+    return (a5, None)
+def q():
+    s1 = argparse.ArgumentParser(description='Translate text or image to English.')
+    s1.add_argument('input_path', type=Path, help='Path to the input file.')
+    s1.add_argument('--lang', default='auto', help="Source language code or 'auto'")
+    s = s1.parse_args()
+    c5 = s.input_path
+    if not c5.exists():
+        print(f'Error: File not found: {c5}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        z4 = c5.suffix.lower()
+        d5 = None
+        if z4 in i4:
+            f2 = m4(c5)
+        elif z4 in j4:
+            f2 = o4(c5)
+            _, d5 = x4(c5)
+            if d5:
+                d5.write_text(f2, encoding='utf-8')
+        else:
+            print(f'Unsupported file type: {z4}. Use text or common image formats.')
+            sys.exit(0)
+        u4 = s.lang
+        if u4 == 'auto':
+            u4 = k4(f2)
+        t4 = q4(f2)
+        a5 = s4(t4, u4)
+        e5, _ = x4(c5)
+        e5.write_text(a5, encoding='utf-8')
+        print(f'✓ Translated output saved to {e5}')
+    except Exception as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(q())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

@@ -1,0 +1,259 @@
+# filename: pytrans.py
+import pycld2;from deep_translator import GoogleTranslator;from dh import DOC_TH1,DOC_TH2;y=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'});r='en';l=0.5;q=8;h='#!/';a=frozenset({'TODO','FIXME','HACK','XXX','NOTE','BUG','pylint','noqa','type:ignore','pragma','coding:','encoding:','charset:'});J.basicConfig(level=J.INFO,format='%(message)s');M=J.getLogger(__name__)
+def s(af):R=af.strip()
+    if not R or R.startswith(h):return True
+    if R.isascii():if any((Y in R.upper() for Y in a)):return True
+        if len(R.split())<=2 and len(R)<30:return True
+    return bool(not any((c.isalpha() for c in R)))
+def j(af):R=af.strip()
+    if len(R)<4 or s(R):return False
+    try:_,_,G=pycld2.detect(R);z=G[0][1];return z not in ('en','un')
+    except Exception:return False
+def k(af):if not af.strip():return af
+    try:N=GoogleTranslator(O='auto',target=r).translate(af);ag.sleep(l);return N if N else af
+    except Exception as exc:M.warning('  [warn] translation failed:%s',am);return af
+def d(ah):g=set();b=set()
+    for ab in aj.walk(ah):if isinstance(ab,aj.Call) and isinstance(ab.func,aj.Name) and (ab.func.id=='print'):for ai in ab.args:if isinstance(ai,aj.Constant) and isinstance(ai.value,str):g.add((ai.lineno,ai.col_offset))
+        if isinstance(ab,(aj.FunctionDef,aj.AsyncFunctionDef,aj.ClassDef,aj.Module)) and (ab.body and isinstance(ab.body[0],aj.Expr) and isinstance(ab.body[0].value,aj.Constant) and isinstance(ab.body[0].value.value,str)):ds=ab.body[0].value;b.add((ds.lineno,ds.col_offset))
+    return (g,b)
+def m(ad):try:O=ad.read_text(encoding='utf-8')
+    except Exception as e:M.error('[error] Could not read%s:%s',ad,e);return False
+    try:P=list(F.generate_tokens(io.StringIO(O).readline));ah=aj.parse(O)
+    except (F.TokenError,SyntaxError) as e:M.warning('[skip]%s:Parse error-%s',ad,e);return False
+    V=O.splitlines(keepends=True)
+    def u(L,ak):return sum((len(V[i]) for i in range(L-1)))+ak
+    A,H=d(ah);n=[]
+    for ao in P:o=u(ao.start[0],ao.start[1]);t=u(ao.end[0],ao.end[1])
+        if ao.type==F.COMMENT:T=ao.string.lstrip('#').strip()
+            if j(T):w=k(T);print('  [comment]%s->%s',T,w);n.append((o,t,f'# {w}'))
+        elif ao.type==F.STRING:B=(ao.start[0],ao.start[1]) in A;K=(ao.start[0],ao.start[1]) in H
+            if B or K:an=ao.string
+                if an.startswith((DOC_TH1,DOC_TH2)):W=an[:3]
+                elif an.startswith('"'):W='"'
+                else:W="'"
+                try:T=aj.literal_eval(an)
+                except Exception:continue
+                if isinstance(T,str) and j(T):w=k(T);U='docstring' if K else 'print-str';print('  [%s]%s->%s',U,T,w);I=w.replace('\\','\\\\').replace(W,f'\\{W}');n.append((o,t,f'{W}{I}{W}'))
+    if not n:return False
+    n.sort(key=lambda x:x[0],reverse=True);E=list(O)
+    for X,al,C in n:E[X:al]=list(C)
+    v=''.join(E)
+    try:aj.parse(v);ad.write_text(v,encoding='utf-8');return True
+    except SyntaxError as e:M.error('[error]%s:Generated invalid syntax,skipping:%s',ad,e);return False
+def Q(D):ad=Z(D)
+    try:if m(ad):print('[updated]%s',ad)
+    except Exception as e:M.error('[failed]%s:%s',ad,e)
+def aa():S=[str(p) for p in Z('.').rglob('*.py') if not any((ac in y for ac in p.parts))]
+    if not S:print('No Python files found.');return
+    print('Found%d files. Processing with%d workers...',len(S),q)
+    with f.Pool(processes=q) as ae:ae.map(Q,S)
+    print('Done.')
+if __name__=='__main__':raise SystemExit(aa())
+# filename: pytranslator.py
+from deep_translator import GoogleTranslator;from dh import DOC_TH1,DOC_TH2;from langdetect import DetectorFactory,detect;C=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'});DetectorFactory.seed=0;v='en';n=0.5;u=h.cpu_count();k='#!/';b=frozenset({'TODO','FIXME','HACK','XXX','NOTE','BUG','pylint','noqa','type:ignore','pragma','coding:','encoding:','charset:','DRYRUN','DRY-RUN','RESCURSIVE MODE ENABLED','.gitignore'});q=[(0,127),(128,255),(256,383),(384,591),(7680,7935),(11360,11391),(42784,43007),(43824,43887)];L.basicConfig(level=L.INFO,format='%(message)s');O=L.getLogger(__name__)
+def o(ac):cp=ord(ac);return any((Z<=cp<=ao for Z,ao in q))
+def f(ai):for ac in ai:if ac.isspace() or not ac.isalpha():continue
+        if not o(ac):return False
+    return True
+def a(ai):return any((ac.isalpha() and (not o(ac)) for ac in ai))
+def w(ai):T=ai.strip()
+    if not T or T.startswith(k):return True
+    if f(T):return True
+    if any((aa in T.upper() for aa in b)):return True
+    return bool(not any((c.isalpha() for c in T)))
+def l(ai):T=ai.strip()
+    if len(T)<2 or w(T):return False
+    if a(T):return True
+    try:return detect(T)!='en'
+    except Exception:return a(T)
+def m(ai):if not ai.strip():return ai
+    try:P=GoogleTranslator(Q='auto',target=v).translate(ai);aj.sleep(n);return P if P else ai
+    except Exception as exc:O.warning('  [warn] translation failed:%s',ap);return ai
+def g(ak):j=set();d=set()
+    for ae in am.walk(ak):if isinstance(ae,am.Call) and isinstance(ae.func,am.Name) and (ae.func.id=='print'):for al in ae.args:if isinstance(al,am.Constant) and isinstance(al.value,str):j.add((al.lineno,al.col_offset))
+        if isinstance(ae,(am.FunctionDef,am.AsyncFunctionDef,am.ClassDef,am.Module)) and (ae.body and isinstance(ae.body[0],am.Expr) and isinstance(ae.body[0].value,am.Constant) and isinstance(ae.body[0].value.value,str)):ds=ae.body[0].value;d.add((ds.lineno,ds.col_offset))
+    return (j,d)
+def r(ag):try:Q=ag.read_text(encoding='utf-8')
+    except Exception as e:O.error('[error] Could not read%s:%s',ag,e);return False
+    try:R=list(I.generate_tokens(io.StringIO(Q).readline));ak=am.parse(Q)
+    except (I.TokenError,SyntaxError) as e:O.warning('[skip]%s:Parse error-%s',ag,e);return False
+    X=Q.splitlines(keepends=True)
+    def z(N,an):return sum((len(X[i]) for i in range(N-1)))+an
+    D,J=g(ak);s=[]
+    for ar in R:t=z(ar.start[0],ar.start[1]);y=z(ar.end[0],ar.end[1])
+        if ar.type==I.COMMENT:V=ar.string.lstrip('#').strip()
+            if l(V):B=m(V);print('  [comment]%s->%s',V,B);s.append((t,y,f'# {B}'))
+        elif ar.type==I.STRING:E=(ar.start[0],ar.start[1]) in D;M=(ar.start[0],ar.start[1]) in J
+            if E or M:aq=ar.string
+                if aq.startswith((DOC_TH1,DOC_TH2)):Y=aq[:3]
+                elif aq.startswith('"'):Y='"'
+                else:Y="'"
+                try:V=am.literal_eval(aq)
+                except Exception:continue
+                if isinstance(V,str) and l(V):B=m(V);W='docstring' if M else 'print-str';print('  [%s]%s->%s',W,V,B);K=B.replace('\\','\\\\').replace(Y,f'\\{Y}');s.append((t,y,f'{Y}{K}{Y}'))
+    if not s:return False
+    s.sort(key=lambda x:x[0],reverse=True);H=list(Q)
+    for Z,ao,F in s:H[Z:ao]=list(F)
+    A=''.join(H)
+    try:am.parse(A);ag.write_text(A,encoding='utf-8');return True
+    except SyntaxError as e:O.error('[error]%s:Generated invalid syntax,skipping:%s',ag,e);return False
+def S(G):ag=ab(G)
+    try:if r(ag):print('[updated]%s',ag)
+    except Exception as e:O.error('[failed]%s:%s',ag,e)
+def ad():U=[str(p) for p in ab('.').rglob('*.py') if not any((af in C for af in p.parts))]
+    if not U:print('No Python files found.');return
+    print('Found%d files. Processing with%d workers...',len(U),u)
+    with h.Pool(processes=u) as ah:ah.map(S,U)
+    print('Done.')
+if __name__=='__main__':raise SystemExit(ad())
+# filename: trans_py.py
+from deep_translator import GoogleTranslator;from dh import get_pyfiles;from loguru import logger;s=5000;o=8;v=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'});e=W.compile('[^\\x00-\\x7F]')
+def j(R):if not R.strip() or not e.search(R):return R
+    try:u=GoogleTranslator(source='auto',target='en');t=u.translate(R.strip());return t if t else R
+    except Exception as exc:logger.debug(f'Translation error:{V} for text:{R[:30]}');return R
+class a(T.NodeTransformer):def __init__(self):self.modified=False
+    def b(self,P):x=T.get_docstring(P)
+        if x and e.search(x):t=j(x)
+            if t!=x:self.modified=True;L=getattr(P,'body',[])
+                if L and isinstance(L[0],T.Expr) and isinstance(L[0].value,T.Constant) and isinstance(L[0].value.value,str):L[0].value.value=t
+    def h(self,P):self._translate_node_docstring(P);return M(T.FunctionDef,self.generic_visit(P))
+    def k(self,P):self._translate_node_docstring(P);return M(T.ClassDef,self.generic_visit(P))
+    def n(self,P):self._translate_node_docstring(P);return M(T.Module,self.generic_visit(P))
+def d(F):H=F.splitlines(keepends=True);z=[];B=False
+    for N in H:if '#' in N:I=N.split('#',1);E=I[1]
+            if e.search(E):t=j(E)
+                if t!=E:z.append(f'{I[0]}# {t}\n');B=True;continue
+        z.append(N)
+    return (''.join(z),B)
+def m(A):try:p=A.with_suffix(A.suffix+'.bak');G.copyfile(A,p);F=A.read_text(encoding='utf-8');c,g=d(F)
+        try:S=T.parse(c);r=a();C=r.visit(S)
+            if r.modified or g:q=T.unparse(C);A.write_text(q,encoding='utf-8');return True
+        except SyntaxError:if g:A.write_text(c,encoding='utf-8');return True
+    except Exception as exc:logger.error(f'Failed to process {A}:{V}')
+    return False
+def O():U=J.cwd();D=get_pyfiles(U)
+    if not D:print('No Python files found.');return
+    print(f'Processing {len(D)} files...');i=0
+    with K(processes=o) as Q:l=[Q.apply_async(m,(f,)) for f in D]
+        for y,w in zip(D,l):if w.get():i+=1;print(f'✓ Updated:{y.name}')
+    print(f'Done. Modified {i} files.')
+if __name__=='__main__':raise SystemExit(O())
+# filename: transjap.py
+from deep_translator import GoogleTranslator;from loguru import logger;r=8;z=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache'});k=W.compile('[\\u3040-\\u30ff\\u4e00-\\u9fff]')
+def o(S):if not S or not S.strip() or (not k.search(S)):return S
+    try:y=GoogleTranslator(source='ja',target='en');x=y.translate(S);return x if x else S
+    except Exception as e:logger.error('Translation error:{} for text snippet:{}',e,S[:50]);return S
+class b(U.NodeTransformer):def __init__(self):self.modified=False
+    def g(self,O):A=U.get_docstring(O)
+        if A and k.search(A):x=o(A)
+            if x!=A:self.modified=True
+                if O.body and isinstance(O.body[0],U.Expr) and isinstance(O.body[0].value,U.Constant) and isinstance(O.body[0].value.value,str):O.body[0].value.value=x
+    def j(self,O):self._process_docstring(O);return self.generic_visit(O)
+    def p(self,O):self._process_docstring(O);return self.generic_visit(O)
+    def t(self,O):self._process_docstring(O);return self.generic_visit(O)
+def a(H):I=H.splitlines(keepends=True);D=False;B=[]
+    for M in I:if '#' in M:J=M.split('#',1);G=J[1]
+            if k.search(G):h=o(G)
+                if h!=G:B.append(f'{J[0]}#{h}');D=True;continue
+        B.append(M)
+    return (''.join(B),D)
+def n(Q):try:H=Q.read_text(encoding='utf-8');c,i=a(H)
+        try:T=U.parse(c);v=b();E=v.visit(T);d=v.modified
+            if i or d:u=U.unparse(E)
+                if k.search(u):u=k.sub(lambda m:o(m.group(0)),u)
+                Q.write_text(u,encoding='utf-8');return True
+        except SyntaxError as e:logger.error('Syntax error in {}:{}. Skipping AST translation.',Q,e)
+            if i:Q.write_text(c,encoding='utf-8');return True
+            return False
+    except Exception as e:logger.error('Error processing {}:{}',Q,e);return False
+    return False
+def N():C=V.argv[1] if len(V.argv)>1 else '.';w=K(C).resolve()
+    if not w.exists():logger.error("Error:Path '{}' does not exist",w);V.exit(1)
+    print('Scanning for Python files in:{}',w);F=[f for f in w.rglob('*.py') if not any((P in z for P in f.parts))]
+    if not F:print('No Python files found.');return
+    print('Found {} Python files. Starting translation...',len(F));l=0
+    with L(processes=r) as R:q=[R.apply_async(n,(f,)) for f in F]
+        for s,Q in zip(q,F):try:if s.get():l+=1;print('✓ Updated:{}',Q)
+            except Exception as e:logger.error('Task failed for {}:{}',Q,e)
+    print('='*40);print('Completed! Modified {} out of {} files',l,len(F))
+if __name__=='__main__':raise SystemExit(N())
+# filename: ultralinetrans.py
+from deep_translator import GoogleTranslator;from dh import DOC_TH1,DOC_TH2,get_files,is_binary;from loguru import logger;w=4990;o=8;B=frozenset({'lazy','.git','__pycache__','.mypy_cache','.ruff_cache','.pytest_cache','.venv'});b=re.compile('[^\\x00-\\x7F]');x=tuple[int,str,tuple[int,int],tuple[int,int],str];g=tuple[int,str]|tuple[int,str,str]
+def y(Y):return not b.search(Y)
+def i(Q):if not Q:return []
+    C='\n===|||===\n';n=C.join(Q)
+    try:c=GoogleTranslator(N='auto',target='en').translate(n)
+        if not c:return Q
+        j=[t.strip() for t in c.split(C.strip())]
+        if len(j)!=len(Q):logger.warning(f'Batch mismatch ({len(j)} vs {len(Q)}). Falling back to individual translation.');return [GoogleTranslator(N='auto',target='en').translate(t) or t for t in Q]
+        return j
+    except Exception as e:logger.error(f'Batch translation error:{e}');return Q
+def k(W,J):with F.NamedTemporaryFile(mode='w',encoding='utf-8',delete=False,dir=W.parent) as ab:ab.write(J);G=S(ab.name)
+    M.move(str(G),str(W))
+def a(N):try:O=list(I.generate_tokens(io.StringIO(N).readline))
+    except (I.TokenError,IndentationError):return i([N])[0]
+    u=[];d=[]
+    for Z,R in enumerate(O):H=R[0];K=R[1]
+        if H==I.COMMENT and (not y(K)):q=K[1:].strip()
+            if q:u.append(q);d.append((Z,'COMMENT'))
+        elif H==I.STRING:E=K.strip('\'"')
+            if E and (not y(E)) and (len(E)>5):u.append(E);d.append((Z,'STRING',K))
+    if not u:return N
+    h=i(u)
+    for v,l in zip(d,h,strict=False):Z=v[0];H=v[1]
+        if H=='COMMENT':O[Z]=(I.COMMENT,f'# {l}',O[Z][2],O[Z][3],O[Z][4])
+        elif H=='STRING':r=v[2];z=r[:3] if r.startswith((DOC_TH1,DOC_TH2)) else r[0];O[Z]=(I.STRING,f'{z}{l}{z}',O[Z][2],O[Z][3],O[Z][4])
+    try:return I.untokenize(O).decode('utf-8')
+    except Exception as e:logger.error(f'Error rebuilding python file structure:{e}');return N
+def s(W):try:D=W.read_text(encoding='utf-8',errors='ignore')
+    except Exception as e:logger.error(f'Error reading {W}:{e}');return
+    if y(D.strip()):return
+    print(f'Processing {W.name}...')
+    try:if W.suffix=='.py':A=a(D)
+        else:A=i([D])[0]
+        if A.strip()!=D.strip():k(W,A);print(f'✓ Updated {W.name}')
+    except Exception as e:logger.error(f'Failed to process {W}:{e}')
+def V():U=aa.argv[1:];P=[S(p) for p in U] if U else [f for f in get_files(S.cwd()) if not is_binary(f)]
+    if not P:print('No files to process.');return
+    with T(processes=o) as X:m=[X.apply_async(s,(f,)) for f in P]
+        for L in m:try:L.get()
+            except Exception as e:logger.error(f'Task failed:{e}')
+if __name__=='__main__':raise SystemExit(V())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

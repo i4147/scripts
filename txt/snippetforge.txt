@@ -1,0 +1,676 @@
+# --- File: 23line.py ---
+from pathlib import Path
+EXT = {'.py', '.h', '.c', '.cpp', '.cc', '.cxx', '.hh', '.hpp', '.hxx'}
+def a(b):
+    try:
+        c = b.read_text(encoding='utf-8', errors='ignore').splitlines(keepends=True)
+        return ''.join(c[:23])
+    except OSError:
+        return ''
+def d():
+    e = Path('all.txt').resolve()
+    f = []
+    for b in Path.cwd().rglob('*'):
+        if not b.is_file():
+            continue
+        if b.suffix not in EXT:
+            continue
+        if b.resolve() == e:
+            continue
+        g = a(b)
+        if g:
+            f.append(g)
+    h = list(set(f))
+    e.write_text('\n\n\n'.join(h), encoding='utf-8')
+    print(f'Unique snippets saved → {e}')
+    print(f'Total unique blocks: {len(h)}')
+if __name__ == '__main__':
+    raise SystemExit(d())
+
+# --- File: code_snip_extractor.py ---
+import re
+import sys
+from collections.abc import Generator
+from multiprocessing import Pool
+from pathlib import Path
+def i(b):
+    try:
+        j = b.read_text(encoding='utf-8', errors='replace')
+    except Exception:
+        return
+    c = j.split('\n')
+    i = 0
+    while i < len(c):
+        if c[i].strip().startswith('```'):
+            k = re.match('^```+(\\w*)', c[i].strip())
+            if k:
+                l = i + 1
+                i += 1
+                m = []
+                while i < len(c) and (not c[i].strip().startswith('```')):
+                    m.append(c[i])
+                    i += 1
+                n = '\n'.join(m).strip()
+                if n:
+                    yield (l, n)
+                i += 1
+                continue
+        if c[i].strip().startswith('>>>'):
+            l = i + 1
+            m = []
+            while i < len(c):
+                o = c[i]
+                p = o.strip()
+                if p.startswith('>>>'):
+                    m.append(p[3:].lstrip())
+                    i += 1
+                elif p.startswith('...'):
+                    m.append(p[3:].lstrip())
+                    i += 1
+                elif p.startswith('>>'):
+                    i += 1
+                elif p == '' or p.startswith('#'):
+                    i += 1
+                    if not p.startswith('#'):
+                        break
+                else:
+                    if m and (not any((c in p for c in ['=', 'True', 'False', '[']))):
+                        break
+                    i += 1
+            n = '\n'.join(m).strip()
+            if n:
+                yield (l, n)
+            continue
+        i += 1
+def q(b, r):
+    s = b.relative_to(b.anchor)
+    t = str(s).replace('/', '_').replace('.', '_')
+    u = 0
+    v = 0
+    try:
+        for w, n in i(b):
+            try:
+                x = r / f'{t}_line{w}.py'
+                y = f'# Source: {b}\n# Line: {w}\n\n'
+                x.write_text(y + n, encoding='utf-8')
+                u += 1
+            except Exception:
+                v += 1
+    except Exception:
+        v += 1
+    return {'file': str(b), 'count': u, 'errors': v}
+def z(a1=None, b1=4):
+    if not a1 or a1 == ['']:
+        c1 = [Path.cwd()]
+    else:
+        c1 = [Path(p).resolve() for p in a1]
+    d1 = []
+    for e1 in c1:
+        if e1.is_file():
+            d1.append(e1)
+        elif e1.is_dir():
+            d1.extend((p for p in e1.rglob('*') if p.is_file() and '.git' not in p.parts and (not p.is_symlink()) and (p.suffix in {'.md', '.rst', '.txt', '.METADATA', '.PKG-INFO', '.cfg', '.ini'})))
+    if not d1:
+        print('No files found.')
+        return
+    r = Path.cwd() / 'output'
+    r.mkdir(exist_ok=True)
+    print(f'📂 Found {len(d1)} files. Processing with {b1} workers...')
+    f1 = 0
+    g1 = 0
+    with Pool(b1) as h1:
+        i1 = [h1.apply_async(q, (f, r)) for f in d1]
+        for _i, j1 in enumerate(i1, 1):
+            try:
+                res = j1.get(timeout=30)
+                f1 += res['count']
+                g1 += res['errors']
+                if res['count'] > 0:
+                    print(f"  ✓ {res['file']}: {res['count']} snippet(s)")
+            except Exception as e:
+                print(f'  ✗ Error: {e}')
+                g1 += 1
+    print(f'\n✅ Complete: {f1} snippets extracted, {g1} error(s).')
+    print(f'📁 Output saved to: {r.resolve()}')
+if __name__ == '__main__':
+    k1 = sys.argv[1:] if len(sys.argv) > 1 else []
+    z(k1, workers=4)
+
+# --- File: excode.py ---
+import re
+from pathlib import Path
+l1 = {'python': '.py', 'py': '.py', 'javascript': '.js', 'js': '.js', 'typescript': '.ts', 'ts': '.ts', 'c': '.c', 'cpp': '.cpp', 'c++': '.cpp', 'h': '.h', 'java': '.java', 'csharp': '.cs', 'c#': '.cs', 'go': '.go', 'golang': '.go', 'rust': '.rs', 'ruby': '.rb', 'rails': '.rb', 'php': '.php', 'swift': '.swift', 'kotlin': '.kt', 'scala': '.scala', 'sql': '.sql', 'bash': '.sh', 'sh': '.sh', 'zsh': '.sh', 'shell': '.sh', 'powershell': '.ps1', 'ps1': '.ps1', 'yaml': '.yaml', 'yml': '.yaml', 'json': '.json', 'html': '.html', 'htm': '.html', 'css': '.css', 'make': 'Makefile', 'makefile': 'Makefile', 'dockerfile': 'Dockerfile', 'text': '.txt', 'txt': '.txt', 'plain': '.txt'}
+m1 = re.compile('```(?P<lang>[A-Za-z0-9_+\\-.]*)[ \\t]*\\n(?P<code>.*?)(?<=\\n)```', re.DOTALL | re.IGNORECASE)
+def n1(o1):
+    if not o1:
+        return '.txt'
+    o1 = o1.strip().lower()
+    if o1 in l1:
+        return l1[o1]
+    if o1.startswith('.'):
+        return o1
+    return '.txt'
+def p1(q1, r1=200):
+    s1 = re.sub('[^\\w\\-.]', '_', q1)
+    return s1[:r1].rstrip('_') or 'code_block'
+def t1(u1, v1):
+    try:
+        j = u1.read_text(encoding='utf-8', errors='replace')
+    except Exception as e:
+        print(f'Warning: Could not read {u1}: {e}')
+        return []
+    w1 = list(m1.finditer(j))
+    if not w1:
+        return []
+    x1 = []
+    y1 = p1(u1.stem)
+    for i, z1 in enumerate(w1, start=1):
+        o1 = z1.group('lang') or ''
+        a2 = z1.group('code')
+        ext = n1(o1)
+        b2 = f'{y1}_block_{i}{ext}'
+        c2 = v1 / b2
+        try:
+            c2.write_text(a2.rstrip('\n') + '\n', encoding='utf-8')
+        except Exception as e:
+            print(f'Warning: Could not write {c2}: {e}')
+            continue
+        x1.append(c2)
+    return x1
+def d():
+    cwd = Path.cwd().resolve()
+    v1 = cwd / 'output'
+    v1.mkdir(parents=True, exist_ok=True)
+    d2 = sorted((p for p in cwd.rglob('*.md') if p.is_file()))
+    e2 = 0
+    f2 = []
+    for u1 in d2:
+        x1 = t1(u1, v1)
+        e2 += len(x1)
+        f2.extend(x1)
+if __name__ == '__main__':
+    raise SystemExit(d())
+
+# --- File: exmd.py ---
+import re
+from pathlib import Path
+g2 = Path('output')
+if not g2.exists():
+    g2.mkdir(exist_ok=True)
+def h2(i2):
+    j2 = []
+    c = i2.splitlines()
+    k2 = False
+    l2 = []
+    m2 = -1
+    n2 = ''
+    for i, o in enumerate(c):
+        if o.strip().startswith('```'):
+            if k2:
+                j2.append({'language': n2, 'start_line': m2, 'end_line': i, 'content': '\n'.join(l2)})
+                k2 = False
+                l2 = []
+                n2 = ''
+            else:
+                k2 = True
+                m2 = i + 1
+                z1 = re.match('```(\\w*)', o.strip())
+                n2 = z1.group(1).lower() if z1 and z1.group(1) else ''
+                l2 = []
+        elif k2:
+            l2.append(o)
+    if k2:
+        j2.append({'language': n2, 'start_line': m2, 'end_line': len(c), 'content': '\n'.join(l2)})
+    return j2
+def o2(n2):
+    p2 = {'sh': '.sh', 'bash': '.sh', 'zsh': '.sh', 'python': '.py', 'py': '.py', 'javascript': '.js', 'js': '.js', 'html': '.html', 'css': '.css', 'json': '.json', 'yaml': '.yaml', 'yml': '.yaml', 'sql': '.sql', 'md': '.md', 'text': '.txt', 'plain': '.txt', '': '.txt'}
+    return p2.get(n2.lower(), '.txt')
+def q2(r2='.'):
+    s2 = Path(r2)
+    for b in s2.rglob('*'):
+        if b.suffix.lower() in {'.md', '.markdown', '.metadata'} or b.name in {'METADATA', 'PKGINFO', 'PKG-INFO'}:
+            try:
+                j = b.read_text(encoding='utf-8')
+            except Exception as e:
+                print(f'Error reading {b}: {e}')
+                continue
+            t2 = h2(j)
+            if t2:
+                y1 = b.stem
+                for u2 in t2:
+                    v2 = f"{u2['start_line']}-{u2['end_line']}"
+                    n2 = u2['language']
+                    w2 = o2(n2)
+                    x2 = f'{y1}_lines_{v2}{w2}'
+                    e = g2 / x2
+                    e.write_text(u2['content'].strip(), encoding='utf-8')
+                    print(f"Saved snippet from {b} (Lines {v2}, Lang: '{n2}') to {e}")
+if __name__ == '__main__':
+    q2()
+
+# --- File: extcode_md.py ---
+import re
+from pathlib import Path
+y2 = {'python': '.py', 'py': '.py', 'javascript': '.js', 'js': '.js', 'typescript': '.ts', 'ts': '.ts', 'c': '.c', 'h': '.h', 'cpp': '.cpp', 'c++': '.cpp', 'cc': '.cc', 'java': '.java', 'csharp': '.cs', 'c#': '.cs', 'cs': '.cs', 'go': '.go', 'golang': '.go', 'rust': '.rs', 'ruby': '.rb', 'rails': '.rb', 'php': '.php', 'swift': '.swift', 'kotlin': '.kt', 'scala': '.scala', 'sql': '.sql', 'bash': '.sh', 'shell': '.sh', 'sh': '.sh', 'zsh': '.sh', 'powershell': '.ps1', 'ps1': '.ps1', 'yaml': '.yml', 'yml': '.yml', 'json': '.json', 'html': '.html', 'htm': '.html', 'css': '.css', 'dockerfile': '', 'make': '', 'makefile': '', 'text': '.txt', 'plain': '.txt', 'md': '.md', 'markdown': '.md'}
+z2 = re.compile('```(?P<lang>[A-Za-z0-9_+\\-\\.]*)[ \\t]*\\n(?P<code>.*?)(?<=\\n)```', re.DOTALL)
+def a3(o1):
+    o1 = (o1 or '').strip().lower()
+    if not o1:
+        return '.txt'
+    if o1 in y2:
+        return y2[o1] or '.txt'
+    if '.' in o1:
+        return o1 if o1.startswith('.') else '.' + o1.split('.')[-1]
+    return '.' + o1
+def b3(s, r1=120):
+    s = re.sub('[^\\w\\-\\.]+', '_', s)
+    return s[:r1].rstrip('_') or 'file'
+def t1(c3, r):
+    d3 = c3.read_text(encoding='utf-8', errors='replace')
+    w1 = list(z2.finditer(d3))
+    if not w1:
+        return 0
+    e3 = b3(c3.stem)
+    for i, m in enumerate(w1, start=1):
+        o1 = m.group('lang') or ''
+        a2 = m.group('code')
+        ext = a3(o1)
+        f3 = (o1 or '').strip().lower()
+        if f3 in {'dockerfile', 'make', 'makefile'}:
+            g3 = f'{e3}_block_{i}'
+        else:
+            g3 = f'{e3}_block_{i}{ext}'
+        c2 = r / g3
+        c2.write_text(a2.rstrip('\n') + '\n', encoding='utf-8')
+    return len(w1)
+def d():
+    cwd = Path.cwd().resolve()
+    v1 = cwd / 'output'
+    v1.mkdir(parents=True, exist_ok=True)
+    d2 = sorted((p for p in cwd.rglob('*.md') if p.is_file()))
+    e2 = 0
+    for md in d2:
+        e2 += t1(md, v1)
+if __name__ == '__main__':
+    raise SystemExit(d())
+
+# --- File: pycodex.py ---
+import argparse
+import json
+import re
+from dataclasses import dataclass
+from multiprocessing.pool import AsyncResult, Pool
+from pathlib import Path
+from typing import Any, Final
+import requests
+from bs4 import BeautifulSoup
+from loguru import logger
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+h3 = ('def ', 'class ', 'import ', 'from ', 'if ', 'for ', 'while ', 'try:', 'except', 'with ', 'lambda', 'return ', 'yield ', 'async ', 'await ', '@', 'elif ', 'else:', 'self.')
+i3 = tuple((re.compile(j3) for j3 in ('\\bdef\\s+\\w+\\s*\\(', '\\bclass\\s+\\w+', '\\bif\\s+.*:', '\\bfor\\s+.*\\s+in\\s+', '\\bimport\\s+', '\\breturn\\s+', '\\b(True|False|None)\\b')))
+k3 = re.compile('#\\s*(?:filename|name|file)\\s*:?\\s*([\\w\\-._]+\\.py)', re.IGNORECASE)
+l3 = ('def ', 'import ', 'class ', 'if __name__')
+m3 = './output'
+n3 = 8
+o3 = 5
+@dataclass
+class p3:
+    q3 = None
+class r3:
+    def __init__(self, s3=3, t3=10):
+        self.session = requests.Session()
+        u3 = Retry(total=s3, backoff_factor=1)
+        v3 = HTTPAdapter(max_retries=u3)
+        self.session.mount('http://', v3)
+        self.session.mount('https://', v3)
+        self.timeout = t3
+    def w3(self, url):
+        try:
+            x3 = self.session.get(url, timeout=self.timeout)
+            x3.raise_for_status()
+            return x3.text
+        except requests.RequestException as exc:
+            logger.exception('Failed to fetch {}: {}', url, exc)
+            return None
+    def y3(self):
+        self.session.close()
+class z3:
+    def __init__(self):
+        self.http_session = r3()
+    def a4(self, b4, c4):
+        d4 = BeautifulSoup(b4, 'html.parser')
+        e4 = []
+        e4.extend(self._extract_from_pre_code(d4, c4))
+        e4.extend(self._extract_from_code_tags(d4, c4))
+        e4.extend(self._extract_from_canvas(d4, c4))
+        return e4
+    def f4(self, d4, c4):
+        g4 = []
+        for idx, pre in enumerate(d4.find_all('pre')):
+            a2 = pre.find('code')
+            if a2 is not None:
+                j = a2.get_text()
+                if self._is_python_code(j):
+                    h4 = p3(content=j, language='python', source_file=c4, block_index=idx, suggested_name=self._extract_filename_from_code(j))
+                    g4.append(h4)
+        return g4
+    def i4(self, d4, c4):
+        g4 = []
+        j4 = len(d4.find_all('pre'))
+        for idx, a2 in enumerate(d4.find_all('code')):
+            k4 = a2.parent
+            if k4 is not None and getattr(k4, 'name', None) == 'pre':
+                continue
+            j = a2.get_text()
+            if self._is_python_code(j):
+                h4 = p3(content=j, language='python', source_file=c4, block_index=j4 + idx, suggested_name=self._extract_filename_from_code(j))
+                g4.append(h4)
+        return g4
+    def l4(self, d4, c4):
+        g4 = []
+        j4 = len(d4.find_all('pre')) + len(d4.find_all('code'))
+        for idx, m4 in enumerate(d4.find_all('script')):
+            n4 = m4.get('type')
+            o4 = str(m4.get('id', '')).lower()
+            if n4 == 'application/json' or 'canvas' in o4:
+                try:
+                    j = m4.string
+                    if j:
+                        p4 = json.loads(j)
+                        q4 = self._extract_from_json(p4)
+                        for r4 in q4:
+                            if self._is_python_code(r4):
+                                h4 = p3(content=r4, language='python', source_file=c4, block_index=j4 + idx, suggested_name=self._extract_filename_from_code(r4))
+                                g4.append(h4)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return g4
+    def s4(self, p4, t4=0, u4=o3):
+        if t4 > u4:
+            return []
+        q4 = []
+        if isinstance(p4, dict):
+            for v4 in p4.values():
+                q4.extend(self._extract_from_json(v4, t4 + 1, u4))
+        elif isinstance(p4, list):
+            for w4 in p4:
+                q4.extend(self._extract_from_json(w4, t4 + 1, u4))
+        elif isinstance(p4, str) and any((x4 in p4 for x4 in l3)):
+            q4.append(p4)
+        return q4
+    def y4(self, j):
+        if not j.strip():
+            return False
+        z4 = j.lower()
+        a5 = sum((1 for x4 in h3 if x4.lower() in z4))
+        b5 = sum((1 for j3 in i3 if j3.search(j)))
+        return a5 >= 2 or b5 >= 2
+    def c5(self, j):
+        c = j.split('\n')
+        for o in c[:10]:
+            z1 = k3.search(o)
+            if z1 is not None:
+                return z1.group(1)
+        return None
+    def y3(self):
+        self.http_session.close()
+class d5:
+    def __init__(self, r=m3):
+        self.output_dir = Path(r)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.extractor = z3()
+    def q(self, b):
+        try:
+            b = Path(b)
+            if b.suffix.lower() != '.html':
+                return 0
+            b4 = b.read_text(encoding='utf-8', errors='ignore')
+            e4 = self.extractor.extract_from_html(b4, str(b))
+            if e4:
+                self._save_code_blocks(e4, str(b))
+                print('Extracted {} code blocks from {}', len(e4), b)
+            return len(e4)
+        except Exception as exc:
+            logger.exception('Error processing {}: {}', b, exc)
+            return 0
+    def e5(self, url):
+        try:
+            b4 = self.extractor.http_session.fetch(url)
+            if not b4:
+                return 0
+            e4 = self.extractor.extract_from_html(b4, url)
+            if e4:
+                self._save_code_blocks(e4, url)
+                print('Extracted {} code blocks from {}', len(e4), url)
+            return len(e4)
+        except Exception as exc:
+            logger.exception('Error processing URL {}: {}', url, exc)
+            return 0
+    def f5(self, e4, g5):
+        if g5.startswith('http'):
+            h5 = 'url_content'
+        else:
+            h5 = Path(g5).stem
+        i5 = self.output_dir / h5
+        i5.mkdir(parents=True, exist_ok=True)
+        for h4 in e4:
+            g3 = h4.suggested_name or f'{h5}_block_{h4.block_index:03d}.py'
+            b = i5 / g3
+            j5 = 1
+            k5 = b
+            while b.exists():
+                l5 = k5.stem.rsplit('_', 1)
+                if len(l5) == 2 and l5[1].isdigit():
+                    y1 = l5[0]
+                else:
+                    y1 = k5.stem
+                b = i5 / f'{y1}_{j5}.py'
+                j5 += 1
+            b.write_text(h4.content, encoding='utf-8')
+            logger.debug('Saved code block to {}', b)
+    def y3(self):
+        self.extractor.close()
+def m5(r2):
+    b = Path(r2)
+    return [str(n5) for n5 in b.rglob('*.html')]
+def o5(p5):
+    b, r = p5
+    q5 = d5(output_dir=r)
+    try:
+        return q5.process_file(b)
+    finally:
+        q5.close()
+def r5():
+    s5 = argparse.ArgumentParser(description='Extract Python code blocks from HTML files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='Examples:\n  python script.py -f document.html\n  python script.py -p /path/to/documents\n  python script.py -u https://example.com/page.html\n  python script.py\n')
+    s5.add_argument('-f', '--file', type=str, help='Path to a single HTML file')
+    s5.add_argument('-p', '--path', type=str, help='Path to directory containing HTML files')
+    s5.add_argument('-u', '--url', type=str, help='URL to fetch HTML content from')
+    s5.add_argument('-o', '--output', type=str, default=m3, help=f'Output directory for extracted code blocks (default: {m3})')
+    return s5
+def t5(b, r):
+    u5 = m5(b)
+    if not u5:
+        logger.warning('No HTML files found in {}', b)
+        return 0
+    print('Found {} HTML files', len(u5))
+    e2 = 0
+    h1 = Pool(processes=n3)
+    try:
+        i1 = [h1.apply_async(o5, ((b, r),)) for b in u5]
+        h1.close()
+        for j1 in i1:
+            try:
+                e2 += j1.get()
+            except Exception as exc:
+                logger.exception('Worker failed: {}', exc)
+        h1.join()
+    except Exception:
+        h1.terminate()
+        raise
+    return e2
+def d():
+    s5 = r5()
+    p5 = s5.parse_args()
+    e2 = 0
+    if p5.url:
+        print('Processing URL: {}', p5.url)
+        q5 = d5(output_dir=p5.output)
+        try:
+            e2 += q5.process_url(p5.url)
+        finally:
+            q5.close()
+    elif p5.file:
+        print('Processing file: {}', p5.file)
+        q5 = d5(output_dir=p5.output)
+        try:
+            e2 += q5.process_file(p5.file)
+        finally:
+            q5.close()
+    elif p5.path:
+        print('Processing directory: {}', p5.path)
+        e2 += t5(p5.path, p5.output)
+    else:
+        print('Processing HTML files in current directory recursively')
+        e2 += t5('.', p5.output)
+    print('Total code blocks extracted: {}', e2)
+    print('Results saved to: {}', Path(p5.output))
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(d())
+
+# --- File: xpy_code.py ---
+import re
+import sys
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+v5 = frozenset({'PKGINFO', 'METADATA', 'PKG-INFO'})
+w5 = frozenset({'.md', '.txt', '.html'})
+x5 = 8
+g2 = Path('extracted_code')
+y5 = re.compile('```python\\s*\\n(.*?)```\\"\\"\\"(.*?)\\"\\"\\"', re.DOTALL | re.IGNORECASE)
+z5 = re.compile('(?:^|\\n)((?:import\\s+\\w+|from\\s+\\w+\\s+import|def\\s+\\w+|class\\s+\\w+).*?)(?=\\n\\s*\\n|\\Z)', re.DOTALL | re.MULTILINE)
+a6 = re.compile('(?:^|\\n)((?:>>>|\\.\\.\\.).*?)(?=\\n\\s*\\n|\\Z)', re.DOTALL | re.MULTILINE)
+b6 = tuple[Path, list[Path]]
+def c6(d6):
+    if d6.name in v5:
+        return True
+    return d6.suffix.lower() in w5
+def e6(a1):
+    f6 = set()
+    for p in a1:
+        b = Path(p)
+        if b.is_file():
+            if c6(b):
+                f6.add(b)
+        elif b.is_dir():
+            for g6 in b.rglob('*'):
+                if g6.is_file() and c6(g6):
+                    f6.add(g6)
+    return sorted(f6)
+def h6(h4):
+    c = h4.strip().split('\n')
+    i6 = []
+    j6 = False
+    for o in c:
+        p = o.strip()
+        if p.startswith(('>>>', '...')):
+            a2 = p[3:].strip()
+            i6.append(a2)
+            j6 = True
+        elif j6 and p:
+            i6.append(f'# {p}')
+        elif not p:
+            i6.append('')
+    return '\n'.join(i6)
+def k6(d6):
+    try:
+        j = d6.read_text(encoding='utf-8', errors='ignore')
+    except (OSError, UnicodeDecodeError):
+        return []
+    g4 = []
+    for z1 in y5.finditer(j):
+        a2 = z1.group(1).strip()
+        if a2:
+            if '>>>' in a2:
+                a2 = h6(a2)
+            g4.append(a2)
+    for z1 in a6.finditer(j):
+        a2 = h6(z1.group(1))
+        if a2.strip():
+            g4.append(a2)
+    if not g4 and d6.name in v5:
+        for z1 in z5.finditer(j):
+            a2 = z1.group(1).strip()
+            if a2 and ('import' in a2 or 'def ' in a2 or 'class ' in a2):
+                g4.append(a2)
+    return g4
+def q(d6, r):
+    g4 = k6(d6)
+    l6 = []
+    for idx, a2 in enumerate(g4, 1):
+        m6 = d6.stem.replace(' ', '_')
+        b2 = f'{m6}_{idx:03d}.py'
+        c2 = r / b2
+        y = f'# Source: {d6}\n# Block: {idx}\n# Extracted: {d6.name}\n\n'
+        c2.write_text(y + a2 + '\n', encoding='utf-8')
+        l6.append(c2)
+    return (d6, l6)
+def d():
+    k1 = sys.argv[1:] if len(sys.argv) > 1 else ['.']
+    g2.mkdir(exist_ok=True)
+    n6 = e6(k1)
+    if not n6:
+        print('No target files found.')
+        return
+    print(f'Found {len(n6)} target files. Processing...')
+    i1 = []
+    with Pool(processes=x5) as h1:
+        o6 = [h1.apply_async(q, (f, g2)) for f in n6]
+        for p6 in o6:
+            d6, l6 = p6.get()
+            i1.append((d6, l6))
+            print(f'  ✓ {d6}: {len(l6)} block(s) extracted')
+    e2 = sum((len(l6) for _, l6 in i1))
+    print(f"Done! Extracted {e2} Python block(s) to '{g2}/'")
+    print('Reference headers in each file indicate the source.')
+if __name__ == '__main__':
+    raise SystemExit(d())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

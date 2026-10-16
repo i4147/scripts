@@ -1,0 +1,77 @@
+# filename: tar_folder.py
+def b(d,f):try:h.make_archive(str(d),str(f),format='tar');return True
+    except Exception:return False
+def g(j):try:if j.is_file():j.unlink();print(f'Removed file:{j}')
+        elif j.is_dir():h.rmtree(j);print(f'Removed directory:{j}')
+    except Exception as e:print(f"Error removing '{j}':{e}")
+if __name__=='__main__':if len(k.argv)!=2:print('Usage:python tar_folder.py<folder_path>');k.exit(1)
+    a=i(k.argv[1])
+    if not a.exists():print(f"Error:Folder '{a}' not found.");k.exit(1)
+    if not a.is_dir():print(f"Error:'{a}' is not a directory.");k.exit(1)
+    c=a.parent/f'{a.name}.tar'
+    if b(a,c):g(a)
+# filename: tgzr.py
+i=8
+def e(p):if p.is_dir() and (not p.is_symlink()):l.rmtree(p)
+    else:p.unlink()
+def b(m):h=list(m)
+    if not h:return
+    with c.Pool(processes=i) as q:d=[q.apply_async(e,(o,)) for o in h]
+        for k in d:k.get()
+def a(r=n()):r=r.resolve();f=f'{r.name}.tar.gz';g=r.parent/f;print(f'Creating archive:{g}')
+    with j.open(g,'w:gz') as s:s.add(r,arcname=r.name)
+    print('Archive created. Removing original files...');m=[o for o in r.iterdir() if o.resolve()!=g];b(m);print('Cleanup complete.')
+if __name__=='__main__':a()
+
+You are a senior Python engineer. You will be given N Python scripts that do
+nearly the same job with small differences. Merge them into ONE well-structured,
+runnable Python script.
+## Input
+are scripts provided above.
+## Deliverable
+A single runnable file named `<merged>.py`, invoked as:
+    python <merged>.py <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse`. Expose every behavioral difference between the original
+   scripts as a CLI argument.
+   - Use subcommands if the scripts are distinct modes/jobs.
+   - Use flags if they are variations of one pipeline.
+2. Factor shared logic (imports, helpers, config, error handling) into common
+   functions. Do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Include a mapping
+   block (see Output format §3).
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args, with
+   defaults equal to the original values.
+5. If differences cannot be unified, keep BOTH behind a flag/choice. Never
+   silently pick one.
+6. Sensible defaults so it runs out of the box. Print help if ambiguous.
+7. Type hints on all public functions. Docstrings on all public functions and
+   classes. Module-level docstring with usage examples.
+8. Standard library only, unless the originals already import third-party
+   packages — in that case list them explicitly at the top of the module
+   docstring and in the imports.
+## Output format (exactly these three sections, in order)
+### 1. Comparison table
+Markdown table: script name | what it does | shared with others | unique to it |
+proposed CLI mapping.
+### 2. Merged script
+One fenced code block containing the complete file.
+### 3. Mapping
+A fenced code block (plain text) showing the exact command for each original:
+    original_name1.py  ->  python merged.py mode-a ...
+    original_name2.py  ->  python merged.py mode-b --flag ...
+## Comment policy
+- Keep the module-level docstring (with usage examples).
+- Keep the mapping block from §3 as real comments in the file.
+- Strip ALL other comments and docstrings from the final code.
+- Exception: keep a short comment wherever a non-obvious behavior was
+  preserved behind a flag, so a future reader knows why the branch exists.
+## Ambiguity policy
+- If something is ambiguous, state your assumption in one line and proceed.
+- If something is impossible, say so plainly. Do not simulate or fake output.
+- Only ask a clarifying question if a wrong assumption would SILENTLY change
+  runtime behavior. Otherwise assume and move on.
+## Batch mode (optional)
+If the user says "batch mode", emit ONLY §2 (the code) for each input group,
+omit the table and mapping sections, and write each merged file to
+`<group>_merged.py` next to the inputs. Otherwise emit all three sections.

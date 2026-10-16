@@ -1,0 +1,139 @@
+# filename: font_convert.py
+from dh import cprint,get_files,mpf3,unique_path;from fontTools.ttLib import TTFont;b=['.ttf','.otf','.woff','.woff2'];d={'woff':'woff','woff2':'woff2','ttf':None}
+def g(r,v='woff2',a=False):r=m(r);i=r.with_suffix(f'.{v}')
+    if i.exists() and i.stat().st_size:i=unique_path(i)
+    try:o=TTFont(r);o.flavor=d[v];o.save(i)
+    except Exception as exc:cprint(f'error converting {r.name}:{s}');return
+    print(f'{r.name}->{i.name}')
+    if a and r.exists():r.unlink()
+def e(l,v):k=[]
+    for p in l:if p.is_dir():k.extend(get_files(p,ext=b))
+        elif p.exists():k.append(p)
+        else:cprint(f'not found:{p}')
+    if not k:k=get_files(m.cwd(),ext=b)
+    return [f for f in k if f.suffix.lower()!=f'.{v}']
+def q():u=c.ArgumentParser(description='Convert TTF/OTF/WOFF/WOFF2 fonts to another container flavour.');u.add_argument('paths',nargs='*',type=m,help='font files or directories (default:scan the current directory)');u.add_argument('--to',required=True,choices=sorted(d),help='target format/extension');u.add_argument('-r','--rm',action='store_true',help='delete the source file after a successful conversion');n=u.parse_args();k=e(n.paths,n.to)
+    if not k:cprint(f'no font files to convert to .{n.to}');return t.exit(1)
+    j=h(g,v=n.to,a=n.rm)
+    if len(k)==1:j(k[0]);return
+    mpf3(j,k)
+if __name__=='__main__':raise SystemExit(q())
+# filename: otf2ttf.py
+from fontTools.pens.ttGlyphPen import TTGlyphPen;from fontTools.ttLib import TTFont
+def a(m):o=m.with_suffix('.ttf');s={'otf':str(m),'ttf':str(o),'status':'unknown'}
+    if o.exists():s['status']='skipped_exists';return s
+    try:y=TTFont(m)
+        if 'glyf' in y:s['status']='skipped_already_ttf';return s
+        i=None
+        if 'CFF2' in y:i=y['CFF2']
+        elif 'CFF ' in y:i=y['CFF ']
+        else:s['status']='failed_no_cff';return s
+        f=y.getGlyphOrder()
+        for h in f:if h in i:k=TTGlyphPen(None);d=i[h];d.draw(k);y['glyf'][h]=k.glyph()
+        y.flavor=None
+        for u in ['CFF ','CFF2','VORG']:if u in y:del y[u]
+        if 'glyf' not in y:raise ValueError('Failed to create glyf table')
+        y.sfVersion='\x00\x01\x00\x00';y.reader=None;y.save(o);m.unlink();s['status']='success'
+    except Exception as e:s['status']='failed';s['error']=str(e)
+        if o.exists():o.unlink()
+    return s
+def b(n=None,p='**/*.otf'):if n is None:n=v.cwd()
+    else:n=v(n)
+    return list(n.glob(p))
+def c(x):m,=x;print(f'Processing:{m}');s=a(m)
+    if s['status']=='success':print(f"  ✓ Converted:{s['ttf']} (original removed)")
+    elif s['status']=='skipped_exists':print(f"  ⚠ Skipped:{s['ttf']} (already exists)")
+    elif s['status']=='skipped_already_ttf':print(f"  ⚠ Skipped:{s['otf']} (already has TrueType outlines)")
+    else:j=s.get('error','Unknown error');print(f"  ✗ Failed:{s['otf']}-{j}")
+    return s
+def z():n=v.cwd();g=6;print(f'Searching for OTF files in:{n}');l=b(n)
+    if not l:print('No OTF files found.');return
+    print(f'Found {len(l)} OTF file(s)');print(f'Using {g} worker processes');print('Original OTF files will be removed after successful conversion\n');x=[(A,) for A in l]
+    with w(processes=g) as B:q=B.map(c,x)
+    r={'total':len(q),'success':0,'skipped_exists':0,'skipped_already_ttf':0,'failed':0}
+    for s in q:if s['status']=='success':r['success']+=1
+        elif s['status']=='skipped_exists':r['skipped_exists']+=1
+        elif s['status']=='skipped_already_ttf':r['skipped_already_ttf']+=1
+        else:r['failed']+=1
+    print('\n'+'='*40);print('Conversion Summary:');print(f"  Total OTF files found:{r['total']}");print(f"  Successfully converted&removed:{r['success']}");print(f"  Skipped (TTF exists):{r['skipped_exists']}");print(f"  Skipped (already TrueType):{r['skipped_already_ttf']}");print(f"  Failed:{r['failed']}")
+    if r['failed']>0:print('\nFailed conversions (original files preserved):')
+        for s in q:if s['status']=='failed':t=s.get('error','Unknown error');print(f"  ✗ {s['otf']}:{t}")
+    return r
+if __name__=='__main__':try:raise SystemExit(z())
+    except KeyboardInterrupt:print('\n\nConversion interrupted by user.');C.exit(1)
+# filename: otf_to_ttf.py
+try:import fontforge
+except ImportError:print("This script must be run with FontForge's Python interpreter:");print('  fontforge-script otf2ttf_fontforge.py');m.exit(1)
+def a(c):f=c.with_suffix('.ttf')
+    if f.exists():return ('skipped',str(f))
+    try:k=fontforge.open(str(c));k.generate(str(f),flags=('opentype',));k.close();c.unlink();return ('success',str(f))
+    except Exception as e:return ('error',str(e))
+def l():d=j(m.argv[1]) if len(m.argv)>1 else j.cwd();print(f'Searching for OTF files in:{d}');b=list(d.rglob('*.otf'))
+    if not b:print('No OTF files found.');return
+    print(f'Found {len(b)} OTF file(s)\n');i={'success':0,'skipped':0,'error':0}
+    for c in b:print(f'Processing:{c}');h,g=a(c)
+        if h=='success':print(f'  ✓ Converted:{g} (original removed)');i['success']+=1
+        elif h=='skipped':print(f'  ⚠ Skipped:{g} (already exists)');i['skipped']+=1
+        else:print(f'  ✗ Failed:{g}');i['error']+=1
+    print(f"\n{'='*40}");print(f"Summary:{i['success']} converted,{i['skipped']} skipped,{i['error']} failed")
+if __name__=='__main__':raise SystemExit(l())
+# filename: tottf.py
+from dh import get_files,runcmd
+def a(g):g=c(g)
+    try:k=g.with_suffix('.ttf');i=['fontforge','-lang=ff','-c','"Open($1); Generate($2);"',str(g),str(k)];l,_,_=runcmd(i,show_output=False)
+        if not l:print(f'✓ {g.name}');return True
+        print(f'✘ {g.name}');return False
+    except:print(f'error processing {g.name}');return False
+def e():j=c.cwd();d=m.argv[1:]
+    if d:for h in d:p=c(h)
+            if p.is_file():b.append(p)
+            if p.is_dir():b.extend(get_files(p))
+    else:b=get_files(j,ext=['.svg','.woff','.eot','.otf','.ttc'])
+    for f in b:if f.suffix!='.ttf':a(f)
+if __name__=='__main__':raise SystemExit(e())
+# filename: woff22ttf.py
+from dh import cprint,get_files,mpf3;from fontTools.ttLib import woff2;g=d.cwd()
+def a(f):f=d(f);b=f.with_suffix('.ttf')
+    if b.exists() and b.stat().st_size:print(f'{f.name} already converted.');return True
+    try:woff2.decompress(f,b);print(f'{f.name} converted.');f.unlink()
+    except:cprint(f'error convering {f.name}')
+def e():c=get_files(g,ext=['.woff2']);_=mpf3(a,c)
+if __name__=='__main__':raise SystemExit(e())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

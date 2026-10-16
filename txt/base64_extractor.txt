@@ -1,0 +1,315 @@
+# filename: cleanuri.py
+from dh import MIME2EXT;a=C.compile('data:(?P<mime>[^;,]*)(?P<params>(?:;[^;,]+=[^;,]+)*?);base64,\\s*(?P<data>[A-Za-z0-9+/=]+)')
+def b(y):if y:if y in MIME2EXT:return MIME2EXT.get(y)[0]
+        B=k.guess_extension(y)
+        if B:return B
+        t=y.split('/')
+        if len(t)==2 and t[1]:return f'.{t[1]}'
+    return '.bin'
+def f(z,j,l):try:o=z.read_text(encoding='utf-8')
+    except Exception as e:print(f'⚠ Skipping {z}:{e}');return
+    c=u(j,z.parent)
+    def d(s):v=s.group(0);y=s.group('mime') or None;m=s.group('data');g=p.sha256(v.encode()).hexdigest()
+        if g not in l:B=b(y);n=f'{g}{B}';i=j/n
+            try:r=q.b64decode(m)
+            except Exception as e:print(f'⚠ Base64 decode error in {z}:{e}  – keeping original.');return v
+            if not i.exists():i.write_bytes(r);print(f'✔ Saved asset:{i}')
+            l[g]=n
+        else:n=l[g]
+        w=c/n;return w.as_posix()
+    h=a.sub(d,o)
+    if h!=o:z.write_text(h,encoding='utf-8');print(f'✎ Updated {z}')
+def x():k.init();j=u('assets');j.mkdir(parents=True,exist_ok=True);l={};A=u('.')
+    for z in A.rglob('*'):if z.is_file() and z.suffix.lower() in ('.css','.js','.html'):f(z,j,l)
+    print('Done.')
+if __name__=='__main__':raise SystemExit(x())
+# filename: ex64.py
+b=w.compile('data:image/(?P<ext>[a-zA-Z0-9+]+);base64,(?P<data>[A-Za-z0-9+/=\\n\\r]+)')
+def a(t,g):try:u=t.read_text(encoding='utf-8',errors='ignore')
+    except Exception:return 0
+    n=b.finditer(u);q=0
+    for m in n:v=m.group('ext').lower();i=m.group('data').replace('\n','').replace('\r','')
+        try:h=o.b64decode(i,validate=False)
+        except Exception:continue
+        p=l.sha1(h).hexdigest()[:12];k=f'{t.stem}_{p}.{v}';d=g/k;d.write_bytes(h);q+=1
+    return q
+def c(j,g):g.mkdir(exist_ok=True);e={'.ipynb','.js','.html'};f=0;print(f'\n🔍 Scanning:{j.resolve()}\n')
+    for t in j.rglob('*'):if not t.is_file():continue
+        if t.suffix.lower() not in e:continue
+        r=a(t,g);f+=r
+        if r:print(f'📸 Extracted {r} images from {t}')
+    print(f'\n✅ Extraction complete. Total images saved:{f}')
+if __name__=='__main__':j=s.cwd();g=s('extracted_images');c(j,g)
+# filename: f2base64.py
+for d in f('.').glob('*.ttf'):a=f'{d.stem}.txt';b=d.read_bytes();c=e.b64encode(b).decode('utf-8');f(a).write_text(c,encoding='utf-8');print(f'Converted:{d.name}->{a}')
+# filename: file_to_base64.py
+def a(c):b=c.read_bytes();return f.b64encode(b).decode('utf-8')
+def i():g=h(j.argv[1].strip());e=a(g);d=g.with_suffix('.txt')
+    if d.exists():print(f'{d.name} exists. remove and run again');j.exit(0)
+    d.write_text(e,encoding='utf-8');print(f'{d.name} created.')
+if __name__=='__main__':raise SystemExit(i())
+# filename: ucss.py
+from dh import MIME2EXT;d=A.compile('url\\(\\s*([\'\\"]?)data:(?P<mime>[^;]+)(?:;charset=[^;]+)?;base64,(?P<data>[A-Za-z0-9+/=\\s]+)\\1\\s*\\)',A.IGNORECASE);b=MIME2EXT
+def c(t):w=e.guess_extension(t)
+    if w:return w
+    return b.get(t,'.bin')
+def a(g,j):v=g.read_text(encoding='utf-8',errors='ignore');j.mkdir(exist_ok=True);u={}
+    def k(p):t=p.group('mime');x=p.group('data').replace('\n','').strip();m=l.b64decode(x);y=h.sha256(m).hexdigest()[:12]
+        if y not in u:w=c(t);o=f'asset-{y}{w}';(j/o).write_bytes(m);u[y]=o
+        return f"url('{j.name}/{u[y]}')"
+    i=d.sub(k,v)
+    if i!=v:g.write_text(i,encoding='utf-8')
+    return len(u)
+def s():if len(z.argv)<2:print('Usage:extract_css_base64.py file1.css [file2.css ...]');z.exit(1)
+    j=r('_static');q=0
+    for f in map(r,z.argv[1:]):if not f.exists():print(f'skip:{f}');continue
+        n=a(f,j);q+=n;print(f'{f}:extracted {n} assets')
+    print(f'\nTotal saved assets:{q}');print(f'Output directory:./{j}')
+if __name__=='__main__':raise SystemExit(s())
+# filename: xbase64_assets.py
+from loguru import logger;h={'.html','.css','.js','.jsx','.tsx','.ts'};W=aY('assets');aA=8;X=8192;H=104857600;m={'image/png':(b'\x89PNG\r\n\x1a\n','.png','images'),'image/jpeg':(b'\xff\xd8\xff','.jpg','images'),'image/gif':(b'GIF87a','.gif','images'),'image/gif':(b'GIF89a','.gif','images'),'image/webp':(b'RIFF','.webp','images'),'image/svg+xml':(b'<?xml','.svg','images'),'image/svg+xml':(b'<svg','.svg','images'),'font/woff':(b'wOF2','.woff2','fonts'),'font/woff':(b'wOF2','.woff2','fonts'),'font/ttf':(b'\x00\x01\x00\x00','.ttf','fonts'),'application/x-font-ttf':(b'\x00\x01\x00\x00','.ttf','fonts'),'application/json':(b'{','.json','data'),'text/plain':(b'text','.txt','data')};@ai
+class R:pass
+@ai
+class A:pass
+@ai
+class o:aT=None;av=0.0
+@am(maxsize=256)
+def a(bb):if not bb or len(bb)<4:return (None,None,None)
+    if bb.startswith(b'\x89PNG\r\n\x1a\n'):return ('image/png','.png','images')
+    if bb.startswith(b'\xff\xd8\xff'):return ('image/jpeg','.jpg','images')
+    if bb.startswith((b'GIF87a',b'GIF89a')):return ('image/gif','.gif','images')
+    if bb.startswith(b'RIFF') and len(bb)>12 and (bb[8:12]==b'WEBP'):return ('image/webp','.webp','images')
+    if b'<?xml' in bb[:100] or b'<svg' in bb[:100]:return ('image/svg+xml','.svg','images')
+    if bb.startswith(b'wOF2'):return ('font/woff2','.woff2','fonts')
+    if bb.startswith(b'wOFF'):return ('font/woff','.woff','fonts')
+    if bb.startswith((b'\x00\x01\x00\x00',b'true')):return ('font/ttf','.ttf','fonts')
+    if bb.startswith(b'OTTO'):return ('font/otf','.otf','fonts')
+    if bb.startswith((b'{',b'[')):return ('application/json','.json','data')
+    if bb.startswith((b'\x00\x00\x00\x18ftypmp42',b'\x00\x00\x00 ftypmp42')):return ('video/mp4','.mp4','videos')
+    if bb.startswith(b'\x00\x00\x01\x00'):return ('image/x-icon','.ico','images')
+    if bb.startswith(b'BM'):return ('image/bmp','.bmp','images')
+    try:af=sum((1 for b in bb[:256] if 32<=b<127 or b in (9,10,13)))
+        if af/min(256,len(bb))>0.8:return ('text/plain','.txt','data')
+    except Exception:pass
+    return (None,None,None)
+class d:aL='[A-Za-z0-9+/]+={0,2}';ar={'url':re.compile(f"""\n            url\\s*\\(\\s*["']?\n            data:\n            (?P<mime>[^;,)\\s]+)\n            (?:;[^,)]*)?\n            ;base64\\s*,\\s*\n            (?P<data>{aL})\n            ["']?\\s*\\)\n            """,re.IGNORECASE|re.VERBOSE),'src':re.compile(f"""\n            \\bsrc\\s*=\\s*["']\n            data:\n            (?P<mime>[^;,]+)\n            (?:;[^,]*)?\n            ;base64\\s*,\\s*\n            (?P<data>{aL})\n            ["']\n            """,re.IGNORECASE|re.VERBOSE),'href':re.compile(f"""\n            \\bhref\\s*=\\s*["']\n            data:\n            (?P<mime>[^;,]+)\n            (?:;[^,]*)?\n            ;base64\\s*,\\s*\n            (?P<data>{aL})\n            ["']\n            """,re.IGNORECASE|re.VERBOSE),'data_uri':re.compile(f'\n            data:\n            (?P<mime>[^;,]+)\n            (?:;[^,]*)?\n            ;base64\\s*,\\s*\n            (?P<data>{aL})\n            ',re.IGNORECASE|re.VERBOSE),'background':re.compile(f"""\n            \\bbackground(?:-image)?\\s*:\\s*\n            url\\s*\\(\\s*["']?\n            data:\n            (?P<mime>[^;,)\\s]+)\n            (?:;[^,)]*)?\n            ;base64\\s*,\\s*\n            (?P<data>{aL})\n            ["']?\\s*\\)\n            """,re.IGNORECASE|re.VERBOSE)};@staticmethod
+    def w(bl,bg):aF=[];V=set()
+        for N,aJ in d.PATTERNS.items():for aV in aJ.finditer(bl):an=aV.group('mime');aa=aV.group('data')
+                if not d.is_valid_base64(aa):continue
+                ay=aE.md5(aa.encode()).hexdigest()
+                if ay in V:continue
+                V.add(ay)
+                if len(aa)<64:continue
+                aF.append(R(bg=bg,start_pos=aV.start(),end_pos=aV.end(),aa=aa,context=aV.group(0),match_type=N))
+        return aF
+    @staticmethod
+    def x(s):try:aK=bytes(s,'utf-8') if isinstance(s,str) else s
+            if len(aK)%4!=0:aK+=b'='*(4-len(aK)%4)
+            aM.b64decode(aK,validate=True);return True
+        except Exception:return False
+class p:def __init__(self):self.available=False;self.parsers={}
+    def ac(self,bg):try:with open(bg,'r',encoding='utf-8',errors='ignore') as f:return f.read()
+        except Exception as e:logger.error(f'Error reading file {bg}:{e}');return None
+class z:def __init__(self,Z=W):self.assets_dir=Z;self.extracted_assets=[];self._ensure_assets_dir()
+    def k(self):self.assets_dir.mkdir(parents=True,exist_ok=True)
+        for aR in ['images','fonts','videos','data']:(self.assets_dir/aR).mkdir(exist_ok=True)
+    def K(self,aV):try:U=aV.base64_str.replace('\n','').replace('\r','');aI=4-len(U)%4
+            if aI!=4:U+='='*aI
+            J=aM.b64decode(U,validate=True);an,bm,at=a(J)
+            if not an:logger.warning(f'Could not detect MIME type for base64 in {aV.path}')
+                if 'data:' in aV.context:try:bc=aV.context.split('data:')[1].split(';')[0];bm=ao.guess_extension(bc) or '.bin';at='data'
+                    except Exception:bm='.bin';at='data'
+                else:bm='.bin';at='data'
+            al=aE.sha256(J).hexdigest()[:16];ax=f'{al}{bm}';Y=self.assets_dir/at/ax
+            if Y.exists():logger.debug(f'Asset already exists:{Y}');ah=Y.relative_to(aV.path.parent).as_posix();return A(original_file=aV.path,Y=Y,ah=ah,base64_match=aV,extracted_bytes=J)
+            with open(Y,'wb') as f:f.write(J)
+            logger.debug(f'Extracted asset:{Y} ({len(J)} bytes)');ah=Y.relative_to(aV.path.parent).as_posix();return A(original_file=aV.path,Y=Y,ah=ah,base64_match=aV,extracted_bytes=J)
+        except Exception as e:logger.error(f'Failed to extract asset from {aV.path}:{e}');return None
+class G:def __init__(self,t):self.extractor=t;self.parser=p()
+    def O(self,bg):ad=au.now()
+        try:if not bg.exists():return o(bg=bg,success=False,v=0,replaced_count=0,aT=f'File not found:{bg}',av=(au.now()-ad).total_seconds())
+            if bg.stat().st_size>H:return o(bg=bg,success=False,v=0,replaced_count=0,aT=f'File too large:{bg.stat().st_size} bytes',av=(au.now()-ad).total_seconds())
+            try:with open(bg,'r',encoding='utf-8',errors='ignore') as f:aC=f.read()
+            except Exception as e:return o(bg=bg,success=False,v=0,replaced_count=0,aT=f'Failed to read file:{e}',av=(au.now()-ad).total_seconds())
+            aF=d.find_all_base64(aC,bg)
+            if not aF:logger.debug(f'No base64 found in {bg}');return o(bg=bg,success=True,v=0,replaced_count=0,av=(au.now()-ad).total_seconds())
+            P=[];v=0
+            for aV in aF:u=self.extractor.extract_asset(aV)
+                if u:v+=1
+                    if bg.suffix.lower()=='.css':L=f"url('{u.asset_url}')"
+                    elif bg.suffix.lower() in {'.html','.htm'}:if 'href=' in aV.context:L=f'href="{u.asset_url}"'
+                        else:L=f'src="{u.asset_url}"'
+                    else:L=f'"{u.asset_url}"'
+                    P.append((aV.context,L))
+            if not P:return o(bg=bg,success=True,v=0,replaced_count=0,av=(au.now()-ad).total_seconds())
+            q=aC
+            for aH,aG in P:q=q.replace(aH,aG)
+            self._write_file_atomic(bg,q);print(f'Processed {bg.name}:extracted={v},replaced={len(P)}');return o(bg=bg,success=True,v=v,replaced_count=len(P),av=(au.now()-ad).total_seconds())
+        except Exception as e:logger.error(f'Unexpected error processing {bg}:{e}');return o(bg=bg,success=False,v=0,replaced_count=0,aT=str(e),av=(au.now()-ad).total_seconds())
+    @staticmethod
+    def l(bg,aC):T=bg.with_suffix(bg.suffix+'.bak');aQ.copy2(bg,T)
+        try:aq=bg.with_suffix(bg.suffix+'.tmp')
+            with open(aq,'w',encoding='utf-8') as f:f.write(aC)
+            aq.replace(bg);logger.debug(f'Updated file:{bg}')
+        except Exception as e:if T.exists():aQ.copy2(T,bg)
+            raise
+        finally:if T.exists():T.unlink()
+class F:ag={'.git','.svn','__pycache__','node_modules','.venv','venv','.env','.egg-info','dist','build','.idea','.vscode','.pytest_cache','.tox','.coverage','.mypy_cache','target','out','bin','.gradle','assets'};@staticmethod
+    def C(aW):ab=[];bi=set()
+        with j(max_workers=4) as aw:aD=[]
+            for az in aW:bg=aY(az).resolve()
+                if not bg.exists():logger.warning(f'Path not found:{bg}');continue
+                if bg.is_file():if bg.suffix.lower() in h:ab.append(bg)
+                else:aD.append(aw.submit(F._discover_in_directory,bg))
+            for aO in aD:try:ab.extend(aO.result())
+                except Exception as e:logger.error(f'Error during file discovery:{e}')
+        Q=[]
+        for f in ab:if f not in bi:Q.append(f);bi.add(f)
+        return sorted(Q)
+    @staticmethod
+    def c(aj):aU=[]
+        try:for bd in aj.rglob('*'):if any((bf in F.SKIP_DIRS for bf in bd.parts)):continue
+                if bd.is_symlink():continue
+                if bd.is_file() and bd.suffix.lower() in h:aU.append(bd)
+        except Exception as e:logger.error(f'Error discovering files in {aj}:{e}')
+        return aU
+def n(ba):bg,t=ba;ap=G(t);return ap.process_file(bg)
+class g:def __init__(self,aW=None):self.paths=aW or ['.'];self.asset_extractor=z();self.results=[]
+    def bn(self):print('='*70);print('Base64 Asset Extractor');print('='*70);print(f"Discovering files in:{','.join(self.paths)}");aU=F.discover_files(self.paths)
+        if not aU:logger.warning('No supported files found');return
+        print(f'Found {len(aU):,} supported files');print(f'Processing with {aA} workers...');aX=[(f,self.asset_extractor) for f in aU]
+        with aZ(aA) as bh:I=[]
+            for bk in aX:aP=bh.apply_async(n,(bk,));I.append(aP)
+            for i,M in enumerate(I,1):try:aP=M.get(timeout=60);self.results.append(aP)
+                    if i%10==0 or i==len(I):print(f'Progress:{i}/{len(I)} files')
+                except Exception as e:logger.error(f'Error retrieving result:{e}')
+        self._print_summary()
+    def B(self):print('='*70);print('SUMMARY');print('='*70);ae=sum((1 for r in self.results if r.success));aN=len(self.results)-ae;y=sum((r.extracted_count for r in self.results));E=sum((r.replaced_count for r in self.results));D=sum((r.duration for r in self.results));print(f'Total files processed:{len(self.results)}');print(f'  ✓ Successful:{ae}');print(f'  ✗ Failed:{aN}');print(f'Total base64 assets extracted:{y:,}');print(f'Total replacements made:{E:,}');print(f'Total processing time:{D:.2f}s')
+        if aN>0:print('\nFailed files:')
+            for aP in self.results:if not aP.success:print(f'-{aP.path}:{aP.error}')
+        if self.results:print('\nDetailed results:')
+            for aP in sorted(self.results,key=lambda r:r.extracted_count,reverse=True):if aP.extracted_count>0 or aP.replaced_count>0:print(f'  {aP.path.name:40} extracted={aP.extracted_count:3} replaced={aP.replaced_count:3} time={aP.duration:.3f}s')
+        print(f'\nAssets saved to:{W.resolve()}')
+        if W.exists():S=sum((1 for _ in W.rglob('*') if _.is_file()))
+            if S>0:print(f'Total asset files:{S}')
+                for at in ['images','fonts','videos','data']:aB=W/at
+                    if aB.exists():aS=sum((1 for _ in aB.iterdir() if _.is_file()))
+                        if aS>0:bj=sum((_.stat().st_size for _ in aB.iterdir() if _.is_file()));print(f'  {at:8}:{aS:4} files ({bj/1024:.1f} KB)')
+def be():logger.remove();logger.add(bo.stdout,format='<green>{time:YYYY-MM-DD HH:mm:ss}</green>|<level>{level:<8}</level>|<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>-<level>{message}</level>',level='INFO');logger.add('extract_base64_assets.log',format='{time:YYYY-MM-DD HH:mm:ss}|{level:<8}|{name}:{function}:{line}-{message}',level='DEBUG',rotation='10 MB',retention='1 week')
+    if len(bo.argv)>1:aW=bo.argv[1:]
+    else:aW=['.']
+    ak=g(aW);ak.run()
+if __name__=='__main__':be()
+# filename: xembedded_elements.py
+from dh import MIME2EXT,get_nobinary;h=u('extracted_base64');f=E.compile('data:(?P<mime>[-\\w.+/]+);base64,(?P<data>[A-Za-z0-9+/=\\s]+)',E.IGNORECASE)
+def c(z):return MIME2EXT.get(z.lower(),z.rsplit('/',maxsplit=1)[-1])[0]
+def d(w):m=''.join(w.split());return q.b64decode(m,validate=False)
+def e(w):return o.sha256(w).hexdigest()[:15]
+def a(x):for s in f.finditer(x):z=s.group('mime');l=s.group('data')
+        try:n=d(l)
+        except Exception:continue
+        yield (z,n)
+def i(z,w):h.mkdir(parents=True,exist_ok=True);C=c(z);r=e(w);k=f'{r}.{C}';A=h/k
+    if not A.exists():A.write_bytes(w)
+    return A
+def y():B=u.cwd();g=set();b=0;v=D.argv[1:];t=[u(p) for p in v] if v else get_nobinary(B)
+    for j in t:try:x=j.read_text(encoding='utf-8',errors='ignore')
+        except Exception:continue
+        for z,w in a(x):r=e(w)
+            if r in g:continue
+            g.add(r);i(z,w);b+=1
+    print(f'{b} elements extracted.')
+if __name__=='__main__':raise SystemExit(y())
+# filename: xembedded_elements2.py
+import requests;from bs4 import BeautifulSoup;from bs4.element import AttributeValueList;O=G.cwd();l=O;j=O/'output';h=O/'output'/'assets';d=False;t=10;h.mkdir(parents=True,exist_ok=True)
+def k(u,o,n='asset'):P=p.guess_extension(o) or '';v=0
+    while 1:D=f'{n}_{v}{P}';L=h/D
+        if not L.exists():break
+        v+=1
+    L.write_bytes(u);return L
+def b(s,n='asset'):m=W.match('data:(.*?);base64,(.*)',s,W.DOTALL)
+    if not m:return None
+    o,w=m.groups();u=A.b64decode(w);return k(u,o,n)
+def a(U,n='remote'):try:print('Downloading:',U);r=requests.get(U,timeout=t)
+        if r.status_code!=200:return None
+        K=r.headers.get('Content-Type','application/octet-stream');return k(r.content,K.split(';')[0],n)
+    except Exception:return None
+def e(L):L=G(L);I=L.read_text(encoding='utf-8',errors='ignore');M=BeautifulSoup(I,'html.parser');g=L.stem
+    for i,q in enumerate(M.find_all('style')):if not q.string:continue
+        N=q.string;L=k(N.encode('utf-8'),'text/css',f'{g}_style{i}');q.replace_with(f'<link rel="stylesheet" href="{L.relative_to(j)}">')
+    for i,B in enumerate(M.find_all('script')):if B.get('src'):R=B.get('src')
+            if R.startswith('http') and d:L=a(R,f'{g}_script_remote')
+                if L:B['src']=str(L.relative_to(j))
+            continue
+        V=B.string or '';L=k(V.encode('utf-8'),'application/javascript',f'{g}_script{i}');B.replace_with(f'<script src="{L.relative_to(j)}"></script>')
+    for Q in M.find_all('img'):R=Q.get('src','')
+        if R.startswith('data:'):L=b(R,f'{g}_img')
+            if L:Q['src']=str(L.relative_to(j))
+        elif R.startswith('http') and d:L=a(R,f'{g}_img_remote')
+            if L:Q['src']=str(L.relative_to(j))
+    C=W.compile('url\\("(data:.*?)"\\)')
+    for T in M.find_all(F=True):F=T['style'];m=C.search(F)
+        if m:s=m.group(1);L=b(s,f'{g}_bg')
+            if L:T['style']=F.replace(s,str(L.relative_to(j)))
+    for i,S in enumerate(M.find_all('svg')):z=str(S);L=k(z.encode('utf-8'),'image/svg+xml',f'{g}_svg{i}');y=M.new_tag('img');y['src']=str(L.relative_to(j));S.replace_with(y)
+    for F in M.find_all('style'):if not F.string:continue
+        x=F.string;E=W.findall('url\\("(data:font\\/.+?)"\\)',x)
+        for f in E:L=b(f,f'{g}_font')
+            if L:x=x.replace(f,str(L.relative_to(j)))
+        F.string.replace_with(x)
+    for J in M.find_all('link',H=True):H=J['href']
+        if H.startswith('http') and d:L=a(H,f'{g}_css_remote')
+            if L:J['href']=str(L)
+    c=j/L.relative_to(l);c.parent.mkdir(parents=True,exist_ok=True);c.write_text(str(M),encoding='utf-8');print('Processed:',L)
+if __name__=='__main__':for L in O.rglob('*'):if L.suffix.lower() in {'.html','.htm'} and 'output' not in L.parts:e(L)
+    print('\nAll done — extracted assets saved to ./output/')
+# filename: xlines_contains_base64.py
+from dh import get_nobinary
+def a(n):n=h(n);g=n.read_text(encoding='utf-8').splitlines();r=[];e=0
+    for l in g:if 'base64,' in l:e+=1;j=l.index('base64,')+7;c=l[j:]
+            if '"' in c:b=c.index('"');c=c[:b]
+            if ' ' in c:b=c.index(' ');c=c[:b]
+            if ')' in c:b=c.index(')');c=c[:b]
+            r.append(c)
+    if e:print(f'{n.name} :{e}')
+        with h('b64').open('a',encoding='utf-8') as f:f.write('\n');f.writelines((f'{k}\n' for k in r))
+def m():i=q.argv[1:];p=h.cwd();d=[h(o) for o in i] if i else get_nobinary(p)
+    for f in d:a(f)
+if __name__=='__main__':raise SystemExit(m())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

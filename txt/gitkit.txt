@@ -1,0 +1,281 @@
+# filename: checkout_previous.py
+c='2026-08-29'
+def l(u,*r):n=j.run(['git',*r],cwd=u,text=True,capture_output=True,check=False)
+    if n.returncode!=0:raise RuntimeError(n.stderr.strip() or 'Git command failed')
+    return n.stdout.strip()
+def h(t):n=j.run(['git','rev-parse','--is-inside-work-tree'],cwd=t,text=True,capture_output=True,check=False);return n.returncode==0 and n.stdout.strip()=='true'
+def e(u):k=u.name
+    try:b=l(u,'log','-1','--format=%s')
+        if not b.startswith(c):print(f'[skip] {k}:latest commit does not start with {c}');return
+        a=l(u,'rev-parse','--short','HEAD');d=l(u,'rev-parse','HEAD^');f=l(u,'rev-parse','--short',d);print(f'\n[match] Repository:{k}');print(f'        Path:{u}');print(f'        Current commit:{a}');print(f'        Latest message:{b}');print(f'        Target commit:{f}');m=input(f'Checkout {f} in {k}? [y/N]:').strip().lower()
+        if m not in {'y','yes'}:print(f'[skip] {k}:checkout cancelled');return
+        l(u,'checkout',d);print(f'[done] {k}:now at {f}')
+    except RuntimeError as error:print(f'[error] {k}:{o}',file=v.stderr)
+    except KeyboardInterrupt:print('\nInterrupted by user.');v.exit(130)
+def s():g=q.cwd();i=[g];i.extend((t for t in g.iterdir() if t.is_dir() and (not t.is_symlink())));p=[t for t in i if h(t)]
+    if not p:print('No Git repositories found.');return
+    for u in p:e(u)
+if __name__=='__main__':s()
+# filename: cut30.py
+from git import Repo
+def c(q='.',y=30):z=Repo(q);o=s.now()-r(y=y);g=int(o.timestamp());print(f'Cutoff date:{o}');print(f'Will keep commits newer than {y} days ago')
+    try:v=list(z.iter_commits('HEAD'))
+    except Exception as e:print(f'Error:Could not get commits. {e}');return
+    if not v:print('No commits found in repository');return
+    print(f'Total commits:{len(v)}');b=None;d=[];i=[]
+    for x in v:n=s.fromtimestamp(x.committed_date)
+        if n>o:b=x;i.append(x)
+        else:d.append(x)
+    print(f'Commits to keep:{len(i)}');print(f'Commits to remove:{len(d)}')
+    if not b:print('No commits to keep! Aborting to prevent data loss.');return
+    if len(d)==0:print('No old commits to remove.');return
+    print(f'\nOldest commit to keep:{b.hexsha[:7]}-{b.summary}');print(f'Date:{s.fromtimestamp(b.committed_date)}');u=input('\nWARNING:This operation will rewrite git history!\nContinue? (yes/no):')
+    if u.lower()!='yes':print('Operation cancelled.');return
+    try:print('\nRewriting git history...')
+        if b.parents:h=b.parents[0];k=z.active_branch.name;t=z.git.commit_tree(b.tree,'-m',f'Squashed history (keeping last {y} days)');f=list(reversed(i[:-1]));z.git.checkout(k);z.git.reset('--hard',b.hexsha);print('Old commits removed. History has been rewritten.');print('\nIMPORTANT:You may need to force push if this is a remote repository:');print(f'  git push--force origin {k}')
+    except Exception as e:print(f'Error during history rewrite:{e}');print('\nAttempting alternative method...')
+        try:z.git.reset('--soft',b.hexsha);z.index.commit('Consolidated commit (old history removed)');print('Alternative method completed. History has been rewritten.')
+        except Exception as e2:print(f'Alternative method also failed:{B}');print('\nManual steps to achieve this:');print(f'1. git checkout {b.hexsha}');print('2. git checkout--orphan temp_branch');print("3. git commit-m 'Initial commit (history cleaned)'");print('4. git cherry-pick<subsequent commits if any>');print('5. git branch-D main  # delete old branch');print('6. git branch-m temp_branch main  # rename temp to main')
+def a(q='.',y=30,m=False):z=Repo(q);g=int((s.now()-r(y=y)).timestamp());v=list(z.iter_commits('HEAD'));i=[]
+    for x in v:if x.committed_date>g:i.append(x)
+    if len(i)==len(v):print('No old commits to remove.');return
+    if not i:print('No commits to keep! Operation aborted.');return
+    print(f'Keeping {len(i)} recent commits out of {len(v)} total commits')
+    if not m:u=input('Continue with history rewrite? (yes/no):')
+        if u.lower()!='yes':print('Cancelled.');return
+    l=i[0];k=z.active_branch;j=f'cleaned_{k.name}'
+    try:z.git.checkout('--orphan',j)
+        for x in reversed(i):z.git.cherry_pick('--allow-empty',x.hexsha)
+        print(f"\nNew branch '{j}' created with {len(i)} recent commits.");print('\nTo replace the original branch,run:');print(f'  git checkout {k.name}');print(f'  git reset--hard {j}');print(f'  git branch-D {j}')
+    except Exception as e:print(f'Error:{e}')
+        with p.suppress(BaseException):z.git.checkout(k.name)
+if __name__=='__main__':y=30
+    if len(A.argv)>1:try:y=int(A.argv[1])
+        except ValueError:print(f'Invalid days argument:{A.argv[1]}');print('Using default:30 days')
+    print(f'Git History Cleaner-Remove commits older than {y} days');print('-'*40);print('\nOptions:');print('1. Safe mode-preserves commits but can specify which to keep');print('2. Orphan branch mode-creates new branch with only recent commits');w=input('\nSelect option (1 or 2,default 1):').strip()
+    if w=='2':a(y=y)
+    else:c(y=y)
+# filename: delcomit.py
+from git import Repo
+def a(s='.',A='master'):try:G=Repo(s);C=G.remotes.origin;y=None
+        if f'origin/{A}' in G.refs:y=f'origin/{A}'
+        elif A=='master' and 'origin/main' in G.refs:y='origin/main';A='main'
+        else:print(f'Error:origin/{A} not found');return False
+        print(f'Cleaning commits on {A} older than one week...');j=G.active_branch
+        if j.name!=A:if A in G.branches:G.head.reference=G.branches[A]
+            else:G.create_head(A,G.refs[y]);G.head.reference=G.branches[A]
+            G.head.reset(index=True,working_tree=True)
+        m=v.now()-t(days=7);d=[]
+        for B in G.iter_commits(f'{A}'):o=v.fromtimestamp(B.committed_date)
+            if o<m and B not in G.iter_commits(y):d.append(B)
+        if not d:print('No old commits found to delete');return True
+        print(f'Found {len(d)} commit(s) to delete:')
+        for B in d[:5]:F=v.fromtimestamp(B.committed_date).strftime('%Y-%m-%d%H:%M');print(f'  {B.hexsha[:8]}-{F}-{B.message.splitlines()[0][:50]}')
+        r=None
+        for B in G.iter_commits(f'{A}'):o=v.fromtimestamp(B.committed_date)
+            if o>=m:r=B;break
+        if r:print(f'\nResetting to commit:{r.hexsha[:8]}');G.head.reset(r,index=True,working_tree=True);print('Force pushing cleaned branch...');C.push(refspec=f'{A}:{A}',force=True);print('Successfully deleted old commits!');return True
+        print('No commits to keep found');return False
+    except Exception as e:print(f'Error:{e}');return False
+def b(s='.',A='master',w=7):try:G=Repo(s);C=G.remotes.origin;y=f'origin/{A}'
+        if y not in G.refs:if A=='master' and 'origin/main' in G.refs:y='origin/main';A='main'
+            else:print(f'Error:{y} not found');return False
+        p=v.now()-t(days=w);k=[]
+        for B in G.iter_commits(f'{A}..{y}'):k.append(B)
+        g=[]
+        for B in k:o=v.fromtimestamp(B.committed_date)
+            if o<p:g.append(B)
+        if not g:print(f'No commits older than {w} days found');return True
+        print(f'\nFound {len(g)} commit(s) older than {w} days:')
+        for i,B in enumerate(g,1):F=v.fromtimestamp(B.committed_date).strftime('%Y-%m-%d%H:%M');print(f'{i}. {B.hexsha[:8]}-{F}-{B.summary}')
+        x=input(f'\nDelete these {len(g)} commit(s)? (y/n):')
+        if x.lower()!='y':print('Aborted');return False
+        q=None
+        for B in G.iter_commits(f'{y}'):o=v.fromtimestamp(B.committed_date)
+            if o>=p:q=B;break
+        if not q:n=list(G.iter_commits(y))
+            if n:q=n[0]
+        if q:print(f'\nResetting to:{q.hexsha[:8]}-{q.summary}');G.head.reference=G.branches[A];G.head.reset(q,index=True,working_tree=True);print('Force pushing to remote...');C.push(refspec=f'{A}:{A}',force=True);print('Successfully deleted old commits!');return True
+        print('Could not find a suitable commit to reset to');return False
+    except Exception as e:print(f'Error:{e}');return False
+def c(s='.',A='master',w=7):try:G=Repo(s);C=G.remotes.origin;y=f'origin/{A}'
+        if y not in G.refs and A=='master' and ('origin/main' in G.refs):y='origin/main';A='main'
+        if A not in G.branches:G.create_head(A,G.refs[y])
+        G.head.reference=G.branches[A];p=v.now()-t(days=w);f=None
+        for B in G.iter_commits(f'{A}'):o=v.fromtimestamp(B.committed_date)
+            if o>=p:f=B;break
+        if not f:print('No commits to keep');return False
+        l=f.parents[0] if f.parents else None
+        if l:print(f'Resetting to parent commit:{l.hexsha[:8]}');G.head.reset(l,index=True,working_tree=True);h=[]
+            for B in G.iter_commits(f'{f.hexsha}..{A}'):h.append(B)
+            for B in reversed(h):print(f'Applying {B.hexsha[:8]}...');G.git.cherry_pick(B.hexsha)
+            C.push(refspec=f'{A}:{A}',force=True);print('Successfully removed old commits!');return True
+    except Exception as e:print(f'Error:{e}');return False
+if __name__=='__main__':D=u.ArgumentParser(description='Delete git commits older than one week');D.add_argument('--path',default='.',help='Repository path');D.add_argument('--branch',default='master',help='Branch to clean');D.add_argument('--days',type=int,default=7,help='Delete commits older than N days');D.add_argument('--interactive',action='store_true',help='Interactive mode');E=D.parse_args()
+    if E.interactive:z=b(E.path,E.branch,E.days)
+    else:z=a(E.path,E.branch)
+    H.exit(0 if z else 1)
+# filename: git-age-filter.py
+d=o.path.expanduser('~/../usr/bin/age')
+if not o.path.exists(d):d='age'
+b=o.path.expanduser('~/.config/age/keys.txt');a=o.path.expanduser('~/.config/age/public.key')
+def l(m,h=1):print(f'git-age-filter:{m}',file=n.stderr);n.exit(h)
+def g():if not o.path.exists(a):l(f'missing public key file:{a}')
+    e=open(a).read().strip()
+    if not e:l('public key file is empty')
+    k=c.run([d,'-r',e,'-a'],input=n.stdin.buffer.read(),capture_output=True)
+    if k.returncode!=0:l(f"age encrypt failed:{k.stderr.decode(errors='replace')}")
+    n.stdout.buffer.write(k.stdout)
+def f():i=n.stdin.buffer.read()
+    if not i.lstrip().startswith(b'-----BEGIN AGE ENCRYPTED FILE-----'):n.stdout.buffer.write(i);return
+    if not o.path.exists(b):print('git-age-filter:no private key; leaving ciphertext',file=n.stderr);n.stdout.buffer.write(i);return
+    k=c.run([d,'-d','-i',b],input=i,capture_output=True)
+    if k.returncode!=0:l(f"age decrypt failed:{k.stderr.decode(errors='replace')}")
+    n.stdout.buffer.write(k.stdout)
+def j():if len(n.argv)!=2 or n.argv[1] not in ('clean','smudge'):l('usage:git-age-filter {clean|smudge}')
+    (g if n.argv[1]=='clean' else f)()
+if __name__=='__main__':j()
+# filename: lastncommits.py
+def a(d):try:l=['git','log','-n',str(d),'--pretty=format:','--name-status','--diff-filter=A'];f=c.run(l,capture_output=True,text=True,check=True);b=[]
+        for i in f.stdout.strip().split('\n'):if i.strip():g=i.split('\t')
+                if len(g)>=2:k=g[1];k=h(k)
+                    if k.is_symlink():continue
+                    b.append(k)
+        return b
+    except c.CalledProcessError as e:print(f'✗ Git command failed:{e.stderr}',file=m.stderr);m.exit(1)
+    except Exception as e:print(f'✗ Error:{e}',file=m.stderr);m.exit(1)
+def j():if len(m.argv)<2:print('Usage:python3 list_commits.py<N>');print('       where N is the number of commits to analyze');print('\nExamples:');print('  python3 list_commits.py 5');print('  python3 list_commits.py 10');m.exit(1)
+    try:d=int(m.argv[1])
+        if d<=0:print('✗ Error:Number of commits must be positive',file=m.stderr);m.exit(1)
+        b=a(d)
+        if b:for k in b:print(k)
+        else:print(f'No files created in the last {d} commit(s)',file=m.stderr)
+    except ValueError:print(f"✗ Error:'{m.argv[1]}' is not a valid integer",file=m.stderr);m.exit(1)
+if __name__=='__main__':raise SystemExit(j())
+# filename: restore_all_historical_deletions.py
+def f(p):try:n=k.run(['git']+p,capture_output=True,text=True,check=True);return n.stdout.strip()
+    except k.CalledProcessError as e:print(f"❌ Git error executing {' '.join(e.cmd)}:\n{e.stderr.strip()}");return
+def r():l=o('.')
+    if not (l/'.git').exists() and (not f(['rev-parse','--is-inside-work-tree'])=='true'):print('❌ Error:Current directory is not a Git repository root.');return
+    print('🔍 Analyzing repository history for all historical file deletions...');j=f(['log','--diff-filter=D','--pretty=format:%H','--name-only'])
+    if not j:print("🎉 No deleted files were found in this repository's entire history.");return
+    b={};a=None
+    for q in j.splitlines():q=q.strip()
+        if not q:continue
+        if len(q)==40 and ' ' not in q:a=q
+        else:s=q
+            if s not in b:b[s]=a
+    c=[]
+    for m,d in b.items():if not o(m).exists():c.append((m,d))
+    if not c:print('ℹ️  All historically deleted files are already active or restored in your workspace.');return
+    print(f'⚠️  Found {len(c)} historically deleted file(s) missing from your workspace.\n');g=0
+    for m,d in c:print(f'🔄 Restoring:{m} (From commit prior to {d[:8]})')
+        try:f(['checkout',f'{d}^','--',m]);f(['add',m]);g+=1
+        except Exception:try:f(['checkout',d,'--',m]);f(['add',m]);g+=1
+            except Exception as fallback_err:print(f'   ❌ Could not restore {m}:{i}')
+    if g>0:print('\n💾 Committing restored files into the repository repository...');h=f(['commit','-m','removed files']);print('\n📊 Git Commit Summary:');print(h)
+    else:print('\n❌ No files were successfully restored.')
+if __name__=='__main__':raise SystemExit(r())
+# filename: rmcommits.py
+import git;from git import GitCommandError,Repo
+def a(p):try:r=Repo('.')
+        if r.head.is_detached:print('Error:HEAD is detached. Please checkout a branch first.');t.exit(1)
+        f=r.active_branch.name;print(f'Current branch:{f}');j=l.now(s)-k(p=p);print(f"Cutoff date:{j.strftime('%Y-%m-%d%H:%M:%S UTC')}")
+        if r.is_dirty(untracked_files=True):print('Error:Working directory is not clean. Please commit or stash changes.');t.exit(1)
+        n=list(r.iter_commits(f))
+        if not n:print('No commits found in repository.');return
+        c=[];b=[]
+        for o in n:i=o.committed_datetime.replace(tzinfo=s)
+            if i>j:c.append(o)
+            else:b.append(o)
+        if not b:print(f'No commits older than {p} days found.');return
+        if not c:print('Error:All commits would be deleted. At least one commit must remain.');t.exit(1)
+        print(f'\nFound {len(b)} commits to delete (older than {p} days)');print(f'Keeping {len(c)} commits');h=min(5,len(b));print('\nPreview of commits to delete (oldest first):')
+        for o in b[-h:]:i=o.committed_datetime.replace(tzinfo=s);print(f"  {o.hexsha[:8]}-{i.strftime('%Y-%m-%d%H:%M')}-{o.summary}")
+        if len(b)>h:print(f'  ... and {len(b)-h} more')
+        d=c[0];print(f'\nNew HEAD will be:{d.hexsha[:8]}-{d.summary}');m=input('\nThis operation will PERMANENTLY DELETE these commits. Continue? (yes/no):')
+        if m.lower()!='yes':print('Operation cancelled.');return
+        g=f"backup-{f}-{l.now().strftime('%Y%m%d%H%M%S')}";print(f'\nCreating backup branch:{g}');r.create_head(g);print(f'Resetting {f} to {d.hexsha[:8]}...');r.git.reset('--hard',d.hexsha);print(f'\nSuccessfully deleted {len(b)} commits older than {p} days.');print(f"Backup branch '{g}' contains the original commits.");print("\nNOTE:If you've already pushed the old commits to a remote,you'll need to force push:");print(f'  git push--force origin {f}');print('\nTo restore the original commits:');print(f'  git reset--hard {g}')
+    except git.InvalidGitRepositoryError:print('Error:Current directory is not a Git repository.');t.exit(1)
+    except GitCommandError as e:print(f'Git command error:{e}');t.exit(1)
+    except Exception as e:print(f'Error:{e}');t.exit(1)
+def q():if len(t.argv)!=2:print('Usage:python script.py<days>');print('Example:python script.py 30  (deletes commits older than 30 days)');t.exit(1)
+    try:p=int(t.argv[1])
+        if p<1:print('Error:Number of days must be positive.');t.exit(1)
+    except ValueError:print('Error:Please provide a valid integer for days.');t.exit(1)
+    print('Git Commit Cleanup Tool');print('=======================');print(f'Will delete commits older than {p} days');print(f"Current time (UTC):{l.now(s).strftime('%Y-%m-%d%H:%M:%S')}");a(p)
+if __name__=='__main__':raise SystemExit(q())
+# filename: squash_deletions.py
+def c(m):try:j=h.run(['git']+m,capture_output=True,text=True,check=True);return j.stdout.strip()
+    except h.CalledProcessError as e:print(f"❌ Git error executing {' '.join(e.cmd)}:\n{e.stderr.strip()}");q.exit(1)
+def o():i=l('.')
+    if not (i/'.git').exists() and (not c(['rev-parse','--is-inside-work-tree'])=='true'):print('❌ Error:Current directory is not a Git repository root.');q.exit(1)
+    try:c(['log','-1'])
+    except SystemExit:print('❌ Error:No previous commit found to squash into. Create an initial commit first.');q.exit(1)
+    print('🔍 Searching repository history for deleted files...');g=c(['log','--diff-filter=D','--name-only','--pretty=format:']);b={n.strip() for n in g.splitlines() if n.strip()}
+    if not b:print('ℹ️  No deleted files found in the git commit log.');return
+    d=c(['status','--porcelain']);a=[]
+    for n in d.splitlines():if len(n)>3:k=n[:2];p=n[3:].strip()
+            if 'D' in k and p in b:a.append(p)
+    if not a:print('🎉 No pending file deletions match historical records.');return
+    print(f'⚠️  Found {len(a)} deleted file(s) to squash into the last commit:')
+    for p in a:print(f'->{p}')
+    print('\n🛠️  Staging file deletions...')
+    for p in a:c(['add',p])
+    print('💾 Squashing changes into previous commit (git commit--amend--no-edit)...');f=c(['commit','--amend','--no-edit']);print('\n📊 Git Amend Summary:');print(f)
+if __name__=='__main__':raise SystemExit(o())
+# filename: stage_deleted_files.py
+def c(n):try:k=i.run(['git']+n,capture_output=True,text=True,check=True);return k.stdout.strip()
+    except i.CalledProcessError as e:print(f"❌ Git error executing {' '.join(e.cmd)}:\n{e.stderr.strip()}");r.exit(1)
+def p():j=m('.')
+    if not (j/'.git').exists() and (not c(['rev-parse','--is-inside-work-tree'])=='true'):print('❌ Error:Current directory is not a Git repository root.');r.exit(1)
+    print('🔍 Searching repository history for deleted files...');h=c(['log','--diff-filter=D','--name-only','--pretty=format:']);b={o.strip() for o in h.splitlines() if o.strip()}
+    if not b:print('ℹ️  No deleted files found in the git commit log log.');return
+    g=c(['status','--porcelain']);a=[]
+    for o in g.splitlines():if len(o)>3:l=o[:2];q=o[3:].strip()
+            if 'D' in l and q in b:a.append(q)
+    if not a:print('🎉 No pending historical file deletions need to be tracked or staged.');return
+    print(f'⚠️  Found {len(a)} deleted file(s) to process:')
+    for q in a:print(f'->{q}')
+    print('\n🛠️ Staging deleted files (git add-A)...')
+    for q in a:c(['add',q])
+    d='removed files';print(f'💾 Committing changes:git commit-m "{d}"');f=c(['commit','-m',d]);print('\n📊 Git Commit Summary:');print(f)
+if __name__=='__main__':raise SystemExit(p())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

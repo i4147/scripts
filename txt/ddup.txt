@@ -1,0 +1,1257 @@
+# --- File: ddup.py ---
+import argparse
+import ast
+import concurrent.futures
+import gzip
+import hashlib
+import lzma
+from dataclasses import dataclass
+from pathlib import Path
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    a = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
+b = {'.gz': gzip, '.bz2': gzip, '.xz': lzma, '.lzma': lzma, '.zst': None, '.br': None}
+def c(d):
+    e = d.suffix.lower()
+    if e not in b:
+        return None
+    f = d.stem
+    if not f.endswith('.py'):
+        return None
+    try:
+        if e == '.zst':
+            import zstandard as zstd
+            with open(d, 'rb') as fh:
+                g = zstd.ZstdDecompressor()
+                h = g.decompress(fh.read())
+            return h.decode('utf-8', errors='replace')
+        if e == '.br':
+            import brotli
+            with open(d, 'rb') as fh:
+                h = brotli.decompress(fh.read())
+            return h.decode('utf-8', errors='replace')
+        if e in ('.gz', '.bz2'):
+            i = gzip if e == '.gz' else __import__('bz2')
+        else:
+            i = b[e]
+        with i.open(d, 'rt', encoding='utf-8', errors='replace') as fh:
+            return fh.read()
+    except ImportError as exc:
+        a.error('Missing library to handle {}: {}', e, exc)
+        return None
+    except Exception as exc:
+        a.error('Failed to decompress {}: {}', d, exc)
+        return None
+def j(k='.'):
+    l = []
+    m = Path(k).resolve()
+    n = m / 'utils'
+    for o, _, p in Path(k).walk():
+        if Path(o).resolve() == n:
+            continue
+        for q in p:
+            d = Path(o) / q
+            if d.suffix == '.py':
+                l.append((full, None))
+            else:
+                r = c(d)
+                if r is not None:
+                    l.append((full, r))
+    return l
+def s(r):
+    return hashlib.sha256(r.encode('utf-8')).hexdigest()
+@dataclass
+class t:
+    pass
+def u(d, r):
+    try:
+        v = ast.parse(r, filename=d)
+    except SyntaxError as exc:
+        a.error('Syntax error in {}: {}', d, exc)
+        return []
+    w = []
+    for x in v.body:
+        if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            typ, y = ('func', x.name)
+        elif isinstance(x, ast.ClassDef):
+            typ, y = ('class', x.name)
+        elif isinstance(x, ast.Assign):
+            if len(x.targets) == 1 and isinstance(x.targets[0], ast.Name):
+                typ, y = ('const', x.targets[0].id)
+            else:
+                continue
+        else:
+            continue
+        try:
+            z = ast.get_source_segment(r, x)
+        except Exception as exc:
+            a.error('Failed to get source segment in {} for {}: {}', d, y, exc)
+            continue
+        if z is None:
+            continue
+        z = z.strip('\n')
+        w.append(t(type=typ, name=y, source_code=z, content_hash=s(z), path=d))
+    return w
+def a1(b1, c1):
+    new = {'func': [], 'class': [], 'const': []}
+    for w in b1.values():
+        rep = w[0]
+        typ, y = (rep.type, rep.name)
+        if typ not in c1:
+            c1[typ] = {}
+        if y in c1[typ]:
+            if c1[typ][y].content_hash == rep.content_hash:
+                a.debug('Already in {}.py: {}', typ, y)
+                continue
+            a.warning("Conflict in {}.py: '{}' exists with different content – skipping.", typ, y)
+            continue
+        if any((d.name == y for d in new[typ])):
+            continue
+        new[typ].append(rep)
+    return new
+def d1(e1):
+    c1 = {'func': {}, 'class': {}, 'const': {}}
+    for typ, q in [('func', 'func.py'), ('class', 'class.py'), ('const', 'const.py')]:
+        d = e1 / q
+        if d.is_file():
+            try:
+                src = d.read_text(encoding='utf-8')
+                for d in u(str(d), src):
+                    c1[typ][d.name] = d
+            except Exception as exc:
+                a.error('Error parsing existing {}: {}', d, exc)
+    return c1
+def f1(e1, new):
+    e1.mkdir(exist_ok=True)
+    for typ, q in [('func', 'func.py'), ('class', 'class.py'), ('const', 'const.py')]:
+        if not new[typ]:
+            continue
+        d = e1 / q
+        g1 = not d.exists() or d.stat().st_size == 0
+        with open(d, 'a', encoding='utf-8') as fh:
+            if g1:
+                fh.write(f'# {typ.capitalize()} definitions\n\n')
+            fh.writelines((d.source_code + '\n\n' for d in new[typ]))
+        print('Added {} definition(s) to {}', len(new[typ]), q)
+def h1(b1):
+    i1 = {}
+    for j1, w in b1.items():
+        for d in w:
+            if not d.path.endswith('.py') or any((d.path.endswith(ext) for ext in b)):
+                continue
+            i1.setdefault(d.path, set()).add(j1)
+    for d, k1 in i1.items():
+        try:
+            r = Path(d).read_text(encoding='utf-8')
+            v = ast.parse(r, filename=d)
+            l1 = []
+            for x in v.body:
+                try:
+                    z = ast.get_source_segment(r, x)
+                except Exception:
+                    l1.append(x)
+                    continue
+                if z is None:
+                    l1.append(x)
+                    continue
+                m1 = s(z.strip('\n'))
+                if m1 in k1:
+                    continue
+                l1.append(x)
+            if len(l1) == len(v.body):
+                continue
+            v.body = l1
+            n1 = ast.unparse(v)
+            try:
+                ast.parse(n1)
+            except SyntaxError as exc:
+                a.error('Resulting code of {} has a syntax error – skipping: {}', d, exc)
+                continue
+            Path(d).write_text(n1, encoding='utf-8')
+            print('Removed {} duplicate definition(s) from {}', len(k1), d)
+        except Exception as exc:
+            a.error('Failed to process {} for moving: {}', d, exc)
+def o1():
+    p1 = argparse.ArgumentParser(description='Copy/move repeated Python definitions to utils/')
+    q1 = p1.add_mutually_exclusive_group(required=True)
+    q1.add_argument('-c', '--copy', action='store_true', help='Copy duplicates to utils/')
+    q1.add_argument('-m', '--move', action='store_true', help='Move duplicates to utils/ and remove from originals')
+    r1 = p1.parse_args()
+    s1 = 'copy' if r1.copy else 'move'
+    print('Action: {}', s1)
+    print('Scanning for Python files …')
+    t1 = j('.')
+    u1 = []
+    for d, r in t1:
+        if r is None:
+            try:
+                r = Path(d).read_text(encoding='utf-8', errors='replace')
+            except Exception as exc:
+                a.error('Failed to read {}: {}', d, exc)
+                continue
+        u1.append((d, r))
+    print('Found {} file(s) to process', len(u1))
+    v1 = []
+    with concurrent.futures.ProcessPoolExecutor() as w1:
+        x1 = {w1.submit(u, p, src): p for p, src in u1}
+        for y1 in concurrent.futures.as_completed(x1):
+            try:
+                z1 = y1.result()
+                if z1:
+                    v1.extend(z1)
+            except Exception as exc:
+                a.error('Worker failed: {}', exc)
+    b1 = {}
+    for d in v1:
+        b1.setdefault(d.content_hash, []).append(d)
+    a2 = {h: w for h, w in b1.items() if len(w) > 1}
+    print('Found {} duplicate group(s)', len(a2))
+    if not a2:
+        print('No duplicates – nothing to do.')
+        return
+    e1 = Path('utils')
+    c1 = d1(e1) if e1.exists() else {}
+    b2 = a1(a2, c1)
+    c2 = sum((len(lst) for lst in b2.values()))
+    if c2 == 0:
+        print('All duplicates are already present in utils/ – nothing to add.')
+        return
+    f1(e1, b2)
+    if s1 == 'move':
+        h1(a2)
+if __name__ == '__main__':
+    raise SystemExit(o1())
+
+# --- File: ddupr.py ---
+import argparse
+import ast
+import hashlib
+import sys
+import tarfile
+import textwrap
+import zipfile
+from collections import defaultdict
+from dataclasses import dataclass, field
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+import brotlicffi as brotli
+import lzma_mt
+import zstandard as zstd
+from loguru import logger
+d2 = True
+e2 = True
+f2 = {'.zip', '.tar', '.gz', '.bz2', '.xz', '.tgz', '.tbz2', '.zst', '.br'}
+g2 = {'func': 'funcs.py', 'class': 'classes.py', 'const': 'const.py'}
+h2 = {'TypeVar', 'NewType', 'ParamSpec', 'TypeVarTuple'}
+@dataclass
+class i2:
+    j2 = field(default_factory=list)
+def k2(r):
+    l2 = '\n'.join((m2 for m2 in r.splitlines() if m2.strip() and (not m2.strip().startswith('#'))))
+    return hashlib.sha256(l2.encode()).hexdigest()
+def n2(r, x):
+    seg = ast.get_source_segment(r, x)
+    if seg is not None:
+        return seg
+    o2 = r.splitlines(keepends=True)
+    p2 = x.lineno - 1
+    end = x.end_lineno
+    return textwrap.dedent(''.join(o2[p2:end]))
+def q2(v, x):
+    r2 = set()
+    for n in ast.walk(x):
+        if isinstance(n, ast.Name):
+            r2.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            k = n
+            while isinstance(k, ast.Attribute):
+                k = k.value
+            if isinstance(k, ast.Name):
+                r2.add(k.id)
+    o2 = []
+    for s2 in v.body:
+        if isinstance(s2, ast.Import):
+            for t2 in s2.names:
+                y = t2.asname or t2.name.split('.')[0]
+                if y in r2:
+                    o2.append(ast.unparse(s2))
+        elif isinstance(s2, ast.ImportFrom):
+            for t2 in s2.names:
+                y = t2.asname or t2.name
+                if y in r2:
+                    o2.append(ast.unparse(s2))
+    return list(dict.fromkeys(o2))
+def u2(x):
+    if isinstance(x, ast.AnnAssign) and isinstance(x.target, ast.Name):
+        y = x.target.id
+        return (True, y)
+    if isinstance(x, ast.Assign) and len(x.targets) == 1:
+        v2 = x.targets[0]
+        if not isinstance(v2, ast.Name):
+            return (False, '')
+        y = v2.id
+        if y.isupper():
+            return (True, y)
+        w2 = x.value
+        if isinstance(w2, ast.Call):
+            x2 = w2.func
+            y2 = x2.id if isinstance(x2, ast.Name) else x2.attr if isinstance(x2, ast.Attribute) else ''
+            if y2 in h2:
+                return (True, y)
+    return (False, '')
+def z2(r, a3):
+    b3 = []
+    try:
+        v = ast.parse(r)
+    except SyntaxError as exc:
+        a.warning('Syntax error in {}: {}', a3, exc)
+        return b3
+    for x in v.body:
+        try:
+            if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                src = n2(r, x)
+                b3.append(i2(kind='func', name=x.name, source=src, content_hash=k2(src), origin_file=a3, node_lineno=x.lineno, node_end_lineno=x.end_lineno, imports=q2(v, x)))
+            elif isinstance(x, ast.ClassDef):
+                src = n2(r, x)
+                b3.append(i2(kind='class', name=x.name, source=src, content_hash=k2(src), origin_file=a3, node_lineno=x.lineno, node_end_lineno=x.end_lineno, imports=q2(v, x)))
+            else:
+                c3, y = u2(x)
+                if c3:
+                    src = n2(r, x)
+                    b3.append(i2(kind='const', name=y, source=src, content_hash=k2(src), origin_file=a3, node_lineno=x.lineno, node_end_lineno=x.end_lineno, imports=q2(v, x)))
+        except Exception as exc:
+            a.error("Failed to process node '{}' in {}: {}", getattr(x, 'name', '?'), a3, exc)
+    return b3
+def d3(d):
+    l = []
+    try:
+        with zipfile.ZipFile(d) as zf:
+            for e3 in zf.namelist():
+                if not e3.endswith('.py'):
+                    continue
+                try:
+                    r = zf.read(e3).decode('utf-8', errors='replace')
+                    l.append((f'{d}::{e3}', r))
+                except Exception as exc:
+                    a.error('Cannot read {}::{}: {}', d, e3, exc)
+    except Exception as exc:
+        a.error('Cannot open zip {}: {}', d, exc)
+    return l
+def f3(d):
+    l = []
+    try:
+        with tarfile.open(d) as tf:
+            for e3 in tf.getmembers():
+                if not e3.name.endswith('.py') or not e3.isfile():
+                    continue
+                try:
+                    f = tf.extractfile(e3)
+                    if f is None:
+                        continue
+                    r = f.read().decode('utf-8', errors='replace')
+                    l.append((f'{d}::{e3.name}', r))
+                except Exception as exc:
+                    a.error('Cannot read {}::{}: {}', d, e3.name, exc)
+    except Exception as exc:
+        a.error('Cannot open tar {}: {}', d, exc)
+    return l
+def g3(d):
+    if not d2:
+        a.warning('zstandard not installed; skipping {}', d)
+        return []
+    try:
+        g = zstd.ZstdDecompressor()
+        raw = g.decompress(d.read_bytes())
+        r = raw.decode('utf-8', errors='replace')
+        return [(str(d), r)]
+    except Exception as exc:
+        a.error('Cannot decompress zst {}: {}', d, exc)
+        return []
+def h3(d):
+    if not e2:
+        a.warning('brotli not installed; skipping {}', d)
+        return []
+    try:
+        raw = brotli.decompress(d.read_bytes())
+        r = raw.decode('utf-8', errors='replace')
+        return [(str(d), r)]
+    except Exception as exc:
+        a.error('Cannot decompress brotli {}: {}', d, exc)
+        return []
+def i3(d):
+    try:
+        raw = lzma_mt.decompress(d.read_bytes(), threads=4)
+        r = raw.decode('utf-8', errors='replace')
+        return [(str(d), r)]
+    except Exception as exc:
+        a.error('Cannot decompress brotli {}: {}', d, exc)
+        return []
+def j3(d):
+    ext = d.suffix.lower()
+    if ext == '.py':
+        try:
+            return [(str(d), d.read_text(encoding='utf-8', errors='replace'))]
+        except Exception as exc:
+            a.error('Cannot read {}: {}', d, exc)
+            return []
+    if ext == '.zip' or ext == '.whl':
+        return d3(d)
+    if ext in {'.tar', '.tgz', '.tbz2', '.tar.gz', '.tar.bz2', '.tar.xz'}:
+        return f3(d)
+    if ext == '.xz':
+        return i3(d)
+    if ext == '.zst':
+        return g3(d)
+    if ext == '.br':
+        return h3(d)
+    return []
+def k3(d):
+    l = []
+    for a3, r in j3(d):
+        l.extend(z2(r, a3))
+    return l
+def l3(b3):
+    m3 = []
+    for obj in b3:
+        m3.extend(obj.imports)
+    n3 = list(dict.fromkeys(m3))
+    o3 = []
+    if n3:
+        o3.append('\n'.join(n3))
+    for obj in b3:
+        o3.append(obj.source.strip())
+    return '\n\n\n'.join(o3) + '\n'
+def p3(r, q3):
+    try:
+        ast.parse(r)
+        return True
+    except SyntaxError as exc:
+        a.error('Generated source for {} has syntax error — skipping write: {}', q3, exc)
+        return False
+def r3(s3, e1, *, t3=False):
+    e1.mkdir(parents=True, exist_ok=True)
+    u3 = {}
+    for v3, w3 in g2.items():
+        b3 = s3.get(v3, [])
+        if not b3:
+            continue
+        q3 = e1 / w3
+        x3 = set()
+        if q3.exists():
+            try:
+                y3 = q3.read_text(encoding='utf-8')
+                z3 = ast.parse(y3)
+                for x in z3.body:
+                    seg = ast.get_source_segment(y3, x)
+                    if seg:
+                        x3.add(k2(seg))
+            except Exception as exc:
+                a.warning('Could not parse existing {}: {}', q3, exc)
+        a4 = [o for o in b3 if o.content_hash not in x3]
+        if not a4:
+            print('No new objects for {} — skipping', q3)
+            continue
+        n1 = l3(a4)
+        if q3.exists():
+            b4 = q3.read_text(encoding='utf-8') + '\n\n' + n1
+        else:
+            b4 = '"""Auto-generated by refactor_utils.py"""\n\n' + n1
+        if not p3(b4, q3):
+            continue
+        if not t3:
+            q3.write_text(b4, encoding='utf-8')
+            a.success('Wrote {} object(s) to {}', len(a4), q3)
+        else:
+            print('[dry-run] Would write {} object(s) to {}', len(a4), q3)
+        u3[v3] = q3
+    return u3
+def c4(e1, cwd, v3):
+    rel = e1.relative_to(cwd)
+    d4 = '.'.join(rel.parts) + '.' + g2[v3].removesuffix('.py')
+    return f'from {d4} import {{names}}'
+def e4(f4, e1, cwd):
+    g4 = defaultdict(list)
+    for obj in f4:
+        if '::' in obj.origin_file:
+            a.warning('Cannot patch archive member {} — skipping move', obj.origin_file)
+            continue
+        g4[obj.origin_file].append(obj)
+    for d, h4 in g4.items():
+        d = Path(d)
+        if not d.exists():
+            a.warning('Origin file gone: {}', d)
+            continue
+        try:
+            i4 = d.read_text(encoding='utf-8')
+            o2 = i4.splitlines(keepends=True)
+        except Exception as exc:
+            a.error('Cannot read {} for patching: {}', d, exc)
+            continue
+        j4 = sorted(h4, key=lambda o: o.node_lineno, reverse=True)
+        k4 = list(o2)
+        for obj in j4:
+            p2 = obj.node_lineno - 1
+            end = obj.node_end_lineno
+            k4[p2:end] = []
+        l4 = defaultdict(list)
+        for obj in h4:
+            l4[obj.kind].append(obj.name)
+        m4 = []
+        for v3, n4 in l4.items():
+            o4 = c4(e1, cwd, v3)
+            m4.append(o4.format(names=', '.join(sorted(n4))) + '\n')
+        p4 = 0
+        try:
+            v = ast.parse(''.join(k4))
+            for x in v.body:
+                if isinstance(x, (ast.Import, ast.ImportFrom)):
+                    p4 = x.end_lineno
+        except SyntaxError:
+            pass
+        for i, imp in enumerate(m4):
+            k4.insert(p4 + i, imp)
+        n1 = ''.join(k4)
+        if not p3(n1, d):
+            a.error('Patched {} has syntax errors — original preserved', d)
+            continue
+        try:
+            d.write_text(n1, encoding='utf-8')
+            a.success('Patched {}: removed {} definition(s), added imports', d, len(h4))
+        except Exception as exc:
+            a.error('Cannot write patched {}: {}', d, exc)
+def q4(k):
+    r4 = {'.py'} | f2
+    s4 = [p for p in k.rglob('*') if p.suffix.lower() in r4 and p.is_file()]
+    e1 = k / 'utils'
+    return [p for p in s4 if not str(p).startswith(str(e1))]
+def t4(u4):
+    v4 = defaultdict(list)
+    for obj in u4:
+        v4[obj.content_hash].append(obj)
+    w4 = {h: h4 for h, h4 in v4.items() if len(h4) > 1}
+    s3 = defaultdict(list)
+    for h4 in w4.values():
+        x4 = h4[0]
+        s3[x4.kind].append(x4)
+    return (w4, s3)
+def run(cwd, y4, z4):
+    e1 = cwd / 'utils'
+    s4 = q4(cwd)
+    print('Found {} file(s) to scan', len(s4))
+    u4 = []
+    with Pool(processes=z4) as a5:
+        for z1 in a5.imap_unordered(k3, s4, chunksize=4):
+            u4.extend(z1)
+    print('Extracted {} top-level object(s) total', len(u4))
+    w4, s3 = t4(u4)
+    sum((len(v) for v in s3.values()))
+    print('Found {} duplicate group(s): {} func, {} class, {} const', len(w4), len(s3.get('func', [])), len(s3.get('class', [])), len(s3.get('const', [])))
+    if not w4:
+        print('Nothing to do.')
+        return
+    if y4 is None:
+        for v3, h4 in s3.items():
+            for obj in h4:
+                print("[{}] '{}' duplicated in {} file(s)", v3, obj.name, len(w4[obj.content_hash]))
+        return
+    t3 = y4 not in {'copy', 'move'}
+    r3(s3, e1, dry_run=t3)
+    if y4 == 'move':
+        f4 = []
+        for h4 in w4.values():
+            f4.extend(h4[1:])
+            f4.append(h4[0])
+        e4(f4, e1, cwd)
+def b5():
+    p1 = argparse.ArgumentParser(description='Extract duplicate Python definitions into utils/.', formatter_class=argparse.RawDescriptionHelpFormatter)
+    q1 = p1.add_mutually_exclusive_group()
+    q1.add_argument('-c', '--copy', action='store_true', help='Copy duplicate definitions to utils/ (originals untouched)')
+    q1.add_argument('-m', '--move', action='store_true', help='Move duplicate definitions to utils/ and patch original files')
+    p1.add_argument('--dir', type=Path, default=Path('.'), help='Root directory to scan (default: current directory)')
+    p1.add_argument('--workers', type=int, default=max(1, cpu_count() - 1), help='Number of worker processes (default: cpu_count - 1)')
+    p1.add_argument('--log-level', default='INFO', choices=['TRACE', 'DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR'], help='Loguru log level (default: INFO)')
+    return p1.parse_args()
+def o1():
+    r1 = b5()
+    a.remove()
+    a.add(sys.stderr, level=r1.log_level, format='<green>{time:HH:mm:ss}</green> | <level>{level:<8}</level> | {message}', colorize=True)
+    a.add('refactor_utils.log', level='DEBUG', rotation='5 MB', retention=3, encoding='utf-8')
+    k = r1.dir.resolve()
+    if not k.is_dir():
+        a.error("'{}' is not a directory", k)
+        sys.exit(1)
+    y4 = None
+    if r1.copy:
+        y4 = 'copy'
+    elif r1.move:
+        y4 = 'move'
+    print('Root: {}  |  mode: {}  |  workers: {}', k, y4 or 'report-only', r1.workers)
+    run(k, y4, r1.workers)
+if __name__ == '__main__':
+    raise SystemExit(o1())
+
+# --- File: dduputil.py ---
+import argparse
+import ast
+import hashlib
+import sys
+import tempfile
+from ast import Name, expr
+from collections.abc import Iterable
+from dataclasses import dataclass
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from loguru import logger
+try:
+    import bz2
+    import gzip
+    import lzma
+    import tarfile
+    import zipfile
+except Exception:
+    a.exception('missing builtin archive modules (unexpected)')
+c5 = True
+try:
+    import zstandard as zstd
+except Exception:
+    c5 = False
+d5 = True
+try:
+    import brotli
+except Exception:
+    d5 = False
+e5 = {'.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.txz'}
+f5 = {'.gz', '.bz2', '.xz', '.zst', '.br'}
+g5 = '.py'
+h5 = Path('utils')
+i5 = h5 / 'funcs.py'
+j5 = h5 / 'classes.py'
+k5 = h5 / 'const.py'
+@dataclass
+class l5:
+    pass
+@dataclass
+class m5:
+    pass
+def n5(s):
+    return hashlib.sha256(s.encode('utf-8')).hexdigest()
+def o5(x):
+    return ast.unparse(x) + '\n'
+def p5(x):
+    if not isinstance(x, ast.Assign):
+        return False
+    def q5(t):
+        return isinstance(t, ast.Name)
+    if any((not q5(t) for t in x.targets if isinstance(t, (ast.Name, ast.Tuple)))):
+        return False
+    def r5(n):
+        if isinstance(n, ast.Constant):
+            return True
+        if isinstance(n, (ast.Tuple, ast.List, ast.Set)):
+            return all((r5(e) for e in n.elts))
+        if isinstance(n, ast.Dict):
+            return all((r5(k) and r5(v) for k, v in zip(n.keys, n.values, strict=False)))
+        return False
+    return r5(x.value)
+def s5(v):
+    return [n for n in v.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+def t5(d):
+    return d.read_bytes()
+def u5(h, ext):
+    try:
+        if ext == '.gz':
+            return (gzip.decompress(h), '')
+        if ext == '.bz2':
+            return (bz2.decompress(h), '')
+        if ext == '.xz':
+            return (lzma.decompress(h), '')
+        if ext == '.zst':
+            if not c5:
+                raise RuntimeError('zstandard library not installed')
+            g = zstd.ZstdDecompressor()
+            return (g.decompress(h), '')
+        if ext == '.br':
+            if not d5:
+                raise RuntimeError('brotli library not installed')
+            return (brotli.decompress(h), '')
+    except Exception as e:
+        a.debug('decompression failed for ext {}: {}', ext, e)
+    return None
+def v5(k):
+    k = k.resolve()
+    for p in k.rglob('*'):
+        if p.is_dir():
+            continue
+        ''.join(p.suffixes) or p.suffix
+        w5 = str(p.name).lower()
+        try:
+            if w5.endswith('.py'):
+                try:
+                    x5 = p.read_text(encoding='utf-8')
+                except UnicodeDecodeError:
+                    x5 = p.read_text(encoding='latin-1')
+                yield l5(path=p, relpath=p.relative_to(k), text=x5, origin=str(p))
+                continue
+            if any((w5.endswith(ext) for ext in e5)):
+                if w5.endswith('.zip'):
+                    try:
+                        with zipfile.ZipFile(p, 'r') as z:
+                            for zi in z.infolist():
+                                if zi.is_dir():
+                                    continue
+                                y = zi.filename
+                                if not y.lower().endswith('.py'):
+                                    continue
+                                h = z.read(zi)
+                                try:
+                                    x5 = h.decode('utf-8')
+                                except UnicodeDecodeError:
+                                    x5 = h.decode('latin-1')
+                                y5 = Path(p.name) / Path(y)
+                                yield l5(path=p, relpath=y5, text=x5, origin=f'{p}:{y}')
+                    except Exception as e:
+                        a.error('error reading zip {}: {}', p, e)
+                else:
+                    try:
+                        with tarfile.open(p, 'r:*') as t:
+                            for ti in t.getmembers():
+                                if not ti.isfile():
+                                    continue
+                                y = ti.name
+                                if not y.lower().endswith('.py'):
+                                    continue
+                                f = t.extractfile(ti)
+                                if not f:
+                                    continue
+                                h = f.read()
+                                try:
+                                    x5 = h.decode('utf-8')
+                                except UnicodeDecodeError:
+                                    x5 = h.decode('latin-1')
+                                y5 = Path(p.name) / Path(y)
+                                yield l5(path=p, relpath=y5, text=x5, origin=f'{p}:{y}')
+                    except Exception as e:
+                        a.error('error reading tar {}: {}', p, e)
+                continue
+            for ext in f5:
+                if w5.endswith(ext):
+                    try:
+                        h = p.read_bytes()
+                        dec = u5(h, ext.lstrip('.'))
+                        if dec:
+                            z5, a6 = dec
+                            try:
+                                txt = z5.decode('utf-8')
+                            except UnicodeDecodeError:
+                                txt = z5.decode('latin-1')
+                            if '.py' in p.name or ('def ' in txt or 'class ' in txt):
+                                b6 = Path(p.name).with_suffix('')
+                                yield l5(path=p, relpath=b6, text=txt, origin=f'{p}:{p.name}')
+                    except Exception as e:
+                        a.debug('decompress attempt failed for {}: {}', p, e)
+                    break
+        except Exception as exc:
+            a.exception('error iterating {}: {}', p, exc)
+def c6(d6):
+    e6, f6, x5, a3 = d6
+    l = []
+    try:
+        v = ast.parse(x5)
+    except SyntaxError as e:
+        a.error('Syntax error parsing {}: {}:{}', a3, e.lineno, e.msg)
+        return (e6, l)
+    j2 = s5(v)
+    for x in v.body:
+        try:
+            if isinstance(x, ast.FunctionDef):
+                if x.name == 'main':
+                    continue
+                g6 = o5(x)
+                h = n5(g6)
+                l.append({'kind': 'func', 'name': x.name, 'hash': h, 'code': g6, 'imports': j2})
+            elif isinstance(x, ast.ClassDef):
+                g6 = o5(x)
+                h = n5(g6)
+                l.append({'kind': 'class', 'name': x.name, 'hash': h, 'code': g6, 'imports': j2})
+            elif isinstance(x, ast.Assign) and p5(x):
+                n4 = []
+                for t in x.targets:
+                    if isinstance(t, ast.Name):
+                        n4.append(t.id)
+                    elif isinstance(t, ast.Tuple):
+                        for e in t.elts:
+                            if isinstance(e, ast.Name):
+                                n4.append(e.id)
+                y = n4[0] if n4 else 'CONST'
+                g6 = o5(x)
+                h = n5(g6)
+                l.append({'kind': 'const', 'name': y, 'hash': h, 'code': g6, 'imports': j2})
+        except Exception as exc:
+            a.exception('error extracting node in {}: {}', a3, exc)
+    return (e6, l)
+def h6(i6):
+    return i6
+def j6():
+    h5.mkdir(exist_ok=True)
+def k6(v2, l6, m6):
+    if not l6:
+        return
+    o2 = []
+    if v2.exists():
+        n6 = v2.read_text(encoding='utf-8')
+    else:
+        n6 = ''
+    for it in l6:
+        if it['hash'] in m6:
+            continue
+        o2.append(it['code'])
+        m6.add(it['hash'])
+    if not o2:
+        return
+    o6 = n6.rstrip() + '\n\n' + '\n'.join(o2) + '\n'
+    v2.write_text(o6, encoding='utf-8')
+def p6(d, q6):
+    d.write_text(q6, encoding='utf-8')
+def r6(s6, t6):
+    out = s6
+    for u6 in t6:
+        idx = out.find(u6)
+        if idx != -1:
+            p2 = idx
+            end = idx + len(u6)
+            while p2 > 0 and out[p2 - 1] in '\n\r\t ':
+                p2 -= 1
+                if out[p2] == '\n':
+                    break
+            while end < len(out) and out[end] in '\n\r\t ':
+                end += 1
+                if out[end - 1] == '\n':
+                    break
+            out = out[:p2] + out[end:]
+        else:
+            v6 = u6.splitlines()[0]
+            idx = out.find(v6)
+            if idx != -1:
+                w6 = out[idx:]
+                nn = w6.find('\n\n')
+                if nn != -1:
+                    out = out[:idx] + out[idx + nn + 2:]
+                else:
+                    out = out[:idx]
+            else:
+                a.debug('could not find snippet to remove: {}', v6[:60])
+    return out
+def x6(s6, m4):
+    try:
+        v = ast.parse(s6)
+    except Exception:
+        return '\n'.join(m4) + '\n\n' + s6
+    p4 = 0
+    if v.body and isinstance(v.body[0], ast.Expr) and isinstance(v.body[0].value, ast.Constant) and isinstance(v.body[0].value.value, str):
+        doc = v.body[0]
+        if hasattr(doc, 'end_lineno'):
+            p4 = doc.end_lineno
+        else:
+            p4 = 1
+    o2 = s6.splitlines()
+    y6 = o2[:p4] + m4 + [''] + o2[p4:]
+    return '\n'.join(y6) + '\n'
+def z6(x5):
+    try:
+        ast.parse(x5)
+        return True
+    except SyntaxError as e:
+        a.error('validation failed: {}:{}', e.lineno, e.msg)
+        return False
+def o1():
+    p1 = argparse.ArgumentParser(description='Deduplicate top-level funcs/classes/constants into utils/*')
+    q1 = p1.add_mutually_exclusive_group(required=True)
+    q1.add_argument('-m', '--move', action='store_true', help='move duplicated objects (default off)')
+    q1.add_argument('-c', '--copy', action='store_true', help='copy duplicated objects (default off)')
+    p1.add_argument('--min-occurs', type=int, default=2, help='minimum occurrences to consider duplicate (default 2)')
+    p1.add_argument('--jobs', type=int, default=max(1, cpu_count() - 1), help='multiprocessing workers')
+    p1.add_argument('--verbose', action='store_true')
+    r1 = p1.parse_args()
+    if r1.verbose:
+        a.remove()
+        a.add(sys.stderr, level='DEBUG')
+    else:
+        a.add(sys.stderr, level='INFO')
+    if not (r1.move or r1.copy):
+        p1.error('one of --move or --copy required')
+    k = Path.cwd()
+    print('scanning for Python sources under {}', k)
+    a7 = list(v5(k))
+    print('found {} candidate sources', len(a7))
+    b7 = [(str(s.path), str(s.relpath), s.text, s.origin) for s in a7]
+    i6 = {}
+    with Pool(processes=r1.jobs) as a5:
+        for e6, l6 in a5.imap_unordered(c6, b7):
+            if not l6:
+                continue
+            d6 = next((s for s in a7 if str(s.path) == e6), None)
+            if not d6:
+                d6 = next((s for s in a7 if s.origin.startswith(e6)), None)
+            for it in l6:
+                h = it['hash']
+                i6.setdefault(h, []).append((d6, it))
+    c7 = {h: lst for h, lst in i6.items() if len(lst) >= r1.min_occurs}
+    print('found {} duplicated code blocks (occurring >= {})', len(c7), r1.min_occurs)
+    j6()
+    d7 = []
+    e7 = []
+    f7 = []
+    g7 = {}
+    for h, h7 in c7.items():
+        d6, it = h7[0]
+        v3 = it['kind']
+        y = it['name']
+        g6 = it['code']
+        j2 = it['imports']
+        for sf, i7 in h7:
+            if r1.copy:
+                pass
+            else:
+                sf.relpath if sf else Path('<unknown>')
+                j7 = sf.path if sf else None
+                if j7 and j7.exists() and j7.suffixes:
+                    sf.path if sf.path.exists() else None
+                d = g7.setdefault(sf.path, {'remove_snippets': [], 'add_imports': set(), 'preserve_imports': []})
+                d['remove_snippets'].append(g6)
+                if v3 == 'func':
+                    mod = 'utils.funcs'
+                elif v3 == 'class':
+                    mod = 'utils.classes'
+                else:
+                    mod = 'utils.const'
+                d['add_imports'].add(f'from {mod} import {y}')
+                for im in j2:
+                    try:
+                        s = ast.unparse(im)
+                    except Exception:
+                        s = o5(im).strip()
+                    d['preserve_imports'].append(s)
+        if v3 == 'func':
+            d7.append({'hash': h, 'code': g6})
+        elif v3 == 'class':
+            e7.append({'hash': h, 'code': g6})
+        elif v3 == 'const':
+            f7.append({'hash': h, 'code': g6})
+    k7 = set()
+    l7 = set()
+    m7 = set()
+    if i5.exists():
+        try:
+            c1 = i5.read_text(encoding='utf-8')
+            k7 = {n5(n7) for n7 in c1.split('\n\n') if n7.strip()}
+        except Exception:
+            k7 = set()
+    if j5.exists():
+        try:
+            c1 = j5.read_text(encoding='utf-8')
+            l7 = {n5(n7) for n7 in c1.split('\n\n') if n7.strip()}
+        except Exception:
+            l7 = set()
+    if k5.exists():
+        try:
+            c1 = k5.read_text(encoding='utf-8')
+            m7 = {n5(n7) for n7 in c1.split('\n\n') if n7.strip()}
+        except Exception:
+            m7 = set()
+    k6(i5, d7, k7)
+    k6(j5, e7, l7)
+    k6(k5, f7, m7)
+    print('written utils files under {}', h5)
+    if r1.move:
+        print('applying move modifications to original files ({} targets)', len(g7))
+        for o7, mod in g7.items():
+            try:
+                if not o7 or not Path(o7).exists():
+                    a.warning('original file {} not on disk (skipping)', o7)
+                    continue
+                p = Path(o7)
+                p7 = p.read_text(encoding='utf-8')
+                o6 = r6(p7, mod['remove_snippets'])
+                m4 = sorted(mod['add_imports'])
+                o6 = x6(o6, m4)
+                if not z6(o6):
+                    a.error('after modifications, file {} has syntax errors; skipping write', p)
+                    continue
+                with tempfile.NamedTemporaryFile('w', delete=False, encoding='utf-8') as tf:
+                    tf.write(o6)
+                    q7 = tf.name
+                Path(q7).replace(p)
+                print('updated {}', p)
+            except Exception as exc:
+                a.exception('failed to modify {}: {}', o7, exc)
+    print('done')
+if __name__ == '__main__':
+    raise SystemExit(o1())
+
+# --- File: vddup.py ---
+import argparse
+import ast
+import bz2
+import gzip
+import hashlib
+import lzma
+import os
+import tarfile
+import zipfile
+from ast import Module
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+import brotli
+import zstandard as zstd
+from loguru import logger
+a.add('error.log', level='ERROR')
+r7 = ['.zip', '.tar', '.gz', '.bz2', '.xz', '.zst', '.br']
+def s7(src, dst, t7=1024 * 1024):
+    while True:
+        u7 = src.read(t7)
+        if not u7:
+            break
+        dst.write(u7)
+def v7(q6):
+    return hashlib.sha256(q6.encode('utf-8')).hexdigest()
+def w7(d, x7):
+    try:
+        if d.suffix == '.zip':
+            with zipfile.ZipFile(d, 'r') as z:
+                z.extractall(x7)
+        elif d.suffix == '.tar':
+            with tarfile.open(d, 'r') as t:
+                t.extractall(x7)
+        elif d.suffix == '.gz':
+            with gzip.open(d, 'rb') as g, open(x7 / d.stem, 'wb') as f:
+                s7(g, f)
+        elif d.suffix == '.bz2':
+            with bz2.open(d, 'rb') as b, open(x7 / d.stem, 'wb') as f:
+                s7(b, f)
+        elif d.suffix == '.xz':
+            with lzma.open(d, 'rb') as x, open(x7 / d.stem, 'wb') as f:
+                s7(x, f)
+        elif d.suffix == '.zst':
+            with open(d, 'rb') as z:
+                g = zstd.ZstdDecompressor()
+                with open(x7 / d.stem, 'wb') as f:
+                    f.write(g.decompress(z.read()))
+        elif d.suffix == '.br':
+            with open(d, 'rb') as b:
+                y7 = brotli.decompress(b.read())
+                with open(x7 / d.stem, 'wb') as f:
+                    f.write(y7)
+    except Exception as e:
+        a.error(f'Error extracting {d}: {e}')
+def z7(d):
+    try:
+        with open(d, encoding='utf-8') as f:
+            return ast.parse(f.read(), filename=str(d))
+    except Exception as e:
+        a.error(f'Error parsing {d}: {e}')
+        return None
+def a8(b8):
+    c8 = {'functions': {}, 'classes': {}, 'constants': {}}
+    for x in ast.walk(b8):
+        if isinstance(x, ast.FunctionDef):
+            q6 = ast.unparse(x)
+            d8 = v7(q6)
+            c8['functions'].setdefault(d8, []).append(x)
+        elif isinstance(x, ast.ClassDef):
+            q6 = ast.unparse(x)
+            d8 = v7(q6)
+            c8['classes'].setdefault(d8, []).append(x)
+        elif isinstance(x, ast.Assign):
+            for v2 in x.targets:
+                if isinstance(v2, ast.Name):
+                    q6 = ast.unparse(x)
+                    d8 = v7(q6)
+                    c8['constants'].setdefault(d8, []).append(x)
+    for key in c8:
+        c8[key] = {k: v for k, v in c8[key].items() if len(v) > 1}
+    return c8
+def e8(d):
+    d = Path(d)
+    b8 = z7(d)
+    if b8:
+        return a8(b8)
+    return None
+def f8(g8):
+    h8 = {'functions': {}, 'classes': {}, 'constants': {}}
+    for k, _, t1 in os.walk(g8):
+        for i8 in t1:
+            d = Path(k) / i8
+            if d.suffix == '.py':
+                print(f'processing ... {d.name}')
+                z1 = e8(d)
+                if z1:
+                    for key in h8:
+                        for d8, j8 in z1[key].items():
+                            h8[key].setdefault(d8, []).extend(j8)
+    return h8
+def k8(c8, l8, m8=False):
+    for n8, l6 in c8.items():
+        o8 = f'{n8[:-1]}.py'
+        p8 = l8 / o8
+        with open(p8, 'w', encoding='utf-8') as f:
+            for j8 in l6.values():
+                for x in j8:
+                    q6 = ast.unparse(x)
+                    try:
+                        ast.parse(q6)
+                        f.write(q6 + '\n\n')
+                        if m8:
+                            pass
+                    except SyntaxError as e:
+                        a.error(f'Syntax error in {q6}: {e}')
+def o1():
+    p1 = argparse.ArgumentParser(description='Inspect Python files for repeated definitions.')
+    p1.add_argument('-m', '--move', action='store_true', help='Move repeated definitions to utils directory.')
+    p1.add_argument('-c', '--copy', action='store_true', help='Copy repeated definitions to utils directory.')
+    r1 = p1.parse_args()
+    cwd = Path.cwd()
+    e1 = cwd / 'utils'
+    e1.mkdir(exist_ok=True)
+    print(cpu_count())
+    with Pool(cpu_count()) as a5:
+        l = a5.map(f8, [cwd])
+    q8 = {'functions': {}, 'classes': {}, 'constants': {}}
+    for z1 in l:
+        for key in q8:
+            for d8, j8 in z1[key].items():
+                q8[key].setdefault(d8, []).extend(j8)
+    if r1.move or r1.copy:
+        k8(q8, e1, move=r1.move)
+if __name__ == '__main__':
+    raise SystemExit(o1())
+
+# --- File: vddup2.py ---
+import argparse
+import ast
+import os
+from ast import Module
+from collections import defaultdict
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+def z7(d):
+    with open(d, encoding='utf-8') as i8:
+        return ast.parse(i8.read(), filename=d)
+def r8(v):
+    s8 = []
+    t8 = []
+    u8 = []
+    for x in ast.walk(v):
+        if isinstance(x, ast.FunctionDef):
+            s8.append(x.name)
+        elif isinstance(x, ast.ClassDef):
+            t8.append(x.name)
+        elif isinstance(x, ast.Assign):
+            for v2 in x.targets:
+                if isinstance(v2, ast.Name):
+                    u8.append(v2.id)
+    return (s8, t8, u8)
+def a8(s4):
+    v8 = defaultdict(lambda: defaultdict(int))
+    for d in s4:
+        v = z7(d)
+        s8, t8, u8 = r8(v)
+        for x2 in s8:
+            v8['functions'][x2] += 1
+        for cls in t8:
+            v8['classes'][cls] += 1
+        for w8 in u8:
+            v8['constants'][w8] += 1
+    h8 = {'functions': [y for y, x8 in v8['functions'].items() if x8 > 1], 'classes': [y for y, x8 in v8['classes'].items() if x8 > 1], 'constants': [y for y, x8 in v8['constants'].items() if x8 > 1]}
+    return h8
+def e8(d, h8, m8):
+    d = Path(d)
+    v = z7(d)
+    y8, z8, a9 = r8(v)
+    e1 = 'utils'
+    os.makedirs(e1, exist_ok=True)
+    def b9(w3, q6):
+        with open(os.path.join(e1, w3), 'a', encoding='utf-8') as f:
+            f.write(q6 + '\n')
+    with open(d, encoding='utf-8') as i8:
+        o2 = i8.readlines()
+    y6 = []
+    for x in ast.walk(v):
+        if isinstance(x, ast.FunctionDef) and x.name in h8['functions']:
+            c9 = ''.join(o2[x.lineno - 1:x.end_lineno])
+            b9('func.py', c9)
+            if m8:
+                continue
+        elif isinstance(x, ast.ClassDef) and x.name in h8['classes']:
+            d9 = ''.join(o2[x.lineno - 1:x.end_lineno])
+            b9('class.py', d9)
+            if m8:
+                continue
+        elif isinstance(x, ast.Assign):
+            for v2 in x.targets:
+                if isinstance(v2, ast.Name) and v2.id in h8['constants']:
+                    e9 = ''.join(o2[x.lineno - 1:x.end_lineno])
+                    b9('const.py', e9)
+                    if m8:
+                        break
+            else:
+                y6.append(o2[x.lineno - 1])
+                continue
+        y6.append(o2[x.lineno - 1])
+    if m8:
+        with open(d, 'w', encoding='utf-8') as i8:
+            i8.writelines(y6)
+def o1():
+    p1 = argparse.ArgumentParser(description='Inspect Python files and copy/move repeated definitions.')
+    p1.add_argument('-m', '--move', action='store_true', help='Move definitions instead of copying')
+    r1 = p1.parse_args()
+    f9 = []
+    for k, _, t1 in os.walk('.'):
+        for i8 in t1:
+            if i8.endswith('.py'):
+                f9.append(os.path.join(k, i8))
+    h8 = a8(f9)
+    with Pool(cpu_count()) as a5:
+        a5.starmap(e8, [(d, h8, r1.move) for d in f9])
+if __name__ == '__main__':
+    raise SystemExit(o1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

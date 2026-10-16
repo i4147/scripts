@@ -1,0 +1,319 @@
+# filename: dh_reverse.py
+from loguru import logger;k=ag.home()/'projects'/'py'/'dh'/'src'/'dh';t=8;c=frozenset({'dh_reverse.py'})
+def a(ap):E=au.FunctionDef(name=ap.name,ai=ap.args,body=[n for n in ap.body if not (isinstance(n,au.Expr) and isinstance(n.value,au.Constant) and isinstance(n.value.value,str))],decorator_list=ap.decorator_list,returns=ap.returns,type_comment=None,lineno=ap.lineno,col_offset=ap.col_offset);V=au.unparse(E);ae=[am.strip() for am in V.split('\n') if am.strip()];return '\n'.join(ae)
+def d(ap):A=a(ap);return P.sha256(A.encode()).hexdigest()
+def g(aq):try:at=au.parse(aq.read_text())
+    except (SyntaxError,UnicodeDecodeError):return {}
+    G={}
+    for ap in au.walk(at):if isinstance(ap,au.FunctionDef):F=d(ap);A=a(ap);G[ap.name]=(F,ap,A)
+    return G
+def i(O):u={};L=sorted(O.glob('**/*.py'))
+    for T in L:ad=g(T)
+        for ac,(ab,_,A) in ad.items():if ac in u:logger.warning(f"Duplicate function '{ac}' in dh package")
+            u[ac]=(ab,A)
+    return u
+def q(aq,u,Z,aa=False):try:M=aq.read_text();at=au.parse(M)
+    except (SyntaxError,UnicodeDecodeError):return (aq,False,'')
+    p=g(aq);H=set();z=[]
+    for ac,(D,W,j) in p.items():if ac in u:N,m=u[ac]
+            if D==N:H.add(ac)
+                if aa:z.append(f'  ✓ {ac}:hash match')
+            elif aa:z.append(f'  ✗ {ac}:hash mismatch')
+        elif aa:z.append(f'  ? {ac}:not in dh package')
+    if aa and z:logger.debug(f'{aq.name}:')
+        for ak in z:logger.debug(ak)
+    if not H:return (aq,False,'')
+    K=[];v=False;l=H
+    for ap in at.body:h=isinstance(ap,au.FunctionDef) and ap.name in l
+        if h:if not v:x=f"from dh import {','.join(sorted(H))}\n";K.append(x);v=True
+            continue
+        if isinstance(ap,au.ImportFrom) and ap.module=='dh':if not v:o={Y.name for Y in ap.names};J=o|H;x=f"from dh import {','.join(sorted(J))}\n";K.append(x);v=True
+            continue
+        K.append(au.unparse(ap))
+    y='\n'.join(K)
+    if Z:aq.write_text(y);return (aq,True,f'Updated {aq.name}:removed {sorted(H)}')
+    return (aq,False,f'Would update {aq.name}:remove {sorted(H)}')
+def B(aj=None):S=I.ArgumentParser(description=__doc__);S.add_argument('paths',nargs='*',type=ag,default=[ag.cwd()],help='Files or directories to process (default:current directory)');S.add_argument('-a','--apply',action='store_true',help='Apply changes in-place (default:dry-run)');S.add_argument('-d','--debug',action='store_true',help='Show function matching details');return S.parse_args(aj)
+def b(af):w=[]
+    for aq in af:if aq.is_file():w.append(aq)
+        elif aq.is_dir():w.extend(aq.glob('**/*.py'))
+    return [f for f in w if f.name not in c]
+def e(ai):aq,u,Z,aa=ai;return q(aq,u,Z,aa)
+def an(aj=None):ai=B(aj);O=k
+    if not O.exists():logger.error(f'dh package not found at {O}');return 1
+    print(f'Loading dh functions from {O}...');u=i(O);print(f'Loaded {len(u)} functions from dh package\n');w=b(ai.paths)
+    if not w:print('No Python files found to process.');return 0
+    print(f'Processing {len(w)} Python files...\n');ao='DRY RUN' if not ai.apply else 'APPLYING CHANGES';print(f'Mode:{ao}\n');s=0;C=[(f,u,ai.apply,ai.debug) for f in w]
+    with ah(processes=t) as ar:r=[ar.apply_async(e,(al,)) for al in C];ar.close();ar.join()
+    for U in r:X,R,Q=U.get()
+        if Q:print(Q)
+        if R:s+=1
+    print('='*40)
+    if ai.apply:print(f'Updated {s} files')
+    else:print(f'Would update {s} files (use-a/--apply to apply)')
+    return 0
+if __name__=='__main__':av.exit(an())
+# filename: dh_usage.py
+p=C.home()/'bin';t=C.home()/'dh_usage.txt';r='dh'
+def a(H):try:J=K.parse(H.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError) as e:print(f'   ⚠️  Skipping {H.name}:{e}');return []
+    k=[]
+    for G in K.walk(J):if isinstance(G,K.ImportFrom) and G.module and (G.module==r or G.module.startswith(r+'.')):for u in G.names:k.append(u.name if u.asname is None else u.asname)
+    j=set()
+    for G in K.walk(J):if isinstance(G,K.Import):for u in G.names:if u.name==r or u.name.startswith(r+'.'):F=u.asname if u.asname else u.name;j.add(F)
+    for G in K.walk(J):if isinstance(G,K.Call):D=G.func
+            if (isinstance(D,K.Attribute) and isinstance(D.value,K.Name)) and D.value.id in j:k.append(D.attr)
+            if isinstance(D,K.Attribute) and isinstance(D.value,K.Attribute):I=D.value
+                while isinstance(I,K.Attribute):I=I.value
+                if isinstance(I,K.Name) and I.id in j:k.append(D.attr)
+    return k
+def c(H,h):try:J=K.parse(H.read_text(encoding='utf-8'))
+    except (SyntaxError,UnicodeDecodeError):return {}
+    l=set(h);s=dict.fromkeys(h,0)
+    for G in K.walk(J):if isinstance(G,K.Call):D=G.func
+            if isinstance(D,K.Name) and D.id in l:s[D.id]+=1
+    return s
+def E():if not p.is_dir():print(f'❌ {p} does not exist or is not a directory.');L.exit(1)
+    o=sorted(p.glob('*.py'))
+    if not o:print(f'⚠️  No .py files found in {p}.');return
+    print(f'🔍 Scanning {len(o)} Python file(s) in {p} ...\n');b={};m=[]
+    for f in o:z=a(f)
+        if not z:continue
+        v=c(f,z);m.append((f.name,v))
+        for F,w in v.items():if F not in b:b[F]=q()
+            b[F][f.name]=w
+    if not b:print(f"✅ No imports from '{r}' found in any script.");t.write_text(f"No imports from '{r}' found in {p}.\n");return
+    A=[];A.append(f"{'='*40}");A.append(f"  dh Usage Report — generated {__import__('datetime').datetime.now():%Y-%m-%d%H:%M}");A.append(f"{'='*40}");A.append(f'  Scanned:{p}');A.append(f'  Files with dh imports:{len(m)}');A.append(f'  Unique dh functions used:{len(b)}');A.append('');A.append(f"{'Function':<30} {'Total Calls':<15} {'Files Used In':<15}");A.append('-'*40)
+    for i in sorted(b,key=lambda n:-sum(b[n].values())):B=sum(b[i].values());g=len(b[i]);A.append(f'{i:<30} {B:<15} {g:<15}')
+    A.append('');A.append(f"{'─'*40}");A.append('  PER-FILE BREAKDOWN');A.append(f"{'─'*40}")
+    for y,v in sorted(m,key=lambda x:-sum(x[1].values())):B=sum(v.values());A.append(f'\n  📄 {y}  ({B} call(s))')
+        for i in sorted(v,key=lambda n:-v[n]):if v[i]>0:A.append(f'      {i:<30} {v[i]} time(s)')
+    A.append('');A.append(f"{'='*40}");A.append('  END OF REPORT');A.append(f"{'='*40}");d='\n'.join(A);t.write_text(d,encoding='utf-8');print(d);print(f'\n✅ Report saved to {t}')
+if __name__=='__main__':raise SystemExit(E())
+# filename: fixdh.py
+from loguru import logger;o=P('~/projects/py/dh/src/dh').expanduser();u=8
+def v(Y,ae=None):S=tuple(ae) if ae is not None else ('.py',);return [p for p in Y.rglob('*') if p.is_file() and p.suffix in S]
+def a(G):w=G/'__init__.py'
+    if not w.exists():raise FileNotFoundError(f'Could not find __init__.py at {w}')
+    H={};aa=ab.parse(w.read_text(encoding='utf-8'))
+    for V in aa.body:if isinstance(V,ab.ImportFrom) and V.level==1 and V.module:m=G/f'{V.module}.py'
+            for K in V.names:H[K.name]=m
+    return H
+def b(G):L={}
+    for I in v(G,ae=['.py']):try:F=I.read_text(encoding='utf-8');aa=ab.parse(F)
+        except (SyntaxError,UnicodeDecodeError):continue
+        N=F.splitlines()
+        for V in aa.body:U=None
+            if isinstance(V,(ab.FunctionDef,ab.AsyncFunctionDef,ab.ClassDef)):U=V.name
+            elif isinstance(V,ab.Assign):J=V.targets
+                if len(J)==1 and isinstance(J[0],ab.Name):U=J[0].id
+            if U is None or V.end_lineno is None:continue
+            ag='\n'.join(N[V.lineno-1:V.end_lineno]).strip();L.setdefault(U,set()).add(ag)
+    return L
+def f(V,Z):for K in V.names:r=K.asname or K.name.split('.')[0]
+        if re.search(f'\\b{re.escape(r)}\\b',Z):return True
+    return False
+def j(C,t,k):W=P(C)
+    if W.resolve()==P(__file__).resolve():return None
+    try:F=W.read_text(encoding='utf-8');aa=ab.parse(F)
+    except (SyntaxError,UnicodeDecodeError) as e:logger.warning(f'Skipping {W}:{e}');return None
+    N=F.splitlines(keepends=True);d=[];A=set()
+    for V in aa.body:U=None
+        if isinstance(V,(ab.FunctionDef,ab.AsyncFunctionDef,ab.ClassDef)):U=V.name
+        elif isinstance(V,ab.Assign):J=V.targets
+            if len(J)==1 and isinstance(J[0],ab.Name):U=J[0].id
+        if U is None or U not in k or V.end_lineno is None:continue
+        B='\n'.join(N[V.lineno-1:V.end_lineno]).strip()
+        if B not in k[U]:continue
+        d.append((V.lineno-1,V.end_lineno))
+        if U in t:A.add(U)
+    if not d:return None
+    for O,ad in sorted(d,reverse=True):del N[O:ad]
+    g=''.join(N)
+    try:h=ab.parse(g)
+    except SyntaxError:h=None
+    if h is not None:c=[]
+        for V in h.body:if isinstance(V,(ab.Import,ab.ImportFrom)):if V.end_lineno is None:continue
+                z=''.join(N[V.lineno-1:V.end_lineno]);y=g.replace(z,'',1)
+                if not f(V,y):c.append((V.lineno-1,V.end_lineno))
+        for O,ad in sorted(c,reverse=True):del N[O:ad]
+    n=''.join(N)
+    if A:l=f"from dh import {','.join(sorted(A))}\n";q=n.splitlines(keepends=True);s=1 if q and q[0].startswith('#!') else 0;q.insert(s,l);n=''.join(q)
+    if n==F:return None
+    W.write_text(n,encoding='utf-8');M=','.join(sorted(A)) if A else '(internal helpers only)';return f'Reverted:{W}->Restored import:{M}'
+def E(C,t,k):return j(C,t,k)
+def T():try:t=a(o)
+    except FileNotFoundError as e:logger.error(f'{e}');return 1
+    k=b(o);ac=P.cwd();R=ah.argv[1:];D=[P(p) for p in R] if R else v(ac,ae=['.py']);x=[str(p) for p in D]
+    with Q(processes=u) as X:i=[X.apply_async(E,(p,t,k)) for p in x]
+        for ar in i:try:af=ar.get()
+            except Exception as e:logger.exception(f'Worker failed:{e}');continue
+            if af:print(af)
+    return 0
+if __name__=='__main__':raise SystemExit(T())
+# filename: inline_dh.py
+from dh import get_files;from loguru import logger;F=ab('~/projects/py/dh/src/dh').expanduser();A=8
+def d(R):L=R/'__init__.py'
+    if not L.exists():raise FileNotFoundError(f'Could not find __init__.py at {L}')
+    T={};ak=al.parse(L.read_text(encoding='utf-8'))
+    for ag in ak.body:if isinstance(ag,al.ImportFrom) and ag.level==1:C=ag.module
+            if C is None:continue
+            D=R/f'{C}.py'
+            for X in ag.names:T[X.name]=D
+    return T
+class a(al.NodeVisitor):def __init__(self,w):self.global_names=set(w);self.references=set();self.imported_modules=[]
+    def z(self,ag):self.imported_modules.append(ag)
+    def g(self,ag):if ag.module!='dh' and ag.level==0:self.imported_modules.append(ag)
+    def K(self,ag):if isinstance(ag.ctx,al.Load) and ag.id in self.global_names:self.references.add(ag.id)
+def b(ah,u):if not ah.exists():return (set(),[])
+    P=ah.read_text(encoding='utf-8');ak=al.parse(P);Z=P.splitlines();r={};k=[]
+    for ag in ak.body:if isinstance(ag,(al.FunctionDef,al.AsyncFunctionDef,al.ClassDef)):r[ag.name]=ag
+        elif isinstance(ag,al.Assign):for W in ag.targets:if isinstance(W,al.Name):r[W.id]=ag
+        elif isinstance(ag,(al.Import,al.ImportFrom)):B=getattr(ag,'module','') or '';I=getattr(ag,'level',0) or 0
+            if B!='dh' and I==0:k.append(ag)
+    if u not in r:return (set(),[])
+    m=set();J=[u]
+    while J:Q=J.pop(0)
+        if Q in m:continue
+        m.add(Q);ag=r.get(Q)
+        if ag:M=a(r.keys());M.visit(ag)
+            for ap in M.references:if ap not in m:J.append(ap)
+    l=set();o='\n'.join(('\n'.join(Z[r[aq].lineno-1:r[aq].end_lineno]) for aq in m if r[aq].end_lineno is not None))
+    for ao in k:N=al.unparse(ao)
+        if isinstance(ao,(al.Import,al.ImportFrom)):for X in ao.names:af=X.asname or X.name
+                if af in o:l.add(N)
+    t=[];n=sorted(m,key=lambda s:r[s].lineno)
+    for aq in n:ag=r[aq];G=ag.end_lineno if ag.end_lineno is not None else ag.lineno;t.append('\n'.join(Z[ag.lineno-1:G]))
+    return (l,t)
+def y(ah,T):ah=ab(ah)
+    if ah.resolve()==ab(__file__).resolve():return
+    try:P=ah.read_text(encoding='utf-8')
+        if 'dh' not in P:return
+        ak=al.parse(P);Z=P.splitlines(keepends=True);f=[];j=set()
+        for ag in ak.body:if isinstance(ag,al.ImportFrom) and ag.module=='dh':f.append((ag.lineno-1,ag.end_lineno))
+                for X in ag.names:j.add(X.name)
+            elif isinstance(ag,al.Import):for X in ag.names:if X.name=='dh':f.append((ag.lineno-1,ag.end_lineno))
+        if not j:return
+        for aa,an in sorted(f,reverse=True):del Z[aa:an]
+        v=set();c=[]
+        for V in j:if V in T:S,U=b(T[V],V);v.update(S)
+                for Y in U:if Y not in c:c.append(Y)
+            else:c.append(f"# WARNING:Source code for '{V}' not found.")
+        if c:h=[]
+            if v:h.append('\n'.join(v))
+            h.extend(c);x='\n\n'+'\n\n'.join(h)+'\n\n';H=0
+            if Z and Z[0].startswith('#!'):H=1
+            ak=al.parse(P);i=0
+            for ag in ak.body:if isinstance(ag,(al.Import,al.ImportFrom)):if isinstance(ag,al.ImportFrom) and ag.module=='dh':continue
+                    if isinstance(ag,al.Import):aj=False
+                        for X in ag.names:if X.name=='dh':aj=True;break
+                        if aj:continue
+                    i=max(i,ag.end_lineno)
+                else:break
+            if i>0:H=i
+            if H>0 and Z[H-1].strip():x='\n'+x
+            E=''.join(Z[:H])+x+''.join(Z[H:]);ah.write_text(E,encoding='utf-8');print('Refactored:{}->Inlined:{}',ah,','.join(j))
+    except Exception as e:logger.exception('Error processing {}:{}',ah,e)
+def ae():try:T=d(F)
+    except FileNotFoundError as e:logger.error('Error:{}',e);return 1
+    am=ab.cwd();ad=at.argv[1:];O=[ab(p) for p in ad] if ad else get_files(am,ext=['.py'])
+    with ac(processes=A) as ai:q=[ai.apply_async(y,(p,T)) for p in O]
+        for ar in q:ar.wait()
+    return 0
+if __name__=='__main__':raise SystemExit(ae())
+# filename: reverse_inline.py
+def c(Z,F):try:ak=al.parse(Z)
+    except SyntaxError:return None
+    for ai in al.walk(ak):if isinstance(ai,al.FunctionDef) and ai.name==F:ab=Z.split('\n');B=ab[ai.lineno-1:ai.end_lineno];v='\n'.join(B);return S.sha256(v.encode()).hexdigest()
+    return None
+def b(z):if not z.is_file():return {}
+    try:with open(z,'r',encoding='utf-8') as f:Z=f.read();ak=al.parse(Z)
+    except (SyntaxError,UnicodeDecodeError):return {}
+    G={};y=z.stem
+    for ai in al.walk(ak):if isinstance(ai,al.FunctionDef):E=c(Z,ai.name)
+            if E:G[ai.name]=(y,E)
+    return G
+def d(u):L={}
+    for w in u.glob('*.py'):if w.name=='__init__.py':continue
+        G=b(w);L.update(G)
+    return L
+def a(Z,t):try:ak=al.parse(Z)
+    except SyntaxError:return []
+    U=[]
+    for ai in al.walk(ak):if isinstance(ai,al.FunctionDef) and ai.name in t:E=c(Z,ai.name);g,O=t[ai.name]
+            if E and E==O:U.append((ai.name,ai.lineno-1,ai.end_lineno))
+    return U
+def C(Z,F):return f'from dh.{F} import' in Z or f'from dh import {F}' in Z or ('from dh import' in Z and f'{F}' in Z)
+def s(ab,T):if not T:return ab
+    j=-1
+    for i,af in enumerate(ab):if af.startswith(('import ','from ')):j=i
+    o=sorted([f'from dh.{X} import {ae}' for ae,X in T])
+    if j==-1:return o+['']+ab
+    return ab[:j+1]+o+ab[j+1:]
+def q(aj,t,Q=True):try:with open(aj,'r',encoding='utf-8') as f:N=f.read()
+    except (OSError,UnicodeDecodeError):return (aj,0,set())
+    U=a(N,t)
+    if not U:return (aj,0,set())
+    ab=N.split('\n');k=set()
+    for F,D,J in U:if not C(N,F):y,_=t[F];k.add((F,y))
+    if not k:return (aj,0,set())
+    if not Q:l=sorted(U,key=lambda x:x[1],reverse=True)
+        for F,D,J in l:del ab[D:J]
+        ab=s(ab,k)
+        with open(aj,'w',encoding='utf-8') as f:f.write('\n'.join(ab))
+    return (aj,len(k),k)
+def ag():Y=H.ArgumentParser(description='Reverse inline functions from dh package');Y.add_argument('-n','--no-dry-run',action='store_true',help='Actually modify files (dry-run by default)');Y.add_argument('paths',nargs='*',help='Files or directories to process');ad=Y.parse_args();Q=not ad.no_dry_run;P=ac.home()/'projects'/'py'/'dh'/'src'/'dh';I=ac.cwd();r=[ac(p).expanduser() for p in ad.paths] if ad.paths else [I]
+    if not P.is_dir():print(f'Error:dh package not found at {P}');am.exit(1)
+    print(f'Building function map from {P}...');t=d(P);print(f'Found {len(t)} functions in dh package\n');M=[]
+    for A in r:if A.is_file() and A.suffix=='.py':M.append(A)
+        elif A.is_dir():M.extend(A.rglob('*.py'))
+    ah='DRY RUN' if Q else 'ACTUAL';print(f'{ah} MODE:Processing {len(M)} Python files...\n')
+    with e() as K:R={K.submit(q,V,t,Q):V for V in M};m=0;h={}
+        for W in n(R):aj,aa,T=W.result()
+            if aa>0:h[aj]=T;m+=aa
+    if not h:print('No matching inlined dh functions found (identical by content hash).');return
+    for aj in sorted(h.keys()):T=h[aj];print(f'{aj.name}:')
+        for F,y in sorted(T):print(f'-Replace {F}() and add:from dh.{y} import {F}')
+        print()
+    print(f'Total functions to process:{m}')
+    if Q:print('\n✓ DRY RUN complete. Run with-n/--no-dry-run to apply changes.')
+    else:print('\n✓ Changes applied successfully.')
+if __name__=='__main__':raise SystemExit(ag())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

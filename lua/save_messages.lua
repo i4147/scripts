@@ -1,0 +1,1 @@
+:redir > ~/nvim_messages.txt | silent messages | redir END

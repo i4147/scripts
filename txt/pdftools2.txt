@@ -1,0 +1,214 @@
+# filename: mdbookpdfsum.py
+import lxml.html;import pypdf
+class u:def __init__(self,M,m,J,K):self.title=M;self.source_file=m;self.depth=J;self.index=K;self.parent=None;self.children=[];self.outline_item=None
+    def q(self,C):self.parent=C
+    def d(self,I):self.children.append(I)
+    def g(self):W=[];U=self
+        while not U.is_root():W.append(str(U.index+1));U=U.parent
+        return W[::-1]
+    def w(self):return self.parent is None
+    def __str__(self):W=self.path_to_root();return '{}. {}'.format('.'.join(W),self.title)
+def k(l,U,s):j=True
+    for I in U.children:e=k(l,I,s)
+        if not e:return False
+    if U.is_root():return True
+    m=os.path.join(l,U.source_file)
+    if not N(m).exists():print(f'File {m} does not exist');return False
+    with N(m).open(encoding='utf-8') as f:L=f.readlines()
+    for Z,R in enumerate(L):if R.startswith('# '):M=R[2:]
+            if not M.startswith(U.title):j=False;print(f'[ERROR] Title not matched:source_file:{m},line num:{Z},title:{M},title in `SUMMARY.md`:{U.title}');break
+    if not j and s:L.insert(0,f'# {U.title}\n');print(f'[Info] Overwrite title as {U.title} in {U.source_file}')
+        with N(m).open('w',encoding='utf-8') as f:f.writelines(L)
+        j=True
+    return j
+def o(U):n=U.source_file;n=n.removeprefix('./');n=n.split('.')[0];F=n;F=F.lower();F=F.replace('/','-');return F.replace(' ','-')
+def i(r,E,H,U):if not U.is_root():id=o(U)
+        try:z=r.get_element_by_id(id)
+        except KeyError:print(f'[ERROR] Element not found:[{id}]');return
+        if z is None:print(f'[ERROR] Element is None,id:[{id}]');return
+        Q=E.named_destinations[f'/{G.parse.quote(id)}'];V=None;Y=None
+        if Q.get('/Type')!='/Fit':V=E.get_destination_page_number(Q);Y=pypdf.generic.Fit(Q.get('/Type'),(Q.get('/Left'),Q.get('/Top'),Q.get('/Zoom')))
+        U.outline_item=H.add_outline_item(str(U),V,U.parent.outline_item,Y=Y)
+    for I in U.children:i(r,E,H,I)
+def S():D=t.ArgumentParser(prog='mdbook_pdf_summary',description='Add outline to the PDF file.');D.add_argument('--html_path',type=str,help='path of the `print.html` generated `mdbook-pdf`',default='print.html');D.add_argument('--pdf_path',type=str,help='path of the `output.pdf` generated `mdbook-pdf`',default='output.pdf');D.add_argument('--summary_path',type=str,help='path of the `SUMMARY.md`',default='src/SUMMARY.md');D.add_argument('--output_path',type=str,help='path of the output PDF file',default='output_with_outline.pdf');O=D.parse_args();print('============args=============');print('args.html_path:',O.html_path);print('args.pdf_path:',O.pdf_path);print('args.summary_path:',O.summary_path);print('args.output_path:',O.output_path)
+    if not N(O.html_path).exists():raise FileNotFoundError(aa)
+    if not N(O.pdf_path).exists():raise FileNotFoundError(aa)
+    if not N(O.summary_path).exists():raise FileNotFoundError(aa)
+    E=pypdf.PdfReader(O.pdf_path);H=pypdf.PdfWriter();H.append(E);x=N(O.summary_path).read_text(encoding='utf-8');h=a(x);r=None
+    with N(O.html_path).open(encoding='utf8') as f:P=f.read();r=lxml.html.fromstring(P)
+    if r is None:raise '[ERROR] html_root is None'
+    i(r,E,H,h)
+    with N(O.output_path).open('wb') as f:H.write(f);print(f'[INFO] Write to {O.output_path}')
+def b(X):print(X)
+    for I in X.children:b(I)
+def a(x):X=u('root','',0,0);v={0:[X]};y=re.compile('(*)-([^:\\n]+)(?::([^\\n]*))?\\n?');ab=None;c=4
+    for B,T,A in y.findall(x):M=T.split('](')[0].split('[')[1];m=T.split('](')[1].split(')')[0];p=len(B)
+        if p>0 and p<c:c=p
+        J=p//c
+        if J+1 not in v:v[J+1]=[]
+        ab=u(M,m,J+1,0);v[J+1].append(ab);C=v[J][-1];ab.set_parent(C);ab.index=len(C.children);C.add_children(ab)
+    return X
+if __name__=='__main__':raise SystemExit(S())
+# filename: merge_pdfs.py
+from pypdf import PdfReader,PdfWriter
+def a(h):l=s.search('_(\\d+)\\.pdf$',h)
+    if l:return (int(l.group(1)),)
+    return (float('inf'),)
+def e(b=None,c='merged.pdf'):if b is None or len(b)==0:g=sorted(m.cwd().glob('*.pdf'),key=lambda p:a(p.name))
+    else:g=[]
+        for q in b:p=m(q)
+            if p.is_file() and p.suffix.lower()=='.pdf':g.append(p)
+            elif p.is_dir():g.extend(p.glob('*.pdf'))
+        g=sorted(g,key=lambda p:a(p.name))
+    if not g:print('No PDF files found.');return
+    k=PdfWriter()
+    for i in g:j=PdfReader(i)
+        for o in j.pages:k.add_page(o)
+    d=m.cwd()/c
+    with open(d,'wb') as f:k.write(f)
+    print(f'Merged {len(g)} files into:{d}')
+if __name__=='__main__':n=r.argv[1:] if len(r.argv)>1 else None;e(b=n)
+# filename: pdf2img.py
+from pdf2image import convert_from_path;n=None
+def a(t,m):try:print(f"Converting '{t.name}'...");l=m/t.stem;l.mkdir(parents=True,exist_ok=True);u=convert_from_path(t=t,dpi=300,m=l,fmt='jpeg',thread_count=4,poppler_path=n);g=[]
+        for i,p in enumerate(u):b=f'{t.stem}_page_{i+1}.jpeg';j=l/b
+            if j.exists():k=l/f'{t.stem}_page_{i+1}.jpg';v.move(j,k);g.append(k)
+            else:print(f'Warning:Expected file {j} not found after conversion.')
+        print(f"Successfully converted '{t.name}' to {len(g)} JPG files in '{l}'.");return True
+    except Exception as e:print(f"Error converting '{t.name}':{e}")
+        if 'pdf_output_dir' in locals() and l.exists():try:v.rmtree(l)
+            except Exception as cleanup_e:print(f"Error during cleanup of '{l}':{q}")
+        return False
+def c(s,h):print(f'Starting PDF to JPG conversion in directory:{s}');print(f'Output will be saved in:{h}');f=0;o=0
+    for x in s.rglob('*'):if x.is_file() and x.suffix.lower()=='.pdf':if h in x.parents:print(f"Skipping PDF '{x.name}' as it's within the output directory.");continue
+            if a(x,h):try:x.unlink();print(f"Removed original PDF:'{x.name}'");f+=1
+                except OSError as e:print(f"Error removing original PDF '{x.name}':{e}");o+=1
+            else:o+=1
+    print('\n---Conversion Summary---');print(f'Successfully converted and removed:{f} PDF files.');print(f'Failed to convert:{o} PDF files.');print('------------------------')
+if __name__=='__main__':r=w.cwd();d=r/'output_jpgs';d.mkdir(exist_ok=True);c(r,d);print('\nScript finished.');print(f'Converted JPG files are located in:{d}')
+# filename: pdfnumpages.py
+import pdfplumber;from fastwalk import walk_files
+def a(h):h=f(h)
+    if h.exists() and (not h.is_symlink()):with pdfplumber.open(h) as j:d=len(j.pages);c=h.stem+str(d)+'.pdf';print(c);l=f(f'{h.parent}/{c}')
+            if str(d) in h.stem:return
+            if not l.exists():f(h).rename(l);print(f'{h.name}-->{l.name}')
+            else:print(f'{l.name} exists.')
+    return
+def g():e=[]
+    for k in walk_files('.'):h=f(k)
+        if h.is_file() and h.suffix=='.pdf':e.append(h)
+    with b('spawn').Pool(8) as i:for _ in i.imap_unordered(a,e):pass
+if __name__=='__main__':raise SystemExit(g())
+# filename: shrinkpdf.py
+from dh import fsz,runcmd
+def a(k):k=g(k);d=k.with_name(f'temp_gs_{k.name}');b=k.stat().st_size;print(f'Before :{fsz(b)}');e=['gs','-sDEVICE=pdfwrite','-dCompatibilityLevel=1.4','-dDownsampleColorImages=true','-dDownsampleGrayImages=true','-dDownsampleMonoImages=true','-dColorImageResolution=65','-dGrayImageResolution=65','-dMonoImageResolution=65','-dColorImageDownsampleType=/Bicubic','-dGrayImageDownsampleType=/Bicubic','-dMonoImageDownsampleType=/Subsample','-dNOPAUSE','-dBATCH',f'-sOutputFile={d}',str(k)];runcmd(e,show_output=False)
+    if d.exists():c=d.stat().st_size
+        if c:print(f'After  :{fsz(c)}');i=b-c;l='-' if i>=0 else '+'
+            if c<b:d.replace(k);print(f'Saved  :{l}{fsz(i)}')
+            else:print('original file is smaller');d.unlink(missing_ok=True)
+def j():m=g.cwd();h=n.argv[1:]
+    if h:f=[g(p) for p in h]
+        for k in f:a(k)
+        n.exit(0)
+    for k in m.rglob('*.pdf'):a(k)
+if __name__=='__main__':raise SystemExit(j())
+# filename: spdf.py
+from dh import fsz,get_files,gsz,mpf_async,runcmd;b=4
+def a(n):n=j(n);e=n.with_name(f'temp_gs_{n.name}');c=n.stat().st_size;print(f'{n.name} Before :{fsz(c)}');g=['gs','-dBATCH','-dColorConversionStrategy=/sRGB','-dColorImageDownsampleType=/Bicubic','-dColorImageResolution=85','-dCompatibilityLevel=1.4','-dDownsampleColorImages=true','-dDownsampleGrayImages=true','-dDownsampleMonoImages=true','-dEmbedAllFonts=false','-dGrayImageDownsampleType=/Bicubic','-dGrayImageResolution=85','-dHaveTransparency=false','-dMonoImageDownsampleType=/Bicubic','-dMonoImageResolution=85','-dNOPAUSE','-dOptimize=true','-dPDFSETTINGS=/screen','-dSubsetFonts=true','-sDEVICE=pdfwrite',f'-sOutputFile={e}',str(n)];runcmd(g,show_output=True)
+    if e.exists():d=e.stat().st_size
+        if d:print(f'{n.name} After  :{fsz(d)}');l=c-d;o='-' if l>=0 else '+'
+            if d<c:e.replace(n);print(f'Saved  :{o}{fsz(l)}')
+            else:print('original file is smaller');e.unlink(missing_ok=True)
+def m():q=j.cwd();f=gsz(q);k=s.argv[1:];i=[j(p) for p in k] if k else get_files(q,ext=['.pdf'])
+    if len(i)==1:a(i[0]);s.exit(0)
+    mpf_async(a,i);h=gsz(q);r=f-h
+    if r:print(f'space freed :{fsz(r)}')
+if __name__=='__main__':raise SystemExit(m())
+# filename: spdf2.py
+from dh import fsz,get_files,gsz,mpf_async,runcmd;b=4
+def a(l):l=h(l)
+    if not l.exists():print('Input file not found.',file=q.stderr);q.exit(1)
+    c=l.with_name(f'temp_qpdf_{l.name}');e=l.stat().st_size;print(f'{l.name} Before :{fsz(e)}');d=['qpdf','--linearize','--object-streams=generate',str(l),str(c)];runcmd(d,show_output=True)
+    if c.exists():f=c.stat().st_size;print(f'{l.name} After  :{fsz(f)}');j=e-f;m='-' if j>=0 else '+'
+        if f<e:c.replace(l);print(f'Saved  :{m}{fsz(abs(j))}')
+        else:print('original file is smaller');c.unlink(missing_ok=True)
+def k():n=h.cwd();e=gsz(n);i=q.argv[1:];g=[h(p) for p in i] if i else get_files(n,ext=['.pdf'])
+    if len(g)==1:a(g[0]);q.exit(0)
+    mpf_async(a,g);f=gsz(n);o=e-f
+    if o:print(f'space freed:{fsz(o)}')
+if __name__=='__main__':raise SystemExit(k())
+# filename: spdf3.py
+def a(l):if not n.path.exists(l):print(f"Error:File '{l}' not found.");m.exit(1)
+    b='gs'
+    if not k.which(b):if k.which('gswin64c'):b='gswin64c'
+        else:print("Error:Ghostscript ('gs' or 'gswin64c') is not installed or not in your PATH.");m.exit(1)
+    d=n.path.getsize(l);print(f'Original size:{d/1024/1024:.2f} MB');print('Compressing for mobile viewing... (72 DPI+Linearization)');f=l+'.tmp';i=[b,'-sDEVICE=pdfwrite','-dCompatibilityLevel=1.4','-dPDFSETTINGS=/screen','-dFastWebView=true','-dNOPAUSE','-dQUIET','-dBATCH',f'-sOutputFile={f}',l]
+    try:j=c.run(i,capture_output=True,text=True)
+        if j.returncode!=0:print(f'Ghostscript Error:\n{j.stderr}')
+            if n.path.exists(f):n.remove(f)
+            m.exit(1)
+        h=n.path.getsize(f)
+        if h<d:n.replace(f,l);print('Success! Inplace update complete.');print(f'New mobile-optimized size:{h/1024/1024:.2f} MB');print(f'Saved:{(d-h)/d*40:.1f}%space')
+        else:print('Compression did not reduce file size. Original file kept intact.')
+            if n.path.exists(f):n.remove(f)
+    except Exception as e:print(f'An unexpected error occurred:{e}')
+        if n.path.exists(f):n.remove(f)
+        m.exit(1)
+if __name__=='__main__':if len(m.argv)<2:print('Usage:python shrink_pdf.py<filename.pdf>');m.exit(1)
+    g=m.argv[1];a(g)
+# filename: split_pdf_5mb.py
+from pypdf import PdfReader,PdfWriter
+def b(t,o,j=5):e=j*1024*1024;u=PdfReader(t);z=t.stem;d=PdfWriter();c=B.BytesIO();n=1
+    for x in u.pages:m=PdfWriter();m.add_page(x);l=B.BytesIO();m.write(l);l.tell();d.add_page(x);c=B.BytesIO();d.write(c);g=c.tell()
+        if g>e and len(d.pages)>1:d.pages.pop();c=B.BytesIO();d.write(c);k=o/f'{z}_{n}.pdf'
+            with open(k,'wb') as f:f.write(c.getvalue())
+            d=PdfWriter();d.add_page(x);n+=1
+    if len(d.pages)>0:k=o/f'{z}_{n}.pdf';c=B.BytesIO();d.write(c)
+        with open(k,'wb') as f:f.write(c.getvalue())
+def h(i=None,o=None):if o is None:o=v.cwd()/'output'
+    o.mkdir(exist_ok=True)
+    if i is None or len(i)==0:q=list(v.cwd().rglob('*.pdf'))
+    else:q=[]
+        for y in i:p=v(y)
+            if p.is_file() and p.suffix.lower()=='.pdf':q.append(p)
+            elif p.is_dir():q.extend(p.rglob('*.pdf'))
+    if not q:print('No PDF files found.');return
+    with a() as r:for s in q:r.submit(b,s,o)
+    print(f'Processing complete. Output files in:{o}')
+if __name__=='__main__':w=A.argv[1:] if len(A.argv)>1 else None;h(i=w)
+# filename: split_pdf_by_page.py
+from pypdf import PdfReader,PdfWriter
+def b(n,h):q=PdfReader(n);w=n.stem;g=len(q.pages);o=len(str(g))
+    for l,u in enumerate(q.pages,1):r=PdfWriter();r.add_page(u);i=str(l).zfill(o);e=h/f'{w}_{i}.pdf'
+        with open(e,'wb') as f:r.write(f)
+def c(d=None,h=None):if h is None:h=s.cwd()/'output'
+    h.mkdir(exist_ok=True)
+    if d is None or len(d)==0:j=list(s.cwd().rglob('*.pdf'))
+    else:j=[]
+        for v in d:p=s(v)
+            if p.is_file() and p.suffix.lower()=='.pdf':j.append(p)
+            elif p.is_dir():j.extend(p.rglob('*.pdf'))
+    if not j:print('No PDF files found.');return
+    with a() as k:for m in j:k.submit(b,m,h)
+    print(f'Processing complete. Output files in:{h}')
+if __name__=='__main__':t=x.argv[1:] if len(x.argv)>1 else None;c(d=t)
+
+Role: Senior Python Engineer
+
+Task: Consolidate $N$ provided Python scripts into ONE unified, runnable script (`merged.py`).
+
+## Core Rules
+1. **Deduplicate Scripts:** If any scripts are exact duplicates or functionally identical, remove/ignore the duplicates and note it in the analysis.
+2. **CLI Design (`argparse`):** Use subcommands for distinct modes/jobs, or flags for pipeline variations. Expose all original behavioral differences and hardcoded constants as CLI options with original default values.
+3. **Clean Code:** Factor shared logic into modular functions with type hints. Use standard library only (unless originals use 3rd-party packages).
+4. **Comments Policy:** Retain only the module-level docstring (with usage examples/mapping) and inline comments explaining non-obvious conditional logic. Strip all other comments and function docstrings.
+
+## Output Format (3 Sections)
+1. **Comparison Table:** Markdown table listing each script, its function, shared/unique logic, CLI mapping, or if it was dropped as a duplicate.
+2. **Merged Script:** One complete fenced `python` code block.
+3. **Execution Mapping:** Fenced text block mapping each original script invocation to its new command:
+   `original.py -> python merged.py <subcommand/flags>`
+
+*(Batch Mode: If requested, output ONLY section 2 as `<group>_merged.py`.)*
+## Input Scripts
+are pasted above

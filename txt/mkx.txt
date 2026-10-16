@@ -1,0 +1,81 @@
+# filename: make_executable.py
+d={'.py','.sh','.bash','.pl','.rb','.pyw','.txt'}
+def a(v):s={'path':v,'is_shebang':False,'permission_changed':False,'error':None}
+    try:if not v.is_file():return s
+        if v.suffix and v.suffix.lower() not in d:return s
+        with v.open('rb') as f:b=f.read(2)
+        if b==b'#!':s['is_shebang']=True
+            if y.name=='posix':h=v.stat().st_mode
+                if not h&w.S_IXUSR:p=h|w.S_IXUSR|w.S_IXGRP|w.S_IXOTH;v.chmod(p);s['permission_changed']=True
+    except Exception as e:s['error']=f'Failed to process:{e}'
+    return s
+def u():j=t('.');print('🔍 Gathering directory contents recursively...');m=list(j.rglob('*'));k=t(__file__).resolve();i=[f for f in m if f.resolve()!=k]
+    if not i:print('ℹ️ No files discovered in the target workspace.');return
+    n=y.cpu_count() or 1;print(f'⚡ Processing {len(i)} files concurrently across {n} threads...');print('-'*40);c=0;g=0
+    with l.futures.ThreadPoolExecutor(max_workers=n) as o:q={o.submit(a,f):f for f in i}
+        for r in l.futures.as_completed(q):x=r.result()
+            if x['error']:print(f"❌ [ERROR] {x['path']}:{x['error']}");continue
+            if x['is_shebang']:c+=1
+                if x['permission_changed']:g+=1;print(f"🚀 [MADE EXECUTABLE] {x['path']}")
+                else:print(f"✅ [ALREADY EXECUTABLE] {x['path']}")
+    print('-'*40);print('📊 Summary:');print(f'   Total shebang files found:{c}');print(f'   Files updated with+x bit:{g}')
+    if y.name!='posix':print('\n⚠️ Note:You are running on a non-POSIX system (e.g. Windows).');print('   Shebang files were detected but executable bits cannot be applied here.')
+if __name__=='__main__':raise SystemExit(u())
+# filename: mkx.py
+from dh import is_binary
+def h(t):try:with t.open('rb') as f:return f.read(2)==b'#!'
+    except (OSError,PermissionError):return False
+def d(t):return bool(w.match('.*\\.so(?:\\.\\d+)*$',t.name))
+def i(t):try:k=t.stat().st_mode;t.chmod(k|u.S_IXUSR|u.S_IXGRP|u.S_IXOTH)
+    except OSError:pass
+def m(t):try:return bool(t.stat().st_mode&u.S_IXUSR)
+    except OSError:return False
+def a(t):if t.parent.name in {'sbin','bin','.bin'}:return True
+    if d(t):return True
+    if h(t):return True
+    return bool(not t.suffix and is_binary(t))
+def g(t,v):if t.is_file() and (not m(t)) and a(t):i(t);return f'[+] Made executable:{t.relative_to(v)}'
+    return None
+def c(v,n=4):r=[p for p in v.rglob('*') if p.is_file() and '.git' not in p.parts and (not p.is_symlink())]
+    with b(max_workers=n) as j:l={j.submit(g,f,v):f for f in r}
+        for o in e(l):q=o.result()
+            if q:print(q)
+if __name__=='__main__':c(s.cwd())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

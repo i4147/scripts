@@ -1,0 +1,326 @@
+# filename: dupimg.py
+import cv2;import numpy as np;x={'.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff','.gif'};A=16
+def u(ar,ac='INFO'):if os.environ.get('VERBOSE','1')=='1':print(f'[{ac}] {ar}')
+def y(ar):print(ar)
+def K(aj):return aj.suffix.lower() in x
+def k(aj):try:aq=cv2.imread(aj)
+        if aq is None:return None
+        aq=cv2.cvtColor(aq,cv2.COLOR_BGR2RGB);return aq
+    except Exception as e:u(f'Failed to load {aj}:{e}','WARN');return None
+def F(aq,E=A):if aq is None:return None
+    N=cv2.resize(aq,(E,E),interpolation=cv2.INTER_AREA);ag=cv2.cvtColor(N,cv2.COLOR_RGB2GRAY);ao=cv2.dct(np.float32(ag));an=np.mean(ao[:8,:8]);D=(ao[:8,:8]>an).flatten();J=''.join(D.astype(int).astype(str));return J
+def b(aa,ab):if aa is None or ab is None:return float('inf')
+    return sum((c1!=c2 for c1,c2 in zip(aa,ab,strict=False)))
+def n(aj):aq=k(str(aj))
+    if aq is None:return (aj.name,None)
+    J=F(aq);return (aj.name,J)
+def c(V,G):S=[];am=set()
+    for i,(Q,T) in enumerate(V):if Q in am:continue
+        Z=[Q];am.add(Q)
+        for j in range(i+1,len(V)):R,U=V[j]
+            if R in am:continue
+            H=b(T,U)
+            if H<=G:Z.append(R);am.add(R)
+        if len(Z)>1:S.append(Z)
+    return S
+def l(aj):try:O=aj.stat().st_size/1048576;aq=k(str(aj))
+        if aq is not None:W,ad=aq.shape[:2];return f'{aj.name:<50} ({ad}x{W},{O:.2f} MB)'
+        return f'{aj.name:<50} ({O:.2f} MB)'
+    except Exception:return aj.name
+def a(S,q,m,L=False):d=0;r=0
+    for C,Z in enumerate(sorted(S,key=len,reverse=True),1):s=f'{m}_{C:03d}';t=q/s
+        if not L:t.mkdir(exist_ok=True);u(f'Created folder:{s}');d+=1
+        else:u(f'[DRY RUN] Would create folder:{s}','INFO');d+=1
+        for I in Z:at=q/I;ap=t/I
+            if not at.exists():u(f'Source file not found:{I}','WARN');continue
+            try:if not L:X.move(str(at),str(ap));u(f'Moved:{I} → {s}/');r+=1
+                else:u(f'[DRY RUN] Would move:{I} → {s}/','INFO');r+=1
+            except Exception as e:u(f'Failed to move {I}:{e}','ERROR')
+    return (d,r)
+def ah():G=int(os.environ.get('DUP_HASH_THRESHOLD','4'));v=int(os.environ.get('NUM_WORKERS',B()));P=os.environ.get('VERBOSE','1')=='1';m=os.environ.get('OUTPUT_DIR_PREFIX','duplicates');L=os.environ.get('DRY_RUN','0')=='1';u('Starting duplicate image finder and organizer');u(f'Threshold:{G},Workers:{v}')
+    if L:u('DRY RUN MODE-No files will be moved','WARN')
+    u(f'Output folder prefix:{m}');q=ae.cwd();Y=[f for f in q.glob('*') if f.is_file() and K(f)]
+    if not Y:y('No images found in the current directory.');au.exit(0)
+    u(f'Found {len(Y)} image file(s)')
+    if P:for f in Y:u(f'-{f.name}')
+    u(f'Computing hashes with {v} worker(s)...');z=al.time()
+    with af(v) as ak:V=ak.map(n,Y)
+    M=al.time()-z;u(f'Hash computation completed in {M:.2f}s');p=[(ai,h) for ai,h in V if h is not None];o=len(V)-len(p)
+    if o>0:u(f'{o} file(s) could not be processed','WARN')
+    if not p:y('No readable images found.');au.exit(0)
+    u(f'Grouping {len(p)} image(s) by hash similarity...');S=c(p,G)
+    if not S:y('✓ No duplicates (near-duplicates) found.');au.exit(0)
+    y(f"\n{'='*40}");y(f'✗ Found {len(S)} duplicate group(s) (threshold={G})');y(f"{'='*40}\n")
+    for C,Z in enumerate(sorted(S,key=len,reverse=True),1):y(f'Group #{C} ({len(Z)} file(s)):');y('-'*40)
+        for I in sorted(Z):aj=q/I;y(f'  • {l(aj)}')
+        y()
+    if L:y(f"\n{'='*40}");y('[DRY RUN] Preview of operations:');y(f"{'='*40}\n")
+    d,r=a(S,q,m,L=L);y(f"\n{'='*40}")
+    if L:y(f'[DRY RUN] Would create {d} folder(s) and move {r} file(s)')
+    else:y(f'✓ Created {d} folder(s) and moved {r} file(s)')
+    w=sum((len(g) for g in S));y(f'Summary:{len(S)} group(s),{w} duplicate file(s)');y(f"{'='*40}\n")
+if __name__=='__main__':raise SystemExit(ah())
+# filename: find_sim_images.py
+import imagehash;from PIL import Image
+def a(d,h=imagehash.average_hash):def i(g):f=g.lower();return f.endswith(('.png','.jpg','.jpeg','.bmp','.gif','.svg')) or '.jpg' in f
+    b=[]
+    for j in d:b+=[n for n in m(j).iterdir() if i(n)]
+    k={}
+    for o in sorted(b):try:hash=h(Image.open(o))
+        except Exception as e:print('Problem:',e,'with',o);continue
+        if hash in k:print(o,'  already exists as',' '.join(k[hash]))
+            if 'dupPictures' in o:print('rm-v',o)
+        k[hash]=[*k.get(hash,[]),o]
+if __name__=='__main__':def l():p.stderr.write(f'SYNOPSIS:{p.argv[0]} [ahash|phash|dhash|...] [<directory>]\nIdentifies similar images in the directory.\nMethod:\n  ahash:Average hash\n  phash:Perceptual hash\n  dhash:Difference hash\n  whash-haar:Haar wavelet hash\n  whash-db4:Daubechies wavelet hash\n  colorhash:HSV color hash\n  crop-resistant:Crop-resistant hash\n(C) Johannes Buchner,2013-2017\n');p.exit(1)
+    c=p.argv[1] if len(p.argv)>1 else l()
+    if c=='ahash':h=imagehash.average_hash
+    elif c=='phash':h=imagehash.phash
+    elif c=='dhash':h=imagehash.dhash
+    elif c=='whash-haar':h=imagehash.whash
+    elif c=='whash-db4':def h(o):return imagehash.whash(o,mode='db4')
+    elif c=='colorhash':h=imagehash.colorhash
+    elif c=='crop-resistant':h=imagehash.crop_resistant_hash
+    else:l()
+    d=p.argv[2:] if len(p.argv)>2 else '.';a(d=d,h=h)
+# filename: folderim.py
+import dh;from PIL import Image;c={'.jpg','.jpeg','.png','.bmp','.webp'};f=dh.phash;a=10;d='group_'
+def i(u):return u.suffix.lower() in c and u.is_file()
+def b(u):try:with Image.open(u) as x:return f(x)
+    except Exception as e:print(f'[SKIP] {u.name}:{e}');return None
+def t():v=s.cwd();n=[p for p in v.iterdir() if i(p)]
+    if not n:print('No images found.');return
+    m={}
+    for x in n:h=b(x)
+        if h is not None:m[x]=h
+    l=[]
+    for x,h in m.items():o=False
+        for r in l:j=r[0][1]
+            if h-j<=a:r.append((x,h));o=True;break
+        if not o:l.append([(x,h)])
+    for w,r in enumerate(l,start=1):if len(r)>1:k=v/f'{d}{w:03d}';k.mkdir(exist_ok=True)
+            for x,_ in r:q.move(str(x),k/x.name)
+    print(f'Done. Created {len([g for g in l if len(g)>1])} groups with multiple images.')
+if __name__=='__main__':raise SystemExit(t())
+# filename: folderimg.py
+import dh;from PIL import Image;l=0.5;k=0.3;j=0.2;d=10.0;c='group_'
+def b(w):try:with Image.open(w) as z:return {'phash':dh.phash(z),'dhash':dh.dhash(z),'ahash':dh.average_hash(z)}
+    except Exception as e:print(f'[SKIP] {w.name}:{e}');return None
+def a(A,B):return (A['phash']-B['phash'])*l+(A['dhash']-B['dhash'])*k+(A['ahash']-B['ahash'])*j
+def v():x=u.cwd();q=[p for p in x.iterdir() if dh.is_image(p)]
+    if not q:print('No images found.');return
+    o={}
+    for z in q:h=b(z)
+        if h:o[z]=h
+    n=[]
+    for z,h in o.items():g=False
+        for s in n:f,i=s[0];t=a(h,i)
+            if t<=d:s.append((z,h));g=True;break
+        if not g:n.append([(z,h)])
+    for y,s in enumerate(n,start=1):if len(s)>1:m=x/f'{c}{y:03d}';m.mkdir(exist_ok=True)
+            for z,_ in s:r.move(str(z),m/z.name)
+    print(f'Done. Created {len(n)} groups.')
+if __name__=='__main__':raise SystemExit(v())
+# filename: folderize_images.py
+import imagehash;from PIL import Image;c={'.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff','.gif'};@n(frozen=True)
+class m:pass
+def b(M):for p in M.rglob('*'):if p.is_file() and p.suffix.lower() in c:yield p
+def i(L,q,r):try:with Image.open(L) as Q:Q=Q.convert('RGB')
+            if q=='phash':h=imagehash.phash(Q,r=r)
+            elif q=='dhash':h=imagehash.dhash(Q,r=r)
+            elif q=='ahash':h=imagehash.average_hash(Q,r=r)
+            else:raise ValueError(R)
+            return m(L=L,h=h)
+    except Exception as e:print(f'[WARN] Skipping {L} ({e})');return None
+def f(S,T):return int(S-T)
+def a(M,l,q,r,s):v=M/l;v.mkdir(parents=True,exist_ok=True);y=[]
+    for p in b(M):if l in p.parts:continue
+        x=i(p,q=q,r=r)
+        if x is not None:y.append(x)
+    if not y:print('No images found.');return
+    w=[]
+    for J in y:B=False
+        for g in w:d=f(J.h,g['rep'])
+            if d<=s:g['members'].append(J);B=True;break
+        if not B:w.append({'rep':J.h,'members':[J]})
+    o=0;F=0
+    for g in w:u=g['members']
+        if len(u)<2:continue
+        o+=1;j=v/f'group_{o:06d}';j.mkdir(parents=True,exist_ok=True)
+        for O,z in enumerate(u):I=j/z.path.name
+            if I.exists():N=I.stem;D=I.suffix;k=1
+                while 1:E=j/f'{N}_{k}{D}'
+                    if not E.exists():I=E;break
+                    k+=1
+            C.move(str(z.path),str(I));F+=1
+def K():A=t.ArgumentParser(description='Folderize images by similarity using imagehash.');A.add_argument('--out',type=str,default='_similar_groups',help='Output folder name');A.add_argument('--hash-func',type=str,default='phash',choices=['phash','dhash','ahash']);A.add_argument('--hash-size',type=int,default=16,help='Hash size (bigger=more sensitive).');A.add_argument('--threshold',type=int,default=8,help='Max Hamming distance to consider similar.');H=A.parse_args();P=G.cwd();a(M=P,l=H.out,q=H.hash_func,r=H.hash_size,s=H.threshold)
+if __name__=='__main__':raise SystemExit(K())
+# filename: folderize_images_by_similarity.py
+import cv2;import numpy as np;from tqdm import tqdm
+class a:def __init__(self,G,d=0.95,A=8):self.root_dir=Q(G);self.similarity_threshold=d;self.hash_size=A;self.supported_formats={'.jpg','.jpeg','.png','.bmp','.tiff','.gif'};print(f'[INIT] Root directory:{self.root_dir}');print(f'[INIT] Similarity threshold:{d}');print(f'[INIT] Hash size:{A}x{A}')
+    def m(self):print('\n[SCAN] Scanning for image files...');q=[]
+        for V in self.supported_formats:q.extend(self.root_dir.rglob(f'*{V}'));q.extend(self.root_dir.rglob(f'*{V.upper()}'))
+        q=list(set(q));print(f'[SCAN] Found {len(q)} image(s)');return sorted(q)
+    @staticmethod
+    def b(v,A=8):try:W=cv2.imread(str(v),cv2.IMREAD_GRAYSCALE)
+            if W is None:return (v,None)
+            s=cv2.resize(W,(A,A));U=s.mean();t=(s>U).flatten().astype(int);return (v,t)
+        except Exception as e:print(f'[ERROR] Failed to hash {v}:{e!s}');return (v,None)
+    def l(self,r):print(f'\n[HASH] Computing perceptual hashes using {y()} processes...');L={}
+        with R(processes=y()) as S:n=I(self.compute_perceptual_hash,A=self.hash_size);J=list(tqdm(S.imap_unordered(n,r),total=len(r),desc='Hashing images',unit='img'))
+        for v,t in J:if t is not None:L[v]=t
+        print(f'[HASH] Successfully hashed {len(L)} image(s)');return L
+    @staticmethod
+    def g(O,P):return np.sum(O!=P)
+    def f(self,L):print(f'\n[GROUP] Grouping similar images (threshold:{self.similarity_threshold})...');u=list(L.keys());K={};E=0;C=set();p=int((1-self.similarity_threshold)*len(L[u[0]]));print(f'[GROUP] Max allowed hamming distance:{p}')
+        for i,F in enumerate(tqdm(u,desc='Grouping images',unit='img')):if F in C:continue
+            K[E]=[F];C.add(F)
+            for j,w in enumerate(u):if i>=j or w in C:continue
+                D=self.hamming_distance(L[F],L[w]);x=1-D/len(L[F])
+                if x>=self.similarity_threshold:K[E].append(w);C.add(w)
+            E+=1
+        print(f'[GROUP] Created {len(K)} group(s)');return K
+    def h(self,K):print('\n[ORGANIZE] Creating folders and organizing images...')
+        for E,r in tqdm(K.items(),desc='Organizing',unit='group'):if len(r)==1:continue
+            o=self.root_dir/f'similar_group_{E:04d}';o.mkdir(exist_ok=True)
+            for F in r:try:z=o/F.name;H=1
+                    while z.exists():T=F.stem;N=F.suffix;z=o/f'{T}_{H}{N}';H+=1
+                    M.move(str(F),str(z))
+                except Exception as e:print(f'[ERROR] Failed to move {F}:{e!s}')
+        print(f'[ORGANIZE] Done! Check {self.root_dir} for organized groups')
+    def X(self):print('-'*40);print('IMAGE SIMILARITY ORGANIZER');print('-'*40);r=self.get_all_images()
+        if not r:print('[WARN] No images found!');return
+        L=self.compute_hashes(r)
+        if not L:print('[ERROR] Could not hash any images!');return
+        K=self.find_similar_images(L);self.organize_images(K);print('\n'+'='*40);print('PROCESS COMPLETE');print('-'*40)
+if __name__=='__main__':k=Q.cwd();c=0.9;B=a(G=k,d=c,A=16);B.run()
+# filename: imgdedup.py
+import cv2;import numpy as np;from imutils import paths
+def o(q,k=8):u=cv2.cvtColor(q,cv2.COLOR_BGR2GRAY);m=cv2.resize(u,(k+1,k));t=m[:,1:]>m[:,:-1];return sum((2**i for i,v in enumerate(t.flatten()) if v))
+def a(c,k=8):n={};f=list(paths.list_images(c))
+    for g in f:q=cv2.imread(g)
+        if q is None:print(f'[WARN] unable to read image:{g}');continue
+        try:h=o(q,k=k)
+        except Exception as e:print(f'[WARN] failed to hash {g}:{e}');continue
+        n.setdefault(h,[]).append(g)
+    return n
+def w():y=j.ArgumentParser(prog='imgdedup',description='Find and remove visually duplicate images using perceptual hashing.',formatter_class=j.RawDescriptionHelpFormatter,epilog='\nExamples:\n  imgdedup ./photos\n  imgdedup ./photos--remove\n        ');y.add_argument('path',help='path to image directory to scan');y.add_argument('--dry-run',action='store_true',default=True,help='preview duplicates without deleting (default:True)');y.add_argument('--remove',action='store_true',help='actually delete duplicate images');s=vars(y.parse_args());c=s['path']
+    if not r(c).is_dir():raise SystemExit(x)
+    b=s['remove'];print('[INFO] computing image hashes...');n=a(c)
+    if not n:print('[INFO] no images found in directory');return
+    print(f'[INFO] found {len(n)} unique image(s)')
+    for h,d in n.items():if len(d)>1:if not b:l=None
+                for p in d:q=cv2.imread(p)
+                    if q is None:print(f'[WARN] unable to read image for montage:{p}');continue
+                    q=cv2.resize(q,(900,900));l=q if l is None else np.hstack([l,q])
+                print(f'[INFO] found {len(d)-1} duplicates with hash:{h}')
+            else:print(f'[INFO] removing {len(d)-1} duplicates with hash:{h}')
+                for p in d[1:]:r(p).unlink()
+if __name__=='__main__':raise SystemExit(w())
+# filename: keeponeingroups.py
+def a(i):g=m(i);b={'.jpg','.jpeg','.png','.gif','.bmp','.tiff','.webp','.svg','.heic','.heif','.raw'};d=[]
+    for l in g.iterdir():if l.is_dir() and l.name.startswith('similar_'):try:j=l.name.split('_')[-1];int(j);d.append(l)
+            except ValueError:print(f"Skipping {l.name}:doesn't match expected pattern");continue
+    print(f'Found {len(d)} group folders')
+    for l in d:print(f'\nProcessing:{l.name}');f=[]
+        for n in l.iterdir():if n.is_file() and n.suffix.lower() in b:f.append(n)
+        if len(f)==0:print(f'  No images found in {l.name}');continue
+        if len(f)==1:print(f'  Already has only 1 image:{f[0].name}');continue
+        h=f[0];print(f'  Keeping:{h.name}')
+        for n in f[1:]:try:n.unlink();print(f'  Deleted:{n.name}')
+            except Exception as e:print(f'  Error deleting {n.name}:{e}')
+        print(f'  Done! {len(o.listdir(l))} files remaining in folder')
+    print(f'\n✅ Completed! Processed {len(d)} folders.')
+if __name__=='__main__':c=m.cwd()
+    if not o.path.exists(c):print(f"Error:Directory '{c}' not found!");print("Please update the 'base_directory' variable with the correct path.")
+    else:print(f'⚠️  WARNING:This will delete images from folders in:{c}');print('Only ONE image will be kept per folder. This action cannot be undone!');k=input('Do you want to continue? (yes/no):').strip().lower()
+        if k=='yes' or k=='y':a(c)
+        else:print('Operation cancelled.')
+# filename: organize_images.py
+import cv2;import numpy as np;from numpy import ndarray
+def a(u,al=(64,64)):try:ar=cv2.imread(u)
+        if ar is None:print(f'Warning:Could not read {u}');return None
+        if ar.size==0:print(f'Warning:Empty image {u}');return None
+        if len(ar.shape)==2:ar=cv2.cvtColor(ar,cv2.COLOR_GRAY2BGR)
+        elif ar.shape[2]==4:ar=cv2.cvtColor(ar,cv2.COLOR_BGRA2BGR)
+        q=cv2.resize(ar,al);an=cv2.cvtColor(q,cv2.COLOR_BGR2HSV)
+        try:O=cv2.calcHist([an],[0],None,[8],[0][180]);P=cv2.calcHist([an],[1],None,[8],[0][256]);Q=cv2.calcHist([an],[2],None,[8],[0][256])
+        except cv2.error as e:print(f'Histogram calculation error for {u}:{e}');return None
+        K=q.flatten();J=np.concatenate([O.flatten(),P.flatten(),Q.flatten(),K]);ai=np.linalg.norm(J)
+        if ai>0:J/=ai
+        return J
+    except Exception as e:print(f'Error processing {u}:{e!s}');return None
+def k(A):f={'.jpg','.jpeg','.png','.gif','.bmp','.tiff','.webp'};o=[]
+    for ak,U,X in os.walk(A):for ag in X:am=ac(ag).suffix.lower()
+            if am in f:C=os.path.join(ak,ag)
+                if ac(C).is_file() and os.access(C,os.R_OK):o.append(C)
+    return o
+def b(V,W):if V is None or W is None:return 0.0
+    Z=np.linalg.norm(V);aa=np.linalg.norm(W)
+    if Z==0 or aa==0:return 0.0
+    return np.dot(V,W)/(Z*aa)
+def c(J,ab,w=10,F=0.7):E=len(J)
+    if E==0:return np.array([])
+    H={i:[i] for i in range(E)};g={i:J[i].copy() for i in range(E)};l=E*2;D=0
+    while len(H)>w and D<l:D+=1;N=-1;v=None;n=list(H.keys())
+        for i in range(len(n)):for j in range(i+1,len(n)):ao,ap=(n[i],n[j]);at=b(g[ao],g[ap])
+                if at>N:N=at;v=(ao,ap)
+        if v is None or N<F:break
+        ao,ap=v;H[ao].extend(H[ap]);M=H[ao];d=[J[aq] for aq in M];g[ao]=np.mean(d,axis=0);del H[ap];del g[ap]
+    R=np.zeros(E,dtype=int)
+    for t,(ad,M) in enumerate(H.items()):for aq in M:R[aq]=t
+    return R
+def h(x='.',w=10,ah=False,F=0.7):print(f'Scanning directory:{x}');p=k(x);print(f'Found {len(p)} images')
+    if len(p)==0:print('No images found!');return
+    print('Extracting features with OpenCV...');J=[];s=[]
+    for i,aj in enumerate(p):if i%10==0:print(f'Processing {i}/{len(p)}...')
+        af=a(aj)
+        if af is not None:J.append(af);s.append(aj)
+    print(f'\nSuccessfully processed {len(J)} out of {len(p)} images')
+    if len(J)==0:print('No valid images to process!');return
+    J=np.array(J);w=min(w,len(J));print(f'Clustering into {w} groups...');R=c(J,s,w,F);r=os.path.join(x,'organized_by_similarity');ac(r).mkdir(exist_ok=True,parents=True);print('Organizing files...')
+    for Y in range(w):m=os.path.join(r,f'group_{Y+1}');ac(m).mkdir(exist_ok=True,parents=True)
+    for aj,Y in zip(s,R,strict=False):I=os.path.join(r,f'group_{Y+1}');z=os.path.join(I,ac(aj).name);L=1;y=ac(z).stem;B=ac(z).suffix
+        while ac(z).exists():z=os.path.join(I,f'{y}_{L}{B}');L+=1
+        try:if ah:T.move(aj,z)
+            else:T.copy2(aj,z)
+        except Exception as e:print(f'Error copying {aj}:{e}')
+    print(f'\nDone! Photos organized in:{r}');print(f'Organized {len(s)} images into {w} groups')
+if __name__=='__main__':S=G.ArgumentParser(description='Organize photos by similarity');S.add_argument('-d','--directory',default='.',help='Source directory (default:current)');S.add_argument('-k','--clusters',type=int,default=10,help='Number of groups (default:10)');S.add_argument('-m','--move',action='store_true',help='Move files instead of copy');S.add_argument('-t','--threshold',type=float,default=0.7,help='Similarity threshold (default:0.7)');ae=S.parse_args();h(ae.directory,ae.clusters,ae.move,ae.threshold)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

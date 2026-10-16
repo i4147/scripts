@@ -1,0 +1,1371 @@
+# --- File: clean_css.py ---
+import os
+import sys
+from collections.abc import Iterable, Iterator
+from multiprocessing import Pool
+from pathlib import Path
+import tree_sitter_css as tscss
+from tree_sitter import Language, Parser
+a = 8
+b = '.css'
+def c():
+    try:
+        d = Language(tscss.language())
+    except TypeError:
+        d = tscss.language()
+    e = Parser()
+    try:
+        e.language = d
+    except AttributeError:
+        e.set_language(d)
+    return e
+def f(g):
+    return g.is_file() and g.suffix.lower() == b
+def h(i):
+    j = set()
+    for k in i:
+        g = Path(k)
+        try:
+            if g.is_symlink():
+                print(f'warning: skipping symlink: {g}', file=sys.stderr)
+                continue
+            if g.is_file():
+                l = (g,)
+            elif g.is_dir():
+                l = (m for m in g.rglob('*') if not m.is_symlink() and f(m))
+            else:
+                print(f'warning: path not found: {g}', file=sys.stderr)
+                continue
+            for n in l:
+                if not f(n):
+                    continue
+                try:
+                    o = n.resolve()
+                except OSError:
+                    o = n.absolute()
+                if o in j:
+                    continue
+                j.add(o)
+                yield n
+        except OSError as exc:
+            print(f'warning: cannot scan {g}: {exc}', file=sys.stderr)
+def p(q, r):
+    if q.type == 'comment':
+        r.append((q.start_byte, q.end_byte))
+        return
+    for m in q.children:
+        p(m, r)
+def s(t, r):
+    u = bytearray()
+    v = 0
+    for w, end in r:
+        u.extend(t[v:w])
+        u.extend((x for x in t[w:end] if x in (ord('\n'), ord('\r'))))
+        v = end
+    u.extend(t[v:])
+    return bytes(u)
+def y(g, z):
+    a1 = g.stat()
+    b1 = g.with_name(f'.{g.name}.{os.getpid()}.tmp')
+    try:
+        with b1.open('wb') as c1:
+            c1.write(z)
+            c1.flush()
+            os.fsync(c1.fileno())
+        os.chmod(b1, a1.st_mode)
+        os.replace(b1, g)
+    except BaseException:
+        try:
+            b1.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+def d1(e1):
+    g = Path(e1)
+    try:
+        t = g.read_bytes()
+        e = c()
+        f1 = e.parse(t)
+        g1 = []
+        p(f1.root_node, g1)
+        if not g1:
+            return (str(g), 0, None)
+        h1 = s(t, g1)
+        if h1 != t:
+            y(g, h1)
+        return (str(g), len(g1), None)
+    except (OSError, TypeError, ValueError) as exc:
+        return (str(g), 0, str(exc))
+def i1():
+    j1 = sys.argv[1:] or ['.']
+    k1 = list(h(j1))
+    if not k1:
+        print('No CSS files found.', file=sys.stderr)
+        return 0
+    l1 = 0
+    m1 = 0
+    n1 = 0
+    with Pool(processes=a) as o1:
+        p1 = [o1.apply_async(d1, (str(g),)) for g in k1]
+        for job in p1:
+            g, q1, r1 = job.get()
+            if r1 is not None:
+                n1 += 1
+                print(f'error: {g}: {r1}', file=sys.stderr)
+                continue
+            if q1:
+                l1 += 1
+                m1 += q1
+                print(f'{g}: removed {q1} comment(s)')
+    print(f'\nFiles scanned: {len(k1)}\nChanged files: {l1}\nComments removed: {m1}')
+    return 1 if n1 else 0
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+# --- File: clean_html.py ---
+import argparse
+import contextlib
+import multiprocessing as mp
+import os
+import sys
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+import tree_sitter_css
+import tree_sitter_html
+import tree_sitter_javascript
+import tree_sitter_typescript
+from tree_sitter import Language, Parser
+s1 = {'.html': 'html', '.htm': 'html', '.css': 'css', '.js': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript', '.jsx': 'javascript', '.ts': 'typescript', '.tsx': 'tsx'}
+t1 = 8
+u1 = 32
+@dataclass(frozen=True, slots=True)
+class v1:
+    r1 = None
+def w1(x1):
+    y1 = {'html': tree_sitter_html.language, 'css': tree_sitter_css.language, 'javascript': tree_sitter_javascript.language, 'typescript': tree_sitter_typescript.language_typescript, 'tsx': tree_sitter_typescript.language_tsx}
+    d = Language(y1[x1]())
+    try:
+        return Parser(d)
+    except TypeError:
+        e = Parser()
+        e.language = d
+        return e
+def z1(q):
+    a2 = [q]
+    while a2:
+        b2 = a2.pop()
+        yield b2
+        c2 = b2.children
+        if c2:
+            a2.extend(reversed(c2))
+def g1(t, e):
+    f1 = e.parse(t)
+    r = []
+    for q in z1(f1.root_node):
+        if q.type == 'comment':
+            r.append((q.start_byte, q.end_byte))
+    return r
+def d2(t, r):
+    e2 = sorted(set(r), reverse=True)
+    if not e2:
+        return (t, 0)
+    u = t
+    f2 = 0
+    for w, end in e2:
+        if w < 0 or end < w or end > len(u):
+            continue
+        u = u[:w] + u[end:]
+        f2 += 1
+    return (u, f2)
+def g2(h2):
+    i2 = h2.lower()
+    if b'type=' not in i2 and b'language=' not in i2:
+        return 'javascript'
+    for j2 in (b'text/typescript', b'application/typescript', b'typescript'):
+        if j2 in i2:
+            return 'typescript'
+    for j2 in (b'text/tsx', b'application/tsx'):
+        if j2 in i2:
+            return 'tsx'
+    k2 = (b'application/json', b'application/ld+json', b'importmap', b'speculationrules', b'text/template', b'text/x-template', b'text/plain', b'application/xml')
+    if any((j2 in i2 for j2 in k2)):
+        return None
+    l2 = (b'javascript', b'ecmascript', b'module', b'text/jsx', b'application/jsx')
+    if any((j2 in i2 for j2 in l2)):
+        return 'javascript'
+    return None
+def m2(h2):
+    i2 = h2.lower()
+    k2 = (b'text/less', b'text/scss', b'text/sass', b'text/stylus', b'text/x-scss', b'text/x-sass')
+    if any((j2 in i2 for j2 in k2)):
+        return None
+    return 'css'
+def n2(o2, p2):
+    f1 = p2.parse(o2)
+    r = []
+    for q in z1(f1.root_node):
+        if q.type != 'element':
+            continue
+        q2 = None
+        r2 = None
+        for m in q.children:
+            if m.type == 'start_tag':
+                q2 = m
+            elif m.type == 'raw_text':
+                r2 = m
+        if q2 is None or r2 is None:
+            continue
+        s2 = o2[q2.start_byte:q2.end_byte].lower()
+        if s2.startswith(b'<script'):
+            d = g2(s2)
+        elif s2.startswith(b'<style'):
+            d = m2(s2)
+        else:
+            continue
+        if d is not None and r2.start_byte < r2.end_byte:
+            r.append((r2.start_byte, r2.end_byte, d))
+    return r
+def t2(t, u2):
+    p2 = u2['html']
+    v2 = g1(t, p2)
+    w2 = n2(t, p2)
+    x2 = []
+    for w, end, x1 in w2:
+        z = t[w:end]
+        y2 = g1(z, u2[x1])
+        z2, q1 = d2(z, y2)
+        if q1:
+            x2.append((w, end, z2, q1))
+    a3 = t
+    b3 = 0
+    for w, end, c3, q1 in sorted(x2, key=lambda d3: d3[0], reverse=True):
+        a3 = a3[:w] + c3 + a3[end:]
+        b3 += q1
+    e3 = g1(a3, p2)
+    a3, f3 = d2(a3, e3)
+    return (a3, b3 + f3)
+def g3(h3):
+    return b'\r\n' if b'\r\n' in h3 else b'\n'
+def i3(g, h3):
+    j3 = g.parent
+    k3 = j3 / f'.{g.name}.strip-comments-{os.getpid()}.tmp'
+    try:
+        l3 = g.stat().st_mode
+    except OSError:
+        l3 = None
+    try:
+        with k3.open('wb') as c1:
+            c1.write(h3)
+            c1.flush()
+            os.fsync(c1.fileno())
+        if l3 is not None:
+            os.chmod(k3, l3)
+        os.replace(k3, g)
+    finally:
+        with contextlib.suppress(OSError):
+            k3.unlink(missing_ok=True)
+def d1(m3, n3):
+    g = Path(m3)
+    try:
+        if not g.is_file():
+            return v1(m3, False, 0, 'Not a regular file')
+        o3 = g.suffix.lower()
+        x1 = s1.get(o3)
+        if x1 is None:
+            return v1(m3, False, 0, 'Unsupported file extension')
+        t = g.read_bytes()
+        if not t:
+            return v1(m3, False, 0)
+        u2 = {'html': w1('html'), 'css': w1('css'), 'javascript': w1('javascript'), 'typescript': w1('typescript'), 'tsx': w1('tsx')}
+        if x1 == 'html':
+            p3, q3 = t2(t, u2)
+        else:
+            r = g1(t, u2[x1])
+            p3, q3 = d2(t, r)
+        if q3 == 0 or p3 == t:
+            return v1(m3, False, 0)
+        if not n3:
+            i3(g, p3)
+        return v1(m3, True, q3)
+    except PermissionError as exc:
+        return v1(m3, False, 0, f'Permission denied: {exc}')
+    except UnicodeError as exc:
+        return v1(m3, False, 0, f'Encoding error: {exc}')
+    except OSError as exc:
+        return v1(m3, False, 0, f'Filesystem error: {exc}')
+    except Exception as exc:
+        return v1(m3, False, 0, f'{type(exc).__name__}: {exc}')
+def r3(g):
+    return g.is_file() and g.suffix.lower() in s1
+def s3(i):
+    t3 = set()
+    for u3 in i:
+        try:
+            if u3.is_file():
+                if r3(u3):
+                    t3.add(u3.resolve())
+            elif u3.is_dir():
+                for n in u3.rglob('*'):
+                    try:
+                        if r3(n):
+                            t3.add(n.resolve())
+                    except OSError:
+                        continue
+            else:
+                print(f'Warning: path does not exist: {u3}', file=sys.stderr)
+        except OSError as exc:
+            print(f'Warning: unable to scan {u3}: {exc}', file=sys.stderr)
+    return sorted(t3, key=lambda g: str(g))
+def v3():
+    e = argparse.ArgumentParser(description='Strip comments from HTML, CSS, JavaScript, and TypeScript files.')
+    e.add_argument('paths', nargs='*', type=Path, help='Files or directories to process. Defaults to the current directory.')
+    e.add_argument('-j', '--workers', type=int, default=t1, help=f'Worker process count (default: {t1}).')
+    e.add_argument('--dry-run', action='store_true', help='Report proposed changes without modifying files.')
+    return e.parse_args()
+def i1():
+    w3 = v3()
+    if w3.workers < 1:
+        print('Error: --workers must be at least 1.', file=sys.stderr)
+        return 2
+    i = w3.paths if w3.paths else [Path.cwd()]
+    k1 = s3(i)
+    if not k1:
+        print('No supported files found.')
+        return 0
+    x3 = 'Would process' if w3.dry_run else 'Processing'
+    print(f'{x3} {len(k1)} file(s) with {w3.workers} worker(s)...')
+    l1 = 0
+    b3 = 0
+    y3 = 0
+    z3 = mp.get_context('spawn')
+    with z3.Pool(processes=w3.workers) as o1:
+        a4 = [o1.apply_async(d1, (str(g), w3.dry_run)) for g in k1]
+        for b4 in a4:
+            try:
+                a3 = b4.get()
+            except Exception as exc:
+                y3 += 1
+                print(f'ERROR: Worker failed: {type(exc).__name__}: {exc}', file=sys.stderr)
+                continue
+            if a3.error:
+                y3 += 1
+                print(f'ERROR: {a3.path}: {a3.error}', file=sys.stderr)
+                continue
+            if a3.changed:
+                l1 += 1
+                b3 += a3.comments_removed
+                c4 = 'WOULD UPDATE' if w3.dry_run else 'UPDATED'
+                print(f'{c4}: {a3.path} ({a3.comments_removed} comment(s) removed)')
+    print()
+    print(f'Done. Changed files: {l1}; comments removed: {b3}; errors: {y3}.')
+    return 1 if y3 else 0
+if __name__ == '__main__':
+    mp.freeze_support()
+    raise SystemExit(i1())
+
+# --- File: cleancss2.py ---
+import multiprocessing as mp
+import os
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+import tree_sitter_css
+from tree_sitter import Language, Node, Parser
+d4 = str | Path
+@dataclass
+class e4:
+    q3 = 0
+    f4 = ''
+    g4 = 0.0
+    h4 = 0
+class i4:
+    def __init__(self):
+        self.parser = Parser()
+        d = Language(tree_sitter_css.language())
+        self.parser.language = d
+    def j4(self, q):
+        return q.type == 'comment'
+    def k4(self, l4):
+        g1 = []
+        def m4(q):
+            if self._is_comment_node(q):
+                g1.append((q.start_byte, q.end_byte))
+                return
+            for m in q.children:
+                m4(m)
+        m4(l4)
+        g1.sort(key=lambda x: x[0])
+        if g1:
+            n4 = [g1[0]]
+            for w, end in g1[1:]:
+                o4, p4 = n4[-1]
+                if w <= p4:
+                    n4[-1] = (o4, max(p4, end))
+                else:
+                    n4.append((w, end))
+            g1 = n4
+        return g1
+    def q4(self, z):
+        while b'\n\n\n' in z:
+            z = z.replace(b'\n\n\n', b'\n\n')
+        z = z.strip(b'\n') + b'\n' if z else b''
+        return z
+    def r4(self, z):
+        f1 = self.parser.parse(z)
+        g1 = self._get_comment_ranges(f1.root_node)
+        if not g1:
+            return (z, 0)
+        s4 = []
+        p4 = 0
+        q3 = 0
+        for w, end in g1:
+            t4 = z[p4:w]
+            u4 = z.rfind(b'\n', 0, w) + 1
+            v4 = z[u4:w]
+            if v4.strip() == b'':
+                w4 = z.find(b'\n', end)
+                if w4 == -1:
+                    w4 = len(z)
+                else:
+                    w4 += 1
+                x4 = z[end:w4].strip()
+                if x4 == b'':
+                    s4.append(t4[:len(v4)])
+                    p4 = w4
+                else:
+                    s4.append(t4)
+                    p4 = end
+            else:
+                s4.append(t4)
+                p4 = end
+            q3 += 1
+        s4.append(z[p4:])
+        y4 = b''.join(s4)
+        y4 = self._cleanup_empty_lines(y4)
+        return (y4, q3)
+def z4(i):
+    a5 = []
+    if not i:
+        i = ['.']
+    for u3 in i:
+        g = Path(u3)
+        if g.is_file():
+            if g.suffix.lower() == '.css':
+                a5.append(g)
+            else:
+                print(f'Warning: {g} is not a .css file, skipping')
+        elif g.is_dir():
+            a5.extend(g.rglob('*.css'))
+            a5.extend(g.rglob('*.CSS'))
+        else:
+            print(f'Warning: {g} does not exist, skipping')
+    j = set()
+    b5 = []
+    for f in a5:
+        c5 = f.resolve()
+        if c5 not in j:
+            j.add(c5)
+            b5.append(c5)
+    return b5
+def d1(g):
+    d5 = time.perf_counter()
+    try:
+        e5 = i4()
+        with open(g, 'rb') as f:
+            z = f.read()
+        h4 = len(z)
+        if h4 == 0:
+            return e4(path=g, success=True, comments_removed=0, processing_time=time.perf_counter() - d5, file_size=0)
+        y4, q3 = e5.remove_comments(z)
+        if q3 > 0 and y4 != z:
+            k3 = g.with_suffix(g.suffix + '.tmp')
+            try:
+                with open(k3, 'wb') as f:
+                    f.write(y4)
+                    f.flush()
+                    os.fsync(f.fileno())
+                l3 = os.stat(g).st_mode
+                os.chmod(k3, l3)
+                f5 = os.stat(k3).st_size
+                if f5:
+                    k3.replace(g)
+                else:
+                    print('result css is empty,skiping write')
+            except Exception:
+                if k3.exists():
+                    k3.unlink()
+                raise
+        g4 = time.perf_counter() - d5
+        return e4(path=g, success=True, comments_removed=q3, processing_time=g4, file_size=h4)
+    except Exception as e:
+        g4 = time.perf_counter() - d5
+        return e4(path=g, success=False, error_message=str(e), processing_time=g4)
+def g5(k1, h5=8):
+    i5 = []
+    j5 = len(k1)
+    k5 = 0
+    with mp.Pool(processes=h5) as o1:
+        l5 = []
+        for g in k1:
+            m5 = o1.apply_async(d1, (g,))
+            l5.append(m5)
+        for m5 in l5:
+            try:
+                a3 = m5.get(timeout=30)
+                i5.append(a3)
+                k5 += 1
+                if a3.success:
+                    if a3.comments_removed > 0:
+                        n5 = a3.file_size / 1024 if a3.file_size else 0
+                        print(f'✓ {a3.path}: removed {a3.comments_removed} comments ({n5:.1f} KB, {a3.processing_time:.3f}s)')
+                    else:
+                        print(f'• {a3.path}: no comments found ({a3.processing_time:.3f}s)')
+                else:
+                    print(f'✗ {a3.path}: ERROR - {a3.error_message}')
+                if k5 % 25 == 0 and k5 < j5:
+                    print(f'Progress: {k5}/{j5} files processed')
+            except mp.TimeoutError:
+                print(f'✗ Timeout processing file (30s limit)')
+                i5.append(e4(path=Path('unknown'), success=False, error_message='Timeout exceeded 30 seconds'))
+                k5 += 1
+    return i5
+def o5(i5, j5, d5):
+    p5 = time.perf_counter() - d5
+    q5 = sum((1 for r in i5 if r.success))
+    r5 = sum((1 for r in i5 if not r.success))
+    m1 = sum((r.comments_removed for r in i5 if r.success))
+    s5 = sum((1 for r in i5 if r.success and r.comments_removed > 0))
+    t5 = sum((r.file_size for r in i5 if r.success and r.file_size))
+    print('\n' + '=' * 70)
+    print('SUMMARY')
+    print('=' * 70)
+    print(f'Total files processed:     {j5}')
+    print(f'Successful:                {q5}')
+    print(f'Failed:                    {r5}')
+    print(f'Files with comments:       {s5}')
+    print(f'Files without comments:    {q5 - s5}')
+    print(f'Total comments removed:    {m1}')
+    if t5 > 0:
+        u5 = t5 / (1024 * 1024)
+        print(f'Total size processed:      {u5:.2f} MB')
+    print(f'Total processing time:     {p5:.2f}s')
+    if q5 > 0:
+        v5 = p5 / q5
+        print(f'Average time per file:     {v5:.3f}s')
+    if r5 > 0:
+        print(f'\nFailed files:')
+        for r in i5:
+            if not r.success:
+                print(f'  - {r.path}: {r.error_message}')
+    print('=' * 70)
+def i1():
+    i = sys.argv[1:]
+    print('CSS Comment Remover')
+    print('=' * 40)
+    print('Collecting .css files...')
+    a5 = z4(i)
+    if not a5:
+        print('No .css files found to process.')
+        return
+    print(f'Found {len(a5)} .css file(s) to process')
+    print(f'Using 8 worker processes\n')
+    d5 = time.perf_counter()
+    i5 = g5(a5, num_workers=8)
+    o5(i5, len(a5), d5)
+if __name__ == '__main__':
+    mp.freeze_support()
+    i1()
+
+# --- File: cleanhtml.py ---
+import argparse
+import sys
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+try:
+    import tree_sitter_css
+    import tree_sitter_html
+    import tree_sitter_javascript
+    import tree_sitter_typescript
+    from tree_sitter import Language, Parser
+except ImportError as e:
+    print(f'Error: Missing tree-sitter dependencies. {e}')
+    print('Please install required packages:')
+    print('pip install tree-sitter tree-sitter-html tree-sitter-css tree-sitter-javascript tree-sitter-typescript')
+    sys.exit(1)
+w5 = Language(tree_sitter_html.language())
+x5 = Language(tree_sitter_css.language())
+y5 = Language(tree_sitter_javascript.language())
+z5 = Language(tree_sitter_typescript.language_typescript())
+def a6(b6):
+    e = Parser()
+    e.language = b6
+    return e
+c6 = a6(w5)
+d6 = a6(x5)
+e6 = a6(y5)
+f6 = a6(z5)
+def g6(q, r):
+    if q.type == 'comment':
+        r.append((q.start_byte, q.end_byte))
+    for m in q.children:
+        g6(m, r)
+def h6(z, r):
+    if not r:
+        return z
+    a3 = bytearray()
+    i6 = 0
+    for w, end in sorted(r):
+        a3.extend(z[i6:w])
+        i6 = end
+    a3.extend(z[i6:])
+    return bytes(a3)
+def j6(z, e):
+    f1 = e.parse(z)
+    r = []
+    g6(f1.root_node, r)
+    if not r:
+        return (z, 0)
+    return (h6(z, r), len(r))
+def k6(z):
+    f1 = c6.parse(z)
+    l6 = []
+    m6 = 0
+    def n6(q):
+        nonlocal total_comments
+        if q.type == 'comment':
+            l6.append((q.start_byte, q.end_byte, b''))
+            m6 += 1
+        elif q.type in ('script_element', 'style_element'):
+            o6 = next((m for m in q.children if m.type == 'raw_text'), None)
+            if o6 and o6.end_byte > o6.start_byte:
+                p6 = z[o6.start_byte:o6.end_byte]
+                e = e6 if q.type == 'script_element' else d6
+                q6 = e.parse(p6)
+                r6 = []
+                g6(q6.root_node, r6)
+                if r6:
+                    m6 += len(r6)
+                    s6 = h6(p6, r6)
+                    l6.append((o6.start_byte, o6.end_byte, s6))
+        for m in q.children:
+            n6(m)
+    n6(f1.root_node)
+    if not l6:
+        return (z, 0)
+    l6.sort(key=lambda x: x[0])
+    a3 = bytearray()
+    i6 = 0
+    for w, end, c3 in l6:
+        a3.extend(z[i6:w])
+        a3.extend(c3)
+        i6 = end
+    a3.extend(z[i6:])
+    return (bytes(a3), m6)
+def d1(g):
+    try:
+        z = g.read_bytes()
+    except Exception as e:
+        return {'file': str(g), 'error': str(e), 'comments_removed': 0, 'changed': False}
+    ext = g.suffix.lower()
+    try:
+        if ext == '.html':
+            t6, u6 = k6(z)
+        elif ext == '.css':
+            t6, u6 = j6(z, d6)
+        elif ext == '.js':
+            t6, u6 = j6(z, e6)
+        elif ext == '.ts':
+            t6, u6 = j6(z, f6)
+        else:
+            return {'file': str(g), 'error': 'Unsupported extension', 'comments_removed': 0, 'changed': False}
+    except Exception as e:
+        return {'file': str(g), 'error': f'Parsing error: {e}', 'comments_removed': 0, 'changed': False}
+    v6 = t6 != z
+    if v6:
+        try:
+            g.write_bytes(t6)
+        except Exception as e:
+            return {'file': str(g), 'error': f'Write error: {e}', 'comments_removed': u6, 'changed': False}
+    return {'file': str(g), 'comments_removed': u6, 'changed': v6, 'error': None}
+def s3(w6):
+    x6 = {'.html', '.css', '.js', '.ts'}
+    k1 = set()
+    if not w6:
+        w6 = ['.']
+    for p in w6:
+        g = Path(p).resolve()
+        if g.is_file():
+            if g.suffix.lower() in x6:
+                k1.add(g)
+        elif g.is_dir():
+            k1.update((f.resolve() for f in g.rglob('*') if f.is_file() and f.suffix.lower() in x6))
+    return sorted(k1)
+def i1():
+    e = argparse.ArgumentParser(description='Strip comments from HTML, CSS, JS, and TS files using tree-sitter.')
+    e.add_argument('paths', nargs='*', help='Files or directories to process. Defaults to current directory.')
+    e.add_argument('-w', '--workers', type=int, default=8, help='Number of multiprocessing workers (default: 8).')
+    w3 = e.parse_args()
+    k1 = s3(w3.paths)
+    if not k1:
+        print('No matching files found.')
+        return
+    print(f'Found {len(k1)} files. Processing with {w3.workers} workers...')
+    m6 = 0
+    l1 = 0
+    y3 = 0
+    with Pool(processes=w3.workers) as o1:
+        l5 = [o1.apply_async(d1, (f,)) for f in k1]
+        for res in l5:
+            y6 = res.get()
+            if y6.get('error'):
+                print(f"  [ERROR] {y6['file']}: {y6['error']}")
+                y3 += 1
+            elif y6['changed']:
+                print(f"  [UPDATED] {y6['file']} (Removed {y6['comments_removed']} comments)")
+                m6 += y6['comments_removed']
+                l1 += 1
+            else:
+                pass
+    print('-' * 40)
+    print(f'Processing complete.')
+    print(f'Files changed: {l1}')
+    print(f'Total comments removed: {m6}')
+    if y3 > 0:
+        print(f'Errors encountered: {y3}')
+if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
+    i1()
+
+# --- File: cleanhtmlre.py ---
+import re
+import sys
+import urllib.request
+from pathlib import Path
+def t2(z6):
+    return re.sub('<!--(?!\\[if).*?-->', '', z6, flags=re.DOTALL)
+def a7(css):
+    return re.sub('/\\*.*?\\*/', '', css, flags=re.DOTALL)
+def b7(js):
+    a3 = []
+    i = 0
+    n = len(js)
+    c7 = None
+    d7 = False
+    e7 = False
+    f7 = False
+    def g7(buf):
+        for ch in reversed(buf):
+            if not ch.isspace():
+                return ch
+        return ''
+    while i < n:
+        c = js[i]
+        nxt = js[i + 1] if i + 1 < n else ''
+        if d7:
+            if c == '\n':
+                d7 = False
+                a3.append(c)
+            i += 1
+            continue
+        if e7:
+            if c == '*' and nxt == '/':
+                e7 = False
+                i += 2
+            else:
+                i += 1
+            continue
+        if c7:
+            a3.append(c)
+            if c == '\\' and i + 1 < n:
+                a3.append(nxt)
+                i += 2
+                continue
+            if c == c7:
+                c7 = None
+            i += 1
+            continue
+        if f7:
+            a3.append(c)
+            if c == '\\' and i + 1 < n:
+                a3.append(nxt)
+                i += 2
+                continue
+            if c == '/':
+                f7 = False
+            i += 1
+            continue
+        if c == '/' and nxt == '/':
+            d7 = True
+            i += 2
+            continue
+        if c == '/' and nxt == '*':
+            e7 = True
+            i += 2
+            continue
+        if c in ("'", '"', '`'):
+            c7 = c
+            a3.append(c)
+            i += 1
+            continue
+        if c == '/':
+            h7 = g7(''.join(a3))
+            if h7 in ('', '(', ',', '=', ':', '[', '!', '&', '|', '?', '{', ';', '+', '-', '*', '%', '<', '>', '\n', 'return'):
+                f7 = True
+                a3.append(c)
+                i += 1
+                continue
+        a3.append(c)
+        i += 1
+    return ''.join(a3)
+def i7(src, j7):
+    try:
+        if src.startswith(('http://', 'https://')):
+            with urllib.request.urlopen(src, timeout=10) as k7:
+                l7 = k7.headers.get_content_charset() or 'utf-8'
+                return k7.read().decode(l7, errors='replace')
+        if src.startswith('//'):
+            url = 'https:' + src
+            with urllib.request.urlopen(url, timeout=10) as k7:
+                l7 = k7.headers.get_content_charset() or 'utf-8'
+                return k7.read().decode(l7, errors='replace')
+        if src.startswith('data:'):
+            return None
+        m7 = (j7 / src.lstrip('/')).resolve()
+        if m7.is_file():
+            return m7.read_text(encoding='utf-8', errors='replace')
+    except Exception as e:
+        print(f"[warn] could not load asset '{src}': {e}", file=sys.stderr)
+    return None
+n7 = re.compile('<link\\b[^>]*rel=["\\\']stylesheet["\\\'][^>]*>', re.IGNORECASE)
+o7 = re.compile('href=["\\\']([^"\\\']+)["\\\']', re.IGNORECASE)
+p7 = re.compile('<script\\b([^>]*)\\bsrc=["\\\']([^"\\\']+)["\\\']([^>]*)>\\s*</script>', re.IGNORECASE)
+q7 = re.compile('<style\\b[^>]*>(.*?)</style>', re.IGNORECASE | re.DOTALL)
+r7 = re.compile('<script\\b(?![^>]*\\bsrc=)([^>]*)>(.*?)</script>', re.IGNORECASE | re.DOTALL)
+def s7(z6, j7):
+    def t7(u7):
+        tag = u7.group(0)
+        v7 = o7.search(tag)
+        if not v7:
+            return tag
+        w7 = v7.group(1)
+        z = i7(w7, j7)
+        if z is None:
+            return tag
+        z = a7(z)
+        return f'<style>{z}</style>'
+    return n7.sub(t7, z6)
+def x7(z6, j7):
+    def t7(u7):
+        y7, src, z7 = u7.groups()
+        z = i7(src, j7)
+        if z is None:
+            return u7.group(0)
+        z = b7(z)
+        a8 = y7 + z7
+        a8 = re.sub('\\ssrc=["\\\'][^"\\\']+["\\\']', '', a8, flags=re.IGNORECASE)
+        return f'<script{a8}>{z}</script>'
+    return p7.sub(t7, z6)
+def b8(z6):
+    def t7(u7):
+        css = u7.group(1)
+        p3 = a7(css)
+        c8 = u7.group(0).split('>', 1)[0] + '>'
+        return f'{c8}{p3}</style>'
+    return q7.sub(t7, z6)
+def d8(z6):
+    def t7(u7):
+        a8, js = u7.groups()
+        p3 = b7(js)
+        return f'<script{a8}>{p3}</script>'
+    return r7.sub(t7, z6)
+def e8(u3):
+    j7 = u3.parent
+    z6 = u3.read_text(encoding='utf-8', errors='replace')
+    z6 = s7(z6, j7)
+    z6 = x7(z6, j7)
+    z6 = b8(z6)
+    z6 = d8(z6)
+    z6 = t2(z6)
+    z6 = re.sub('\\n\\s*\\n+', '\n\n', z6)
+    f8 = u3.with_name(f'{u3.stem}_cleaned.html')
+    f8.write_text(z6, encoding='utf-8')
+    return f8
+def i1():
+    if len(sys.argv) < 2:
+        print('Usage: python clean_html.py <input.html>', file=sys.stderr)
+        sys.exit(1)
+    u3 = Path(sys.argv[1]).expanduser().resolve()
+    if not u3.is_file():
+        print(f'Error: file not found: {u3}', file=sys.stderr)
+        sys.exit(1)
+    f8 = e8(u3)
+    print(f'Cleaned file written to: {f8}')
+if __name__ == '__main__':
+    i1()
+
+# --- File: cleanjs.py ---
+import sys
+from collections.abc import Iterable
+from multiprocessing import Pool
+from pathlib import Path
+import tree_sitter_javascript as tsjavascript
+from tree_sitter import Language, Parser
+a = 8
+g8 = frozenset({'.js', '.mjs', '.cjs', '.jsx'})
+def h8():
+    try:
+        return Language(tsjavascript.language())
+    except TypeError:
+        return tsjavascript.language()
+def c():
+    e = Parser()
+    d = h8()
+    try:
+        e.language = d
+    except AttributeError:
+        e.set_language(d)
+    return e
+def i8(g):
+    return g.is_file() and g.suffix.lower() in g8
+def j8(i):
+    j = set()
+    for k8 in i:
+        g = Path(k8)
+        try:
+            if g.is_file():
+                l = (g,)
+            elif g.is_dir():
+                l = (m for m in g.rglob('*') if not m.is_symlink() and i8(m))
+            else:
+                print(f'warning: not found or unsupported path: {g}', file=sys.stderr)
+                continue
+            for n in l:
+                if not i8(n):
+                    continue
+                try:
+                    c5 = n.resolve()
+                except OSError:
+                    c5 = n.absolute()
+                if c5 not in j:
+                    j.add(c5)
+                    yield n
+        except OSError as exc:
+            print(f'warning: cannot scan {g}: {exc}', file=sys.stderr)
+def p(q, r):
+    if q.type == 'comment':
+        r.append((q.start_byte, q.end_byte))
+        return
+    for m in q.children:
+        p(m, r)
+def s(t, r):
+    if not r:
+        return t
+    u = bytearray()
+    v = 0
+    for w, end in r:
+        u.extend(t[v:w])
+        l8 = t[w:end]
+        u.extend((x for x in l8 if x in (ord('\n'), ord('\r'))))
+        v = end
+    u.extend(t[v:])
+    return bytes(u)
+def d1(m3):
+    g = Path(m3)
+    try:
+        t = g.read_bytes()
+        e = c()
+        f1 = e.parse(t)
+        r = []
+        p(f1.root_node, r)
+        if not r:
+            return (str(g), 0, None)
+        h1 = s(t, r)
+        if h1 != t:
+            with g.open('wb') as c1:
+                c1.write(h1)
+        return (str(g), len(r), None)
+    except (OSError, UnicodeError, ValueError) as exc:
+        return (str(g), 0, str(exc))
+def i1():
+    i = sys.argv[1:] or ['.']
+    k1 = list(j8(i))
+    if not k1:
+        print('No JavaScript files found.', file=sys.stderr)
+        return 0
+    l1 = 0
+    m6 = 0
+    n1 = 0
+    m8 = max(1, len(k1) // (a * 8))
+    with Pool(processes=a) as o1:
+        i5 = [o1.apply_async(d1, (str(g),)) for g in k1]
+        for a3 in i5:
+            g, f2, r1 = a3.get()
+            if r1 is not None:
+                n1 += 1
+                print(f'error: {g}: {r1}', file=sys.stderr)
+                continue
+            if f2:
+                l1 += 1
+                m6 += f2
+                print(f'{g}: removed {f2} comment(s)')
+    print(f'\nChanged files: {l1}\nComments removed: {m6}\nFiles scanned: {len(k1)}')
+    return 1 if n1 else 0
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+# --- File: cleants.py ---
+import os
+import sys
+from collections.abc import Iterable, Iterator
+from multiprocessing import Pool
+from pathlib import Path
+import tree_sitter_typescript as tstypescript
+from tree_sitter import Language, Parser
+a = 8
+n8 = frozenset({'.ts', '.tsx', '.mts', '.cts'})
+o8 = frozenset({'.tsx'})
+def p8(q8):
+    try:
+        return Language(q8)
+    except TypeError:
+        return q8
+def c(r8):
+    s8 = tstypescript.language_tsx if r8 else tstypescript.language_typescript
+    d = p8(s8())
+    e = Parser()
+    try:
+        e.language = d
+    except AttributeError:
+        e.set_language(d)
+    return e
+def t8(g):
+    return g.is_file() and g.suffix.lower() in n8
+def u8(i):
+    j = set()
+    for k in i:
+        g = Path(k)
+        try:
+            if g.is_symlink():
+                print(f'warning: skipping symlink: {g}', file=sys.stderr)
+                continue
+            if g.is_file():
+                l = (g,)
+            elif g.is_dir():
+                l = (m for m in g.rglob('*') if not m.is_symlink() and t8(m))
+            else:
+                print(f'warning: path not found: {g}', file=sys.stderr)
+                continue
+            for n in l:
+                if not t8(n):
+                    continue
+                try:
+                    o = n.resolve()
+                except OSError:
+                    o = n.absolute()
+                if o not in j:
+                    j.add(o)
+                    yield n
+        except OSError as exc:
+            print(f'warning: cannot scan {g}: {exc}', file=sys.stderr)
+def p(q, r):
+    if q.type == 'comment':
+        r.append((q.start_byte, q.end_byte))
+        return
+    for m in q.children:
+        p(m, r)
+def s(t, r):
+    u = bytearray()
+    v = 0
+    for w, end in r:
+        u.extend(t[v:w])
+        u.extend((x for x in t[w:end] if x == ord('\n') or x == ord('\r')))
+        v = end
+    u.extend(t[v:])
+    return bytes(u)
+def y(g, z):
+    v8 = g.stat()
+    b1 = g.with_name(f'.{g.name}.{os.getpid()}.tmp')
+    try:
+        with b1.open('wb') as c1:
+            c1.write(z)
+            c1.flush()
+            os.fsync(c1.fileno())
+        os.chmod(b1, v8.st_mode)
+        os.replace(b1, g)
+    except BaseException:
+        try:
+            b1.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+def d1(e1):
+    g = Path(e1)
+    try:
+        t = g.read_bytes()
+        e = c(g.suffix.lower() in o8)
+        f1 = e.parse(t)
+        r = []
+        p(f1.root_node, r)
+        if not r:
+            return (str(g), 0, None)
+        h1 = s(t, r)
+        if h1 != t:
+            y(g, h1)
+        return (str(g), len(r), None)
+    except (OSError, ValueError, TypeError) as exc:
+        return (str(g), 0, str(exc))
+def i1():
+    i = sys.argv[1:] or ['.']
+    k1 = list(u8(i))
+    if not k1:
+        print('No TypeScript files found.', file=sys.stderr)
+        return 0
+    l1 = 0
+    m6 = 0
+    n1 = 0
+    with Pool(processes=a) as o1:
+        p1 = [o1.apply_async(d1, (str(g),)) for g in k1]
+        for job in p1:
+            g, q1, r1 = job.get()
+            if r1 is not None:
+                n1 += 1
+                print(f'error: {g}: {r1}', file=sys.stderr)
+                continue
+            if q1:
+                l1 += 1
+                m6 += q1
+                print(f'{g}: removed {q1} comment(s)')
+    print(f'\nFiles scanned: {len(k1)}\nChanged files: {l1}\nComments removed: {m6}')
+    return 1 if n1 else 0
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+# --- File: rmcss.py ---
+import argparse
+import re
+import sys
+from collections.abc import Iterable, Iterator
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Optional, Set, Tuple
+from loguru import logger
+w8 = re.compile('<!--.*?-->', re.DOTALL)
+x8 = ('.html', '.htm', '.css')
+y8 = 8
+v1 = tuple[Path, bool, str | None]
+def z8(a9):
+    try:
+        z = a9.read_text(encoding='utf-8', errors='ignore')
+        t6 = w8.sub('', z)
+        if t6 != z:
+            a9.write_text(t6, encoding='utf-8', errors='ignore')
+            return (a9, True, None)
+        return (a9, False, None)
+    except Exception as exc:
+        return (a9, False, str(exc))
+def b9(c9, x6):
+    if not c9.exists():
+        raise ValueError(f'Directory {c9} does not exist')
+    for a9 in c9.rglob('*'):
+        if a9.is_file() and a9.suffix.lower() in x6:
+            yield a9
+def d9(ext):
+    ext = ext.lower()
+    return ext if ext.startswith('.') else f'.{ext}'
+def e9():
+    e = argparse.ArgumentParser(description='Remove HTML comments from HTML and CSS files recursively.')
+    e.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    e.add_argument('-e', '--extensions', nargs='+', default=list(x8), help='File extensions to process (default: .html .htm .css)')
+    return e
+def i1(f9=None):
+    e = e9()
+    w3 = e.parse_args(list(f9) if f9 is not None else None)
+    x6 = {d9(ext) for ext in w3.extensions}
+    c9 = Path(w3.directory)
+    try:
+        k1 = list(b9(c9, x6))
+    except ValueError as exc:
+        logger.error('{}', exc)
+        return 1
+    if not k1:
+        logger.info('No files found with extensions: {}', ', '.join(x6))
+        return 0
+    logger.info('Found {} files to process', len(k1))
+    logger.info('Using {} workers', y8)
+    logger.info('{}', '-' * 40)
+    g9 = 0
+    h9 = 0
+    try:
+        with Pool(processes=y8) as o1:
+            l5 = [(a9, o1.apply_async(z8, (a9,))) for a9 in k1]
+            for a9, m5 in l5:
+                _, i9, r1 = m5.get()
+                try:
+                    j9 = a9.relative_to(c9)
+                except ValueError:
+                    j9 = a9
+                if r1:
+                    logger.error('ERROR: {} - {}', j9, r1)
+                    h9 += 1
+                elif i9:
+                    logger.info('UPDATED: {}', j9)
+                    g9 += 1
+    except Exception as exc:
+        logger.exception('Fatal error: {}', exc)
+        return 1
+    logger.info('{}', '-' * 40)
+    logger.info('Summary:')
+    logger.info('  Total files processed: {}', len(k1))
+    logger.info('  Files updated: {}', g9)
+    logger.info('  Errors: {}', h9)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+# --- File: rmhtml.py ---
+import re
+import sys
+from pathlib import Path
+from dh import cprint, fsz, get_files, gsz, mpf3
+k9 = 8
+def d1(g):
+    g = Path(g)
+    l9 = gsz(g)
+    src = g.read_text(encoding='utf-8')
+    m9 = re.compile('<!--[\\s\\S]*?-->', re.MULTILINE)
+    out = m9.sub('', src)
+    if out != src:
+        n9 = out.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+        g.write_text(n9, encoding='utf-8')
+    o9 = gsz(g)
+    print(f'[OK] {g.name} ', end='')
+    p9 = l9 - o9
+    cprint(f'{fsz(p9)}', 'cyan')
+def i1():
+    cwd = Path.cwd()
+    l9 = gsz(cwd)
+    w3 = sys.argv[1:]
+    k1 = [Path(f) for f in w3] if w3 else get_files(cwd, ext=['.html', '.htm', '.xml'])
+    mpf3(d1, k1)
+    q9 = l9 - gsz(cwd)
+    print(f'space saved : {fsz(q9)}')
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+# --- File: rmjsts.py ---
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+def r9(z):
+    a3 = []
+    i = 0
+    c7 = False
+    s9 = None
+    while i < len(z):
+        if z[i] in ('"', "'", '`') and (i == 0 or z[i - 1] != '\\'):
+            if not c7:
+                c7 = True
+                s9 = z[i]
+                a3.append(z[i])
+                i += 1
+            elif z[i] == s9:
+                c7 = False
+                s9 = None
+                a3.append(z[i])
+                i += 1
+            else:
+                a3.append(z[i])
+                i += 1
+        elif c7:
+            a3.append(z[i])
+            i += 1
+        elif i + 1 < len(z) and z[i:i + 2] == '//':
+            while i < len(z) and z[i] != '\n':
+                i += 1
+            if i < len(z):
+                a3.append('\n')
+                i += 1
+        elif i + 1 < len(z) and z[i:i + 2] == '/*':
+            i += 2
+            while i + 1 < len(z):
+                if z[i:i + 2] == '*/':
+                    i += 2
+                    break
+                if z[i] == '\n':
+                    a3.append('\n')
+                i += 1
+        else:
+            a3.append(z[i])
+            i += 1
+    return ''.join(a3)
+def d1(g):
+    try:
+        z = g.read_text(encoding='utf-8')
+        p3 = r9(z)
+        g.write_text(p3, encoding='utf-8')
+        return None
+    except Exception as e:
+        return f'Error processing {g}: {e}'
+def i1():
+    if len(sys.argv) > 1:
+        w6 = [Path(arg) for arg in sys.argv[1:]]
+    else:
+        w6 = [Path.cwd()]
+    t9 = []
+    for g in w6:
+        if g.is_file():
+            if g.suffix in ('.js', '.ts', '.jsx', '.tsx'):
+                t9.append(g)
+        elif g.is_dir():
+            for ext in ('*.js', '*.ts', '*.jsx', '*.tsx'):
+                t9.extend(g.rglob(ext))
+    with ThreadPoolExecutor() as u9:
+        i5 = u9.map(d1, t9)
+    y3 = [e for e in i5 if e]
+    if y3:
+        for r1 in y3:
+            print(r1, file=sys.stderr)
+        sys.exit(1)
+    print(f'Processed {len(t9)} file(s)')
+if __name__ == '__main__':
+    raise SystemExit(i1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

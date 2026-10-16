@@ -1,0 +1,80 @@
+# filename: pytokei.py
+from dh import is_binary;f={'python':['.py','.pyi'],'javascript':['.js'],'java':['.java'],'c':['.c'],'cpp':['.cpp','.h'],'html':['.html'],'css':['.css'],'ruby':['.rb'],'php':['.php'],'bash':['.sh','.bash']};d={'python':'^\\s*#','javascript':'^\\s*//','java':'^\\s*//','c':'^\\s*//','cpp':'^\\s*//','html':'^\\s*<!--','css':'^\\s*/\\*','ruby':'^\\s*#','php':'^\\s*//'};c={'python':['#!/usr/bin/env python','#!/usr/bin/python3','#!/bin/python3'],'bash':['#!/bin/bash'],'ruby':['#!/usr/bin/ruby','#!/bin/ruby'],'perl':['#!/usr/bin/perl'],'node':['#!/usr/bin/node','#!/bin/node'],'sh':['#!/bin/sh']}
+def a(B):if is_binary(B):print(f'{B} is binary');return None
+    if '.git' in str(B):return None
+    try:with w(B).open(encoding='utf-8') as y:n=y.readline().strip()
+            for z,s in c.items():for t in s:if n.startswith(t):return z
+    except Exception as e:print(f'Error reading file {B}:{e}')
+    return None
+def b(B,z):if '.git' in str(B):return (0,0,0)
+    if is_binary(B):print(f'{B} is binary');return (0,0,0)
+    with w(B).open(encoding='utf-8') as y:l=0;i=0;k=0
+        for A in y:if not A.strip():k+=1
+            elif C.match(d.get(z,''),A):i+=1
+            else:l+=1
+    return (l,i,k)
+def h(q='.'):v={'total':{'code':0,'comments':0,'blank':0},'languages':{z:{'code':0,'comments':0,'blank':0} for z in f}};p=w(q)
+    for B in p.rglob('*'):if not B.is_file():continue
+        g=B.suffix.lower()
+        if not g:z=a(str(B))
+            if z:x,r,u=b(str(B),z);v['languages'][z]['code']+=x;v['languages'][z]['comments']+=r;v['languages'][z]['blank']+=u;v['total']['code']+=x;v['total']['comments']+=r;v['total']['blank']+=u;continue
+        for z,m in f.items():if g in m:x,r,u=b(str(B),z);v['languages'][z]['code']+=x;v['languages'][z]['comments']+=r;v['languages'][z]['blank']+=u;v['total']['code']+=x;v['total']['comments']+=r;v['total']['blank']+=u;break
+    return v
+def j(v):print(f"Total lines of code:{v['total']['code']}");print(f"Total comment lines:{v['total']['comments']}");print(f"Total blank lines:{v['total']['blank']}\n");print('Language-based statistics:')
+    for z,o in v['languages'].items():if o['code']>0:print(f'\n{z.capitalize()}:');print(f"  Code lines:{o['code']}");print(f"  Comment lines:{o['comments']}");print(f"  Blank lines:{o['blank']}")
+if __name__=='__main__':v=h();j(v)
+# filename: pytokei2.py
+from dh import is_binary
+def b(w,u):if '.git' in str(w):return (0,0,0)
+    if is_binary(str(w)):print(f'{w} is binary');return (0,0,0)
+    with w.open(encoding='utf-8') as t:j=0;g=0;i=0
+        for v in t:if not v.strip():i+=1
+            elif x.match(c.get(u,''),v):g+=1
+            else:j+=1
+    return (j,g,i)
+def f(n='.'):q={'total':{'code':0,'comments':0,'blank':0},'languages':{u:{'code':0,'comments':0,'blank':0} for u in d}};m=r(n)
+    for w in m.rglob('*'):if not w.is_file():continue
+        e=w.suffix.lower()
+        if not e:u=a(str(w))
+            if u:s,o,p=b(w,u);q['languages'][u]['code']+=s;q['languages'][u]['comments']+=o;q['languages'][u]['blank']+=p;q['total']['code']+=s;q['total']['comments']+=o;q['total']['blank']+=p;continue
+        for u,k in d.items():if e in k:s,o,p=b(w,u);q['languages'][u]['code']+=s;q['languages'][u]['comments']+=o;q['languages'][u]['blank']+=p;q['total']['code']+=s;q['total']['comments']+=o;q['total']['blank']+=p;break
+    return q
+def h(q):for l in q['languages'].values():l['code']>0
+if __name__=='__main__':q=f();h(q)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

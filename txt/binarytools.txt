@@ -1,0 +1,179 @@
+# filename: binortxt.py
+from dh import get_files,is_binary,mpf3;h=e.cwd();b=e(f'{h}/binary');b.mkdir(exist_ok=True)
+def a(g):g=e(g)
+    if is_binary(g):c=b/g.name;g.rename(c)
+def f():d=get_files(h);mpf3(a,d)
+if __name__=='__main__':raise SystemExit(f())
+# filename: binsanity.py
+from binaryornot import is_binary;from dh import should_skip
+def t(A):h=set();A=M(A)
+    if A.is_dir():for D,w,r in E(A,topdown=True):o=M(D)
+            for C in list(w):s=o/C;g=s.resolve()
+                if should_skip(s) or g in h:w.remove(C)
+                h.add(g)
+            for y in r:O=M(D)/y
+                if not should_skip(O):yield O
+    else:yield A
+def f(O):return O.is_file() and O.stat().st_mode&73!=0
+def K(O):if not is_binary(str(O)):return False
+    try:J=O.read_bytes()[:4]
+        if J[:4]==b'\x7fELF':return True
+        if J[:2]==b'#!':return False
+    except OSError:pass
+    return False
+def b(p):v=[]
+    try:for O in t(p):if '.git' in O.parts or O.is_symlink():continue
+            if O.is_file() and f(O) and K(O):v.append(O)
+    except PermissionError:pass
+    return v
+def d(O):u=['--help','-h','--version','-v','--info']
+    for B in u:try:L=n.run([str(O),B],capture_output=True,text=True,timeout=2)
+            if L.stderr:j=L.stderr.lower()
+                if any((G in j for G in ['error while loading shared libraries','cannot open shared object file','no such file','not found','failed to load'])):return (O,L.stderr.strip()[:200])
+            if L.returncode==0:return (O,None)
+        except n.TimeoutExpired:return (O,None)
+        except FileNotFoundError:return (O,'File not found')
+        except PermissionError:return (O,'Permission denied')
+        except OSError as e:if 'exec format error' in str(e):return (O,'Exec format error (wrong architecture)')
+            return (O,str(e))
+    try:L=n.run([str(O)],capture_output=True,text=True,timeout=1)
+        if L.stderr:j=L.stderr.lower()
+            if any((G in j for G in ['error while loading shared libraries','cannot open shared object file','no such file'])):return (O,L.stderr.strip()[:200])
+        return (O,None)
+    except n.TimeoutExpired:return (O,None)
+    except Exception as e:return (O,str(e)[:200])
+def N():m=M.home()/'tmp';m.mkdir(exist_ok=True);k=m/'err';P=M.cwd();v=b(P)
+    if not v:print('No executable binaries found in current directory');k.write_text('No executable binaries found in current directory\n');return
+    print(f'Found {len(v)} binaries to test');print('Testing binaries in parallel...');c=[]
+    with l.futures.ThreadPoolExecutor(max_workers=Q.cpu_count()) as x:a={x.submit(d,H):H for H in v}
+        for i,I in enumerate(l.futures.as_completed(a),1):H=a[I]
+            try:O,q=I.result()
+                if q:c.append((O,q));print(f'  [{i}/{len(v)}] ❌ {H.name}-FAILED')
+                else:print(f'  [{i}/{len(v)}] ✅ {H.name}-OK')
+            except Exception as e:c.append((H,f'Test exception:{str(e)[:100]}'));print(f'  [{i}/{len(v)}] ⚠️ {H.name}-ERROR')
+    F=P/'err';F.mkdir(exist_ok=True)
+    for O,_ in c:z=F/O.name;O.rename(z)
+    k.write_text(f"Binary Analysis Results\nDirectory:{P}\nTotal binaries tested:{len(v)}\nFailed binaries:{len(c)}\n{'='*40}\n\n"+('\n'.join((f"Binary:{O}\nError:{q}\n{'-'*40}" for O,q in c)) if c else '✓ All binaries tested successfully!\n'));print('\n'+'='*35);print(f'Failed:{len(c)}');print(f'Success:{len(v)-len(c)}')
+    if c:for O,q in c:print(f'  • {O.name}');print(f'    → {q[:100]}')
+    else:print('\n✅ All binaries are working correctly!');print(f'Report written to:{k}')
+    print('-'*40)
+if __name__=='__main__':try:raise SystemExit(N())
+    except KeyboardInterrupt:print('\n\nScan interrupted by user')
+    except Exception as e:print(f'\nUnexpected error:{e}')
+# filename: soverify.py
+from dh import cprint,get_files;from loguru import logger;logger.remove();logger.add('/data/data/com.termux/files/home/tmp/apps/soverify.log')
+class c:def __init__(self,r=False):self.verbose=r;self.platform=G.platform
+    def E(self,p,v='DEBUG'):if self.verbose:getattr(logger,v.lower())(f'[CTYPES] {p}')
+    def d(self,B):if not B.exists():return (False,'File does not exist')
+        if not B.is_file():return (False,'Not a regular file')
+        try:s.CDLL(str(B),use_errno=True);D=s.get_errno()
+            if D:self.log(f'Warning:errno set to {D} for {B.name}')
+            return (True,'ok')
+        except OSError as e:l=f'OSError:{e}';self.log(f'Failed to load {B.name}:{l}','ERROR');return (False,l)
+        except Exception as e:l=f'{type(e).__name__}:{e}';self.log(f'Failed to load {B.name}:{l}','ERROR');return (False,l)
+    def a(self,B):n,F=self.verify_so_file(B);i={'can_load':n,'message':F,'has_symbols':False,'symbol_count':0}
+        if not n:return (False,i)
+        try:t=k.run(['nm',str(B)],capture_output=True,timeout=10,text=True)
+            if t.returncode==0:w=[z for z in t.stdout.split('\n') if z.strip()];i['symbol_count']=len(w);i['has_symbols']=len(w)>0;self.log(f'Found {len(w)} symbols in {B.name}')
+        except FileNotFoundError:self.log("'nm' command not found. Install binutils for symbol analysis",'WARNING')
+        except k.TimeoutExpired:self.log(f'Symbol extraction timed out for {B.name}','WARNING')
+        except Exception as e:self.log(f'Could not extract symbols from {B.name}:{e}','ERROR')
+        return (n,i)
+def b(B):try:o=c();q,p=o.verify_so_file(B)
+        if q:logger.debug(f'✓ {B.name}:Valid');return True
+        logger.error(f'✗ {B.name}:{p}');cprint(f'  ✗ {B}:{p}','red');return False
+    except Exception as e:logger.error(f'✗ {B.name}:Unexpected error-{e}');cprint(f'  ✗ {B}:Unexpected error-{e}','red');return False
+def f(y):if not y:return get_files(x.cwd(),ext=['.so'])
+    u=[]
+    for C in y:B=x(C)
+        if B.is_file():u.append(B)
+        elif B.is_dir():u.extend(get_files(B,ext=['.so']))
+        else:cprint(f'Warning:{B} does not exist','yellow')
+    return u
+def A():u=f(G.argv[1:])
+    if not u:cprint('No .so files found to verify','yellow');return
+    print(f'\nVerifying {len(u)} shared object file(s)...\n');j=0;g=0;h=[]
+    for B in u:t=b(B)
+        if t is True:j+=1
+        elif t is False:g+=1;h.append(B)
+    print(f"\n{'='*40}");print('VERIFICATION SUMMARY');print(f"{'='*40}");print(f'Total files checked:{len(u)}');print(f'✓ Valid files:{j}');print(f'✗ Files with errors:{g}')
+    if h:print(f"\n{'='*40}");print('FILES WITH ERRORS:');print(f"{'='*40}")
+        for B in h:print(f'  ✗ {B}')
+    print(f'Verification complete:{j} valid,{g} errors out of {len(u)} files')
+    if g>0:G.exit(1)
+if __name__=='__main__':m=s.pythonapi.PyGILState_Ensure()
+    try:raise SystemExit(A())
+    except KeyboardInterrupt:cprint('\nVerification interrupted by user','yellow');G.exit(130)
+    except Exception as e:logger.error(f'Fatal error:{e}');cprint(f'Fatal error:{e}','red');G.exit(1)
+    finally:s.pythonapi.PyGILState_Release(m)
+    x('/sdcard/soverify.log').unlink()
+# filename: stripsofiles.py
+class h:@staticmethod
+    def a(r,m=1.0,z=False,C=True):print(f'\nStripping .so files larger than {m} MB...');u=list(D(r).rglob('*.so*'));s=m*1024*1024;k=[f for f in u if f.stat().st_size>=s];v=g(z=z,verify_ctypes=C)
+        for y in k:v.process_file(y)
+        return v.stats
+    @staticmethod
+    def c(r,p=None,z=False,C=True):if p is None:pass
+        print(f'\nStripping .so files with extensions:{p}');u=[]
+        for H in p:u.extend(D(r).rglob(f'*{H}'))
+        u=list(set(u));v=g(z=z,verify_ctypes=C)
+        for y in u:v.process_file(y)
+        return v.stats
+    @staticmethod
+    def b(r,d=None,z=False,C=True):if d is None:d=['test','debug','profile']
+        print(f'\nStripping .so files (excluding:{d})...');u=[f for f in D(r).rglob('*.so*') if not any((x in f.name for x in d))];v=g(z=z,verify_ctypes=C)
+        for y in u:v.process_file(y)
+        return v.stats
+    @staticmethod
+    def e(r,l=3,z=False,C=True):print(f'\nStripping with retry logic (max {l} attempts)...');u=list(D(r).rglob('*.so*'));v=g(z=z,verify_ctypes=C)
+        for y in u:for w in range(l):B=v.process_file(y)
+                if B['success']:break
+                if w<l-1:if z:print(f'  Retry {w+1}/{l-1}...')
+                    G.sleep(1)
+        return v.stats
+def F():A=t.ArgumentParser(description='Batch .so file stripping with ctypes verification');q=A.add_subparsers(dest='command',help='Command to run');n=q.add_parser('size',help='Strip by size threshold');n.add_argument('directory',nargs='?',default='.');n.add_argument('--min-mb',type=float,default=1.0,help='Minimum size in MB');n.add_argument('-v','--verbose',action='store_true');n.add_argument('--no-verify',action='store_true',help='Skip ctypes verification');o=q.add_parser('ext',help='Strip by extensions');o.add_argument('directory',nargs='?',default='.');o.add_argument('--extensions',nargs='+',default=['.so','.so.1','.so.6']);o.add_argument('-v','--verbose',action='store_true');o.add_argument('--no-verify',action='store_true',help='Skip ctypes verification');j=q.add_parser('exclude',help='Strip excluding patterns');j.add_argument('directory',nargs='?',default='.');j.add_argument('--patterns',nargs='+',default=['test','debug','profile']);j.add_argument('-v','--verbose',action='store_true');j.add_argument('--no-verify',action='store_true',help='Skip ctypes verification');i=q.add_parser('retry',help='Strip with retry');i.add_argument('directory',nargs='?',default='.');i.add_argument('--max-retries',type=int,default=3);i.add_argument('-v','--verbose',action='store_true');i.add_argument('--no-verify',action='store_true',help='Skip ctypes verification');E=A.parse_args()
+    if not E.command:A.print_help();return
+    C=not E.no_verify
+    if E.command=='size':h.strip_by_size_threshold(E.directory,E.min_mb,E.verbose,C)
+    elif E.command=='ext':h.strip_by_extension(E.directory,E.extensions,E.verbose,C)
+    elif E.command=='exclude':h.strip_exclude_patterns(E.directory,E.patterns,E.verbose,C)
+    elif E.command=='retry':h.strip_with_retry(E.directory,E.max_retries,E.verbose,C)
+if __name__=='__main__':raise SystemExit(F())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

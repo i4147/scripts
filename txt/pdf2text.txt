@@ -1,0 +1,57 @@
+# filename: pdf2text.py
+import PyPDF2
+def a(f):with i(f).open('rb') as j:g=PyPDF2.PdfReader(j);d=''
+        for h in range(len(g.pages)):k=g.pages[h];d+=k.extract_text()
+    return d
+def b(l,c):i(c).write_text(l,encoding='utf-8')
+if __name__=='__main__':if len(m.argv)!=2:print('Usage:python extract_pdf_text.py<pdf_filename>');m.exit(1)
+    f=m.argv[1];e=f.replace('.pdf','.txt');d=a(f);b(d,e);print(f'Text extracted and saved to {e}')
+# filename: pdftotxt.py
+import pdfplumber
+def a(g):g=d(g);i=1
+    with pdfplumber.open(g) as j:for f in j.pages:h=f.extract_text(encoding='utf-8');d(g).stem
+            if not d(c).exists():d(c).mkdir()
+            if i<10:b=f'{c}/{d(g).stem}00{i!s}.txt'
+            elif i<100 and i>=10:b=f'{c}/{d(g).stem}0{i!s}.txt'
+            else:b=f'{c}/{d(g).stem}{i!s}.txt'
+            d(b).write_text(h,encoding='utf-8');print(f'{b} created');i+=1
+def e():a(k.argv[1])
+if __name__=='__main__':raise SystemExit(e())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

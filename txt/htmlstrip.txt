@@ -1,0 +1,64 @@
+# filename: remove_tag.py
+from bs4 import BeautifulSoup
+def a(k,g):try:j=i(k).read_text(encoding='utf-8');l=BeautifulSoup(j,'html.parser')
+        for o in l.find_all(g):o.decompose()
+        i(k).write_text(str(l),encoding='utf-8');print(f'✅ Removed<{g}>from {k}')
+    except Exception as e:print(f'❌ Error processing {k}:{e}')
+def b(m,g):for h,_,c in p.walk(m):for f in c:if f.lower().endswith(('.html','.txt')):d=p.path.join(h,f);a(d,g)
+if __name__=='__main__':if len(n.argv)<2:print('Usage:python remove_tag.py tagname');n.exit(1)
+    g=n.argv[1];b(i.cwd(),g)
+# filename: rmeta.py
+from bs4 import BeautifulSoup;b=n.compile('<meta[^>]*>',n.IGNORECASE)
+def d(k):try:f=k.read_text(encoding='utf-8',errors='ignore');l=BeautifulSoup(f,'html.parser');h=l.find_all('meta')
+        if h:c=b.sub('',f)
+        if c!=f:k.write_text(c,encoding='utf-8');print(f'Removed meta tags from:{k}')
+        else:print(f'No meta tags found or removed in:{k}')
+    except Exception as e:print(f'Error processing {k}:{e}')
+def a(g):for j in g.rglob('*.html'):if j.is_file():d(j)
+if __name__=='__main__':m=i();print(f"Starting to remove meta tags from HTML files in '{m.resolve()}' and its subdirectories...\n");a(m);print('\nFinished processing. Meta tags have been removed from applicable HTML files.')
+# filename: strip_tags.py
+from dh import get_removed_lines,read_lines;b='-w' in j.argv
+if __name__=='__main__':l=g(j.argv[1]);c=l.read_text(encoding='utf-8');f=read_lines(l,ke=False);m=[]
+    for h in f:if '<:' in h or '>:' in h:continue
+        i=n.sub('<[^>]*>','',h);m.append(i)
+    a='\n'.join(m);d,e=get_removed_lines(c,a)
+    for k in d:print(f'-{k}')
+    if b:l.write_text(a,encoding='utf8')
+    print('file didnt updated.\n for update inplace rerun with-w arg')
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

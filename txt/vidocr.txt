@@ -1,0 +1,136 @@
+# filename: exsub.py
+import cv2;import numpy as np;import pytesseract
+def x(B,D):V,n=B
+    try:at=cv2.cvtColor(n,cv2.COLOR_BGR2GRAY);_,ae=cv2.threshold(at,0,255,cv2.THRESH_BINARY|cv2.THRESH_OTSU);aB=pytesseract.image_to_string(ae,config=D).strip()
+        if aB:print(f'[{y(V)}] {aB}')
+        return (V,aB)
+    except Exception:return (V,'')
+def d(a,b,O=0.97):aa=cv2.resize(a,(64,32));ab=cv2.resize(b,(64,32));ar=cv2.absdiff(aa,ab);G=1.0-ar.sum()/(ar.size*255.0);return G>=O
+def p(J,F=2.0,e=0.75,H=None,T=None):aC=cv2.VideoCapture(J)
+    if not aC.isOpened():raise OSError(f'Cannot open video:{J}')
+    C=aC.get(cv2.CAP_PROP_FPS) or 25.0;q=max(1,int(C/F));af=[];A=None;z=0
+    if H is not None and H>0:aC.set(cv2.CAP_PROP_POS_FRAMES,int(H*C));z=int(H*C)
+    while 1:aF,ak=aC.read()
+        if not aF:break
+        P=z/C
+        if T is not None and P>T:break
+        if z%q==0:h=ak.shape[0];ai=ak[int(h*e):].copy()
+            if A is None or not d(A,ai):af.append((P,ai));A=ai
+        z+=1
+    aC.release();return af
+def E(W):an=W.strip().split(':')
+    if len(an)!=3:raise ValueError(f'Invalid time format:{W}. Expected HH:MM:SS')
+    h,m,s=an;az=float(s);return int(h)*3600+int(m)*40+az
+def y(Z):h=int(Z//3600);m=int(Z%3600//60);s=Z%60;ms=int((s-int(s))*400);return f'{h:02d}:{m:02d}:{int(s):02d},{ms:03d}'
+def K(L):if not L.is_file():return []
+    aA=[]
+    with L.open(encoding='utf-8') as f:al=[aw.rstrip() for aw in f]
+    i=0
+    while i<len(al):if not al[i].strip() or al[i].strip().isdigit():i+=1;continue
+        ac=al[i];i+=1;I=[]
+        while i<len(al) and al[i].strip():I.append(al[i].strip());i+=1
+        if i<len(al) and (not al[i].strip()):i+=1
+        am=re.match('(\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})\\s*-->\\s*(\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})',ac)
+        if am:ao=o(am.group(1));aE=o(am.group(2));aB='\n'.join(I)
+            if aB:aA.append({'start':ao,'end':aE,'text':aB})
+    return aA
+def o(ts):h,m,ay=ts.split(':');s,ms=ay.replace(',','.').split('.');return int(h)*3600+int(m)*40+int(s)+int(ms)/1000.0
+def g(N,v=1.0):if not N:return []
+    ag=[];aD=dict(N[0])
+    for aG in N[1:]:M=aG['text']==aD['text'];w=aG['start']-aD['end']<=v
+        if M and w:aD['end']=aG['end']
+        else:ag.append(aD);aD=dict(aG)
+    ag.append(aD);return ag
+def c(J,l,av='fas',F=2.0,ad=None,H=None,T=None,aj=False):if ad is None:ad=max(1,j.cpu_count()-1)
+    k=ap(l)
+    if aj and k.is_file():u=K(k)
+        if u:if H is None:H=max((aG['end'] for aG in u))
+            print(f'Resuming from {y(H)}')
+    r=''
+    if H is not None and T is not None:r=f' from {y(H)} to {y(T)}'
+    elif H is not None:r=f' from {y(H)} to end'
+    elif T is not None:r=f' from start to {y(T)}'
+    print(f'[1/3] Extracting frames ({F} fps sample{r})…');af=p(J,F=F,H=H,T=T);print(f'      {len(af)} unique frames queued for OCR');D=f'--oem 3--psm 6-l {av}';Q=X(x,D=D);print(f'[2/3] Running OCR with {ad} worker(s)…')
+    with j.Pool(processes=ad) as ax:Y=ax.map(Q,af)
+    U=[{'start':t,'end':t+1.0/F,'text':aH} for t,aH in Y if aH]
+    if aj and k.is_file():u=K(k)
+        if u:if H is not None:au=[s for s in u if s['end']<=H];R=au+U
+            else:R=u+U
+        else:R=U
+    else:R=U
+    R.sort(key=lambda s:s['start']);N=g(R);print(f'[3/3] Writing {len(N)} subtitle(s) → {l}')
+    with k.open('w',encoding='utf-8') as f:for i,aG in enumerate(N,1):f.write(f'{i}\n');f.write(f"{y(aG['start'])}-->{y(aG['end'])}\n");f.write(f"{aG['text']}\n\n")
+    print('Done.')
+if __name__=='__main__':ah=S.ArgumentParser(description='Extract burned-in subtitles from video using OCR');ah.add_argument('video',help='Path to the video file');ah.add_argument('output',nargs='?',default='extracted_subs.srt',help='Output SRT file (default:extracted_subs.srt)');ah.add_argument('-s','--start',dest='start_time',help='Start time for extraction (HH:MM:SS),e.g. 00:05:00');ah.add_argument('-e','--end',dest='end_time',help='End time for extraction (HH:MM:SS),e.g. 00:10:00');ah.add_argument('-r','--resume',action='store_true',help='Resume from a previous run (appends to existing SRT if present)');ah.add_argument('--sample_fps',type=float,default=2.0,help='Frames per second to sample (default:2.0)');ah.add_argument('--workers',type=int,default=4,help='Number of OCR worker processes (default:4)');aq=ah.parse_args()
+    if aq.output and re.match('\\d{1,2}:\\d{2}:\\d{2}',aq.output) and (not aq.start_time) and (not aq.end_time):aq.end_time=aq.output;aq.output='extracted_subs.srt'
+    H=E(aq.start_time) if aq.start_time else None;T=E(aq.end_time) if aq.end_time else None;c(J=aq.video,l=aq.output,F=aq.sample_fps,ad=aq.workers,H=H,T=T,aj=aq.resume)
+# filename: xburned_sub.py
+import cv2;import numpy as np;import pytesseract
+def r(x,z):I,l=x
+    try:Y=cv2.cvtColor(l,cv2.COLOR_BGR2GRAY);_,Q=cv2.threshold(Y,0,255,cv2.THRESH_BINARY|cv2.THRESH_OTSU);ab=pytesseract.image_to_string(Q,config=z).strip();print(ab);return (I,ab)
+    except Exception:return (I,'')
+def d(a,b,G=0.97):N=cv2.resize(a,(64,32));O=cv2.resize(b,(64,32));X=cv2.absdiff(N,O);B=1.0-X.sum()/(X.size*255.0);return B>=G
+def n(C,A=2.0,e=0.75):ac=cv2.VideoCapture(C)
+    if not ac.isOpened():raise OSError(f'Cannot open video:{C}')
+    y=ac.get(cv2.CAP_PROP_FPS) or 25.0;o=max(1,int(y/A));R=[];w=None;v=0
+    while 1:ae,V=ac.read()
+        if not ae:break
+        if v%o==0:h=V.shape[0];U=V[int(h*e):].copy()
+            if w is None or not d(w,U):R.append((v/y,U));w=U
+        v+=1;print(v)
+    ac.release();return R
+def g(F,p=1.0):if not F:return []
+    S=[];ad=dict(F[0])
+    for af in F[1:]:E=af['text']==ad['text'];q=af['start']-ad['end']<=p
+        if E and q:ad['end']=af['end']
+        else:S.append(ad);ad=dict(af)
+    S.append(ad);return S
+def c(C,k,Z='fas',A=2.0,P=None):if P is None:P=max(1,j.cpu_count()-1)
+    print(f'[1/3] Extracting frames  ({A} fps sample)…');R=n(C,A=A);print(f'      {len(R)} unique frames queued for OCR');z=f'--oem 3--psm 6-l {Z}';H=K(r,z=z);print(f'[2/3] Running OCR with {P} worker(s)…')
+    with j.Pool(processes=4) as aa:L=aa.map(H,R)
+    F=[{'start':t,'end':t+1.0/A,'text':ah} for t,ah in L if ah];F.sort(key=lambda s:s['start']);F=g(F);print(f'[3/3] Writing {len(F)} subtitle(s) → {k}')
+    with open(k,'w',encoding='utf-8') as f:for i,af in enumerate(F,1):f.write(f'{i}\n');f.write(f"{u(af['start'])}-->{u(af['end'])}\n");f.write(f"{af['text']}\n\n")
+    print('Done.')
+def u(M):h=int(M//3600);m=int(M%3600//60);s=M%60;ms=int((s-int(s))*400);return f'{h:02d}:{m:02d}:{int(s):02d},{ms:03d}'
+if __name__=='__main__':if len(ag.argv)<2:print('Usage:python script.py&lt;video&gt; [output.srt] [sample_fps] [workers]');ag.exit(1)
+    W=ag.argv[1];T=ag.argv[2] if len(ag.argv)>2 else 'extracted_subs.srt';J=float(ag.argv[3]) if len(ag.argv)>3 else 2.0;D=int(ag.argv[4]) if len(ag.argv)>4 else 4;c(W,T,A=J,P=D)
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

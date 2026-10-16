@@ -1,0 +1,723 @@
+# --- File: avif2jpg.py ---
+from pathlib import Path
+from PIL import Image
+a = Path('avif_images')
+b = Path('jpg_images')
+b.mkdir(exist_ok=True, parents=True)
+if a.exists() and a.is_dir():
+    for c in a.iterdir():
+        if c.is_file() and c.suffix.lower() in ('.avif', '.aviff'):
+            d = b / (c.stem + '.jpg')
+            with x3.open(c) as img:
+                img = img.convert('RGB')
+                img.save(d, 'JPEG', quality=95)
+
+# --- File: gif2jpg.py ---
+import logging
+import sys
+from pathlib import Path
+import numpy as np
+from joblib import Parallel, delayed
+from PIL import Image, UnidentifiedImageError
+e = Path('.')
+f = 90
+g = 8.0
+h = 0.005
+i = -1
+logging.basicConfig(level=logging.INFO, format='%(asctime)s  %(levelname)-8s  %(message)s', datefmt='%H:%M:%S', stream=sys.stdout)
+log = logging.getLogger(__name__)
+def j(k, l):
+    if k.shape != l.shape:
+        return False
+    m = np.abs(k.astype(np.int16) - l.astype(np.int16))
+    n = m.mean()
+    o = (m > 10).any(axis=-1).mean()
+    return n < g and o < h
+def p(q):
+    r = []
+    try:
+        with x3.open(q) as img:
+            if not hasattr(img, 'n_frames'):
+                s = x3.new('RGB', img.size, (255, 255, 255))
+                s.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[3] if img.mode in ('RGBA', 'P') else None)
+                r.append(np.asarray(s))
+                return r
+            s = x3.new('RGB', img.size, (255, 255, 255))
+            t = None
+            for u in range(img.n_frames):
+                img.seek(u)
+                v = img.info.get('disposal', 0)
+                if v == 3 and t is not None:
+                    s = t.copy()
+                elif v == 2:
+                    s = x3.new('RGB', img.size, (255, 255, 255))
+                t = s.copy()
+                w = img.convert('RGBA')
+                s.paste(w, mask=w.split()[3])
+                arr = np.asarray(s.convert('RGB'))
+                if r and j(r[-1], arr):
+                    log.debug('  Skipping near-duplicate frame %d in %s', u, q.name)
+                    continue
+                r.append(arr)
+    except (UnidentifiedImageError, OSError) as exc:
+        log.error('Cannot open %s: %s', q, exc)
+    return r
+def x(q):
+    r = p(q)
+    if not r:
+        log.warning('No usable frames in %s', q)
+        return (q, 0, 0)
+    y = 0
+    try:
+        with x3.open(q) as z:
+            y = getattr(z, 'n_frames', 1)
+    except OSError:
+        pass
+    a1 = q.stem
+    b1 = q.parent
+    c1 = len(str(len(r)))
+    d1 = 0
+    for idx, arr in enumerate(r):
+        if len(r) == 1:
+            e1 = b1 / f'{a1}.jpg'
+        else:
+            e1 = b1 / f'{a1}_frame{idx:0{c1}d}.jpg'
+        if e1.exists() and e1.stat().st_mtime >= q.stat().st_mtime:
+            log.debug('  Up-to-date, skipping: %s', e1.name)
+            d1 += 1
+            continue
+        img = x3.fromarray(arr, mode='RGB')
+        try:
+            img.save(e1, format='JPEG', quality=f, optimize=True)
+            d1 += 1
+        except OSError as exc:
+            log.error('Failed to save %s: %s', e1, exc)
+    log.info('%-50s  %d/%d frames kept → %d JPG(s)', str(q), len(r), y, d1)
+    return (q, y, d1)
+def f1():
+    g1 = sorted(e.rglob('*.gif'))
+    g1 += sorted(e.rglob('*.GIF'))
+    h1 = set()
+    i1 = []
+    for p in g1:
+        r = p.resolve()
+        if r not in h1:
+            h1.add(r)
+            i1.append(p)
+    if not i1:
+        log.info('No GIF files found under %s', e.resolve())
+        return
+    log.info('Found %d GIF file(s). Starting conversion with %s workers…', len(i1), 'all CPUs' if i == -1 else str(i))
+    j1 = Parallel(n_jobs=i, backend='loky', verbose=0)((delayed(x)(p) for p in i1))
+    k1 = len(j1)
+    l1 = sum((r[1] for r in j1))
+    m1 = sum((r[2] for r in j1))
+    log.info('Done. %d GIF(s) processed — %d/%d frames saved as JPG.', k1, m1, l1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: heif2jpg.py ---
+from pathlib import Path
+import pillow_heif as ph
+from dh import gsz
+from fastwalk import walk_files
+def n1(o1):
+    o1 = Path(o1)
+    if not o1.exists():
+        return False
+    print(f'[OK] {o1.name}')
+    img = ph.open_heif(o1)
+    p1 = o1.with_suffix('.jpg')
+    img.save(p1)
+    return True
+def f1():
+    cwd = Path().cwd()
+    q1 = gsz(cwd)
+    r1 = []
+    for pth in walk_files(cwd):
+        o1 = Path(pth)
+        if o1.is_file() and o1.suffix in {'.heif', '.heic'}:
+            r1.append(o1)
+    s1 = Pool(8)
+    s1.imap_unordered(n1, r1)
+    s1.close()
+    s1.join()
+    t1 = gsz(cwd)
+    print(f'{fornat_size(t1 - q1)}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: htm2png.py ---
+import cairosvg
+from weasyprint import HTML
+def u1(v1, d, w1=None):
+    if v1.startswith(('<', '<!DOCTYPE')):
+        x1 = HTML(string=v1)
+    else:
+        x1 = HTML(filename=v1)
+    y1 = x1.write_pdf()
+    cairosvg.svg2png(bytestring=y1, write_to=d, output_width=w1, scale=2.0)
+    print(f'PNG saved to: {d}')
+
+# --- File: html2png.py ---
+import os
+from pathlib import Path
+def z1(v1, d, dpi=150):
+    if v1.startswith(('<', '<!DOCTYPE')):
+        x1 = HTML(string=v1)
+    else:
+        x1 = HTML(filename=v1)
+    y1 = x1.write_pdf()
+    from pdf2image import convert_from_bytes
+    a2 = convert_from_bytes(y1, dpi=dpi)
+    if len(a2) > 1:
+        b2 = sum((img.height for img in a2))
+        c2 = max((img.width for img in a2))
+        d2 = x3.new('RGB', (c2, b2), (255, 255, 255))
+        e2 = 0
+        for img in a2:
+            d2.paste(img, (0, e2))
+            e2 += img.height
+        d2.save(d, 'PNG')
+    else:
+        a2[0].save(d, 'PNG')
+    print(f'Full page PNG saved to: {d}')
+def f2(a, b, w1=1200):
+    os.makedirs(b, exist_ok=True)
+    for g2 in Path(a).glob('*.html'):
+        h2 = g2.stem + '.png'
+        d = os.path.join(b, h2)
+        z1(str(g2), d, width=w1)
+f2('html_files/', 'png_output/', width=1600)
+
+# --- File: neg.py ---
+import argparse
+import logging
+import sys
+from functools import partial
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from PIL import Image
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+i2 = logging.getLogger(__name__)
+j2 = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp', '.gif'}
+def k2(o1):
+    return o1.suffix.lower() in j2
+def l2(m2, n2=False):
+    try:
+        if n2:
+            print(f'[DRY RUN] Would invert: {m2}')
+            return (m2, True)
+        with x3.open(m2) as img:
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            o2 = img.point(lambda p: 255 - p)
+            o2.save(m2, quality=95, optimize=True)
+        print(f'✓ Inverted: {m2}')
+        return (m2, True)
+    except Exception as e:
+        i2.error(f'✗ Failed to process {m2}: {e}')
+        return (m2, False)
+def p2(q2, r2=True):
+    if r2:
+        s2 = [f for f in q2.rglob('*') if f.is_file() and k2(f)]
+    else:
+        s2 = [f for f in q2.iterdir() if f.is_file() and k2(f)]
+    return sorted(s2)
+def f1():
+    t2 = argparse.ArgumentParser(description='Convert images to negative (invert colors) recursively in place', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s ./photos                 # Invert all images recursively in ./photos\n  %(prog)s ./images -n 4            # Use 4 parallel processes\n  %(prog)s ./images --dry-run       # Preview what would be processed\n  %(prog)s ./images --no-recursive  # Only process current directory\n        ')
+    t2.add_argument('directory', type=str, help='Directory containing images to invert')
+    t2.add_argument('-n', '--processes', type=int, default=None, help='Number of parallel processes (default: CPU count)')
+    t2.add_argument('--no-recursive', action='store_true', help='Do not process subdirectories recursively')
+    t2.add_argument('--dry-run', action='store_true', help='Show what would be processed without actually modifying files')
+    t2.add_argument('--extensions', type=str, nargs='+', help='Additional file extensions to process (e.g., .jpg .png)')
+    t2.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
+    u2 = t2.parse_args()
+    if u2.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    q2 = Path(u2.directory)
+    if not q2.exists():
+        i2.error(f'Directory does not exist: {q2}')
+        sys.exit(1)
+    if not q2.is_dir():
+        i2.error(f'Path is not a directory: {q2}')
+        sys.exit(1)
+    if u2.extensions:
+        for ext in u2.extensions:
+            if not ext.startswith('.'):
+                ext = '.' + ext
+            j2.add(ext.lower())
+    r2 = not u2.no_recursive
+    print(f"Scanning {('recursively' if r2 else 'non-recursively')} in: {q2}")
+    s2 = p2(q2, r2)
+    if not s2:
+        i2.warning('No image files found to process')
+        sys.exit(0)
+    print(f'Found {len(s2)} image(s) to process')
+    v2 = u2.processes or cpu_count()
+    print(f'Using {v2} process(es)')
+    if u2.dry_run:
+        print('DRY RUN MODE - No files will be modified')
+    w2 = partial(l2, dry_run=u2.dry_run)
+    with Pool(processes=v2) as s1:
+        j1 = s1.map(w2, s2)
+    x2 = sum((1 for _, y2 in j1 if y2))
+    z2 = len(j1) - x2
+    print(f"\n{'=' * 40}")
+    print('Processing complete!')
+    print(f'✓ Successful: {x2}')
+    if z2 > 0:
+        i2.warning(f'✗ Failed: {z2}')
+    print(f'Total processed: {len(j1)}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: png2jpg.py ---
+import sys
+from pathlib import Path
+from dh import get_files, mpf3
+from PIL import Image
+def n1(o1):
+    o1 = Path(o1)
+    img = x3.open(o1).convert('RGB')
+    a3 = o1.with_suffix('.jpg')
+    img.save(a3, 'JPEG')
+    o1.unlink()
+    print(f'Converted {o1} to {a3} and deleted the original PNG.')
+if __name__ == '__main__':
+    cwd = Path.cwd()
+    u2 = sys.argv[1:]
+    r1 = [Path(p) for p in u2] if u2 else get_files(cwd, ext=['.png', '.PNG'])
+    if len(r1) == 1:
+        n1(r1[0])
+        sys.exit(0)
+    mpf3(n1, r1)
+
+# --- File: pngtojpg.py ---
+from pathlib import Path
+from PIL import Image
+for b3 in Path('.').rglob('*.png'):
+    if b3.is_file():
+        a3 = b3.with_suffix('.jpg')
+        try:
+            img = x3.open(b3).convert('RGB')
+            img.save(a3, 'JPEG')
+            b3.unlink()
+            print(f'Converted and deleted: {b3} -> {a3}')
+        except Exception as e:
+            print(f'Failed to convert {b3}: {e}')
+
+# --- File: svg2png.py ---
+from io import BytesIO
+from pathlib import Path
+import cairosvg
+from dh import get_files, mpf3
+from PIL import Image
+def n1(o1):
+    o1 = Path(o1)
+    c3 = o1.with_suffix('.png')
+    try:
+        with o1.open('rb') as d3:
+            e3 = BytesIO(d3.read())
+            f3 = BytesIO()
+            cairosvg.svg2png(bytestring=e3.getvalue(), write_to=f3)
+            f3.seek(0)
+            img = x3.open(f3)
+            img.save(c3)
+    except:
+        pass
+def f1():
+    cwd = Path.cwd()
+    r1 = get_files(cwd, ext=['.svg'])
+    mpf3(n1, r1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: to_jpg.py ---
+import sys
+from pathlib import Path
+from dh import cprint, fsz, get_files, gsz, mpf3, rrs, unique_path
+try:
+    import cv2
+    import numpy as np
+    g3 = True
+except ImportError:
+    from PIL import Image
+    g3 = False
+def n1(o1):
+    o1 = Path(o1)
+    if not o1.is_file():
+        print(f'Skipping: {o1.name} (Unsupported format or not a file)')
+        return
+    if o1.suffix.lower() == '.jpg':
+        return
+    d = o1.with_suffix('.jpg')
+    if d.exists():
+        d = unique_path(d)
+    h3 = gsz(o1)
+    try:
+        if g3:
+            img = cv2.imread(str(o1), cv2.IMREAD_UNCHANGED)
+            if img is None:
+                print(f'Error: Could not decode {o1.name}')
+                return
+            if img.shape[2] == 4:
+                b, g, r, a = cv2.split(img)
+                i3 = np.full(img.shape[:2], 255, dtype=np.uint8)
+                j3 = a.astype(float) / 255.0
+                k3 = (b.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                l3 = (g.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                m3 = (r.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                n3 = cv2.merge((k3, l3, m3))
+            else:
+                n3 = img
+            y2 = cv2.imwrite(str(d), n3, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        else:
+            img = x3.open(o1)
+            if img.mode in {'RGBA', 'LA'}:
+                o3 = x3.new('RGB', img.size, (255, 255, 255))
+                o3.paste(img, mask=img.split()[-1])
+                n3 = o3
+            else:
+                n3 = img
+            n3.save(d, 'JPEG', quality=95)
+            y2 = True
+        if y2:
+            o1.unlink()
+            t1 = gsz(d)
+            rrs(o1, h3, t1)
+            return
+        return
+    except Exception:
+        return
+def f1():
+    cwd = Path.cwd()
+    h3 = gsz(cwd)
+    u2 = sys.argv[1:]
+    r1 = [Path(f) for f in u2] if u2 else get_files(cwd, ext=['.webp', '.bmp', '.jpeg', '.png', '.tiff', 'PNG'])
+    if len(r1) == 1:
+        n1(r1[0])
+        sys.exit(1)
+    mpf3(n1, r1)
+    p3 = h3 - gsz(cwd)
+    cprint(f'space freed: {fsz(p3)}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: to_png.py ---
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Any, Final
+from dh import fsz, gsz, is_image
+from loguru import logger
+q3 = 8
+r3 = frozenset({'.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp', '.gif', '.ppm', '.pgm'})
+s3 = frozenset({'.git', 'dist', 'build', '__pycache__', '.venv', 'node_modules'})
+t3 = False
+u3 = False
+v3 = False
+cv2 = None
+np = None
+w3 = None
+x3 = None
+try:
+    import cv2 as _cv2
+    import numpy as _np
+    cv2 = _cv2
+    np = _np
+    t3 = True
+except ImportError:
+    pass
+if not t3:
+    try:
+        import numpy as _np2
+        import skimage.io as _skio
+        w3 = _skio
+        np = _np2
+        u3 = True
+    except ImportError:
+        pass
+if not t3 and (not u3):
+    try:
+        from PIL import Image as _PILImage
+        x3 = _PILImage
+        v3 = True
+    except ImportError:
+        pass
+y3 = tuple[Path, bool, str]
+def z3(img):
+    if img.shape[2] != 4:
+        return img
+    b, g, r, a = cv2.split(img)
+    i3 = np.full(img.shape[:2], 255, dtype=np.uint8)
+    j3 = a.astype(float) / 255.0
+    inv = 1 - j3
+    k3 = (b.astype(float) * j3 + i3.astype(float) * inv).astype(np.uint8)
+    l3 = (g.astype(float) * j3 + i3.astype(float) * inv).astype(np.uint8)
+    m3 = (r.astype(float) * j3 + i3.astype(float) * inv).astype(np.uint8)
+    return cv2.merge((k3, l3, m3))
+def a4(o1, d):
+    img = cv2.imread(str(o1), cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return (False, f'cv2 could not decode {o1.name}')
+    n3 = z3(img)
+    ok = bool(cv2.imwrite(str(d), n3))
+    return (ok, 'cv2' if ok else f'cv2 failed to write {d.name}')
+def b4(o1, d):
+    img = w3.imread(str(o1))
+    if img is None:
+        return (False, f'skimage could not decode {o1.name}')
+    if img.ndim == 3 and img.shape[2] == 4:
+        rgb = img[:, :, :3].astype(float)
+        j3 = img[:, :, 3:4].astype(float) / 255.0
+        c4 = np.full_like(rgb, 255.0)
+        img = (rgb * j3 + c4 * (1 - j3)).astype(np.uint8)
+    w3.imsave(str(d), img)
+    return (True, 'skimage')
+def d4(o1, d):
+    with x3.open(o1) as img:
+        if img.mode in {'RGBA', 'LA'}:
+            o3 = x3.new('RGB', img.size, (255, 255, 255))
+            o3.paste(img, mask=img.split()[-1])
+            n3 = o3
+        elif img.mode != 'RGB':
+            n3 = img.convert('RGB')
+        else:
+            n3 = img
+        n3.save(d, 'PNG')
+    return (True, 'pillow')
+def e4(o1, d):
+    f4 = []
+    if t3:
+        ok, msg = a4(o1, d)
+        if ok:
+            return (True, f'cv2 ({msg})')
+        f4.append(msg)
+    if u3:
+        ok, msg = b4(o1, d)
+        if ok:
+            return (True, f'skimage')
+        f4.append(msg)
+    if v3:
+        ok, msg = d4(o1, d)
+        if ok:
+            return (True, f'pillow')
+        f4.append(msg)
+    if not f4:
+        f4.append('no image backend available')
+    return (False, '; '.join(f4))
+def g4(o1):
+    if not o1.is_file() or o1.suffix.lower() not in r3:
+        return (o1, False, f'Skipping: {o1.name} (Unsupported format or not a file)')
+    d = o1.with_suffix('.png')
+    if d.exists():
+        return (o1, False, f'Skipping: {d.name} already exists')
+    try:
+        y2, h4 = e4(o1, d)
+    except Exception as exc:
+        return (o1, False, f"Error converting '{o1.name}': {exc}")
+    if not y2:
+        return (o1, False, f"Failed '{o1.name}': {h4}")
+    try:
+        o1.unlink()
+    except OSError as exc:
+        return (o1, False, f'Wrote {d.name} but could not delete source: {exc}')
+    return (o1, True, f"Converted '{o1.name}' to '{d.name}' via {h4}")
+def i4(j4):
+    r1 = []
+    for f in j4.rglob('*'):
+        if any((k4 in s3 for k4 in f.parts)):
+            continue
+        if f.is_file() and is_image(f):
+            r1.append(f)
+    return sorted(r1)
+def f1():
+    q1 = gsz('.')
+    r1 = i4(Path())
+    if not r1:
+        print('No image files detected.')
+        return
+    print(f'Converting {len(r1)} files...')
+    l4 = 0
+    with Pool(processes=q3) as s1:
+        m4 = [s1.apply_async(g4, (f,)) for f in r1]
+        for n4 in m4:
+            try:
+                o4, ok, h4 = n4.get()
+            except Exception as exc:
+                i2.error(f'Worker raised: {exc}')
+                continue
+            if ok:
+                l4 += 1
+                print(f'✓ {h4}')
+            else:
+                i2.warning(f'✗ {h4}')
+    print(f'Done. {l4} files modified.')
+    p4 = gsz('.') - q1
+    if p4 < 0:
+        print(f'size reduced: - {fsz(p4)}')
+    else:
+        print(f'size increased: + {fsz(p4)}')
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: tojpg.py ---
+import sys
+from pathlib import Path
+try:
+    import cv2
+    import numpy as np
+    g3 = True
+except ImportError:
+    from PIL import Image
+    g3 = False
+q4 = {'.png', '.bmp', '.tiff', '.webp', '.ico', '.jpg', '.jpeg'}
+def r4(o1):
+    o1 = Path(o1)
+    if not o1.is_file() or o1.suffix.lower() not in q4:
+        print(f'Skipping: {o1.name} (Unsupported format or not a file)')
+        return False
+    if o1.suffix.lower() in {'.jpg', '.jpeg'}:
+        return True
+    d = o1.with_suffix('.jpg')
+    if d.exists():
+        s4 = input(f"'{d.name}' exists. Overwrite? (y/n): ").strip().lower()
+        if s4 != 'y':
+            return False
+    try:
+        if g3:
+            img = cv2.imread(str(o1), cv2.IMREAD_UNCHANGED)
+            if img is None:
+                print(f'Error: Could not decode {o1.name}')
+                return False
+            if img.shape[2] == 4:
+                b, g, r, a = cv2.split(img)
+                i3 = np.full(img.shape[:2], 255, dtype=np.uint8)
+                j3 = a.astype(float) / 255.0
+                k3 = (b.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                l3 = (g.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                m3 = (r.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+                n3 = cv2.merge((k3, l3, m3))
+            else:
+                n3 = img
+            y2 = cv2.imwrite(str(d), n3, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        else:
+            img = x3.open(o1)
+            if img.mode in {'RGBA', 'LA'}:
+                o3 = x3.new('RGB', img.size, (255, 255, 255))
+                o3.paste(img, mask=img.split()[-1])
+                n3 = o3
+            else:
+                n3 = img
+            n3.save(d, 'JPEG', quality=95)
+            y2 = True
+        if y2:
+            o1.unlink()
+            print(f"Successfully converted '{o1.name}' to jpg.")
+            return True
+        print(f"Failed to write '{d.name}'")
+        return False
+    except Exception as e:
+        print(f"Error converting '{o1.name}': {e}")
+        return False
+def f1():
+    if len(sys.argv) != 2:
+        print(f'Usage: {sys.argv[0]} <image_file>')
+        sys.exit(1)
+    if r4(sys.argv[1]):
+        sys.exit(0)
+    else:
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+# --- File: topng.py ---
+import sys
+from pathlib import Path
+import cv2
+import numpy as np
+q4 = {'.png', '.bmp', '.tiff', '.webp', '.ico', '.jpg', '.jpeg'}
+def t4(o1):
+    o1 = Path(o1)
+    if not o1.is_file() or o1.suffix.lower() not in q4:
+        print(f'Skipping: {o1.name} (Unsupported format or not a file)')
+        return False
+    if o1.suffix.lower() in {'.png', '.jpeg'}:
+        return True
+    d = o1.with_suffix('.png')
+    if d.exists():
+        s4 = input(f"'{d.name}' exists. Overwrite? (y/n): ").strip().lower()
+        if s4 != 'y':
+            return False
+    try:
+        img = cv2.imread(str(o1), cv2.IMREAD_UNCHANGED)
+        if img is None:
+            print(f'Error: Could not decode {o1.name}')
+            return False
+        if img.shape[2] == 4:
+            b, g, r, a = cv2.split(img)
+            i3 = np.full(img.shape[:2], 255, dtype=np.uint8)
+            j3 = a.astype(float) / 255.0
+            k3 = (b.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+            l3 = (g.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+            m3 = (r.astype(float) * j3 + i3.astype(float) * (1 - j3)).astype(np.uint8)
+            n3 = cv2.merge((k3, l3, m3))
+        else:
+            n3 = img
+        y2 = cv2.imwrite(str(d), n3)
+        if y2:
+            o1.unlink()
+            print(f"Successfully converted '{o1.name}' to png.")
+            return True
+        print(f"Failed to write '{d.name}'")
+        return False
+    except Exception as e:
+        print(f"Error converting '{o1.name}': {e}")
+        return False
+def f1():
+    if len(sys.argv) != 2:
+        print(f'Usage: {sys.argv[0]} <image_file>')
+        sys.exit(1)
+    if t4(sys.argv[1]):
+        sys.exit(0)
+    else:
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(f1())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

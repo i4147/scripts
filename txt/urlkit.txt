@@ -1,0 +1,759 @@
+# --- File: clean_urls.py ---
+from urllib.parse import urlparse
+a = set()
+gl = []
+with open('urls.txt') as f:
+    b = f.readlines()
+    for c in b:
+        try:
+            d = urlparse(c.strip()).netloc
+            if d == 'github.com':
+                gl.append(c)
+            if d not in a:
+                a.add(d)
+            else:
+                continue
+        except:
+            print(c)
+with open('cleaned_urls', 'w') as fo:
+    fo.writelines((f'{k}\n' for k in a))
+with open('git_urls', 'a') as fg:
+    fg.write(''.join(gl))
+
+# --- File: exlinks.py ---
+import re
+import tarfile
+import zipfile
+from multiprocessing import Pool
+from pathlib import Path
+import chardet
+from loguru import logger
+e = {'.tar.gz', '.pdf', '.zip', '.css', '.js', '.tar.xz', '.7z', '.whl', '.html'}
+f = {'.tar.xz', '.tar.gz', '.tar.zst', '.7z', '.br', '.zip', '.whl'}
+g = re.compile('https?://(?:www\\.)?github\\.com/[a-zA-Z0-9\\-]+/[a-zA-Z0-9\\-]+')
+h = re.compile('(http|ftp|https)://([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])?')
+i = 8
+def j(k, l):
+    m = h.findall(k)
+    n = g.findall(k)
+    return (m, n)
+def o(l):
+    p = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+    for q in p:
+        try:
+            r = l.read_text(encoding=q)
+            logger.debug(f'Successfully read {l} with {q}')
+            return (r, None)
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            logger.warning(f'Error reading {l} with {q}: {e}')
+            continue
+    try:
+        s = l.read_bytes()
+        t = chardet.detect(s)
+        u = t.get('encoding')
+        v = u if isinstance(u, str) else None
+        if v:
+            try:
+                r = s.decode(v)
+                logger.debug(f'Successfully read {l} with detected encoding {v}')
+                return (r, v)
+            except Exception as e:
+                logger.warning(f'Error decoding {l} with detected encoding {v}: {e}')
+    except Exception as e:
+        logger.error(f'Failed to read or detect encoding for {l}: {e}')
+    return (None, None)
+def w(l):
+    x = []
+    n = []
+    try:
+        with tarfile.open(l, 'r:*') as tar:
+            for y in tar.getmembers():
+                if not y.isfile():
+                    continue
+                try:
+                    f = tar.extractfile(y)
+                    if f is None:
+                        continue
+                    z = f.read()
+                    t = chardet.detect(z)
+                    a1 = t.get('encoding')
+                    enc = a1 if isinstance(a1, str) and a1 else 'utf-8'
+                    b1 = z.decode(enc, errors='ignore')
+                    if b1:
+                        m, c1 = j(b1, f'{l}/{y.name}')
+                        x.extend(m)
+                        n.extend(c1)
+                except Exception as e:
+                    logger.warning(f'Error processing member {y.name} in {l}: {e}')
+        logger.debug(f'Extracted from Tar archive: {l}')
+    except Exception as e:
+        logger.error(f'Unexpected error processing tar archive {l}: {e}')
+    return (x, n)
+def d1(l):
+    x = []
+    n = []
+    try:
+        with zipfile.ZipFile(l, 'r') as e1:
+            for f1 in e1.infolist():
+                if f1.is_dir():
+                    continue
+                with e1.open(f1) as f:
+                    z = f.read()
+                    t = chardet.detect(z)
+                    a1 = t.get('encoding')
+                    enc = a1 if isinstance(a1, str) and a1 else 'utf-8'
+                    b1 = z.decode(enc, errors='ignore')
+                    if b1:
+                        m, c1 = j(b1, f'{l}/{f1.filename}')
+                        x.extend(m)
+                        n.extend(c1)
+        logger.debug(f'Extracted from ZIP archive: {l}')
+    except Exception as e:
+        logger.error(f'Unexpected error processing zip archive {l}: {e}')
+    return (x, n)
+def g1(l):
+    x = []
+
+# --- File: file_urls.py ---
+from pathlib import Path
+from dh import BIN_EXT, TXT_EXT
+h1 = {'.net', '.ai', '.org', '.com', '.me', '.svg', '.webp', '.png', '.jpg', '.jpeg', '.ico', '.cgi', '.xsl', '.bmp', '.gif'}
+i1 = set(list(TXT_EXT) + list(BIN_EXT))
+i1 = [p for p in i1 if p not in h1]
+def j1(k1='file_urls.txt'):
+    l1 = set()
+    m1 = []
+    n1 = []
+    o1 = []
+    p1 = []
+    q1 = []
+    r1 = []
+    with open('urls.txt', encoding='utf-8', errors='ignore') as f:
+        for c in f:
+            s1 = c.strip()
+            if any((s1.endswith(p) for p in i1)):
+                if s1.endswith(('.html', '.htm')):
+                    m1.append(s1)
+                    continue
+                if s1.endswith('.pdf'):
+                    n1.append(s1)
+                    continue
+                if s1.endswith('.whl'):
+                    p1.append(s1)
+                    continue
+                if s1.endswith(('.tar.gz', '.tar.xz', '.tgz', '.txz')):
+                    o1.append(s1)
+                    continue
+                if s1.endswith(('.ttf', '.woff', '.woff2', '.eot', '.otf', '.ttc')):
+                    q1.append(s1)
+                    continue
+                if s1.endswith(('.js', '.css')):
+                    r1.append(s1)
+                    continue
+                if s1 not in l1:
+                    l1.add(s1)
+    t1 = Path('pdf_urls.txt')
+    u1 = Path('html_urls.txt')
+    v1 = Path('whl_urls.txt')
+    w1 = Path('font_urls.txt')
+    x1 = Path('targz_urls.txt')
+    y1 = Path('js_css_urls.txt')
+    if n1:
+        z1 = '\n'.join(n1)
+        t1.write_text(z1, encoding='utf8')
+    if m1:
+        a2 = '\n'.join(m1)
+        u1.write_text(a2, encoding='utf8')
+    if p1:
+        b2 = '\n'.join(p1)
+        v1.write_text(b2, encoding='utf8')
+    if q1:
+        c2 = '\n'.join(q1)
+        w1.write_text(c2, encoding='utf8')
+    if o1:
+        d2 = '\n'.join(o1)
+        x1.write_text(d2, encoding='utf8')
+    if r1:
+        e2 = '\n'.join(r1)
+        y1.write_text(e2, encoding='utf8')
+    if l1:
+        with open(k1, 'w', encoding='utf-8') as f2:
+            f2.writelines((url + '\n' for url in sorted(l1)))
+        print(f'\nSuccessfully extracted {len(l1)} unique URLs')
+    else:
+        print('\nNo URLs with specified file extensions found.')
+if __name__ == '__main__':
+    j1()
+
+# --- File: filter_jscss_links.py ---
+import re
+from pathlib import Path
+from urllib.parse import urlparse
+g2 = Path('urls.txt')
+h2 = Path('filtered_urls.txt')
+i2 = re.compile('\\.(min\\.)?(js|css)$', re.IGNORECASE)
+def j2(url):
+    url = url.strip()
+    if not url:
+        return False
+    k2 = urlparse(url)
+    l = k2.path
+    return bool(i2.search(l))
+def l2():
+    if not g2.exists():
+        print('urls.txt not found.')
+        return
+    a = set()
+    m2 = []
+    with g2.open('r', encoding='utf-8') as f:
+        for c in f:
+            url = c.strip()
+            if url and j2(url) and (url not in a):
+                a.add(url)
+                m2.append(url)
+    h2.write_text('\n'.join(m2), encoding='utf-8')
+    print(f'Kept {len(m2)} URLs.')
+    print(f'Saved to {h2}')
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+# --- File: furl.py ---
+import re
+import sys
+from collections.abc import Iterable
+from multiprocessing import Pool
+from pathlib import Path
+from typing import List, Optional, Set, Tuple
+from loguru import logger
+from tqdm import tqdm
+n2 = 8
+o2 = 10 * 1024 * 1024
+p2 = '.,;:!?)\'"`'
+q2 = 'urls.txt'
+r2 = 'gitlinks.txt'
+s2 = {'.git', '__pycache__', '.venv', 'venv', 'node_modules', '.env', 'dist', 'build'}
+t2 = re.compile('https?://[^\\s<>r"{}|\\^`\\[\\]]*', re.IGNORECASE)
+u2 = {'github.com', 'gitlab.com', 'gitea.io', 'bitbucket.org', 'git.sr.ht', 'codeberg.org', 'gitbucket.org', 'gogs.io'}
+v2 = tuple[set[str], set[str]]
+def w2(url):
+    x2 = url.lower()
+    for y2 in u2:
+        if y2 in x2:
+            return True
+    return False
+def z2(a3):
+    b3 = set()
+    c3 = set()
+    try:
+        if a3.stat().st_size > o2:
+            return (b3, c3)
+        try:
+            r = a3.read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            return (b3, c3)
+        for d3 in t2.findall(r):
+            url = d3.rstrip(p2)
+            if not url:
+                continue
+            if w2(url):
+                c3.add(url)
+            else:
+                b3.add(url)
+    except Exception:
+        pass
+    return (b3, c3)
+def e3(f3):
+    g3 = []
+    for l in f3.rglob('*'):
+        if not l.is_file():
+            continue
+        if any((h3 in s2 for h3 in l.parts)):
+            continue
+        g3.append(l)
+    return g3
+def i3(l, b):
+    with l.open('w', encoding='utf-8') as f:
+        f.writelines((c + '\n' for c in b))
+def l2(j3=None):
+    _ = list(j3) if j3 is not None else sys.argv[1:]
+    k3 = Path.cwd()
+    l3 = e3(k3)
+    if not l3:
+        logger.info('No files found to process.')
+        return 0
+    logger.info('Found {} files to process...', len(l3))
+    m3 = set()
+    n3 = set()
+    with Pool(processes=n2) as o3:
+        for t in tqdm(o3.imap_unordered(z2, l3), total=len(l3), desc='Processing files', unit='file'):
+            b3, c3 = t
+            m3.update(b3)
+            n3.update(c3)
+    p3 = sorted(m3)
+    q3 = sorted(n3)
+    r3 = k3 / q2
+    s3 = k3 / r2
+    i3(r3, p3)
+    i3(s3, q3)
+    logger.info('Extraction complete!')
+    logger.info('  Regular URLs: {} -> {}', len(p3), r3.name)
+    logger.info('  Git URLs: {} -> {}', len(q3), s3.name)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+# --- File: move_gitlinks.py ---
+import sys
+from pathlib import Path
+if __name__ == '__main__':
+    fn = Path(sys.argv[1])
+    b = fn.read_text(encoding='utf-8').splitlines(keepends=False)
+    nl = []
+    gl = []
+    for c in b:
+        if 'github.com' in c:
+            gl.append(c)
+        else:
+            nl.append(c)
+    with fn.open('w', encoding='utf-8') as fo:
+        for k in nl:
+            fo.write(f'{k}\n')
+    if gl:
+        t3 = Path('gitlinks.txt')
+        with t3.open('a', encoding='utf8') as fg:
+            fg.write('\n')
+            for x in gl:
+                fg.write(f'{x}\n')
+    else:
+        print('no git link')
+
+# --- File: process_urls.py ---
+import re
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+def u3(u):
+    u = u.strip()
+    if not u:
+        return ''
+    if not re.match('^https?://', u, re.IGNORECASE):
+        u = 'https://' + u
+    try:
+        p = urlparse(u)
+        v3 = p.scheme or 'https'
+        w3 = (p.netloc or '').lower()
+        l = p.path or '/'
+        if l != '/' and l.endswith('/'):
+            l = l[:-1]
+        return f'{v3}://{w3}{l}'
+    except ValueError:
+        print(f'Warning: Could not parse URL: {u}', file=sys.stderr)
+        return ''
+def x3(y3):
+    try:
+        p = urlparse(y3)
+        w3 = p.netloc.lower()
+        z3 = [s for s in p.path.split('/') if s]
+        if w3 in ('github.com', 'www.github.com'):
+            if len(z3) >= 2:
+                return f'https://github.com/{z3[0]}/{z3[1]}'
+            else:
+                return 'https://github.com/'
+        else:
+            if not w3:
+                return y3
+            if not z3:
+                return f'https://{w3}/'
+            return f'https://{w3}/{z3[0]}'
+    except ValueError:
+        print(f'Warning: Could not parse URL for root: {y3}', file=sys.stderr)
+        return y3
+def a4(m):
+    if not m:
+        return []
+    b4 = {}
+    for c4 in m:
+        d4 = u3(c4)
+        if d4:
+            b4[c4] = d4
+    e4 = {}
+    for c4, d4 in b4.items():
+        f3 = x3(d4)
+        if f3 not in e4 or len(d4) < len(e4[f3]):
+            e4[f3] = d4
+    f4 = sorted(e4.values(), key=len)
+    g4 = []
+    for h4 in f4:
+        i4 = urlparse(h4)
+        j4 = i4.netloc.lower()
+        k4 = i4.path.rstrip('/')
+        if not k4:
+            k4 = '/'
+        else:
+            k4 += '/'
+        l4 = False
+        for m4 in g4:
+            n4 = urlparse(m4)
+            o4 = n4.netloc.lower()
+            p4 = n4.path.rstrip('/')
+            if not p4:
+                p4 = '/'
+            else:
+                p4 += '/'
+            if j4 == o4 and k4.startswith(p4):
+                l4 = True
+                break
+        if not l4:
+            g4.append(h4)
+    g4.sort()
+    return g4
+def l2():
+    if len(sys.argv) < 2:
+        print('Usage: python script_name.py <input_file>')
+        sys.exit(1)
+    q4 = Path(sys.argv[1])
+    if not q4.exists():
+        print(f"Error: Input file '{q4}' not found.")
+        sys.exit(1)
+    try:
+        b = q4.read_text(encoding='utf-8').splitlines()
+        r4 = a4(b)
+        q4.write_text('\n'.join(r4) + '\n', encoding='utf-8')
+        print(f"Successfully pruned URLs in '{q4}'. {len(b) - len(r4)} URLs removed.")
+    except Exception as e:
+        print(f'An error occurred: {e}', file=sys.stderr)
+        sys.exit(1)
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+# --- File: process_urls_aggresive.py ---
+import re
+import sys
+from urllib.parse import urlparse
+g2 = sys.argv[1]
+def u3(u):
+    u = u.strip()
+    if not u:
+        return ''
+    if not re.match('^https?://', u, re.IGNORECASE):
+        u = 'https://' + u
+    p = urlparse(u)
+    v3 = 'https'
+    w3 = (p.netloc or '').lower()
+    l = p.path or '/'
+    if l != '/' and l.endswith('/'):
+        l = l[:-1]
+    return f'{v3}://{w3}{l}'
+def s4(u):
+    p = urlparse(u)
+    w3 = p.netloc.lower()
+    t4 = [s for s in (p.path or '/').split('/') if s]
+    if 'github.com' in w3:
+        if len(t4) >= 2:
+            u4, v4 = (t4[0], t4[1])
+            return f'https://github.com/{u4}/{v4}'
+        return 'https://github.com/'
+    return f'https://{w3}/'
+def w4(m):
+    a = set()
+    out = []
+    for c in m:
+        n = u3(c)
+        if not n:
+            continue
+        c = s4(n)
+        if c not in a:
+            a.add(c)
+            out.append(c)
+    return sorted(out)
+def l2():
+    with open(g2, encoding='utf-8') as f:
+        b = f.readlines()
+    x4 = w4(b)
+    with open(g2, 'w', encoding='utf-8') as f:
+        f.writelines((u + '\n' for u in x4))
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+# --- File: saveurl.py ---
+import sys
+from pywebcopy import save_webpage
+def l2():
+    save_webpage(url=sys.argv[1], project_folder='./saved_pages/', project_name=sys.argv[1], bypass_robots=True, debug=True, open_in_browser=True, delay=None, threaded=False)
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+# --- File: split_urls.py ---
+import sys
+from collections import defaultdict
+from pathlib import Path
+from urllib.parse import urlparse
+y4 = ['htm', 'html', 'js', 'css', 'pdf', 'asp', 'aspx', 'php', 'jsp', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'zip', 'rar', '7z', 'tar', 'gz', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'xml', 'json', 'mp3', 'mp4', 'avi', 'mov', 'wav', 'exe', 'dmg', 'apk']
+def z4(url):
+    url = url.strip().strip('"').strip("'")
+    if not url:
+        return None
+    k2 = urlparse(url)
+    l = k2.path or url
+    a5 = l.rstrip('/').split('/')[-1]
+    if '.' not in a5:
+        return None
+    ext = a5.rsplit('.', 1)[-1].lower()
+    return ext if ext in y4 else None
+def l2():
+    b5 = Path(sys.argv[1].strip())
+    if not b5.exists():
+        print(f'Input file not found: {b5}')
+        return
+    c5 = defaultdict(list)
+    with b5.open('r', encoding='utf-8', errors='ignore') as f:
+        for c in f:
+            url = c.strip()
+            if not url:
+                continue
+            ext = z4(url)
+            if ext:
+                c5[ext].append(url)
+    cwd = Path.cwd()
+    if not c5:
+        print('No URLs with recognized extensions found.')
+        return
+    for ext, m in sorted(c5.items()):
+        d5 = cwd / f'{ext}_urls.txt'
+        d5.write_text('\n'.join(m) + '\n', encoding='utf-8')
+        print(f'{d5.name}: {len(m)} URLs')
+if __name__ == '__main__':
+    l2()
+
+# --- File: urlzz.py ---
+import re
+import sys
+import tarfile
+import zipfile
+from collections.abc import Iterable
+from multiprocessing import Pool
+from pathlib import Path
+import py7zr
+from dh import cprint, get_nobinary
+from loguru import logger
+e5 = 1024 * 1024
+n2 = 8
+t2 = re.compile('https?://[^\\s"\'<>\\)\\]\\}]+', re.IGNORECASE)
+f5 = re.compile('https?://(?:www\\.)?github\\.com/[^\\s"\'<>\\)\\]\\}]+', re.IGNORECASE)
+g5 = {'.zip', '.whl'}
+h5 = {'.tar', '.tar.gz', '.tgz', '.tar.xz', '.txz', '.tar.zst', '.tar.7z', '.tar.bz2', '.tbz', '.tbz2'}
+i5 = {'.7z'}
+j5 = Path('/sdcard/data/urlzz.txt')
+k5 = Path('/sdcard/data/gitlinks.txt')
+def l5(r):
+    t = set(t2.findall(r))
+    cprint(t)
+    return t
+def z2(l):
+    m = set()
+    try:
+        r = l.read_text(encoding='utf-8', errors='ignore')
+        m.update(l5(r))
+    except Exception as exc:
+        logger.warning(f'Failed to read {l}: {exc}')
+    return m
+def m5(l):
+    m = set()
+    try:
+        with tarfile.open(l, mode='r:*') as tar:
+            for y in tar.getmembers():
+                if not y.isfile():
+                    continue
+                n5 = tar.extractfile(y)
+                if n5 is None:
+                    continue
+                r = n5.read().decode('utf-8', errors='ignore')
+                m.update(l5(r))
+    except Exception as exc:
+        logger.warning(f'Failed to read tar {l}: {exc}')
+    return m
+def o5(l):
+    m = set()
+    try:
+        with zipfile.ZipFile(l, 'r') as zf:
+            for p5 in zf.namelist():
+                try:
+                    with zf.open(p5) as f:
+                        r = f.read().decode('utf-8', errors='ignore')
+                        m.update(l5(r))
+                except Exception:
+                    continue
+    except Exception as exc:
+        logger.warning(f'Failed to read zip {l}: {exc}')
+    return m
+def q5(l):
+    m = set()
+    try:
+        with py7zr.SevenZipFile(l, mode='r') as r5:
+            l3 = r5.readall()
+            for bio in l3.values():
+                try:
+                    r = bio.read().decode('utf-8', errors='ignore')
+                    m.update(l5(r))
+                except Exception:
+                    continue
+    except Exception as exc:
+        logger.warning(f'Failed to read 7z {l}: {exc}')
+    return m
+def s5(l):
+    t5 = l.suffix.lower()
+    p5 = l.name.lower()
+    if t5 in g5:
+        return o5(l)
+    if t5 in i5:
+        return q5(l)
+    if t5 in h5 or any((p5.endswith(s) for s in h5)):
+        return m5(l)
+    return z2(l)
+def u5(l):
+    return s5(l)
+def l2():
+    cwd = Path.cwd()
+    v5 = sys.argv[1:]
+    w5 = [Path(p) for p in v5] if v5 else list(get_nobinary(cwd))
+    w5 = list(w5)
+    x5 = set()
+    with Pool(processes=n2) as o3:
+        y5 = [o3.apply_async(u5, (l,)) for l in w5]
+        t = None
+        for t in y5:
+            try:
+                x5.update(t.get())
+            except Exception as exc:
+                logger.warning(f'Worker failed: {exc}')
+    n = {u for u in x5 if f5.match(u)}
+    j5.parent.mkdir(parents=True, exist_ok=True)
+    with j5.open('a', encoding='utf-8') as f:
+        f.write('\n')
+        f.writelines((url + '\n' for url in sorted(x5)))
+    with k5.open('a', encoding='utf-8') as f:
+        f.write('\n')
+        f.writelines((url + '\n' for url in sorted(n)))
+    print(f'Extracted {len(x5)} unique URLs to {j5}')
+    print(f'Extracted {len(n)} GitHub URLs to {k5}')
+if __name__ == '__main__':
+    l2()
+
+# --- File: xfile_urls.py ---
+import argparse
+import hashlib
+import os
+import re
+from multiprocessing import Pool
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+import requests
+z5 = {'.css', '.ttf', '.woff', '.woff2', '.pdf'}
+def a6(url):
+    url = url.strip().strip('"\'<>(),;')
+    return url
+def b6(url):
+    try:
+        k2 = urlparse(url)
+        l = unquote(k2.path).lower()
+        return any((l.endswith(c6) for c6 in z5))
+    except ValueError:
+        return False
+def s5(b5, d6):
+    e6 = re.compile('https?://[^\\s\\"\'<>]+', re.IGNORECASE)
+    f6 = set()
+    with open(b5, 'r', encoding='utf-8', errors='ignore') as g6:
+        for c in g6:
+            for h6 in e6.findall(c):
+                url = a6(h6)
+                if b6(url):
+                    f6.add(url)
+    i6 = sorted(f6)
+    with open(d6, 'w', encoding='utf-8') as j6:
+        for url in i6:
+            j6.write(url + '\n')
+    return i6
+def k6(url):
+    k2 = urlparse(url)
+    p5 = os.path.basename(unquote(k2.path))
+    if not p5 or '.' not in p5:
+        p5 = 'downloaded_file'
+    l6 = hashlib.sha256(url.encode('utf-8')).hexdigest()[:10]
+    m6, t5 = os.path.splitext(p5)
+    n6 = re.sub('[^A-Za-z0-9._-]', '_', m6)
+    return f'{n6}_{l6}{t5}'
+def o6(p6):
+    url, q6 = p6
+    r6 = k6(url)
+    j6 = Path(q6) / r6
+    try:
+        s6 = requests.get(url, timeout=30, allow_redirects=True, headers={'User-Agent': 'url-file-downloader/1.0'})
+        s6.raise_for_status()
+        j6.write_bytes(s6.content)
+        return (url, True, str(j6))
+    except requests.RequestException as error:
+        return (url, False, str(error))
+    except OSError as error:
+        return (url, False, str(error))
+def t6(m, q6, u6):
+    Path(q6).mkdir(parents=True, exist_ok=True)
+    v6 = [(url, q6) for url in m]
+    with Pool(processes=u6) as o3:
+        for url, w6, t in o3.imap_unordered(o6, v6):
+            if w6:
+                print(f'[OK]   {url} -> {t}')
+            else:
+                print(f'[FAIL] {url} -> {t}')
+def l2():
+    x6 = argparse.ArgumentParser(description='Extract CSS, font, and PDF URLs from a text file.')
+    x6.add_argument('-i', '--input', default='urls.txt', help='Input file containing URLs or HTML text (default: urls.txt)')
+    x6.add_argument('-o', '--output', default='file_urls.txt', help='Output file for extracted URLs (default: file_urls.txt)')
+    x6.add_argument('-d', '--download', nargs='?', const='downloads', metavar='DIRECTORY', help='Download extracted files into DIRECTORY. If no directory is supplied, use ./downloads.')
+    x6.add_argument('-w', '--workers', type=int, default=os.cpu_count() or 4, help=f'Number of multiprocessing workers (default: {os.cpu_count() or 4})')
+    v5 = x6.parse_args()
+    if v5.workers < 1:
+        x6.error('--workers must be at least 1')
+    m = s5(v5.input, v5.output)
+    print(f'Extracted {len(m)} matching URLs to {v5.output}')
+    if v5.download is not None and m:
+        t6(m, v5.download, v5.workers)
+if __name__ == '__main__':
+    raise SystemExit(l2())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

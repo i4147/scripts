@@ -1,0 +1,253 @@
+# filename: fixcode.py
+l='    ';h=A.compile('^\\s*(def|class)\\s+');f=A.compile('^\\s*if\\s+__name__\\s*==\\s*[\'\\"]__main__[\'\\"]\\s*:');d=A.compile('\n^\\s*\n    (\n        if\\s+|\n        elif\\s+|\n        else\\s*:|\n        for\\s+|\n        while\\s+|\n        try\\s*:|\n        except\\s+|\n        finally\\s*:|\n        with\\s+\n    )\n    ',A.VERBOSE)
+def c(o):s=o.strip()
+    if not s:return True
+    return s.startswith(('def ','class ','if ','elif ','else:','for ','while ','try:','except ','finally:','with ','return','import ','from ','@','#')) or '=' in s or '(' in s or s.endswith(':')
+def g(q):v=[];b=0;k=False
+    for w in q.splitlines():o=w.rstrip()
+        if not o.strip():v.append('');continue
+        if h.match(o):k=True
+        if not k and (not c(o)):v.append('# '+o.strip());continue
+        i=o.strip()
+        if h.match(i):b=0;v.append(i);b=1;continue
+        if f.match(i):b=1;v.append('if __name__=="__main__":');continue
+        if i.startswith(('return','pass','break','continue','raise')):v.append(l*b+i);b=max(b-1,0);continue
+        if d.match(i):v.append(l*b+i);b+=1;continue
+        v.append(l*b+i)
+    return '\n'.join(v)
+def a(n):try:r.parse(n);return (True,None)
+    except SyntaxError as e:return (False,f'{e.msg} (line {e.lineno},col {e.offset})')
+def p():x=m(y.argv[1]);t=m(y.argv[1]);j=g(x.read_text(encoding='utf-8',errors='ignore'));z,u=a(j)
+    if z:t.write_text(j,encoding='utf-8');print(f'✔ AST valid → {t}')
+    else:t.write_text(j,encoding='utf-8');print('✘ AST validation failed');print(u);print('Wrote for inspection')
+if __name__=='__main__':raise SystemExit(p())
+# filename: fixindent.py
+def a(n,l=None,k=4):if not q(n).exists():print(f'خطا:فایل ورودی یافت نشد:{n}');return False
+    j=[];b=0;d=['def','class','if','for','while','with','try','except','finally','elif','else'];h=['return','break','continue','pass','raise']
+    with q(n).open(encoding='utf-8') as f:p=f.readlines()
+    for i,r in enumerate(p):g=r.strip()
+        if not g:j.append('\n');continue
+        if (any((g.startswith(o) for o in h)) and b>0) and i>0 and (not p[i-1].strip().endswith(':')):b=max(0,b-1)
+        j.append(' '*(b*k)+g+'\n')
+        if g.endswith(':'):m=g.split(' ')[0]
+            if m in d or (m=='lambda' and ':' in g):b+=1
+        g.startswith(('elif','else'))
+    c=l or n
+    try:with q(c).open('w',encoding='utf-8') as f:f.writelines(j)
+        print(f'فایل با موفقیت اصلاح شد:{c}');return True
+    except OSError as e:print(f'خطا در نوشتن فایل خروجی:{e}');return False
+if __name__=='__main__':t=q(u.argv[1]);s=t.with_stem(t.stem+'_fixed')
+    if not a(t,s):print('There was an error modifying the file.')
+# filename: format_py_code.py
+def a(r):k=r.read_text(encoding='utf-8')
+    if not k.endswith('\n'):k+='\n'
+    l=list(h.generate_tokens(u.StringIO(k).readline));j=[];c=0;e=True
+    def o(s):nonlocal e
+        if e:j.append('    '*c);e=False
+        j.append(s)
+    def i():nonlocal e
+        while j and j[-1].endswith(' '):j.pop()
+        if not j or not j[-1].endswith('\n'):j.append('\n')
+        e=True
+    b=None
+    for n in l:f=n.type;d=n.string
+        if f in {h.ENCODING,h.ENDMARKER,h.NL}:continue
+        if f==h.INDENT:c+=1;continue
+        if f==h.DEDENT:c=max(0,c-1);continue
+        if f==h.NEWLINE:i();b=f;continue
+        if f==h.COMMENT:if not e:j.append(' ')
+            o(d);i();b=f;continue
+        if d==':':o(':');i();b=f;continue
+        if not e and b in {h.NAME,h.NUMBER,h.STRING} and (f in {h.NAME,h.NUMBER,h.STRING}):j.append(' ')
+        if d in {'=','+','-','*','/','%','==','!=','<','>','<=','>='}:if j and (not j[-1].endswith((' ','\n'))):j.append(' ')
+            o(d);j.append(' ')
+        else:o(d)
+        b=f
+    g=''.join(j).rstrip()+'\n';r.write_text(g,encoding='utf-8')
+def q():if len(t.argv)!=2:print(f'Usage:{p(t.argv[0]).name} FILE.py',file=t.stderr);raise SystemExit(2)
+    r=p(t.argv[1])
+    if not r.is_file():print(f'Error:file not found:{r}',file=t.stderr);raise SystemExit(1)
+    try:a(r)
+    except (SyntaxError,h.TokenError) as error:print(f'Error:input is not valid tokenizable Python:{m}',file=t.stderr);raise SystemExit(1)
+if __name__=='__main__':q()
+# filename: p45.py
+from dh import DOC_TH1,DOC_TH2
+def d(B):if not B.exists():print(f'Error:File not found at {B}',file=D.stderr);return
+    v='';q=B.with_name(B.name+'.bak')
+    try:with B.open('r',encoding='utf-8') as z,q.open('w',encoding='utf-8') as w:v=z.read();w.write(v)
+    except OSError as e:print(f'Error creating backup file {q.name}:{e}',file=D.stderr);return
+    i=[];x=v.splitlines();c=False;a=[];r=''
+    for E,A in enumerate(x):o=A.strip()
+        if '# type:' in o:continue
+        if o.startswith('#!'):continue
+        if o.startswith((DOC_TH1,DOC_TH2)):if not c:c=True;r=o[:3];a=[A]
+            else:a.append(A)
+                if A.strip().endswith(r) and len(A.strip())>len(r):c=False;f='\n'.join(a);h=f[len(r):-len(r)];k=u.fill(h,width=35,initial_indent=r,subsequent_indent=r+' '*(len(r)-1),break_long_words=False,break_on_hyphens=False)
+                    if not k.endswith(r):k+=r
+                    i.append(k);a=[];r=''
+            continue
+        if c:a.append(A)
+            if A.strip().endswith(r) and len(A.strip())>len(r):c=False;f='\n'.join(a);h=f[len(r):-len(r)];k=u.fill(h,width=35,initial_indent=r,subsequent_indent=r+' '*(len(r)-1),break_long_words=False,break_on_hyphens=False)
+                if not k.endswith(r):k+=r
+                i.append(k);a=[];r=''
+            continue
+        n=A.find('#')
+        if n!=-1:s=A[:n];p=A[n:].strip()
+            if p:l=' '*(len(A)-len(A.lstrip()));g=p[1:].strip();j=u.fill(g,width=35,initial_indent=l+'# ',subsequent_indent=l+'# ',break_long_words=False,break_on_hyphens=False);i.append(s+j[len(l+'# '):])
+            else:i.append(A)
+        else:i.append(A)
+    if c:i.extend(a)
+    b='\n'.join(i)
+    try:C.parse(b)
+        try:y(B).write_text(b,encoding='utf-8');print(f'Successfully formatted {B}. Backup created at {q}')
+        except OSError as e:print(f'Error writing formatted content to {B}:{e}',file=D.stderr)
+    except SyntaxError as e:t=y('temporary.py');t.write_text(b,encoding='utf-8');print(f'Error:Formatted code is not parsable by AST. Aborting write operation for {B}.',file=D.stderr);print(f'AST Syntax Error:{e}',file=D.stderr);y(q).replace(B);print(f'Restored {B} from backup.')
+if __name__=='__main__':if len(D.argv)!=2:print('Usage:python format_python.py<path>');D.exit(1)
+    m=y(D.argv[1]);d(m)
+# filename: rrw.py
+import astor;from dh import get_files,is_binary;f=False
+def a(k):k=h(k)
+    if is_binary(k):return
+    try:e=k.read_text(encoding='utf-8',errors='ignore')
+        if f:b=k.with_suffix(k.suffix+'.bak');b.write_text(e,encoding='utf-8')
+        c=e
+        if k.suffix=='.py':try:l=n.parse(e);c=astor.to_source(l);k.write_text(c,encoding='utf-8');print(f'\x1b[0m[ \x1b[6;96m✓\x1b[0m ] {k.name} ');return
+            except:print(f'\x1b[0m[ \x1b[6;96m✘\x1b[0m ] {k.name} ');return
+        c=d.normalize('NFD',e);k.write_text(c,encoding='utf-8')
+    except:return
+def j():o=h.cwd();i=p.argv[1:];p.argv[2] if len(p.argv)>2 else False;g=[h(m) for m in i] if i else get_files(o)
+    for k in g:a(k)
+if __name__=='__main__':raise SystemExit(j())
+# filename: rufbin.py
+def c(u):try:with r(u).open('r',encoding='utf-8',p='ignore') as f:m=f.read(1024)
+        if m.startswith('#!') and 'python' in m.lower():return True
+        a=['def ','class ','import ','from ','async def','if __name__==','print(','raise ','try:','except ','__init__'];d=m.lower()
+        for l in a:if l in d:return True
+        return u.suffix.lower()=='.py'
+    except:return False
+def b(u):try:q=j.run(['ruff','format',str(u)],check=False,capture_output=True,text=True,timeout=30)
+        if not q.returncode:return (True,'')
+        return (False,q.stderr.strip())
+    except j.TimeoutExpired:return (False,'Timeout (30s)')
+    except FileNotFoundError:return (False,'ruff not installed or not in PATH')
+    except Exception as e:return (False,str(e))
+def t():v=r();h=[s for s in v.iterdir() if s.is_file() and c(s)]
+    if not h:return
+    for w in h:pass
+    g=0;i=0;p=[]
+    for u in h:n,k=b(u)
+        if n:g+=1
+        else:i+=1;p.append(f'{u.name}:{k}')
+    if p:for o in p:pass
+if __name__=='__main__':raise SystemExit(t())
+# filename: sort_pyfile.py
+def a(C):try:l=C.read_text(encoding='utf-8')
+    except Exception as e:print(f'Error reading {C}:{e}');return
+    y=l.split('\n');w='';b='';m=0
+    if y and y[0].startswith('#!'):w=y[0];m=1
+    d='\n'.join(y[m:])
+    try:D=E.parse(d)
+    except SyntaxError as e:print(f'Error parsing Python code in {C}:{e}');return
+    if (D.body and isinstance(D.body[0],E.Expr) and isinstance(D.body[0].value,E.Constant)) and isinstance(D.body[0].value.value,str):c=D.body[0];b=E.get_source_segment(d,c) or '';D.body.pop(0)
+    o=None;i=[]
+    for B in D.body:if isinstance(B,E.If) and isinstance(B.test,E.Compare) and (isinstance(B.test.left,E.Name) and B.test.left.id=='__name__' and (len(B.test.ops)==1) and isinstance(B.test.ops[0],E.Eq) and (len(B.test.comparators)==1) and isinstance(B.test.comparators[0],E.Constant) and (B.test.comparators[0].value=='__main__')):o=B;continue
+        i.append(B)
+    t=[];p=[];s=[];q=[];A=[]
+    for B in i:if isinstance(B,(E.Import,E.ImportFrom)):t.append(B)
+        elif isinstance(B,E.Assign):h=all((isinstance(x,E.Name) and x.id.isupper() for x in B.targets))
+            if h:p.append(B)
+            else:A.append(B)
+        elif isinstance(B,E.ClassDef):s.append(B)
+        elif isinstance(B,E.FunctionDef):q.append(B)
+        else:A.append(B)
+    p.sort(key=lambda n:n.targets[0].id if n.targets else '');s.sort(key=lambda n:n.name);q.sort(key=lambda n:n.name);g=[]
+    if w:g.append(w)
+    if b:g.append(b)
+    for u in [t,A,p,s,q]:for B in u:v=E.get_source_segment(d,B)
+            if v:g.append(v)
+            else:print(f'Warning:Could not preserve source for {B}')
+    if o:v=E.get_source_segment(d,o)
+        if v:g.append(v)
+    k='\n'.join(g)
+    try:r=C.with_name(C.stem+'_sorted'+C.suffix)
+        with r.open('w',encoding='utf-8') as f:f.write(k)
+        print(f'Successfully sorted and saved:{r}')
+    except Exception as e:print(f'Error writing to {C}:{e}')
+if __name__=='__main__':if len(F.argv)!=2:print('Usage:python sort_script.py<path_to_python_script>');F.exit(1)
+    j=z(F.argv[1]);a(j)
+# filename: yap.py
+from dh import cprint,format_time,fsz,get_pyfiles,mpf_async;l='black';c=1048576
+def b(s,r=l):k=v();s=m(s);f=s.stat().st_size;g=f
+    try:a=s.read_text(encoding='utf-8');o=a
+        match r:case 'autoflake':from autoflake import fix_code as fix_with_autoflake;o=fix_with_autoflake(a,remove_all_unused_imports=True)
+            case 'isort':from isort import code as fix_with_isort;o=fix_with_isort(a)
+            case 'black':from black import Mode as _Mode,TargetVersion as _tv,format_str;o=format_str(a,r=_Mode(target_versions={_tv.PY310,_tv.PY313},line_length=120))
+            case 'autopep':from autopep8 import fix_code as fix_with_autopep;o=fix_with_autopep(a,options={'aggressive':2})
+            case 'yapf':from yapf.yapflib.yapf_api import FormatCode as fix_with_yapf;o,_=fix_with_yapf(a)
+            case _:from black import Mode as _Mode,TargetVersion as _tv,format_str;o=format_str(a,r=_Mode(target_versions={_tv.PY310,_tv.PY313},line_length=120))
+        g=len(o);u=abs(f-g);h=v()
+        if u:s.write_text(o,encoding='utf-8');j=u/f*40;cprint(f'({format_time(h-k)})|{fsz(u)}|{j:.1f}%','cyan');return True
+        print(f'{s.name} ',end=' ');cprint(f'({format_time(h-k)})|(no change)','grey');return True
+    except Exception as e:cprint('[ERROR]','red',end=' ');print(f'{s.name}:{e}');return False
+def q():global l;p=d.ArgumentParser(description='Fast Python API-based formatter (Lazy Loading)');p.add_argument('-b','--black',action='store_true',help='Use black style');p.add_argument('-a','--autopep',action='store_true',help='Use autopep8 style');p.add_argument('-i','--isort',action='store_true',help='Sort imports');p.add_argument('-r','--raui',action='store_true',help='Autoflake cleanup');p.add_argument('-y','--yapf',action='store_true',help='yapf formatter');n=p.parse_args();t=m.cwd();i=get_pyfiles(t)
+    if n.raui:l='autoflake'
+    elif n.black:l='black'
+    elif n.autopep:l='autopep'
+    elif n.isort:l='isort'
+    elif n.yapf:l='yapf'
+    else:l='black'
+    mpf_async(b,i)
+if __name__=='__main__':raise SystemExit(q())
+
+You are a senior Python engineer. You will be given N Python scripts that do
+nearly the same job with small differences. Merge them into ONE well-structured,
+runnable Python script.
+## Input
+are scripts provided above.
+## Deliverable
+A single runnable file named `<merged>.py`, invoked as:
+    python <merged>.py <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse`. Expose every behavioral difference between the original
+   scripts as a CLI argument.
+   - Use subcommands if the scripts are distinct modes/jobs.
+   - Use flags if they are variations of one pipeline.
+2. Factor shared logic (imports, helpers, config, error handling) into common
+   functions. Do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Include a mapping
+   block (see Output format §3).
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args, with
+   defaults equal to the original values.
+5. If differences cannot be unified, keep BOTH behind a flag/choice. Never
+   silently pick one.
+6. Sensible defaults so it runs out of the box. Print help if ambiguous.
+7. Type hints on all public functions. Docstrings on all public functions and
+   classes. Module-level docstring with usage examples.
+8. Standard library only, unless the originals already import third-party
+   packages — in that case list them explicitly at the top of the module
+   docstring and in the imports.
+## Output format (exactly these three sections, in order)
+### 1. Comparison table
+Markdown table: script name | what it does | shared with others | unique to it |
+proposed CLI mapping.
+### 2. Merged script
+One fenced code block containing the complete file.
+### 3. Mapping
+A fenced code block (plain text) showing the exact command for each original:
+    original_name1.py  ->  python merged.py mode-a ...
+    original_name2.py  ->  python merged.py mode-b --flag ...
+## Comment policy
+- Keep the module-level docstring (with usage examples).
+- Keep the mapping block from §3 as real comments in the file.
+- Strip ALL other comments and docstrings from the final code.
+- Exception: keep a short comment wherever a non-obvious behavior was
+  preserved behind a flag, so a future reader knows why the branch exists.
+## Ambiguity policy
+- If something is ambiguous, state your assumption in one line and proceed.
+- If something is impossible, say so plainly. Do not simulate or fake output.
+- Only ask a clarifying question if a wrong assumption would SILENTLY change
+  runtime behavior. Otherwise assume and move on.
+## Batch mode (optional)
+If the user says "batch mode", emit ONLY §2 (the code) for each input group,
+omit the table and mapping sections, and write each merged file to
+`<group>_merged.py` next to the inputs. Otherwise emit all three sections.

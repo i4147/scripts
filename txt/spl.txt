@@ -1,0 +1,286 @@
+# filename: fspliter.py
+from loguru import logger;c=4900;b=4990;G=8;h={'.txt','.md','.rst','.log','.csv','.json','.xml','.html','.htm','.py','.js','.css','.yml','.yaml','.cfg','.ini'};d=re.compile('[.!?]\\s+');m=re.compile('\\s+')
+def j(v,K=True):F=[]
+    for Y in v:if not Y.exists():logger.warning(f'Path does not exist:{Y}');continue
+        if Y.is_file():if Y.suffix.lower() in h or Y.suffix.lower()=='':F.append(Y)
+            else:logger.warning(f'Skipping non-text file:{Y}')
+        elif Y.is_dir():if K:for ae in h:F.extend(Y.rglob(f'*{ae}'))
+                F.extend([f for f in Y.rglob('*') if f.is_file() and f.suffix==''])
+            else:for ae in h:F.extend(Y.glob(f'*{ae}'))
+                F.extend([f for f in Y.glob('*') if f.is_file() and f.suffix==''])
+    aa=set();t=[]
+    for f in F:if f not in aa:aa.add(f);t.append(f)
+    return t
+def g(ac,L,I,H):O=L+H
+    if O>=len(ac):return len(ac)
+    s=L+I;D=min(O,len(ac));x=ac[s:D];P=list(d.finditer(x))
+    if P:B=P[-1];y=s+B.end();return y
+    P=list(m.finditer(x))
+    if P:B=P[-1];y=s+B.end();return y
+    return O
+def E(ac,I,H):S=[];u=0
+    while u<len(ac):y=g(ac,u,I,H);X=ac[u:y];X=X.rstrip()
+        if X:S.append(X)
+        u=y
+    return S
+def r(A,C,I,H):try:try:with open(A,encoding='utf-8') as f:N=f.read()
+        except UnicodeDecodeError:with open(A,encoding='latin-1') as f:N=f.read()
+        if not N.strip():print(f'Skipping empty file:{A}');return (A,0)
+        S=E(N,I,H)
+        if not S:print(f'No parts generated for:{A}');return (A,0)
+        C.mkdir(parents=True,exist_ok=True);ab=A.stem;R=A.suffix
+        for i,X in enumerate(S,1):w=C/f'{ab}_{i:03d}{R}'
+            with open(w,'w',encoding='utf-8') as f:f.write(X)
+        print(f'Split {A.name} into {len(S)} parts');return (A,len(S))
+    except Exception as e:logger.error(f'Error processing {A}:{e}');return (A,0)
+def a(V):return r(*V)
+def W():Q=M.ArgumentParser(description='Split text files into parts of 4900-4990 characters',formatter_class=M.RawDescriptionHelpFormatter,epilog='\nExamples:\n%(prog)s file1.txt file2.txt-o output/\n%(prog)s dir1/dir2/-o output/\n%(prog)s-o output/(process all files in current directory)\n%(prog)s*.txt-o output/\n        ');Q.add_argument('inputs',nargs='*',help='Input files and/or directories to process. If not provided,processes current directory recursively.');Q.add_argument('-o','--output',type=T,default=T('split_output'),help='Output directory for split files (default:split_output)');Q.add_argument('--no-recursive',action='store_true',help='Do not search directories recursively');Q.add_argument('--min-chars',type=int,default=c,help=f'Minimum characters per part (default:{c})');Q.add_argument('--max-chars',type=int,default=b,help=f'Maximum characters per part (default:{b})');V=Q.parse_args()
+    if V.inputs:v=[T(p) for p in V.inputs]
+    else:v=[T('.')]
+    F=j(v,K=not V.no_recursive)
+    if not F:logger.error('No text files found to process');return 1
+    print(f'Found {len(F)} file(s) to process');print(f'Character limits:{V.min_chars}-{V.max_chars} per part');q=[(Y,V.output,V.min_chars,V.max_chars) for Y in F];z=0;k=0
+    with U(processes=G) as Z:l=[Z.apply_async(a,(ad,)) for ad in q]
+        for o in l:try:n,J=o.get();z+=J;k+=1
+            except Exception as e:logger.error(f'Failed to process a file:{e}')
+    print(f'Processing complete:{k} files split into {z} parts');print(f'Output directory:{V.output.absolute()}');return 0
+if __name__=='__main__':raise SystemExit(W())
+# filename: merge_parts.py
+f=D.compile('^(?P<prefix>.+)\\.part(?P<num>\\d+)$')
+def b(i):if not i:return [p for p in s('.').rglob('*') if p.is_file() and f.match(p.name)]
+    A=[]
+    for u in i:p=s(u)
+        if p.is_dir():A.extend((x for x in p.rglob('*') if x.is_file() and f.match(x.name)))
+        elif p.is_file():A.append(p)
+    return A
+def c(r):h={}
+    for p in r:m=f.match(p.name)
+        if not m:continue
+        z=(p.parent.resolve(),m.group('prefix'));h.setdefault(z,[]).append((int(m.group('num')),p))
+    return h
+def d(o):(j,l),q=o;q.sort(z=lambda x:x[0]);A=j/l
+    with A.open('wb') as y:for _,w in q:with w.open('rb') as B:for n in iter(lambda:B.read(1048576),b''):y.write(n)
+    return A
+def v():k=e.ArgumentParser();k.add_argument('paths',nargs='*');t=k.parse_args();r=b(t.paths);h=c(r)
+    if not h:raise SystemExit('No .part files found')
+    with a() as C:g=list(C.map(d,h.items()))
+    for A in g:print(A)
+if __name__=='__main__':raise SystemExit(v())
+# filename: merger.py
+from dh import get_nobinary,get_random_filename,should_skip
+def u(B):try:return B.read_text(encoding='utf-8',errors='ignore')
+    except (OSError,UnicodeDecodeError):return None
+def b(B):return B.suffix.lstrip('.').lower()
+def a(y,C,n=None,h=False):if n:n=[e.lower() for e in n];y=[f for f in y if b(f).lower() in n]
+    m=[]
+    for B in y:if should_skip(B):continue
+        w=u(B)
+        if w is not None and w.strip():m.append((B,w))
+    if not m:print('ℹ️  No files to merge.');return []
+    if not h:l=C/f'{get_random_filename()}.txt';p={b(f) for f,_ in m}
+        if len(p)==1 and n is None:D=next(iter(p))
+            if D:l=C/f'{get_random_filename()}.{D}'
+        c(l,m,C);return [l]
+    r=C/'merged';r.mkdir(exist_ok=True);o={}
+    for B,w in m:D=b(B)
+        if D not in o:o[D]=[]
+        o[D].append((B,w))
+    i=[]
+    for D,j in o.items():l=r/f'{get_random_filename()}.{D}' if D else r/f'{get_random_filename()}.txt';c(l,j,C);i.append(l)
+    return i
+def c(l,d,C):try:t=0;q=0
+        with l.open('w',encoding='utf-8') as E:for B,w in d:g=B.relative_to(C);E.write(f'# File:{g}\n');E.write(w)
+                if not w.endswith('\n'):E.write('\n')
+                t+=len(w);q+=1
+        print(f'✅ Merged {q} files ({t:,} bytes) into:{l}')
+    except OSError as e:print(f'❌ Error writing output file {l}:{e}')
+        if l.exists():l.unlink()
+def k(A):C=z.cwd();y=[f for f in get_nobinary(C)]
+    if not A.group:pass
+    if A.extensions:print(f"🔍 Filtering for extensions:{','.join(A.extensions)}")
+    i=a(y,C,n=A.extensions,h=A.group)
+    if not i:print('ℹ️  No content to merge (all files were empty or skipped).')
+    if A.group and i:print(f"📁 All merged files saved in:{C/'merged'}")
+def s():x=v.ArgumentParser(description='Merge text files in the current directory.',formatter_class=v.RawDescriptionHelpFormatter,epilog='\nExamples:\n  python merger.py                    # Merge all non-binary files\n  python merger.py-e py cpp          # Merge only .py and .cpp files\n  python merger.py-c                 # Group files by extension into separate files\n  python merger.py-c-e py cpp       # Group .py and .cpp files by extension\n        ');x.add_argument('-e','--extensions',nargs='+',help='File extensions to merge (e.g.,py cpp js)');x.add_argument('-c','--group',action='store_true',help='Group files by extension,output multiple files in "merged" directory');return x.parse_args()
+if __name__=='__main__':A=s();k(A)
+# filename: pysplit.py
+from dh import is_binary
+def a(p,n):if n<=0:raise ValueError('n must be a positive integer')
+    if is_binary(p):print(f"Error:binary file '{p}' detected. Aborting.",file=s.stderr);s.exit(1)
+    j=p.read_text(encoding='utf-8').splitlines(keepends=True);d=len(j);b=len(str(n));m=d//n;q=p.stem;h=p.suffix;g=p.parent;k=0
+    for i in range(1,n+1):if i==n:r=d
+        else:r=k+m
+        c=str(i).zfill(b);e=f'{q}_{c}{h}';f=g/e;f.write_text(''.join(j[k:r]),encoding='utf-8');print(f'Created:{f}');k=r
+def o():if len(s.argv)!=3:print('Usage:python script.py<n><path>');s.exit(1)
+    try:p=l(s.argv[1]);n=int(s.argv[2])
+    except ValueError:print('Error:n must be an integer.',file=s.stderr);s.exit(1)
+    if not p.is_file():print(f'Error:file not found:{p}',file=s.stderr);s.exit(1)
+    a(p,n)
+if __name__=='__main__':raise SystemExit(o())
+# filename: s16.py
+from dh import mpf_map;g=15850
+def a(z,l):if len(z)<=l:return (z,'')
+    f=z.rfind('\n',0,l+1)
+    if f>0:j=f+1;return (z[:j],z[j:])
+    b=-1
+    for t in range(l,0,-1):if z[t-1].isspace():b=t;break
+    if b>0:return (z[:b],z[b:])
+    return (z[:l],z[l:])
+def d(y):y=u(y)
+    try:z=y.read_text(encoding='utf-8')
+        if not z:return
+        i=z;e=0
+        while i:q,i=a(i,g);e+=1
+        c=max(3,len(str(e-1)));i=z;m=0
+        while i:q,i=a(i,g);p=str(m).zfill(c);n=y.with_stem(f'{y.stem}_{p}');n.write_text(q,encoding='utf-8');m+=1
+    except Exception as error:print(f'An error occurred during file splitting:{r}')
+def h(y):return [w for w in y.rglob('*') if w.is_file() and (not w.stem.endswith(tuple((f'_{o:03d}' for o in range(1000)))))]
+def x():A=u.cwd();v=B.argv[1:];s=[]
+    if v:for k in v:y=u(k)
+            if y.is_file():s.append(y)
+            elif y.is_dir():s.extend(h(y))
+    else:s=h(A)
+    if len(s)==1:d(s[0]);B.exit(0)
+    elif s:mpf_map(d,s)
+    return 0
+if __name__=='__main__':raise SystemExit(x())
+# filename: split5000.py
+from binaryornot import is_binary;from nltk.tokenize import sent_tokenize;e=5000;c=4096
+def b(o,h=e):u=H.findall('\\S+\\s*',o,flags=H.DOTALL);t=[];C=''
+    for w in u:if len(C)+len(w)<=h:C+=w
+        else:if C:t.append(C)
+            if len(w)>h:i=0
+                while i<len(w):r=w[i:i+h];t.append(r);i+=h
+                C=''
+            else:C=w
+    if C:t.append(C)
+    return t
+def a(B,h):j=sent_tokenize(B);q=[];C=''
+    for z in j:f=z
+        if C and (not C.endswith((' ','\n'))) and (not f.startswith((' ','\n'))):f=' '+f
+        if len(C)+len(f)<=h:C+=f
+        else:if C:q.append(C);C=''
+            if len(f)<=h:C=f
+            else:t=b(f,h)
+                for p in t[:-1]:q.append(p)
+                C=t[-1] if t else ''
+    if C:q.append(C)
+    return q
+def d(q,g,n,k):A=g.stem;E=''.join(g.suffixes);n.mkdir(parents=True,exist_ok=True)
+    for i,s in enumerate(q,start=1):l=f'{A}_{i}{E}';m=n/l;m.write_text(s,k=k);print(f'Wrote {m} ({len(s)} chars)')
+def y():F=v(G.argv[1])
+    if not F.exists() or not F.is_file() or is_binary(F):print(f'Input file not found or is binary:{F.name}',file=G.stderr);G.exit(2)
+    try:B=F.read_text(k='utf-8')
+    except Exception as exc:print(f'Failed to read input file with encoding {x.encoding}:{D}',file=G.stderr);G.exit(2)
+    if len(B)<e:print(f'File has fewer than {e} characters ({len(B)}). Skipping.',file=G.stderr);G.exit(0)
+    q=a(B,e)
+    if not q:print('No chunks produced. Exiting.',file=G.stderr);G.exit(0)
+    n=F.parent;d(q,F,n,'utf-8');print(f'Finished:{len(q)} files created')
+if __name__=='__main__':raise SystemExit(y())
+# filename: splitby.py
+def a(d,b):c=g(d).read_text(encoding='utf-8');e=c.split(b)
+    with g(d).open('w',encoding='utf-8') as f:f.writelines((i.strip()+f'{b}\n' for i in e))
+def h():if len(j.argv)!=3:print('Usage:python script.py<filename><delimiter>');j.exit(1)
+    d=j.argv[1];b=j.argv[2]
+    if not b:print('Error:delimiter cannot be empty');j.exit(1)
+    a(d,b);print(f'{j.argv[1]} updated.')
+if __name__=='__main__':raise SystemExit(h())
+# filename: splitbyletter.py
+def j():if len(k.argv)!=2:print(f'Usage:{k.argv[0]}<filename>');k.exit(1)
+    b=k.argv[1]
+    if not h(b).is_file():print(f'Error:file not found:{b}');k.exit(1)
+    h('output').mkdir(exist_ok=True,parents=True);g={d:h(l.path.join('output',f'{d}.txt')).open('w',encoding='utf-8') for d in e.ascii_lowercase}
+    try:with h(b).open(encoding='utf-8') as f:for i in f:c=i.lstrip()
+                if not c:continue
+                a=c[0].lower()
+                if a in g:g[a].write(i)
+    finally:for f in g.values():f.close()
+if __name__=='__main__':raise SystemExit(j())
+# filename: splitt.py
+def a(f,e):b=g(f).read_text(encoding='utf-8');l=g(f);d=l.stem;i=0;m=l.suffix;h='\n'
+    if not g('output').exists():g('output').mkdir()
+    for k in b.split(e):c=f'output/{d+str(i)+m}'
+        with g(c).open('w',encoding='utf-8') as p:p.write(e);p.write(k);p.write(h);i+=1
+        print(f'{c} created')
+def j():o=n.argv[1];e=n.argv[2];a(o,e);print('metadata updated.')
+if __name__=='__main__':raise SystemExit(j())
+# filename: text_chunker.py
+c=4900;r=500;h=4999
+def b(Y,C,u=l):F=min(C+u,len(Y))
+    if F>=len(Y):return len(Y)
+    o=max(C,F-r);t=Y[o:F+r];d='[.!?]\\s+';G=list(re.finditer(d,t))
+    if G:for O in reversed(G):m=o+O.end()
+            if m<=F+r and m>F-r:return m
+    for i in range(F,max(C,F-r),-1):if i<len(Y) and Y[i] in (' ','\n','\t'):return i+1
+    return F
+def a(Y):I=[];Z=0
+    while Z<len(Y):A=b(Y,Z);M=Y[Z:A].strip()
+        if M:if len(M)>h:M=M[:z].rsplit(' ',1)[0]
+            I.append(M)
+        Z=A
+    return I
+def n(V,x):try:with open(V,encoding='utf-8',J='ignore') as f:Y=f.read()
+        if not Y.strip():return (V.name,0,None)
+        I=a(Y)
+        if not I:return (V.name,0,None)
+        X=V.stem;L=V.suffix
+        for i,M in enumerate(I,1):j=f'{X}_{i}{L}';v=x/j
+            with open(v,'w',encoding='utf-8') as f:f.write(M)
+        return (V.name,len(I),None)
+    except Exception as e:return (V.name,0,str(e))
+def k(P):y=[];g={'.txt','.md','.csv','.log','.json','.yaml','.yml','.xml'}
+    for V in P:if V.is_file():if V.suffix.lower() in g or V.suffix=='':y.append(V)
+        elif V.is_dir():for T in V.rglob('*'):if T.is_file() and T.suffix.lower() in g:y.append(T)
+    return y
+def U():K=D.ArgumentParser(description='Split text files into chunks (<5000 chars) respecting word/sentence boundaries.');K.add_argument('inputs',nargs='*',help='Files or directories to process (default:current directory)');K.add_argument('-o','--output',default='output',help='Output directory for chunks (default:output)');K.add_argument('-j','--jobs',type=int,default=B(),help=f'Number of parallel jobs (default:{B()})');S=K.parse_args()
+    if S.inputs:s=[Q(p) for p in S.inputs]
+    else:s=[Q.cwd()]
+    x=Q(S.output);x.mkdir(exist_ok=True,parents=True);y=k(s)
+    if not y:print('No text files found.');return 1
+    print(f'Found {len(y)} text file(s)');print(f'Processing with {S.jobs} parallel job(s)...');print('Target chunk size:<5000 characters')
+    with R(S.jobs) as W:H=W.starmap(n,[(f,x) for f in y])
+    q=0;J=0;print('\nResults:');print('-'*40)
+    for E,w,N in H:if N:print(f'❌ {E}:{N}');J+=1
+        else:print(f'✓ {E}:{w} chunk(s)');q+=w
+    print('-'*40);print(f'Total chunks created:{q}');print(f'Output directory:{x.resolve()}');return 1 if J else 0
+if __name__=='__main__':raise SystemExit(U())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed.
+if anything impossible, just say so, dont simulate it
+ Only ask me a question if a wrong assumption would silently change behavior.
+at the end strip comments and docstrings from final code, except module docstring and return fully annotated code

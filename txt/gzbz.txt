@@ -1,0 +1,310 @@
+# filename: bzr.py
+from loguru import logger;L=8;Q=524288;d=32768;j=9;a=('.bz2','.xz','.gz','.br','.zst','.7z','.zip','.rar');aB=None
+def ai():global aB
+    if aB is None:aB=aH(processes=L)
+    return aB
+def R():global aB
+    if aB is not None:aB.close();aB.join();aB=None
+def aX(aS):aE=['B','KB','MB','GB','TB'];aF=float(aS)
+    for aT in aE:if aF<1024.0 or aT==aE[-1]:return f'{aF:.1f} {aT}' if aT!='B' else f'{int(aF)} B'
+        aF/=1024.0
+    return f'{aF:.1f} {aE[-1]}'
+def A(aQ):if aQ.suffix!='.bz2':return False
+    aj=aQ.with_suffix('')
+    try:y=aQ.read_bytes()
+        if not y:return False
+        o=aU.decompress(y);aj.write_bytes(o);H=aQ.stat().st_size;q=aj.stat().st_size;print(f'  ✓ Decompressed {aQ.name}:{aX(H)} → {aX(q)}');aQ.unlink();return True
+    except (OSError,EOFError,ValueError) as e:logger.error(f'  ✗ Failed to decompress {aQ.name}:{e}');return False
+def k(ay,ar):try:aJ=ay.read_bytes()
+        if not aJ:return False
+        S=aU.compress(aJ,compresslevel=j);ar.write_bytes(S);return True
+    except (OSError,MemoryError,EOFError) as e:logger.error(f'Memory compression failed for {ay.name}:{e}');return False
+def D(aJ):return aU.compress(aJ,compresslevel=j)
+def c(aI):aY,aC=aI;return (aY,D(aC))
+def s(aq,aj,Y):try:M=(Y+d-1)//d
+        with aj.open('wb',buffering=1048576) as aK,aq.open('rb') as aW,aO.mmap(aW.fileno(),length=0,access=aO.ACCESS_READ) as mm:ax=[(i,mm[i*d:min((i+1)*d,Y)]) for i in range(M)];aR=ai();F=[aR.apply_async(c,((aY,aC),)) for aY,aC in ax];at=[None]*M
+            for K in F:try:aY,t=K.get();at[aY]=t
+                except Exception as e:logger.error(f'Chunk compression failed:{e}');return False
+            for t in at:if t:aK.write(t)
+                else:return False
+            return True
+    except (OSError,MemoryError,EOFError) as e:logger.error(f'Chunked compression failed for {aq.name}:{e}');return False
+def l(U,P):try:with aw.open(P,'w') as ba:for aL in U.rglob('*'):if aL.is_file():ao=aL.relative_to(U.parent);ba.add(aL,ao=ao)
+        return True
+    except (OSError,aw.TarError) as e:logger.error(f'  Failed to create tar archive:{e}');return False
+def f(al,ae):try:am=al.stat().st_size
+        if am<Q:av=k(al,ae)
+        else:av=s(al,ae,am)
+        if av and ae.exists():af=ae.stat().st_size
+            if af==0:logger.warning(f'Compressed archive empty for {al.name}');ae.unlink();return False
+            if af<am:al.unlink();ab=(am-af)/am*100;print(f'  ✓ Compressed archive:{ab:.1f}%saved ({aX(am)} → {aX(af)})');return True
+            print("  ✗ Archive compression didn't save space,keeping .tar");ae.unlink();return False
+        return False
+    except (OSError,MemoryError,EOFError,aw.TarError) as e:logger.error(f'  ✗ Failed to compress tar archive:{e}');return False
+async def b(O,v):aM=ap.get_running_loop();al=aG(v+'.tar');ae=aG(v+'.tar.bz2')
+    try:print('  Creating tar archive...');av=await aM.run_in_executor(None,l,O,al)
+        if not av or not al.exists():logger.error('  Failed to create tar archive');return False
+        print(f'  Compressing tar archive with bzip2 (level {j})...')
+        if f(al,ae):await aM.run_in_executor(None,aA.rmtree,O);return True
+        return False
+    except (OSError,MemoryError,EOFError,aw.TarError) as e:logger.error(f'Failed to compress folder {O.name}:{e}')
+        if al.exists():al.unlink()
+        if ae.exists():ae.unlink()
+        return False
+def G(aQ):aj=aQ.with_suffix(aQ.suffix+'.bz2')
+    if aj.exists():print(f'Skipping {aQ.name}-output already exists');return (False,0,0)
+    try:H=aQ.stat().st_size
+        if not H:return (False,0,0)
+        if H<Q:av=k(aQ,aj)
+        else:av=s(aQ,aj,H)
+        if av and aj.exists():z=aj.stat().st_size
+            if z==0:logger.warning(f'Compressed file empty for {aQ.name}');aj.unlink();return (False,0,0)
+            if z<H:aQ.unlink();ab=(H-z)/H*100;print(f'  ✓ {aQ.name}:{ab:.1f}%saved ({aX(H)} → {aX(z)})');return (True,H,z)
+            print(f'  ✗ {aQ.name}:No space saved,removing compressed file');aj.unlink();return (False,0,0)
+        return (False,0,0)
+    except (OSError,PermissionError,EOFError) as e:logger.error(f'  ✗ Failed to compress {aQ.name}:{e}');return (False,0,0)
+def C(aQ):try:if not aQ.is_file() or aQ.is_symlink():return False
+        if aQ.suffix in a:return False
+        aS=aQ.stat().st_size;return aS>=1024
+    except (OSError,PermissionError):return False
+def Z(X,aP='compress'):if aP=='compress':return [p for p in X.glob('*') if p.is_file() and (not p.is_symlink()) and C(p)]
+    return [p for p in X.glob('*.bz2') if p.is_file() and (not p.is_symlink())]
+def ah(X):return [p for p in X.glob('*') if not p.is_symlink() and p.is_dir()]
+def g(al,N):try:with aw.open(al,'r') as ba:ba.extractall(aQ=N)
+        return True
+    except (OSError,aw.TarError) as e:logger.error(f'  Failed to extract tar archive:{e}');return False
+async def w():aV=aG.cwd();print('\n🔧 Bzip2 Compression Settings:');print(f'   Level:{j}/9 (maximum)');print('   Block size:900KB (standard)');print(f'   Parallel workers:{L}');print(f'   Chunk size:{aX(Q)}');print('   Algorithm:Burrows-Wheeler+Run-length+Huffman');u=ah(aV)
+    if u:print(f'\n📁 Compressing {len(u)} directories...')
+        for ag in sorted(u):I=ag.relative_to(aV);print(f'\n  Processing {I}...');J=str(ag.parent/ag.name)
+            if await b(ag,J):print(f'  ✓ Successfully compressed {I} to {ag.name}.tar.bz2')
+            else:logger.error(f'  ✗ Failed to compress {I}')
+    r=Z(aV,aP='compress')
+    if not r:print('\n📄 No files to compress');return
+    print(f'\n📄 Compressing {len(r)} files with bzip2 max compression...');E=0;x=0;V=0
+    for i,aQ in enumerate(sorted(r),1):print(f'\n[{i}/{len(r)}] {aQ.name}');av,aa,W=G(aQ)
+        if av:V+=1;E+=aa;x+=W
+    if V>0:au=E-x;B=au/E*100;print(f"\n{'='*40}");print(f'✅ Compressed {V}/{len(r)} files');print(f'📊 Original size:{aX(E)}');print(f'📦 Compressed size:{aX(x)}');print(f'💾 Space saved:{aX(au)} ({B:.1f}%)');print(f"{'='*40}")
+    elif r:logger.error('\n❌ No files were successfully compressed')
+async def m():aV=aG.cwd();ac=[p for p in aV.glob('*.tar.bz2') if p.is_file()]
+    if ac:print(f'\n📦 Decompressing {len(ac)} archives...')
+        for an in sorted(ac):print(f'\n  Decompressing {an.name}...');al=None
+            try:al=an.with_suffix('');print('    Decompressing bzip2...');y=an.read_bytes();ak=aU.decompress(y);al.write_bytes(ak);N=an.stem;print(f'    Extracting tar to {N}/...');aM=ap.get_running_loop();av=await aM.run_in_executor(None,g,al,aG(N))
+                if av:al.unlink();an.unlink();print(f'  ✓ Extracted {an.name} to {N}/')
+                else:logger.error(f'  ✗ Failed to extract {an.name}')
+            except (OSError,EOFError,ValueError,aw.TarError) as e:logger.error(f'  ✗ Failed to decompress {an.name}:{e}')
+                if al is not None and al.exists():al.unlink()
+    h=Z(aV,aP='decompress')
+    if not h:print('\n📄 No .bz2 files to decompress');return
+    h=[p for p in h if p.suffixes!=['.tar','.bz2']]
+    if not h:return
+    print(f'\n📄 Decompressing {len(h)} bzip2 files...');E=0;n=0;V=0
+    for i,aQ in enumerate(sorted(h),1):print(f'\n[{i}/{len(h)}] {aQ.name}');H=aQ.stat().st_size;E+=H
+        if A(aQ):V+=1;aj=aQ.with_suffix('')
+            if aj.exists():n+=aj.stat().st_size
+    if V>0:print(f"\n{'='*40}");print(f'✅ Decompressed {V}/{len(h)} files');print(f'📦 Compressed size:{aX(E)}');print(f'📊 Decompressed size:{aX(n)}');print(f"{'='*40}")
+    elif h:logger.error('\n❌ No files were successfully decompressed')
+async def T(aP='compress'):if aP=='compress':await w()
+    elif aP=='decompress':await m()
+    else:logger.error(f'Unknown mode:{aP}')
+def aN():az=ad.ArgumentParser(description='Multi-threaded Bzip2 compression/decompression tool (max compression)',formatter_class=ad.RawDescriptionHelpFormatter,epilog='\nExamples:\n%(prog)s-c\n%(prog)s-d\n%(prog)s\nBzip2 Settings:\n-Level:9 (maximum compression)\n-Block size:900KB\n-Algorithm:Burrows-Wheeler transform+Move-to-front+Huffman coding\n-Good for:Text files,source code,structured data\n        ');aD=az.add_mutually_exclusive_group();aD.add_argument('-c','--compress',action='store_true',help='Compress files and folders with bzip2 (default)');aD.add_argument('-d','--decompress',action='store_true',help='Decompress .bz2 and .tar.bz2 files');aI=az.parse_args();aP='decompress' if aI.decompress else 'compress'
+    try:ap.run(T(aP))
+    except KeyboardInterrupt:logger.warning('\n\n⚠️  Interrupted by user');aZ.exit(1)
+    except Exception as e:logger.error(f'\n❌ Unexpected error:{e}');aZ.exit(1)
+    finally:R()
+if __name__=='__main__':raise SystemExit(aN())
+# filename: gziper.py
+from dh import fsz;from loguru import logger;r=262144;J=8;a={'.gz','.zip','.bz2','.xz','.7z','.rar','.tar'}
+class f:def __init__(self):self.total_files=0;self.successful=0;self.failed=0;self.total_original_size=0;self.total_compressed_size=0
+    def t(self,k,g):self.total_files+=1;self.successful+=1;self.total_original_size+=k;self.total_compressed_size+=g
+    def s(self):self.total_files+=1;self.failed+=1
+def w(I,F,x=r):while 1:N=I.read(x)
+        if not N:break
+        F.write(N)
+def j(Y):K=Y.with_suffix(Y.suffix+'.gz')
+    try:k=Y.stat().st_size
+        with open(Y,'rb') as V,W.open(K,'wb',compresslevel=9) as P:w(V,P)
+        g=K.stat().st_size;Y.unlink();return (Y,True,k,g,'')
+    except Exception as e:if K.exists():K.unlink()
+        return (Y,False,0,0,str(e))
+def b(u,h=None):if h is None:h=set(a)
+    c=[]
+    for B in u:if not B.exists():logger.warning("Directory '{}' does not exist,skipping...",B);continue
+        for Y in B.rglob('*'):if Y.is_file() and Y.suffix not in h:c.append(Y)
+    return c
+def q(G,y):if G==0:return 'N/A'
+    Q=(1-y/G)*100;return f'{Q:.1f}%'
+def X():M=E.ArgumentParser(description='Compress files recursively with gzip (maximum compression)',formatter_class=E.RawDescriptionHelpFormatter,epilog='\nExamples:\n%(prog)s\n%(prog)s dir1 dir2\n%(prog)s/path/to/dir1/path/to/dir2\n        ');M.add_argument('directories',nargs='*',default=['.'],help='Directories to process (default:current directory)');M.add_argument('--exclude','-e',nargs='+',default=[],help='Additional file extensions to exclude (e.g.,.pdf .jpg)');U=M.parse_args();u=[S(d).resolve() for d in U.directories];print('='*40);print('🔍 GZIP Compression Tool (Maximum Compression-Level 9)'.center(70));print('-'*40);print('📂 Processing directories:')
+    for d in u:print('   • {}',d)
+    h=set(a)
+    if U.exclude:for ab in U.exclude:if not ab.startswith('.'):ab='.'+ab
+            h.add(ab)
+        print('🚫 Excluding extensions:{}',','.join(sorted(h)))
+    print('🔎 Scanning for files...');z=aa.time();c=b(u,h)
+    if not c:logger.success('✅ No files found to compress!');return 0
+    print('📊 Found {} file(s) to compress',len(c));print('-'*40);print(f"{'File':<50} {'Original':>10} {'Compressed':>10} {'Ratio':>8} {'Status':>10}");print('-'*40);R=f()
+    with T(processes=J) as Z:i=[Z.apply_async(j,(Y,)) for Y in c]
+        for n in i:Y,L,C,A,O=n.get()
+            try:H=Y.relative_to(S.cwd())
+            except ValueError:H=Y
+            o=str(H)
+            if len(o)>47:o='...'+o[-44:]
+            if L:R.add_success(C,A);m='✅';print(f'{o:<50} {fsz(C):>10} {fsz(A):>10} {q(C,A):>8} {m:>10}')
+            else:R.add_failure();m='❌';print(f"{o:<50} {'N/A':>10} {'N/A':>10} {'N/A':>8} {m:>10}")
+                if O:logger.warning('   ⚠ Error:{}',O)
+    p=aa.time()-z;print('='*40);print('📊 COMPRESSION SUMMARY'.center(70));print('-'*40);print('  Total files processed:{}',R.total_files);print('  Successfully compressed:{} ✅',R.successful);print('  Failed compressions:{} ❌',R.failed);print('  Original total size:{}',fsz(R.total_original_size));print('  Compressed total size:{}',fsz(R.total_compressed_size))
+    if R.total_original_size>0:l=(1-R.total_compressed_size/R.total_original_size)*100;v=R.total_original_size-R.total_compressed_size;print('  Overall compression ratio:{:.1f}%',l);print('  Space saved:{}',fsz(v))
+    print('  Time elapsed:{}',D(seconds=int(p)));print('-'*40);return 0
+if __name__=='__main__':raise SystemExit(X())
+# filename: gzr.py
+from loguru import logger;K=8;P=524288;s=32768;d=9;n=1024
+def aU(aP):az=['B','KB','MB','GB','TB'];aA=float(aP)
+    for aQ in az:if aA<1024.0 or aQ==az[-1]:return f'{aA:.1f} {aQ}'
+        aA/=1024.0
+    return f'{aA:.1f} {az[-1]}'
+def A(aN):if aN.suffix!='.gz':return False
+    ad=aN.with_suffix('')
+    try:with aH.open(aN,'rb') as aF:o=aF.read()
+        ad.write_bytes(o);H=aN.stat().st_size;q=ad.stat().st_size;print(f'  ✓ Decompressed {aN.name}:{aU(H)} → {aU(q)}');aN.unlink();return True
+    except Exception as e:logger.error(f'  ✗ Failed to decompress {aN.name}:{e}');return False
+def h(av,an):try:aE=av.read_bytes()
+        if not aE:return False
+        Q=aH.compress(aE,compresslevel=d);an.write_bytes(Q);return True
+    except (OSError,MemoryError) as e:logger.error(f'Memory compression failed for {av.name}:{e}');return False
+def D(aE):return aH.compress(aE,compresslevel=d)
+def c(aD):ax,aV=aD;return (aV,D(ax))
+def t(am,ad,W,aO):try:L=(W+s-1)//s
+        with ad.open('wb',buffering=1048576) as aG,am.open('rb') as aT,aL.mmap(aT.fileno(),length=0,access=aL.ACCESS_READ) as mm:au=[mm[i*s:min((i+1)*s,W)] for i in range(L)];ao=[None]*L;F=[aO.apply_async(c,((ax,aV),)) for aV,ax in enumerate(au)]
+            for ar in F:try:aV,u=ar.get();ao[aV]=u
+                except Exception as e:logger.error(f'Chunk compression failed:{e}');return False
+            for u in ao:if u is not None:aG.write(u)
+                else:return False
+            return True
+    except (OSError,MemoryError) as e:logger.error(f'Chunked compression failed for {am.name}:{e}');return False
+def k(S,O):try:with at.open(O,'w') as aX:for aI in S.rglob('*'):if aI.is_file():ai=aI.relative_to(S.parent);aX.add(aI,ai=str(ai))
+        return True
+    except Exception as e:logger.error(f'  Failed to create tar archive:{e}');return False
+def j(af,ak,aO):try:ag=af.stat().st_size
+        if ag<P:aq=h(af,ak)
+        else:aq=t(af,ak,ag,aO)
+        if aq and ak.exists():al=ak.stat().st_size
+            if al==0:logger.warning(f'Compressed archive empty for {af.name}');ak.unlink();return False
+            if al<ag:af.unlink();Z=(ag-al)/ag*100;print(f'  ✓ Compressed archive:{Z:.1f}%saved ({aU(ag)} → {aU(al)})');return True
+            print("  ✗ Archive compression didn't save space,keeping .tar");ak.unlink();return False
+        return False
+    except Exception as e:logger.error(f'  ✗ Failed to compress tar archive:{e}');return False
+async def a(N,w,aO):aJ=aj.get_running_loop();af=aB(w+'.tar');ak=aB(w+'.tar.gz')
+    try:print('  Creating tar archive...');aq=await aJ.run_in_executor(None,k,N,af)
+        if not aq or not af.exists():logger.error('  Failed to create tar archive');return False
+        print(f'  Compressing tar archive with gzip (level {d})...')
+        if await aJ.run_in_executor(None,j,af,ak,aO):await aJ.run_in_executor(None,aw.rmtree,N);return True
+        return False
+    except Exception as e:logger.error(f'Failed to compress folder {N.name}:{e}')
+        if af.exists():af.unlink()
+        if ak.exists():ak.unlink()
+        return False
+def G(aN,aO):ad=aN.with_suffix(aN.suffix+'.gz')
+    if ad.exists():print(f'Skipping {aN.name}-output already exists');return (False,0,0)
+    try:H=aN.stat().st_size
+        if not H:return (False,0,0)
+        if H<P:aq=h(aN,ad)
+        else:aq=t(aN,ad,H,aO)
+        if aq and ad.exists():z=ad.stat().st_size
+            if z==0:logger.warning(f'Compressed file empty for {aN.name}');ad.unlink();return (False,0,0)
+            if z<H:aN.unlink();Z=(H-z)/H*100;print(f'  ✓ {aN.name}:{Z:.1f}%saved ({aU(H)} → {aU(z)})');return (True,H,z)
+            print(f'  ✗ {aN.name}:No space saved,removing compressed file');ad.unlink();return (False,0,0)
+        return (False,0,0)
+    except (OSError,PermissionError) as e:logger.error(f'  ✗ Failed to compress {aN.name}:{e}');return (False,0,0)
+def X(V,aM='compress'):if aM=='compress':return [p for p in V.glob('*') if p.is_file() and (not p.is_symlink()) and C(p)]
+    return [p for p in V.glob('*.gz') if p.is_file() and (not p.is_symlink())]
+def ac(V):return [p for p in V.glob('*') if not p.is_symlink() and p.is_dir()]
+def C(aN):try:if not aN.is_file() or aN.is_symlink():return False
+        b=('.gz','.bz2','.xz','.br','.zst','.7z','.zip','.rar')
+        if aN.suffix in b:return False
+        aP=aN.stat().st_size;return aP>=n
+    except (OSError,PermissionError):return False
+def f(af,M):try:with at.open(af,'r') as aX:aX.extractall(aN=M)
+        return True
+    except Exception as e:logger.error(f'  Failed to extract tar archive:{e}');return False
+async def x(ay=None):aS=aB.cwd()
+    with aC(processes=K) as aO:v=ac(aS)
+        if v:print(f'\n📁 Compressing {len(v)} directories...')
+            for ab in sorted(v):I=ab.relative_to(aS);print(f'\n  Processing {I}...');J=str(ab.parent/ab.name)
+                if await a(ab,J,aO):print(f'  ✓ Successfully compressed {I} to {ab.name}.tar.gz')
+                else:logger.error(f'  ✗ Failed to compress {I}')
+        r=list(ay) if ay else X(aS,aM='compress');print(f'\n📄 Compressing {len(r)} files with gzip max compression...');E=0;y=0;T=0
+        for i,aN in enumerate(sorted(r),1):print(f'\n[{i}/{len(r)}] {aN.name}');aq,Y,U=G(aN,aO)
+            if aq:T+=1;E+=Y;y+=U
+        if T>0:ap=E-y;B=ap/E*100;print(f"\n{'='*40}");print(f'✅ Compressed {T}/{len(r)} files');print(f'📊 Original size:{aU(E)}');print(f'📦 Compressed size:{aU(y)}');print(f'💾 Space saved:{aU(ap)} ({B:.1f}%)');print(f"{'='*40}")
+        elif r:logger.error('\n❌ No files were successfully compressed')
+async def l(ay=None):aS=aB.cwd();aa=list(ay) if ay else [p for p in aS.glob('*.tar.gz') if p.is_file()]
+    if aa:print(f'\n📦 Decompressing {len(aa)} archives...')
+        for ah in sorted(aa):print(f'\n  Decompressing {ah.name}...');af=None
+            try:af=ah.with_suffix('');print('    Decompressing gzip...')
+                with aH.open(ah,'rb') as aF:ae=aF.read()
+                af.write_bytes(ae);M=ah.stem;print(f'    Extracting tar to {M}/...');aJ=aj.get_running_loop();aq=await aJ.run_in_executor(None,f,af,aB(M))
+                if aq:af.unlink();ah.unlink();print(f'  ✓ Extracted {ah.name} to {M}/')
+                else:logger.error(f'  ✗ Failed to extract {ah.name}')
+            except Exception as e:logger.error(f'  ✗ Failed to decompress {ah.name}:{e}')
+                if af and af.exists():af.unlink()
+    g=X(aS,aM='decompress')
+    if not g:print('\n📄 No .gz files to decompress');return
+    g=[p for p in g if p.suffixes!=['.tar','.gz']]
+    if not g:return
+    print(f'\n📄 Decompressing {len(g)} gzip files...');E=0;m=0;T=0
+    for i,aN in enumerate(sorted(g),1):print(f'\n[{i}/{len(g)}] {aN.name}');H=aN.stat().st_size;E+=H
+        if A(aN):T+=1;ad=aN.with_suffix('')
+            if ad.exists():m+=ad.stat().st_size
+    if T>0:print(f"\n{'='*40}");print(f'✅ Decompressed {T}/{len(g)} files');print(f'📦 Compressed size:{aU(E)}');print(f'📊 Decompressed size:{aU(m)}');print(f"{'='*40}")
+    elif g:logger.error('\n❌ No files were successfully decompressed')
+async def R(ay,aM='compress'):if aM=='compress':await x(ay)
+    elif aM=='decompress':await l(ay)
+    else:logger.error(f'Unknown mode:{aM}')
+def aK():aS=aB.cwd();aD=aW.argv[1:];ay=[];aM='compress'
+    if aD:for aR in aD:if aR=='-c':aM='compress';continue
+            if aR=='-d':aM='decompress';continue
+            p=aB(aR)
+            if p.is_file():ay.append(p)
+            if p.is_dir():ay.extend(X(p))
+    else:ay=X(aS)
+    if not ay:print('no files found');aW.exit(0)
+    try:aj.run(R(ay,aM))
+    except KeyboardInterrupt:logger.warning('\n\n⚠️  Interrupted by user');aW.exit(1)
+    except Exception as e:logger.error(f'\n❌ Unexpected error:{e}');aW.exit(1)
+if __name__=='__main__':raise SystemExit(aK())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

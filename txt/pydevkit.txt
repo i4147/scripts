@@ -1,0 +1,1664 @@
+# --- File: create_cargo_toml.py ---
+import re
+import sys
+from pathlib import Path
+def a(b):
+    with open(b, 'r', encoding='utf-8') as f:
+        c = f.read()
+    d = re.search('^version\\s*=\\s*(\\d+)', c, re.MULTILINE)
+    e = int(d.group(1)) if d else 3
+    f = []
+    if e >= 2:
+        g = re.split('\\n\\[\\[package\\]\\]\\n', c)
+        for h in g[1:]:
+            pkg = i(h)
+            if pkg:
+                f.append(pkg)
+    else:
+        g = re.split('\\n\\[\\[package\\]\\]\\n', c)
+        for h in g[1:]:
+            pkg = p(h)
+            if pkg:
+                f.append(pkg)
+    return {'version': e, 'packages': f}
+def i(h):
+    pkg = {}
+    j = re.search('^name\\s*=\\s*"([^"]*)"', h, re.MULTILINE)
+    d = re.search('^version\\s*=\\s*"([^"]*)"', h, re.MULTILINE)
+    k = re.search('^source\\s*=\\s*"([^"]*)"', h, re.MULTILINE)
+    if not j or not d:
+        return None
+    pkg['name'] = j.group(1)
+    pkg['version'] = d.group(1)
+    if k:
+        pkg['source'] = k.group(1)
+    l = []
+    m = False
+    for n in h.split('\n'):
+        if n.strip().startswith('dependencies = ['):
+            m = True
+            o = re.findall('"([^"]*)"', n)
+            l.extend(o)
+            if ']' in n:
+                m = False
+        elif m:
+            o = re.findall('"([^"]*)"', n)
+            l.extend(o)
+            if ']' in n:
+                m = False
+    if l:
+        pkg['dependencies'] = l
+    return pkg
+def p(h):
+    pkg = {}
+    j = re.search('^name\\s*=\\s*"([^"]*)"', h, re.MULTILINE)
+    d = re.search('^version\\s*=\\s*"([^"]*)"', h, re.MULTILINE)
+    if not j or not d:
+        return None
+    pkg['name'] = j.group(1)
+    pkg['version'] = d.group(1)
+    l = []
+    for n in h.split('\n'):
+        q = re.match('^\\s*"([^"]+)\\s+([^"]+)"', n)
+        if q:
+            l.append(f'{q.group(1)} {q.group(2)}')
+    if l:
+        pkg['dependencies'] = l
+    return pkg
+def r(f, s=None, t='0.1.0', u=False):
+    v = []
+    v.append('[package]')
+    if s:
+        v.append(f'name = "{s}"')
+    elif f:
+        v.append(f'''name = "{f[0]['name']}"''')
+    else:
+        v.append('name = "generated-project"')
+    v.append(f'version = "{t}"')
+    v.append('edition = "2021"')
+    v.append('')
+    if f:
+        v.append('[dependencies]')
+        w = set()
+        if f and 'dependencies' in f[0]:
+            w.update(f[0]['dependencies'])
+        if w:
+            for x in w:
+                y = z(f, x)
+                if y:
+                    v.append(f'''{y['name']} = "{y['version']}"''')
+                else:
+                    v.append(f'{x} = "*"  # Version not found in lock file')
+        else:
+            for pkg in f[1:]:
+                v.append(f'''{pkg['name']} = "{pkg['version']}"''')
+    return '\n'.join(v)
+def z(f, a1):
+    for pkg in f:
+        if pkg['name'] == a1:
+            return pkg
+    return None
+def b1():
+    c1 = 'Cargo.lock'
+    if len(sys.argv) > 1:
+        c1 = sys.argv[1]
+    if not Path(c1).exists():
+        print(f'Error: {c1} not found!')
+        sys.exit(1)
+    print(f'Parsing {c1}...')
+    d1 = a(c1)
+    if not d1['packages']:
+        print('No packages found in lock file!')
+        sys.exit(1)
+    print(f"Found {len(d1['packages'])} packages (lock file v{d1['version']})")
+    e1 = r(d1['packages'], root_package_name=None, root_version='0.1.0')
+    f1 = 'Cargo.toml'
+    with open(f1, 'w', encoding='utf-8') as f:
+        f.write(e1)
+    print(f'Generated {f1}')
+    print('\nPreview:')
+    print('-' * 40)
+    print(e1)
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: create_setuppy.py ---
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import Any
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+def g1():
+    h1 = argparse.ArgumentParser(description='Generate setup.py from pyproject.toml.')
+    h1.add_argument('project_dir', nargs='?', type=Path, default=Path('.'), help='Project directory. Defaults to the current directory.')
+    h1.add_argument('-o', '--output', type=Path, default=None, help='Output setup.py path. Defaults to PROJECT_DIR/setup.py.')
+    h1.add_argument('--force', action='store_true', help='Overwrite an existing setup.py.')
+    return h1.parse_args()
+def i1(j1):
+    b = j1 / 'pyproject.toml'
+    if not b.is_file():
+        raise FileNotFoundError(f'Missing pyproject.toml: {b}')
+    with b.open('rb') as k1:
+        return tomllib.load(k1)
+def l1(d1):
+    try:
+        return d1['build-system']['build-backend']
+    except KeyError as error:
+        raise ValueError('pyproject.toml does not define [build-system].build-backend') from w7
+def m1(a1):
+    return a1.replace('.', '/').replace('-', '_')
+def n1(a1):
+    return re.sub('[-.]+', '_', a1).lower()
+def o1(p1, q1=None):
+    if q1:
+        r1 = repr(q1)
+        return f'\nfrom pathlib import Path\nfrom setuptools import find_packages\n_project_root = Path(__file__).parent\n_package_name = {r1}\nif (_project_root / _package_name).is_dir():\n    packages = find_packages(\n        where=str(_project_root),\n        include=(_package_name, f"{{_package_name}}.*"),\n    )\n    package_dir = {{}}\nelif (_project_root / "src" / _package_name).is_dir():\n    packages = find_packages(\n        where=str(_project_root / "src"),\n        include=(_package_name, f"{{_package_name}}.*"),\n    )\n    package_dir = {{"": "src"}}\nelse:\n    packages = []\n    package_dir = {{}}\n'.strip()
+    return '\nfrom pathlib import Path\nfrom setuptools import find_packages\n_project_root = Path(__file__).parent\nif (_project_root / "src").is_dir():\n    packages = find_packages(where=str(_project_root / "src"))\n    package_dir = {"": "src"}\nelse:\n    packages = find_packages(where=str(_project_root))\n    package_dir = {}\n'.strip()
+def s1(t1):
+    return repr(t1)
+def u1(v1):
+    w1 = v1.get('authors', [])
+    x1 = [y1['name'] for y1 in w1 if isinstance(y1, dict) and y1.get('name')]
+    z1 = [y1['email'] for y1 in w1 if isinstance(y1, dict) and y1.get('email')]
+    a2 = {}
+    if x1:
+        a2['author'] = ', '.join(x1)
+    if z1:
+        a2['author_email'] = ', '.join(z1)
+    return a2
+def b2(v1):
+    c2 = {'name': v1['name']}
+    for key in ('version', 'description', 'readme', 'license', 'requires-python', 'dependencies', 'optional-dependencies', 'classifiers', 'keywords'):
+        if key in v1:
+            c2[key] = v1[key]
+    c2.update(u1(v1))
+    d2 = v1.get('urls', {})
+    if 'Homepage' in d2:
+        c2['url'] = d2['Homepage']
+    e2 = v1.get('scripts', {})
+    if e2:
+        c2['entry_points'] = {'console_scripts': [f'{a1} = {f2}' for a1, f2 in e2.items()]}
+    return c2
+def g2(h2):
+    c2 = {'name': h2['name'], 'version': h2['version'], 'description': h2.get('description', '')}
+    w1 = h2.get('authors', [])
+    x1 = []
+    z1 = []
+    for y1 in w1:
+        i2 = re.match('^\\s*(.*?)\\s*<([^>]+)>\\s*$', y1)
+        if i2:
+            x1.append(i2.group(1))
+            z1.append(i2.group(2))
+        else:
+            x1.append(y1)
+    if x1:
+        c2['author'] = ', '.join(x1)
+    if z1:
+        c2['author_email'] = ', '.join(z1)
+    for j2, k2 in (('homepage', 'url'), ('classifiers', 'classifiers'), ('keywords', 'keywords'), ('readme', 'long_description'), ('dependencies', 'install_requires')):
+        if j2 in h2:
+            c2[k2] = h2[j2]
+    e2 = h2.get('scripts', {})
+    if e2:
+        c2['entry_points'] = {'console_scripts': [f'{a1} = {f2}' for a1, f2 in e2.items()]}
+    return c2
+def l2(l):
+    m2 = []
+    for a1, t1 in l.items():
+        if a1 == 'python':
+            continue
+        if isinstance(t1, str):
+            if t1 == '*':
+                m2.append(a1)
+            else:
+                m2.append(f'{a1}{t1}')
+            continue
+        if isinstance(t1, dict):
+            n2 = t1.get('version', '')
+            o2 = t1.get('extras', [])
+            p2 = a1
+            if o2:
+                p2 += f"[{','.join(o2)}]"
+            if n2 and n2 != '*':
+                p2 += n2
+            m2.append(p2)
+    return m2
+def q2(c2):
+    v = []
+    r2 = {'name': 'name', 'version': 'version', 'description': 'description', 'author': 'author', 'author_email': 'author_email', 'url': 'url', 'classifiers': 'classifiers', 'keywords': 'keywords', 'install_requires': 'install_requires', 'python_requires': 'python_requires', 'long_description': 'long_description'}
+    for s2, k2 in r2.items():
+        if s2 not in c2:
+            continue
+        t1 = c2[s2]
+        if s2 == 'readme':
+            continue
+        if s2 == 'requires-python':
+            k2 = 'python_requires'
+        if s2 == 'dependencies':
+            k2 = 'install_requires'
+        if s2 == 'optional-dependencies':
+            continue
+        v.append(f'    {k2}={s1(t1)},')
+    if 'entry_points' in c2:
+        v.append(f"    entry_points={s1(c2['entry_points'])},")
+    t2 = c2.get('optional-dependencies', {})
+    if t2:
+        u2 = {v2: w2 for v2, w2 in t2.items()}
+        v.append(f'    extras_require={s1(u2)},')
+    return '\n'.join(v)
+def x2(d1, j1):
+    y2 = l1(d1)
+    v1 = d1.get('project')
+    h2 = d1.get('tool', {}).get('poetry')
+    if v1 is not None:
+        c2 = b2(v1)
+        q1 = v1['name']
+    elif h2 is not None:
+        c2 = g2(h2)
+        if isinstance(h2.get('dependencies'), dict):
+            c2['install_requires'] = l2(h2['dependencies'])
+        q1 = n1(h2['name'])
+    else:
+        raise ValueError('This script requires either [project] or [tool.poetry] metadata.')
+    z2 = o1(j1.name, q1)
+    a3 = q2(c2)
+    b3 = f'# Original build backend: {y2}'
+    return f'"""Generated setup.py.\n{b3}\nGenerated by create_setup.py.\n"""\nfrom setuptools import setup\n{z2}\nsetup(\n{a3}\n    packages=packages,\n    package_dir=package_dir,\n)\n'
+def b1():
+    c3 = g1()
+    j1 = c3.project_dir.expanduser().resolve()
+    d3 = c3.output.expanduser().resolve() if c3.output is not None else j1 / 'setup.py'
+    if d3.exists() and (not c3.force):
+        raise FileExistsError(f'{d3} already exists; use --force to overwrite it')
+    d1 = i1(j1)
+    e3 = x2(d1, j1)
+    d3.parent.mkdir(parents=True, exist_ok=True)
+    d3.write_text(e3, encoding='utf-8')
+    print(f'Created {d3}')
+    return 0
+if __name__ == '__main__':
+    try:
+        raise SystemExit(b1())
+    except (FileNotFoundError, FileExistsError, ValueError, KeyError) as error:
+        print(f'error: {w7}', file=sys.stderr)
+        raise SystemExit(1)
+
+# --- File: generate_setuppy.py ---
+import argparse
+import configparser
+import pprint
+import re
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+f3 = {'.md', '.markdown', '.mdown', '.mkdn'}
+g3 = {'.py', '.pyi'}
+@dataclass(frozen=True)
+class h3:
+    pass
+def i3(t1):
+    return pprint.pformat(t1, indent=4, width=88, sort_dicts=False)
+def j3(b):
+    try:
+        with b.open('rb') as k3:
+            return tomllib.load(k3)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f'Invalid TOML in {b}: {exc}') from exc
+def l3(b):
+    if not b.is_file():
+        return None
+    try:
+        return b.read_text(encoding='utf-8')
+    except OSError as exc:
+        raise OSError(f'Unable to read {b}: {exc}') from exc
+def m3(n3):
+    o3 = n3.parent
+    return h3(root=o3, pyproject=n3, setup_py=o3 / 'setup.py', setup_cfg=o3 / 'setup.cfg', manifest=o3 / 'MANIFEST.in')
+def p3(d1):
+    v1 = d1.get('project', {})
+    q3 = d1.get('build-system', {})
+    r3 = d1.get('tool', {})
+    if not isinstance(v1, dict):
+        raise ValueError('[project] must be a TOML table')
+    if not isinstance(r3, dict):
+        r3 = {}
+    s3 = v1.get('license', '')
+    if isinstance(s3, dict):
+        s3 = s3.get('text') or s3.get('file', '')
+    t3 = v1.get('readme', '')
+    if isinstance(t3, dict):
+        t3 = dict(t3)
+    return {'name': str(v1.get('name', '')), 'version': str(v1.get('version', '0.0.0')), 'description': str(v1.get('description', '')), 'readme': t3, 'requires_python': str(v1.get('requires-python', '')), 'license': str(s3), 'authors': v1.get('authors', []), 'maintainers': v1.get('maintainers', []), 'keywords': v1.get('keywords', []), 'classifiers': v1.get('classifiers', []), 'urls': v1.get('urls', {}), 'scripts': v1.get('scripts', {}), 'gui_scripts': v1.get('gui-scripts', {}), 'entry_points': v1.get('entry-points', {}), 'dependencies': v1.get('dependencies', []), 'optional_dependencies': v1.get('optional-dependencies', {}), 'build_backend': q3.get('build-backend', ''), 'build_requires': q3.get('requires', []), 'tool': r3}
+def u3(b):
+    h1 = configparser.ConfigParser(interpolation=None, delimiters=('=',))
+    if b.is_file():
+        try:
+            h1.read(b, encoding='utf-8')
+        except configparser.Error as exc:
+            raise ValueError(f'Invalid setup.cfg: {exc}') from exc
+    return h1
+def v3(t1):
+    if not t1:
+        return []
+    return [w3.strip() for w3 in re.split('[,\\n]+', t1) if w3.strip()]
+def x3(h1, y3):
+    if not h1.has_section(y3):
+        return {}
+    a2 = {}
+    for key, t1 in h1.items(y3):
+        a2[key] = v3(t1)
+    return a2
+def z3(t3):
+    if isinstance(t3, dict):
+        a4 = t3.get('file')
+        b4 = t3.get('content-type', 'text/markdown')
+        if a4:
+            return (f'read_text({a4!r})', repr(b4))
+        return (repr(t3.get('text', '')), repr(b4))
+    if isinstance(t3, str) and t3:
+        c4 = Path(t3).suffix.lower()
+        b4 = 'text/markdown' if c4 in f3 else 'text/x-rst' if c4 == '.rst' else 'text/plain'
+        return (f'read_text({t3!r})', repr(b4))
+    return ("''", repr('text/plain'))
+def d4(e4):
+    x1 = []
+    z1 = []
+    if not isinstance(e4, list):
+        return ('', '')
+    for f4 in e4:
+        if not isinstance(f4, dict):
+            continue
+        a1 = str(f4.get('name', '')).strip()
+        g4 = str(f4.get('email', '')).strip()
+        if a1:
+            x1.append(a1)
+        if g4:
+            z1.append(g4)
+    return (', '.join(x1), ', '.join(z1))
+def h4(c2):
+    i4 = c2['tool'].get('setuptools', {})
+    j4 = []
+    if isinstance(i4, dict):
+        k4 = i4.get('ext-modules', [])
+        if isinstance(k4, list):
+            j4 = [ext for ext in k4 if isinstance(ext, dict) and ext.get('name')]
+    if j4:
+        return (j4, 'setuptools')
+    y2 = str(c2.get('build_backend', '')).lower()
+    m2 = ' '.join(map(str, c2.get('build_requires', []))).lower()
+    if 'scikit-build' in y2 or 'scikit-build' in m2:
+        return ([], 'scikit-build')
+    if 'mesonpy' in y2 or 'meson-python' in m2:
+        return ([], 'meson')
+    if 'cmake' in y2 or 'cmake' in m2:
+        return ([], 'cmake')
+    return ([], 'none')
+def l4(c2, cfg):
+    m4 = []
+    n4 = x3(cfg, 'options.packages.find')
+    i4 = c2['tool'].get('setuptools', {})
+    if n4:
+        o4 = n4.get('where', [''])[0]
+        p4 = n4.get('exclude', [])
+        if o4:
+            m4.append(f"package_dir={{'': {o4!r}}}")
+            q4 = f'find_packages(where={o4!r}'
+        else:
+            q4 = 'find_packages('
+        if q4.endswith('('):
+            q4 += ')'
+        else:
+            q4 += ')'
+        if p4:
+            q4 = f'find_packages(where={o4!r}, exclude={i3(p4)})'
+        m4.append(f'packages={q4}')
+    else:
+        r4 = i4.get('package-dir', {}) if isinstance(i4, dict) else {}
+        if r4:
+            m4.append(f'package_dir={i3(r4)}')
+        m4.append('packages=find_packages()')
+    s4 = {}
+    if isinstance(i4, dict):
+        s4 = i4.get('package-data', {}) or {}
+    if cfg.has_section('options.package_data'):
+        s4.update(x3(cfg, 'options.package_data'))
+    if s4:
+        m4.append(f'package_data={i3(s4)}')
+    return m4
+def t4(c2):
+    a2 = {}
+    if c2['scripts']:
+        a2['console_scripts'] = [f'{a1} = {f2}' for a1, f2 in c2['scripts'].items()]
+    if c2['gui_scripts']:
+        a2['gui_scripts'] = [f'{a1} = {f2}' for a1, f2 in c2['gui_scripts'].items()]
+    for v2, u4 in (c2['entry_points'] or {}).items():
+        if isinstance(u4, dict):
+            a2[v2] = [f'{a1} = {f2}' for a1, f2 in u4.items()]
+        elif isinstance(u4, list):
+            a2[v2] = [str(v4) for v4 in u4]
+    return a2
+def x2(c2, cfg, o3):
+    w1, w4 = d4(c2['authors'])
+    x4, y4 = d4(c2['maintainers'])
+    d2 = c2['urls']
+    z4 = next(iter(d2.values()), '') if isinstance(d2, dict) else ''
+    a5, b4 = z3(c2['readme'])
+    b5 = t4(c2)
+    j4, c5 = h4(c2)
+    d5 = [f"name={c2['name']!r}", f"version={c2['version']!r}", f"description={c2['description']!r}", 'long_description=long_description', f'long_description_content_type={b4}', f'author={w1!r}', f'author_email={w4!r}', f'maintainer={x4!r}', f'maintainer_email={y4!r}', f"license={c2['license']!r}", f'url={z4!r}', f"keywords={i3(c2['keywords'])}", f"classifiers={i3(c2['classifiers'])}", f"python_requires={c2['requires_python']!r}", f"install_requires={i3(c2['dependencies'])}", f"extras_require={i3(c2['optional_dependencies'])}", f'entry_points={i3(b5)}', 'include_package_data=True', *l4(c2, cfg)]
+    if j4:
+        e5 = []
+        for f5 in j4:
+            e5.append(f"Extension({f5['name']!r}, sources={i3(f5.get('sources', []))})")
+        d5.append(f"ext_modules=[{', '.join(e5)}]")
+    g5 = ',\n    '.join(d5)
+    h5 = repr(str(Path(c2['readme'].get('file', ''))))
+    if isinstance(c2['readme'], str):
+        h5 = repr(c2['readme'])
+    return f'#!/usr/bin/env python3\n"""\nAuto-generated from {o3.name}/pyproject.toml.\nThis file intentionally preserves MANIFEST.in and setup.cfg by leaving them\navailable to setuptools rather than copying their contents into this file.\nDetected extension backend: {c5}\n"""\nfrom pathlib import Path\nfrom setuptools import Extension, find_packages, setup\nROOT = Path(__file__).resolve().parent\nREADME_FILE = ROOT / {h5}\ndef read_text(relative_path: str) -> str:\n    """Read a project file relative to setup.py."""\n    path = ROOT / relative_path\n    return path.read_text(encoding="utf-8") if path.is_file() else ""\nlong_description = {a5}\nsetup(\n    {g5}\n)\n'
+def g1():
+    h1 = argparse.ArgumentParser(description='Generate setup.py from pyproject.toml.')
+    h1.add_argument('toml_path', nargs='?', type=Path, default=Path('pyproject.toml'), help='Path to pyproject.toml.')
+    h1.add_argument('--force', action='store_true', help='Overwrite an existing setup.py.')
+    return h1.parse_args()
+def b1():
+    c3 = g1()
+    n3 = c3.toml_path.expanduser().resolve()
+    if not n3.is_file():
+        print(f'❌ Error: {n3} not found.')
+        return 1
+    i5 = m3(n3)
+    print(f'📂 Loading {i5.pyproject}...')
+    try:
+        c2 = p3(j3(i5.pyproject))
+        cfg = u3(i5.setup_cfg)
+        j5 = x2(c2, cfg, i5.root)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f'❌ Error: {exc}', file=sys.stderr)
+        return 1
+    if i5.setup_py.exists() and (not c3.force):
+        print(f'⚠️  {i5.setup_py} already exists. Use --force to overwrite.')
+        return 0
+    try:
+        i5.setup_py.write_text(j5, encoding='utf-8', newline='\n')
+    except OSError as exc:
+        print(f'❌ Error writing {i5.setup_py}: {exc}', file=sys.stderr)
+        return 1
+    j4, c5 = h4(c2)
+    print(f'✅ Generated {i5.setup_py}')
+    print('\n--- Conversion Summary ---')
+    print(f"Project: {c2['name']} v{c2['version']}")
+    print(f"Dependencies: {len(c2['dependencies'])}")
+    print(f"Optional deps: {len(c2['optional_dependencies'])}")
+    print(f'C-extensions: {c5}')
+    if i5.setup_cfg.is_file():
+        print('✅ Preserved: setup.cfg')
+    if i5.manifest.is_file():
+        print('✅ Preserved: MANIFEST.in')
+    if j4:
+        print(f'Extensions generated: {len(j4)}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: init_project.py ---
+import argparse
+from pathlib import Path
+def k5():
+    import json
+    l5 = Path.home() / '.myinfo'
+    m5 = {}
+    if not l5.exists():
+        return m5
+    with l5.open(encoding='utf-8') as f:
+        m5 = json.load(f)
+    return m5
+def n5(b, c=''):
+    if not b.exists():
+        b.write_text(c)
+def o5(pkg, n2, y1, g4, url, p5, q5, r5='>=3.11'):
+    s5 = pkg.replace('-', '_')
+    v = ['[build-system]', 'requires = ["setuptools>=68"]', 'build-backend = "setuptools.build_meta"', '', '[project]', f'name = "{pkg}"', f'version = "{n2}"']
+    if p5:
+        v.append(f'description = "{p5}"')
+    if y1:
+        v.append(f'authors = [{{name = "{y1}"')
+        if g4:
+            v[-1] += f', email = "{g4}"'
+        v[-1] += '}]'
+    elif g4:
+        v.append(f'authors = [{{email = "{g4}"}}]')
+    if url:
+        v.extend(['', '[project.urls]', f'Homepage = "{url}"'])
+    v.extend(['', f'requires-python = "{r5}"', 'dependencies = []', '', '[tool.setuptools.packages.find]', 'where = ["src"]'])
+    if q5:
+        v.extend(['', '[project.scripts]', f'{pkg} = "{s5}:main"'])
+    return '\n'.join(v) + '\n'
+def t5(pkg, y1, g4, url, p5, q5, n2='0.1.0'):
+    cwd = Path.cwd() / pkg
+    cwd.mkdir(exist_ok=True)
+    s5 = pkg.replace('-', '_')
+    n5(cwd / 'README.md', f'# {pkg}\n')
+    n5(cwd / '.gitignore', w5)
+    n5(cwd / 'LICENSE', '')
+    (cwd / 'pyproject.toml').write_text(o5(pkg, n2, y1, g4, url, p5, q5))
+    u5 = cwd / 'src' / s5
+    u5.mkdir(parents=True, exist_ok=True)
+    n5(u5 / '__init__.py', f'__version__ = "{n2}"\n')
+    if q5:
+        n5(u5 / '__main__.py', f'"""CLI entry point for {pkg}."""\nimport sys\ndef main() -> int:\n    """Main entry point. Returns process exit code."""\n    print(f"Hello from {pkg}!")\n    return 0\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+    v5 = cwd / 'tests'
+    v5.mkdir(exist_ok=True)
+    n5(v5 / '__init__.py')
+    n5(v5 / f'test_{s5}.py', f'def test_version():\n    from {s5} import __version__\n    assert __version__ == "{n2}"\n')
+    print(f"Project '{pkg}' initialized in {cwd}")
+    print(f"  - pyproject.toml with {('CLI entry point' if q5 else 'no CLI')}")
+    print('  - src/ layout with setuptools auto-discovery')
+    print('  - tests/ directory with a smoke test')
+w5 = '__pycache__/\n*.py[cod]\n*.egg-info/\ndist/\nbuild/\n.venv/\nvenv/\nenv/\n.mypy_cache/\n.ruff_cache/\n.pytest_cache/\n.coverage\n'
+def b1():
+    x5 = k5()
+    h1 = argparse.ArgumentParser(description='Initialize a modern Python project with pyproject.toml')
+    h1.add_argument('name', help='Package name (e.g., my-package)')
+    h1.add_argument('--version', default='0.1.0', help='Initial version (default: 0.1.0)')
+    h1.add_argument('-d', '--description', default='', help='One-line project description')
+    h1.add_argument('-s', '--simple-cli', action='store_true', help='Create a console_scripts entry point + __main__.py')
+    c3 = h1.parse_args()
+    y1 = x5.get('name', '')
+    g4 = x5.get('email', '')
+    y5 = x5.get('github_username', '')
+    url = f'https://github.com/{y5}/{c3.name}' if y5 else ''
+    t5(c3.name, y1, g4, url, c3.description, c3.simple_cli, c3.version)
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: initproj.py ---
+import sys
+from pathlib import Path
+def z5(b, c):
+    b.parent.mkdir(parents=True, exist_ok=True)
+    b.write_text(c.strip() + '\n', encoding='utf-8')
+    print(f'Created: {b}')
+def b1():
+    a6 = input('Enter project name (e.g., my-cli-tool): ').strip().replace(' ', '-')
+    if not a6:
+        print('Project name cannot be empty.')
+        sys.exit(1)
+    b6 = a6.replace('-', '_')
+    c6 = input('Enter author name: ').strip() or 'Your Name'
+    w4 = input('Enter author email: ').strip() or 'author@example.com'
+    o3 = Path(a6)
+    if o3.exists():
+        print(f"Error: Directory '{a6}' already exists.")
+        sys.exit(1)
+    print(f"\nScaffolding modern '{a6}' layout with Typer CLI...")
+    d6 = f'''\n[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"\n[project]\nname = "{a6}"\ndynamic = ["version"]\ndescription = "A standard library and CLI tool built with Typer."\nreadme = "README.md"\nrequires-python = ">=3.10"\nauthors = [\n    {{ name = "{c6}", email = "{w4}" }}\n]\nclassifiers = [\n    "Programming Language :: Python :: 3",\n    "License :: OSI Approved :: MIT License",\n    "Operating System :: OS Independent",\n]\ndependencies = [\n    "typer>=0.12.0",\n    "rich>=13.0.0",\n]\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n    "black>=24.0.0",\n    "flake8>=7.0.0",\n]\n[project.scripts]\n{a6} = "{b6}.cli:app"\n{a6}-admin = "{b6}.admin:app"\n[tool.hatch.version]\npath = "src/{b6}/__init__.py"\n[tool.black]\nline-length = 88\ntarget-version = ['py310']\n'''
+    e6 = '__version__ = "0.1.0"'
+    f6 = f'\nimport typer\nfrom rich import print\napp = typer.Typer(help="Main CLI for {a6}")\n@app.command()\ndef hello(name: str = typer.Argument("World", help="The name to greet")):\n    """Greet someone politely."""\n    print(f"[bold green]Hello[/bold green] [cyan]{{name}}[/cyan]! Welcome to {a6}.")\n@app.command()\ndef version():\n    """Show tool version."""\n    from {b6} import __version__\n    print(f"{a6} version: [yellow]{{__version__}}[/yellow]")\nif __name__ == "__main__":\n    app()\n'
+    g6 = f'\nimport typer\nfrom rich import print\napp = typer.Typer(help="Administrative commands for {a6}")\n@app.command()\ndef setup():\n    """Initialize application system configs."""\n    print("[bold yellow]Initializing secure admin layout... Done.[/bold yellow]")\nif __name__ == "__main__":\n    app()\n'
+    h6 = f'\nA cookiecutter-pypackage styled boilerplate library including dual CLI entrypoints powered by Typer.\n```bash\npip install .\n```\nFor development installations:\n```bash\npip install -e ".[dev]"\n```\n```bash\n{a6} hello --name Alice\n```\n```bash\n{a6}-admin setup\n```\n- Run tests: `pytest`\n- Format code: `black .`\n'
+    i6 = f'\nfrom typer.testing import CliRunner\nfrom {b6}.cli import app\nrunner = CliRunner()\ndef test_hello_endpoint():\n    result = runner.invoke(app, ["hello", "Tester"])\n    assert result.exit_code == 0\n    assert "Hello Tester!" in result.stdout\n'
+    z5(o3 / 'pyproject.toml', d6)
+    z5(o3 / 'README.md', h6)
+    z5(o3 / 'src' / b6 / '__init__.py', e6)
+    z5(o3 / 'src' / b6 / 'cli.py', f6)
+    z5(o3 / 'src' / b6 / 'admin.py', g6)
+    z5(o3 / 'tests' / '__init__.py', '')
+    z5(o3 / 'tests' / 'test_cli.py', i6)
+    print(f"\n[Success] Your library template '{a6}' has been created successfully!")
+    print(f'Next steps:\n  cd {a6}\n  pip install -e .[dev]\n  pytest')
+if __name__ == '__main__':
+    b1()
+
+# --- File: mk_setup.py ---
+import os
+import re
+import sys
+from pathlib import Path
+def j6(j1, q1):
+    k6 = Path(j1).resolve()
+    l6 = k6 / q1 / '__main__.py'
+    m6 = k6 / q1 / 'cli.py'
+    n6 = k6 / '__main__.py'
+    o6 = k6 / 'cli.py'
+    b5 = []
+    if l6.exists():
+        b5.append({'module': f'{q1}.__main__', 'function': 'main', 'script_name': q1})
+    if m6.exists():
+        p6 = q6(m6)
+        b5.append({'module': f'{q1}.cli', 'function': p6, 'script_name': q1 if not l6.exists() else f'{q1}-cli'})
+    if n6.exists() and (not b5):
+        b5.append({'module': '__main__', 'function': 'main', 'script_name': q1})
+    if o6.exists() and (not b5):
+        p6 = q6(o6)
+        b5.append({'module': 'cli', 'function': p6, 'script_name': q1})
+    return b5
+def q6(b):
+    try:
+        with open(b, encoding='utf-8') as f:
+            c = f.read()
+        if re.search('def main\\(', c) or re.search('@click\\.\\w+', c) or re.search('import click', c):
+            return 'main'
+        elif re.search('def cli\\(', c):
+            return 'cli'
+        elif re.search('if __name__ == [\\\'"]__main__[\\\'"]:', c):
+            return 'main'
+        return 'main'
+    except Exception:
+        return 'main'
+def r6(j1):
+    k6 = Path(j1).resolve()
+    m2 = []
+    s6 = ['requirements.txt', 'requirements.in', 'Pipfile']
+    for t6 in s6:
+        u6 = k6 / t6
+        if u6.exists():
+            try:
+                with open(u6, encoding='utf-8') as f:
+                    for n in f:
+                        n = n.strip()
+                        if n and (not n.startswith('#')) and (not n.startswith('-')):
+                            if t6 == 'Pipfile':
+                                if '=' in n and (not n.startswith('[')):
+                                    pkg = n.split('=')[0].strip()
+                                    if pkg:
+                                        m2.append(pkg)
+                            else:
+                                m2.append(n)
+            except Exception:
+                pass
+            break
+    return m2
+def x2(j1, q1, b5, m2):
+    v6 = ''
+    if b5:
+        w6 = []
+        for ep in b5:
+            w6.append(f"{ep['script_name']}={ep['module']}:{ep['function']}")
+        v6 = '    entry_points={\n'
+        v6 += "        'console_scripts': [\n"
+        for x6 in w6:
+            v6 += f"            '{x6}',\n"
+        v6 += '        ],\n'
+        v6 += '    },\n'
+    y6 = '    install_requires=[],\n'
+    if m2:
+        y6 = '    install_requires=[\n'
+        for req in m2:
+            y6 += f"        '{req}',\n"
+        y6 += '    ],\n'
+    h6 = ''
+    z6 = Path(j1) / 'README.md'
+    if z6.exists():
+        h6 = "    long_description=open('README.md').read(),\n"
+        h6 += "    long_description_content_type='text/markdown',\n"
+    a7 = f"from setuptools import setup, find_packages\nsetup(\n    name='{q1}',\n    version='1.4.7',\n    description='{q1} - A Python project',\n    author='Your Name',\n    author_email='your.email@example.com',\n    url='',\n    packages=find_packages(),\n{y6}{h6}{v6}    python_requires='>=3.6',\n    classifiers=[\n        'Development Status :: 3 - Alpha',\n        'Intended Audience :: Developers',\n        'Programming Language :: Python :: 3',\n        'Programming Language :: Python :: 3.6',\n        'Programming Language :: Python :: 3.7',\n        'Programming Language :: Python :: 3.8',\n        'Programming Language :: Python :: 3.9',\n        'Programming Language :: Python :: 3.10',\n        'Programming Language :: Python :: 3.11',\n    ],\n)\n"
+    return a7
+def b1():
+    if len(sys.argv) != 2:
+        print('Usage: python create_setup.py <project_directory>')
+        sys.exit(1)
+    j1 = sys.argv[1]
+    if not os.path.exists(j1):
+        print(f"Error: Directory '{j1}' does not exist.")
+        sys.exit(1)
+    if not os.path.isdir(j1):
+        print(f"Error: '{j1}' is not a directory.")
+        sys.exit(1)
+    q1 = os.path.basename(os.path.abspath(j1))
+    print(f'Package name: {q1}')
+    b5 = j6(j1, q1)
+    if not b5:
+        print('Warning: No __main__.py or cli.py found.')
+        print('Creating setup.py without console_scripts entry points.')
+    else:
+        print('Detected entry points:')
+        for ep in b5:
+            print(f"  - {ep['script_name']} -> {ep['module']}:{ep['function']}")
+    m2 = r6(j1)
+    if m2:
+        print(f'\nFound {len(m2)} requirements in requirements files.')
+    a7 = x2(j1, q1, b5, m2)
+    b7 = os.path.join(j1, 'setup.py')
+    with open(b7, 'w', encoding='utf-8') as f:
+        f.write(a7)
+    print(f'\n✓ Created {b7}')
+    print('\nGenerated setup.py content preview:')
+    print('-' * 40)
+    print(a7)
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: mksetup.py ---
+import shutil
+import sys
+import tempfile
+import zipfile
+from email.parser import Parser
+from pathlib import Path
+c7 = ('.so', '.pyd', '.dll')
+def d7(o3):
+    e7 = next(o3.glob('*.dist-info'), None)
+    if not e7:
+        return {}
+    f7 = e7 / 'entry_points.txt'
+    if not f7.exists():
+        return {}
+    g7 = {}
+    h7 = None
+    for n in f7.read_text().splitlines():
+        n = n.strip()
+        if not n or n.startswith('#'):
+            continue
+        if n.startswith('[') and n.endswith(']'):
+            h7 = n[1:-1]
+            g7[h7] = []
+            continue
+        if h7:
+            g7[h7].append(n)
+    return g7
+def i7(whl, dst):
+    with zipfile.ZipFile(whl) as zf:
+        zf.extractall(dst)
+def j7(k7):
+    if k7.is_dir():
+        return k7.resolve()
+    if k7.suffix == '.whl':
+        tmp = Path(tempfile.mkdtemp())
+        i7(k7, tmp)
+        return tmp
+    msg = 'Input must be a .whl file or an unzipped wheel directory'
+    raise SystemExit(msg)
+def l7(o3):
+    e7 = next(o3.glob('*.dist-info'), None)
+    if not e7:
+        msg = 'No .dist-info directory found'
+        raise RuntimeError(msg)
+    m7 = e7 / 'METADATA'
+    n7 = Parser().parsestr(m7.read_text())
+    return {'name': n7['Name'], 'version': n7['Version'], 'summary': n7.get('Summary', ''), 'install_requires': n7.get_all('Requires-Dist') or []}
+def o7(o3):
+    return ['.'.join(f.relative_to(o3).with_suffix('').parts) for f in o3.rglob('*') if f.suffix in c7]
+def x2(n7, j4, b5):
+    p7 = 'from setuptools import Extension\n\next_modules = [\n' + '\n'.join((f'''    Extension("{m}", sources=["{m.replace('.', '/')}.*"]),''' for m in j4)) + '\n]\n' if j4 else 'ext_modules = []\n'
+    q7 = ''
+    if b5:
+        r7 = '{\n'
+        for y3, w2 in b5.items():
+            r7 += f'        "{y3}": [\n'
+            for v in w2:
+                r7 += f'            "{v}",\n'
+            r7 += '        ],\n'
+        r7 += '    }'
+        q7 = f'    entry_points={r7},\n'
+    return f'''from setuptools import setup, find_packages\n{p7}\nsetup(\n    name="{n7['name']}",\n    version="{n7['version']}",\n    description="{n7['summary']}",\n    packages=find_packages() or ["."],\n    install_requires={n7['install_requires']},\n    ext_modules=ext_modules,\n{q7})\n'''
+def s7():
+    return '[build-system]\nrequires = ["setuptools>=61", "wheel"]\nbuild-backend = "setuptools.build_meta"\n'
+def b1():
+    if len(sys.argv) != 2:
+        msg = 'Usage: python mk_setuppy.py <wheel.whl | unzipped-dir>'
+        raise SystemExit(msg)
+    k7 = Path(sys.argv[1]).resolve()
+    o3 = j7(k7)
+    n7 = l7(o3)
+    b5 = d7(o3)
+    j4 = o7(o3)
+    t7 = Path('output') / n7['name']
+    t7.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(o3, t7, dirs_exist_ok=True)
+    (t7 / 'setup.py').write_text(x2(n7, j4, b5))
+    (t7 / 'pyproject.toml').write_text(s7())
+    print(f"✔ setup.py generated for {n7['name']}")
+    print('✔ binary extensions detected' if j4 else '✔ pure Python package')
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: mksetuppy.py ---
+import email.utils
+import importlib
+import re
+import subprocess
+import sys
+from collections import defaultdict
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+from setuptools import find_packages, setup
+u7 = Path.cwd()
+def v7(w7):
+    raise w7
+def x7(y7, z7=u7):
+    a8 = z7 / y7
+    a2 = {}
+    if z7 != u7:
+        a2['package_dir'] = {'': str(z7)}
+    if a8.is_dir():
+        a2['packages'] = find_packages(where=str(z7), include=(y7, f'{y7}.*'))
+    elif (z7 / f'{y7}.py').is_file():
+        a2['py_modules'] = [y7]
+    else:
+        raise RuntimeError(f'No package matching {y7!r} found in {z7}')
+    return a2
+def b8(f, c8=None):
+    c8 = c8 or {}
+    a2 = defaultdict(list)
+    a2[''] = ['*']
+    for d8 in f:
+        e8 = c8.get(d8)
+        if e8 is None:
+            f8 = c8.get('', '')
+            e8 = str(Path(f8) / Path(d8.replace('.', '/')))
+        a8 = Path(e8)
+        if not a8.is_dir():
+            continue
+        for g8 in a8.rglob('*'):
+            if not g8.is_dir():
+                continue
+            h8 = g8.relative_to(a8).parts
+            if '__pycache__' in h8 or any((i8.startswith('.') for i8 in h8)):
+                continue
+            if not (g8 / '__init__.py').exists():
+                j8 = g8.relative_to(a8)
+                a2[d8].append(f'{j8}/*')
+    return {d8: sorted(set(k8)) for d8, k8 in a2.items()}
+def l8(d1, m8=()):
+    if 'project' not in d1:
+        return None
+    c2 = d1['project']
+    w1 = []
+    n8 = []
+    for y1 in c2.get('authors', []):
+        if 'name' in y1:
+            w1.append(y1['name'])
+        if 'email' in y1:
+            n8.append(y1['email'])
+    b5 = defaultdict(list)
+    for a1, f2 in c2.get('scripts', {}).items():
+        b5['console_scripts'].append(f'{a1} = {f2}')
+    for a1, f2 in c2.get('gui-scripts', {}).items():
+        b5['gui_scripts'].append(f'{a1} = {f2}')
+    for o8, p8 in c2.get('entrypoints', {}).items():
+        if o8 in {'console_scripts', 'gui_scripts'}:
+            raise ValueError(f'{o8} is forbidden in [project.entrypoints]')
+        for a1, f2 in p8.items():
+            b5[o8].append(f'{a1} = {f2}')
+    for key in m8:
+        q8 = key in c2
+        r8 = key in c2.get('dynamic', [])
+        if q8 and r8:
+            raise ValueError(f'Key {key!r} is declared both statically and dynamically')
+        if not q8 and (not r8):
+            raise ValueError(f'Key {key!r} must be declared either statically or dynamically')
+    return {'name': c2['name'], 'version': c2.get('version'), 'description': c2.get('description'), 'author': ', '.join(w1), 'author_email': ', '.join(n8), 'classifiers': c2.get('classifiers', []), 'entry_points': dict(b5)}
+def s8(d1):
+    t8 = l8(d1, allow_dynamic=('version', 'description'))
+    y7 = None
+    if t8 is not None:
+        u8 = d1.get('tool', {}).get('flit', {}).get('metadata')
+        if u8 is not None:
+            raise ValueError('[project] and [tool.flit.metadata] cannot be used together')
+        y7 = d1.get('tool', {}).get('flit', {}).get('module', {}).get('name')
+    else:
+        v8 = d1['tool']['flit']
+        c2 = v8['metadata']
+        b5 = defaultdict(list)
+        for a1, f2 in v8.get('scripts', {}).items():
+            b5['console_scripts'].append(f'{a1} = {f2}')
+        for o8, p8 in v8.get('entrypoints', {}).items():
+            for a1, f2 in p8.items():
+                b5[o8].append(f'{a1} = {f2}')
+        t8 = {'name': c2['module'], 'version': None, 'description': None, 'author': c2.get('author'), 'author_email': c2.get('author-email'), 'url': c2.get('home-page'), 'classifiers': c2.get('classifiers', []), 'entry_points': dict(b5)}
+    y7 = y7 or t8['name']
+    if t8['version'] is None or t8['description'] is None:
+        sys.path.insert(0, str(u7))
+        sys.path.insert(1, str(u7 / 'src'))
+        w8 = importlib.import_module(y7.replace('/', '.'))
+        if t8['version'] is None:
+            t8['version'] = w8.__version__
+        if t8['description'] is None:
+            t8['description'] = ' '.join(w8.__doc__.strip().splitlines())
+    try:
+        x8 = x7(y7)
+    except RuntimeError:
+        x8 = x7(y7, u7 / 'src')
+    t8.update(x8)
+    t8['package_data'] = b8(t8.get('packages', []), t8.get('package_dir', {}))
+    w13(**t8)
+def y8(d1):
+    q3 = d1['build-system']
+    z8 = q3['backend-path']
+    if isinstance(z8, str):
+        z8 = [z8]
+    sys.path = [str(u7 / b) for b in z8] + sys.path
+    a9 = q3['build-backend']
+    w8 = importlib.import_module(a9)
+    c2 = w8.metadata_dict
+    q1 = a9.split('.')[0]
+    x8 = x7(q1)
+    w13(name=w8.metadata.name, version=w8.metadata.version, description=w8.metadata.summary, author=c2['author'], author_email=c2['author_email'], url=c2.get('home_page'), classifiers=c2.get('classifiers', []), **x8)
+def b9(d1):
+    c2 = d1['tool']['poetry']
+    w1 = []
+    n8 = []
+    for y1 in c2.get('authors', []):
+        a1, c9 = g4.utils.parseaddr(y1)
+        w1.append(a1)
+        n8.append(c9)
+    if 'packages' not in c2:
+        d9 = re.sub('[-.]', '_', c2['name'].lower())
+        try:
+            x8 = x7(d9)
+        except RuntimeError:
+            x8 = x7(d9, u7 / 'src')
+    else:
+        x8 = {'packages': [], 'package_dir': {}}
+        for d8 in c2['packages']:
+            if d8.get('format', '') == 'sdist':
+                continue
+            e9 = d8['include']
+            z7 = u7 / d8.get('from', '.')
+            f = find_packages(where=str(z7), include=(e9, f'{e9}.*'))
+            x8['packages'].extend(f)
+            if z7 != u7:
+                for q1 in f:
+                    x8['package_dir'][q1] = str(z7 / q1.replace('.', '/'))
+    x8['package_data'] = b8(x8.get('packages', []), x8.get('package_dir', {}))
+    if c2.get('exclude'):
+        raise NotImplementedError("Poetry's exclude option is not implemented")
+    b5 = defaultdict(list)
+    for a1, f2 in c2.get('scripts', {}).items():
+        b5['console_scripts'].append(f'{a1} = {f2}')
+    for o8, p8 in c2.get('plugins', {}).items():
+        for a1, f2 in p8.items():
+            b5[o8].append(f'{a1} = {f2}')
+    w13(name=c2['name'], version=c2['version'], description=c2['description'], author=', '.join(w1), author_email=', '.join(n8), url=c2.get('homepage'), classifiers=c2.get('classifiers', []), entry_points=dict(b5), **x8)
+def f9(d1):
+    j5 = u7 / 'setup.py'
+    if j5.exists():
+        a2 = subprocess.run([sys.executable, str(j5), *sys.argv[1:]], check=False)
+        if a2.returncode:
+            raise SystemExit(a2.returncode)
+        return
+    w13()
+g9 = {'flit.buildapi': s8, 'flit_core.buildapi': s8, 'flit_core.build_thyself': y8, 'poetry.masonry.api': b9, 'poetry.core.masonry.api': b9, 'setuptools.build_meta': f9, 'setuptools.build_meta:__legacy__': f9}
+def b1():
+    h9 = u7 / 'pyproject.toml'
+    if not h9.exists():
+        raise FileNotFoundError(f'Could not find {h9}')
+    with h9.open('rb') as k1:
+        d1 = tomllib.load(k1)
+    y2 = d1['build-system']['build-backend']
+    try:
+        i9 = g9[y2]
+    except KeyError as error:
+        raise NotImplementedError(f'Build backend {y2!r} is unknown') from w7
+    i9(d1)
+if __name__ == '__main__':
+    b1()
+
+# --- File: new2old.py ---
+import argparse
+import configparser
+import tomllib
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Any, ClassVar
+class j9(Enum):
+    k9 = ('✅', '\x1b[92m')
+    l9 = ('❌', '\x1b[91m')
+    m9 = ('⚠️ ', '\x1b[93m')
+    n9 = ('ℹ️ ', '\x1b[94m')
+def o9(p9, q9):
+    return f'{q9}{p9}\x1b[0m'
+def log(r9, s9):
+    print(f'{r9.value[0]} {o9(s9, r9.value[1])}')
+def t9(s9):
+    print(s9)
+@dataclass
+class u9:
+    a1 = None
+    g4 = None
+    def v9(self):
+        if self.name and self.email:
+            return f'{self.name} <{self.email}>'
+        elif self.name:
+            return self.name
+        elif self.email:
+            return self.email
+        return None
+    @classmethod
+    def w9(cls, d1):
+        return cls(name=d1.get('name'), email=d1.get('email'))
+@dataclass
+class x9:
+    p9 = ''
+    b = None
+    @classmethod
+    def y9(cls, t1):
+        if not t1:
+            return cls()
+        if isinstance(t1, str):
+            return cls(text=t1)
+        if isinstance(t1, dict):
+            if 'text' in t1:
+                return cls(text=t1['text'])
+            if 'file' in t1:
+                b = t1['file']
+                try:
+                    p9 = Path(b).read_text(encoding='utf-8')
+                    return cls(text=p9, path=b)
+                except OSError:
+                    return cls(path=b)
+        return cls()
+@dataclass
+class z9:
+    c = ''
+    b4 = 'text/plain'
+    @classmethod
+    def y9(cls, t1):
+        if not t1:
+            return cls()
+        if isinstance(t1, str):
+            return cls._from_path(t1)
+        if isinstance(t1, dict):
+            if 'file' in t1:
+                c = cls._read_file(t1['file'])
+                b4 = t1.get('content-type', 'text/plain')
+                return cls(content=c, content_type=b4)
+            if 'text' in t1:
+                return cls(content=t1['text'], content_type=t1.get('content-type', 'text/plain'))
+        return cls()
+    @staticmethod
+    def a10(b):
+        c = z9._read_file(b)
+        if b.lower().endswith('.md'):
+            b4 = 'text/markdown'
+        elif b.lower().endswith('.rst'):
+            b4 = 'text/x-rst'
+        else:
+            b4 = 'text/plain'
+        return z9(content=c, content_type=b4)
+    @staticmethod
+    def b10(b):
+        try:
+            return Path(b).read_text(encoding='utf-8')
+        except OSError:
+            return ''
+@dataclass
+class c10:
+    a1 = ''
+    n2 = '0.0.0'
+    p5 = ''
+    t3 = field(default_factory=z9)
+    d10 = ''
+    license = field(default_factory=x9)
+    w1 = field(default_factory=list)
+    x4 = field(default_factory=list)
+    e10 = field(default_factory=list)
+    f10 = field(default_factory=list)
+    d2 = field(default_factory=dict)
+    e2 = field(default_factory=dict)
+    g10 = field(default_factory=dict)
+    b5 = field(default_factory=dict)
+    l = field(default_factory=list)
+    h10 = field(default_factory=dict)
+    i10 = ''
+    j10 = field(default_factory=list)
+    k10 = field(default_factory=dict)
+    @classmethod
+    def l10(cls, d1):
+        v1 = d1.get('project', {})
+        q3 = d1.get('build-system', {})
+        r3 = d1.get('tool', {})
+        w1 = [u9.from_dict(a) for a in v1.get('authors', []) if isinstance(a, dict)]
+        x4 = [u9.from_dict(m) for m in v1.get('maintainers', []) if isinstance(m, dict)]
+        b5 = {}
+        for o8, m10 in v1.get('entry-points', {}).items():
+            if isinstance(m10, dict):
+                b5[o8] = m10
+        return cls(name=v1.get('name', ''), version=v1.get('version', '0.0.0'), description=v1.get('description', ''), readme=z9.from_value(v1.get('readme')), requires_python=v1.get('requires-python', ''), license=x9.from_value(v1.get('license')), authors=w1, maintainers=x4, keywords=v1.get('keywords', []), classifiers=v1.get('classifiers', []), urls=v1.get('urls', {}), scripts=v1.get('scripts', {}), gui_scripts=v1.get('gui-scripts', {}), entry_points=b5, dependencies=v1.get('dependencies', []), optional_dependencies=v1.get('optional-dependencies', {}), build_backend=q3.get('build-backend', ''), build_requires=q3.get('requires', []), tool_config=r3)
+@dataclass
+class n10:
+    o10 = field(default_factory=dict)
+    s4 = field(default_factory=dict)
+    p10 = field(default_factory=list)
+    b5 = field(default_factory=dict)
+    q10 = field(default_factory=dict)
+    @classmethod
+    def r10(cls, c):
+        if not c:
+            return cls()
+        try:
+            h1 = configparser.ConfigParser()
+            h1.read_string(c)
+        except configparser.Error:
+            return cls()
+        s10 = cls()
+        if h1.has_section('options.packages.find'):
+            s10.packages_find = dict(h1.items('options.packages.find'))
+        if h1.has_section('options') and h1.has_option('options', 'package_data'):
+            t10 = h1.get('options', 'package_data')
+            s10.package_data = {}
+        if h1.has_section('options.data_files'):
+            for f2, u10 in h1.items('options.data_files'):
+                i5 = [f.strip() for f in u10.split(',') if f.strip()]
+                s10.data_files.append((f2, i5))
+        if h1.has_section('options.entry_points'):
+            for v2, v10 in h1.items('options.entry_points'):
+                w10 = [e.strip() for e in v10.split('\n') if e.strip()]
+                s10.entry_points[v2] = w10
+        return s10
+class x10(Enum):
+    y10 = 'none'
+    z10 = 'setuptools'
+    a11 = 'scikit-build'
+    b11 = 'meson-python'
+    c11 = 'cmake'
+@dataclass
+class d11:
+    y2 = x10.NONE
+    e11 = False
+    @classmethod
+    def f11(cls, c2):
+        k10 = c2.tool_config
+        if 'setuptools' in k10 and k10['setuptools'].get('ext-modules'):
+            return cls(backend=x10.SETUPTOOLS, has_extensions=True)
+        if 'scikit-build' in k10 or 'scikit-build-core' in k10:
+            return cls(backend=x10.SCIKIT_BUILD, has_extensions=True)
+        if 'meson-python' in k10:
+            return cls(backend=x10.MESON, has_extensions=True)
+        for req in c2.build_requires:
+            if 'meson-python' in req:
+                return cls(backend=x10.MESON, has_extensions=True)
+        return cls()
+class g11:
+    h11 = '#!/usr/bin/env python3\n"""\nAuto-generated setup.py from pyproject.toml.\nThis file is generated for compatibility with tools that require setup.py.\nFor modern packaging, consider using pyproject.toml directly with build tools\nlike pip, build, or uv.\nC-extensions backend: {cext_backend}\n"""\nimport os\nfrom pathlib import Path\n{imports}\n{setup_func}\nif __name__ == "__main__":\n    setup(\n{setup_kwargs}\n    )\n'
+    @staticmethod
+    def i11(s):
+        return f'"{s.replace(chr(34), chr(92) + chr(34))}"'
+    @staticmethod
+    def j11(k11, l11=8):
+        if not k11:
+            return '[]'
+        m11 = ' ' * l11
+        r7 = ',\n'.join((f'{m11}{g11.quote_string(w3)}' for w3 in k11))
+        return f"[\n{r7}\n{' ' * (l11 - 4)}]"
+    @staticmethod
+    def n11(d1, l11=8, o11=False):
+        if not d1:
+            return '{}'
+        m11 = ' ' * l11
+        k11 = []
+        for key, t1 in d1.items():
+            if o11 and isinstance(t1, list):
+                p11 = g11.format_list(t1, l11 + 4).replace('\n', f'\n{m11}')
+                k11.append(f'{m11}{g11.quote_string(key)}: {p11}')
+            else:
+                k11.append(f'{m11}{g11.quote_string(key)}: {g11.quote_string(str(t1))}')
+        return '{\n' + ',\n'.join(k11) + f"\n{' ' * (l11 - 4)}}}"
+    @classmethod
+    def q11(cls, r11):
+        s11 = ['from setuptools import setup, find_packages']
+        if r11.backend == x10.SETUPTOOLS:
+            s11.append('from setuptools import Extension')
+        elif r11.backend == x10.SCIKIT_BUILD:
+            s11 = ['from skbuild import setup']
+        return '\n'.join(s11)
+    @classmethod
+    def t11(cls, c2, r11, u11):
+        return ''
+    @classmethod
+    def v11(cls, c2, r11, u11):
+        w11 = []
+        w11.append(f'        name={cls.quote_string(c2.name)},')
+        w11.append(f'        version={cls.quote_string(c2.version)},')
+        if c2.description:
+            w11.append(f'        description={cls.quote_string(c2.description)},')
+        if c2.readme.content:
+            h6 = c2.readme.content.replace('"""', '\\"\\"\\"')
+            w11.append(f'        long_description={cls.quote_string(h6)},\n        long_description_content_type={cls.quote_string(c2.readme.content_type)},')
+        x11 = [a.to_string() for a in c2.authors if a.to_string()]
+        if x11:
+            w11.append(f"        author={cls.quote_string(', '.join(x11))},")
+        y11 = [m.to_string() for m in c2.maintainers if m.to_string()]
+        if y11:
+            w11.append(f"        maintainer={cls.quote_string(', '.join(y11))},")
+        if c2.license.text:
+            w11.append(f'        license={cls.quote_string(c2.license.text)},')
+        elif c2.license.path:
+            w11.append(f'        license_files={cls.format_list([c2.license.path], 8)},')
+        if c2.requires_python:
+            w11.append(f'        python_requires={cls.quote_string(c2.requires_python)},')
+        if c2.keywords:
+            w11.append(f"        keywords={cls.quote_string(' '.join(c2.keywords))},")
+        if c2.classifiers:
+            w11.append(f'        classifiers={cls.format_list(c2.classifiers, 8)},')
+        if c2.urls:
+            w11.append(f'        project_urls={cls.format_dict(c2.urls, 8)},')
+        if u11.packages_find:
+            z11 = ', '.join((f'{k}={cls.quote_string(v)}' for k, v in u11.packages_find.items()))
+            w11.append(f'        packages=find_packages({z11}),')
+        else:
+            w11.append('        packages=find_packages(),')
+        if c2.dependencies:
+            w11.append(f'        install_requires={cls.format_list(c2.dependencies, 8)},')
+        if c2.optional_dependencies:
+            w11.append(f'        extras_require={cls.format_dict(c2.optional_dependencies, 8, value_is_list=True)},')
+        a12 = {}
+        if c2.scripts:
+            a12['console_scripts'] = [f'{a1} = {f2}' for a1, f2 in c2.scripts.items()]
+        if c2.gui_scripts:
+            a12['gui_scripts'] = [f'{a1} = {f2}' for a1, f2 in c2.gui_scripts.items()]
+        for v2, w10 in c2.entry_points.items():
+            a12[v2] = [f'{a1} = {f2}' for a1, f2 in w10.items()]
+        if u11.entry_points:
+            for v2, w10 in u11.entry_points.items():
+                if v2 in a12:
+                    a12[v2].extend(w10)
+                else:
+                    a12[v2] = w10
+        if a12:
+            w11.append(f'        entry_points={cls.format_dict(a12, 8, value_is_list=True)},')
+        if u11.package_data:
+            w11.append(f'        package_data={cls.format_dict(u11.package_data, 8, value_is_list=True)},')
+        if u11.data_files:
+            b12 = ',\n'.join((f'            ({cls.quote_string(f2)}, {cls.format_list(i5, 12)})' for f2, i5 in u11.data_files))
+            w11.append(f'        data_files=[\n{b12}\n        ],')
+        if r11.has_extensions and r11.backend == x10.SETUPTOOLS:
+            w11.append('        ext_modules=ext_modules,')
+        elif r11.has_extensions and r11.backend == x10.SCIKIT_BUILD:
+            w11.append('        cmake_args=[],')
+        return '\n'.join(w11)
+    @classmethod
+    def c12(cls, c2, r11, u11):
+        s11 = cls.generate_imports(r11)
+        d12 = cls.generate_setup_kwargs(c2, r11, u11)
+        e12 = cls.generate_setup_function(c2, r11, u11)
+        if r11.has_extensions and r11.backend == x10.SETUPTOOLS:
+            e12 = cls._generate_ext_modules(c2)
+        return cls.TEMPLATE.format(cext_backend=r11.backend.value, imports=s11, setup_func=e12, setup_kwargs=d12)
+    @classmethod
+    def f12(cls, c2):
+        g12 = c2.tool_config.get('setuptools', {}).get('ext-modules', [])
+        if not g12:
+            return ''
+        h12 = []
+        for w8 in g12:
+            if isinstance(w8, dict):
+                a1 = w8.get('name', '')
+                i12 = w8.get('sources', [])
+                j12 = w8.get('include-dirs', [])
+                c3 = [f'    Extension({cls.quote_string(a1)},']
+                c3.append(f'        sources={cls.format_list(i12, 8)},')
+                if j12:
+                    c3.append(f'        include_dirs={cls.format_list(j12, 8)},')
+                c3.append('    ),')
+                h12.append('\n'.join(c3))
+            elif isinstance(w8, str):
+                h12.append(f'    Extension({cls.quote_string(w8)}, sources=[{cls.quote_string(w8)}.c]),')
+        if h12:
+            return 'ext_modules = [\n' + '\n'.join(h12) + '\n]\n'
+        return ''
+def k12(b):
+    try:
+        return b.read_text(encoding='utf-8')
+    except OSError:
+        return None
+def l12(b, c, m12=False):
+    if b.exists() and (not m12):
+        log(j9.WARNING, f'File {b} already exists. Use --force to overwrite.')
+        return False
+    try:
+        b.write_text(c, encoding='utf-8')
+        return True
+    except OSError as e:
+        log(j9.ERROR, f'Failed to write {b}: {e}')
+        return False
+def n12(b):
+    if b.exists():
+        log(j9.INFO, f'Preserving existing {b.name}')
+def b1():
+    h1 = argparse.ArgumentParser(description='Convert pyproject.toml to setup.py while preserving setup.cfg and MANIFEST.in.')
+    h1.add_argument('pyproject_path', nargs='?', default='pyproject.toml', help='Path to pyproject.toml (default: pyproject.toml)')
+    h1.add_argument('--force', action='store_true', help='Overwrite existing setup.py')
+    c3 = h1.parse_args()
+    h9 = Path(c3.pyproject_path)
+    if not h9.exists():
+        log(j9.ERROR, f'File not found: {h9}')
+        return 1
+    log(j9.INFO, f'Reading {h9}')
+    try:
+        with h9.open('rb') as f:
+            o12 = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        log(j9.ERROR, f'Invalid TOML in {h9}: {e}')
+        return 1
+    except OSError as e:
+        log(j9.ERROR, f'Failed to read {h9}: {e}')
+        return 1
+    if 'project' not in o12:
+        log(j9.ERROR, 'No [project] section found in pyproject.toml')
+        return 1
+    log(j9.INFO, 'Parsing project metadata')
+    c2 = c10.from_toml_dict(o12)
+    if not c2.name:
+        log(j9.ERROR, 'Missing required field: project.name')
+        return 1
+    p12 = h9.parent / 'setup.cfg'
+    q12 = k12(p12)
+    u11 = n10.from_text(q12)
+    if q12:
+        log(j9.INFO, 'Parsed existing setup.cfg')
+        n12(p12)
+    r11 = d11.detect(c2)
+    if r11.has_extensions:
+        log(j9.INFO, f'Detected C-extension backend: {r11.backend.value}')
+    log(j9.INFO, 'Generating setup.py')
+    r12 = g11()
+    a7 = r12.generate(c2, r11, u11)
+    b7 = h9.parent / 'setup.py'
+    if l12(b7, a7, c3.force):
+        log(j9.SUCCESS, f'Generated {b7}')
+    else:
+        return 1
+    s12 = h9.parent / 'MANIFEST.in'
+    n12(s12)
+    t9('')
+    log(j9.SUCCESS, 'Conversion complete!')
+    t9('')
+    t9(f'  📄 Generated: {b7.name}')
+    t9('  📄 Preserved: setup.cfg' if q12 else '  📄 No setup.cfg found')
+    t9('  📄 Preserved: MANIFEST.in' if s12.exists() else '  📄 No MANIFEST.in found')
+    if r11.has_extensions:
+        t9(f'  🔧 C-extension backend: {r11.backend.value}')
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: pnew.py ---
+import sys
+from pathlib import Path
+def b1():
+    b = Path(sys.argv[1])
+    t12 = '#!/data/data/com.termux/files/usr/bin/python\nfrom pathlib import Path\nimport sys\nfrom dh import get_files\nfrom pbar import Pbar\ndef process_file(path) -> None:\n    pass\ndef main():\n    cwd = Path.cwd()\n    args = sys.argv[1:]\n    if args:\n        for arg in args:\n            p = Path(arg)\n            if p.is_file():\n                files.append(p)\n            if p.is_dir():\n                files.extend(get_files(p))\n    else:\n        files = get_files(cwd)\n    with Pbar("") as pbar:\n        for f in pbar.wrap(files):\n            process_file(f)\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+    b.write_text(t12, encoding='utf-8')
+    print(f'{b.name} created.')
+if __name__ == '__main__':
+    raise SystemExit(b1())
+
+# --- File: py_dev.py ---
+import subprocess
+import sys
+import venv
+from pathlib import Path
+class u12:
+    v12 = ['pre-commit']
+    w12 = 'repos:\n  - repo: https://github.com/pre-commit/pre-commit-hooks\n    rev: v4.5.0\n    hooks:\n      - id: trailing-whitespace\n      - id: end-of-file-fixer\n      - id: check-yaml\n      - id: check-added-large-files\n      - id: check-merge-conflict\n      - id: debug-statements\n      - id: check-ast\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.3.7\n    hooks:\n      - id: ruff\n        args: [--fix, --exit-non-zero-on-fix]\n  - repo: https://github.com/psf/black-pre-commit\n    rev: 24.2.0\n    hooks:\n      - id: black\n  - repo: https://github.com/pycqa/isort\n    rev: 5.13.2\n    hooks:\n      - id: isort\n        args: ["--profile", "black"]\n  - repo: https://github.com/pre-commit/mirrors-mypy\n    rev: v1.8.0\n    hooks:\n      - id: mypy\n        additional_dependencies: [types-requests, types-python-dateutil]\n        args: [--ignore-missing-imports, --disallow-untyped-defs]\n        exclude: ^tests/\n'
+    x12 = '3.12.12'
+    y12 = '# Byte-compiled / optimized / DLL files\n__pycache__/\n*.py[cod]\n*$py.class\n*.so\n.Python\nbuild/\ndevelop-eggs/\ndist/\ndownloads/\neggs/\n.eggs/\nlib/\nlib64/\nparts/\nsdist/\nvar/\nwheels/\n*.egg-info/\n.installed.cfg\n*.egg\n*.manifest\n*.spec\npip-log.txt\npip-delete-this-directory.txt\nhtmlcov/\n.tox/\n.nox/\n.coverage\n.coverage.*\n.cache\nnosetests.xml\ncoverage.xml\n*.cover\n*.py,cover\n.hypothesis/\n.pytest_cache/\n*.mo\n*.pot\n.env\n.venv\nenv/\nvenv/\nENV/\nenv.bak/\nvenv.bak/\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n.DS_Store\nThumbs.db\n*.log\nlogs/\n.env.local\n.env.*.local\n'
+    def __init__(self, k6=None):
+        self.project_path = k6 or Path.cwd()
+        self.venv_path = self.project_path / '.venv'
+        self.is_windows = sys.platform == 'win32'
+    def z12(self):
+        try:
+            a2 = subprocess.run([sys.executable, '--version'], capture_output=True, text=True)
+            a13 = a2.stdout.strip()
+            print(f'Found Python: {a13}')
+            n2 = a13.split()[-1]
+            b13, c13, _ = n2.split('.')
+            if int(b13) >= 3 and int(c13) >= 11:
+                return True
+            else:
+                print(f'Warning: Python {b13}.{c13} detected. Recommended: Python 3.11+')
+                return True
+        except Exception as e:
+            print(f'Error checking Python version: {e}')
+            return False
+    def t5(self):
+        d13 = {'src': [], 'tests': ['__init__.py', 'conftest.py'], 'docs': [], 'scripts': [], '.github/workflows': ['ci.yml']}
+        print('\nCreating project structure...')
+        for e13, i5 in d13.items():
+            f13 = self.project_path / e13
+            f13.mkdir(parents=True, exist_ok=True)
+            for k1 in i5:
+                (f13 / k1).touch(exist_ok=True)
+                print(f'  Created: {e13}/{k1}')
+            if not i5:
+                (f13 / '__init__.py').touch(exist_ok=True)
+                print(f'  Created: {e13}/__init__.py')
+        l6 = self.project_path / 'src' / 'main.py'
+        if not l6.exists():
+            l6.write_text(self._get_main_template())
+            print(f'  Created: src/main.py')
+        g13 = self.project_path / 'tests' / 'test_main.py'
+        if not g13.exists():
+            g13.write_text(self._get_test_template())
+            print(f'  Created: tests/test_main.py')
+        h13 = self.project_path / '.github' / 'workflows' / 'ci.yml'
+        if not h13.exists():
+            h13.write_text(self._get_ci_template())
+            print(f'  Created: .github/workflows/ci.yml')
+    def i13(self):
+        return '"""Main module for the project."""\ndef main() -> None:\n    print("Hello, Python!")\nif __name__ == "__main__":\n    main()\n'
+    def j13(self):
+        return '"""Tests for the main module."""\nimport pytest\nfrom src.main import main\ndef test_main(capsys: pytest.CaptureFixture[str]) -> None:\n    main()\n    captured = capsys.readouterr()\n    assert captured.out.strip() == "Hello, Python!"\n'
+    def k13(self):
+        return 'name: Python CI\non:\n  push:\n    branches: [main, develop]\n  pull_request:\n    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        python-version: ["3.11", "3.12"]\n    steps:\n      - uses: actions/checkout@v4\n      - name: Set up Python ${{ matrix.python-version }}\n        uses: actions/setup-python@v5\n        with:\n          python-version: ${{ matrix.python-version }}\n      - name: Install dependencies\n        run: |\n          python -m pip install --upgrade pip\n          pip install ruff black isort mypy pytest pytest-cov\n      - name: Lint with ruff\n        run: ruff check .\n      - name: Format check with black\n        run: black --check .\n      - name: Import sort check\n        run: isort --check-only .\n      - name: Type check with mypy\n        run: mypy src/\n      - name: Test with pytest\n        run: |\n          pip install -e .\n          pytest --cov=src --cov-report=xml tests/\n      - name: Upload coverage\n        uses: codecov/codecov-action@v3\n        with:\n          file: ./coverage.xml\n'
+    def l13(self):
+        if self.venv_path.exists():
+            if self.is_windows:
+                return str(self.venv_path / 'Scripts' / 'python')
+            else:
+                return str(self.venv_path / 'bin' / 'python')
+        return sys.executable
+    def m13(self):
+        print('\nSetting up pre-commit hooks...')
+        try:
+            n13 = self.project_path / '.pre-commit-config.yaml'
+            n13.write_text(self.PRE_COMMIT_CONFIG)
+            print('  Created: .pre-commit-config.yaml')
+            o13 = self.project_path / '.python-version'
+            o13.write_text(self.PYTHON_VERSION)
+            print(f'  Created: .python-version ({self.PYTHON_VERSION})')
+            p13 = self.project_path / '.gitignore'
+            if not p13.exists():
+                p13.write_text(self.GITIGNORE_TEMPLATE)
+                print('  Created: .gitignore')
+            subprocess.run(['pre-commit', 'install'], cwd=self.project_path, check=True)
+            print('  Pre-commit hooks installed')
+            subprocess.run(['pre-commit', 'run', '--all-files'], cwd=self.project_path)
+            return True
+        except Exception as e:
+            print(f'  Error setting up pre-commit: {e}')
+            return False
+    def q13(self):
+        print('\nCreating pyproject.toml...')
+        h9 = self.project_path / 'pyproject.toml'
+        if h9.exists():
+            print('  pyproject.toml already exists')
+            return True
+        c = f'[build-system]\nrequires = ["setuptools>=61.0", "wheel"]\nbuild-backend = "setuptools.build_meta"\n[project]\nname = "{self.project_path.name}"\nversion = "1.4.7"\ndescription = "Python project"\nreadme = "README.md"\nrequires-python = ">=3.11"\nlicense = {{text = "MIT"}}\nauthors = [\n    {{name = "Your Name", email = "your.email@example.com"}}\n]\n[project.optional-dependencies]\ndev = [\n    "pyright",\n    "black",\n    "isort",\n    "mypy",\n    "debugpy",\n    "pytest",\n    "pytest-cov",\n    "pre-commit",\n    "pynvim",\n]\n[tool.setuptools.packages.find]\nwhere = ["src"]\n[tool.ruff]\nline-length = 120\ntarget-version = "py312"\nselect = ["E", "F", "I", "N", "W", "UP"]\nignore = ["E501"]\n[tool.ruff.isort]\nprofile = "black"\n[tool.black]\nline-length = 120\ntarget-version = ["py312"]\n[tool.isort]\nprofile = "black"\nline_length = 120\n[tool.mypy]\npython_version = "3.12"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\nignore_missing_imports = true\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\npython_files = ["test_*.py"]\npython_functions = ["test_*"]\naddopts = "-v --tb=short"\n[tool.coverage.run]\nsource = ["src"]\n[tool.coverage.report]\nexclude_lines = [\n    "pragma: no cover",\n    "def __repr__",\n    "raise NotImplementedError",\n    "if TYPE_CHECKING:",\n]\n'
+        h9.write_text(c)
+        print('  Created: pyproject.toml')
+        return True
+    def r13(self):
+        print('\nCreating requirements files...')
+        u6 = self.project_path / 'requirements.txt'
+        if not u6.exists():
+            u6.write_text('# Add your production dependencies here\n')
+            print('  Created: requirements.txt')
+        s13 = self.project_path / 'requirements-dev.txt'
+        if not s13.exists():
+            t13 = '\n'.join(self.DEV_PACKAGES)
+            s13.write_text(f'# Development dependencies\n{t13}\n')
+            print('  Created: requirements-dev.txt')
+        return True
+    def u13(self):
+        print('\nCreating Neovim configuration info...')
+        v13 = self.project_path / 'NEOVIM.md'
+        if not v13.exists():
+            c = f'# Neovim Configuration for Python Development\nThis project uses **LazyVim** with a custom Python configuration.\n1. **Install Neovim** (v0.9+ recommended):\n   Linux/macOS:\n   brew install neovim  (macOS)\n   sudo apt install neovim  (Ubuntu/Debian)\n   Windows:\n   choco install neovim\n2. **Install LazyVim**:\n   mv ~/.config/nvim ~/.config/nvim.bak\n   git clone https://github.com/LazyVim/starter ~/.config/nvim\n   rm -rf ~/.config/nvim/.git\n3. **Add Python Configuration**:\n   Create ~/.config/nvim/lua/plugins/python.lua with the configuration.\n4. **Install Python LSP Tools**:\n   pip install pyright black isort debugpy pynvim\n| Key | Action |\n|-----|--------|\n| <leader>rp | Run current Python file |\n| <leader>rv | Run Python file (vertical split) |\n| <leader>rh | Run Python file (horizontal split) |\n| <leader>pi | Open Python REPL |\n| <leader>dc | Debug: Continue |\n| <leader>db | Debug: Toggle breakpoint |\n| <leader>dr | Debug: Open REPL |\n| <leader>di | Debug: Toggle UI |\n| <leader>tr | Run tests |\n| <leader>tf | Run tests for current file |\n| <leader>tt | Run all tests |\n| <leader>td | Debug tests |\n| <leader>cv | Create virtualenv |\nThe configuration automatically detects and uses virtual environments.\nTo create a virtual environment:\npython -m venv .venv\nsource .venv/bin/activate\nThe Python configuration includes:\n- LSP: Pyright + Ruff LSP\n- Formatting: Black + isort (via Conform.nvim)\n- Linting: Ruff (via nvim-lint)\n- Debugging: debugpy with DAP UI\n- Testing: neotest with pytest\n- Snippets: Python docstring and code snippets\n- Virtualenv: Automatic venv detection and creation\nLSP not working?\n:LspInfo\n:Mason\nFormatting not working?\n:ConformInfo\nDebugging not working?\n:DapInfo\n'
+            v13.write_text(c)
+            print('  Created: NEOVIM.md')
+        return True
+    def run(self):
+        print('=' * 40)
+        print('  Python Development Environment Setup')
+        print('=' * 40)
+        if not self.check_python_version():
+            return False
+        self.create_project_structure()
+        if not self.create_pyproject_toml():
+            return False
+        if not self.create_requirements_files():
+            return False
+        if not self.setup_pre_commit():
+            print('  Warning: Pre-commit setup failed, continuing...')
+        if not self.generate_neovim_config_info():
+            print('  Warning: Neovim info generation failed, continuing...')
+        print('\n' + '=' * 40)
+        print('  Setup Complete!')
+        print('=' * 40)
+        print(f'\nProject: {self.project_path}')
+        print(f'Python: {self._get_python_path()}')
+        print(f'Venv: {self.venv_path}')
+        print('\nNext steps:')
+        print('  1. Activate virtual environment:')
+        if self.is_windows:
+            print(f'     .\\{self.venv_path.name}\\Scripts\\activate')
+        else:
+            print(f'     source {self.venv_path.name}/bin/activate')
+        print('  2. Start coding!')
+        print('  3. Use pre-commit run --all-files to check everything')
+        return True
+def b1():
+    a6 = None
+    if len(sys.argv) > 1:
+        a6 = sys.argv[1]
+    if a6:
+        k6 = Path(a6)
+        if not k6.exists():
+            k6.mkdir(parents=True)
+            print(f'Created project directory: {k6}')
+    else:
+        print('Python Development Environment Setup')
+        print('-' * 40)
+        a6 = input('Enter project name (or press Enter for current directory): ').strip()
+        if a6:
+            k6 = Path(a6)
+            if not k6.exists():
+                k6.mkdir(parents=True)
+                print(f'Created project directory: {k6}')
+        else:
+            k6 = Path.cwd()
+            print(f'Using current directory: {k6}')
+    w13 = u12(k6)
+    x13 = w13.run()
+    if not x13:
+        print('\nSetup failed. Check the error messages above.')
+        sys.exit(1)
+if __name__ == '__main__':
+    b1()
+
+# --- File: pyproj2.py ---
+import argparse
+from pathlib import Path
+def k5():
+    l5 = Path.home() / '.myinfo'
+    m5 = {}
+    if not l5.exists():
+        return m5
+    for n in l5.read_text().splitlines():
+        n = n.strip()
+        if not n or n.startswith('#') or '=' not in n:
+            continue
+        key, val = n.split('=', 1)
+        m5[key.strip()] = val.strip()
+    return m5
+def n5(b, c=''):
+    if not b.exists():
+        b.write_text(c)
+def t5(pkg, y1, g4, url, q5=False):
+    cwd = Path.cwd()
+    n2 = '1.4.7'
+    z6 = cwd / 'README.md'
+    n5(z6, f'# {pkg}\n')
+    j5 = cwd / 'setup.py'
+    j5.write_text('__import__("setuptools").setup()\n')
+    u11 = cwd / 'setup.cfg'
+    y13 = ['[metadata]', f'name = {pkg}', f'version = {n2}']
+    if y1:
+        y13.append(f'author = {y1}')
+    if g4:
+        y13.append(f'author_email = {g4}')
+    if url:
+        y13.append(f'url = {url}')
+    y13.extend(['', '[options]', f'py_modules = {pkg}', 'python_requires = >=3.11', '[options.entry_points]', 'console_scripts =', f'{pkg} = {pkg}:main', ''])
+    u11.write_text('\n'.join(y13))
+    h9 = cwd / 'pyproject.toml'
+    h9.write_text(f'\n[build-system]\nrequires = ["setuptools>=69.0", "wheel-"]\nbuild-backend = "setuptools.build_meta"\n[project.scripts]\n{pkg} = "{pkg}:main"\n')
+    print(f"Project '{pkg}' initialized in {cwd}")
+def b1():
+    x5 = k5()
+    h1 = argparse.ArgumentParser(description='Initialize a Python project structure')
+    h1.add_argument('name', help='Package name')
+    h1.add_argument('--version', default='1.4.7', help='Initial version (default: 1.4.7)')
+    h1.add_argument('-s', '--simple-cli', action='store_true', help='Create with simple CLI entry point')
+    c3 = h1.parse_args()
+    y1 = x5.get('name', '')
+    g4 = x5.get('email', '')
+    y5 = x5.get('github_username', '')
+    url = f'https://github.com/{y5}/{c3.name}' if y5 else ''
+    t5(c3.name, y1, g4, url, c3.simple_cli)
+if __name__ == '__main__':
+    raise SystemExit(b1())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

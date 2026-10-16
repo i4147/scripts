@@ -1,0 +1,523 @@
+# --- File: bightml.py ---
+from pathlib import Path
+from dh import get_files
+def a():
+    cwd = Path.home()
+    b = get_files(cwd, ext=['.html', '.htm'])
+    for f in b:
+        if f.stat().st_size > 1024 * 1024:
+            print(f.relative_to(cwd))
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: htmlformat.py ---
+import logging
+import multiprocessing as mp
+import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Tuple
+try:
+    import tree_sitter_html as ts_html
+    from tree_sitter import Language, Node, Parser
+except ImportError:
+    print('Error: Required packages not installed.', file=sys.stderr)
+    print('Install with: pip install tree-sitter tree-sitter-html', file=sys.stderr)
+    sys.exit(1)
+c = {'.html', '.htm', '.xhtml'}
+d = 50 * 1024 * 1024
+e = 8
+f = 1024 * 1024
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+g = logging.getLogger(__name__)
+@dataclass
+class h:
+    i = None
+    j = 0
+    k = 0
+    l = False
+class m:
+    n = {'html', 'head', 'body', 'div', 'p', 'span', 'section', 'article', 'header', 'footer', 'nav', 'aside', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'form', 'input', 'button', 'select', 'option', 'textarea', 'label', 'fieldset', 'legend', 'script', 'style', 'link', 'meta', 'title', 'br', 'hr', 'img', 'a', 'iframe', 'video', 'audio', 'source', 'canvas', 'svg', 'template', 'slot', 'custom-element'}
+    o = {'b', 'i', 'u', 'em', 'strong', 'code', 'small', 'sub', 'sup'}
+    def __init__(self):
+        try:
+            self.HTML_LANGUAGE = Language(ts_html.language())
+            self.parser = Parser(self.HTML_LANGUAGE)
+        except Exception as e:
+            raise RuntimeError(f'Failed to initialize Tree-sitter parser: {e}')
+    def p(self, q):
+        if not q.strip():
+            return (q, 0)
+        try:
+            r = self.parser.parse(bytes(q, 'utf8'))
+            s = self._collect_edits(r.root_node, q)
+            if not s:
+                return (q, 0)
+            s.sort(key=lambda x: x[0], reverse=True)
+            t = q
+            for pos, u, v in s:
+                t = t[:pos] + u + t[pos + v:]
+            t = self._cleanup_blank_lines(t)
+            return (t, len(s))
+        except Exception as e:
+            g.error(f'Error formatting HTML: {e}')
+            return (q, 0)
+    def w(self, x, y):
+        s = []
+        z = [x]
+        a1 = 0
+        while z:
+            b1 = z.pop()
+            if b1.type == 'element':
+                c1 = self._get_tag_name(b1, y)
+                if c1 and self._should_format_tag(c1):
+                    d1 = b1.start_byte
+                    e1 = b1.end_byte
+                    f1 = y.rfind('\n', 0, d1) + 1
+                    g1 = y[f1:d1]
+                    if g1.strip() and (not g1.strip().endswith('\n')):
+                        s.append((d1, '\n', 0))
+                    h1 = y.find('\n', e1)
+                    if h1 == -1:
+                        h1 = len(y)
+                    i1 = y[e1:h1]
+                    if i1.strip():
+                        s.append((e1, '\n', 0))
+            for j1 in reversed(b1.children):
+                z.append(j1)
+        return s
+    def k1(self, l1, y):
+        for j1 in l1.children:
+            if j1.type == 'start_tag':
+                for m1 in j1.children:
+                    if m1.type == 'tag_name':
+                        return y[m1.start_byte:m1.end_byte].lower()
+        return None
+    def n1(self, c1):
+        return c1 not in self.INLINE_TAGS
+    def o1(self, p1):
+        q1 = p1.split('\n')
+        t = []
+        r1 = 0
+        for s1 in q1:
+            if s1.strip():
+                r1 = 0
+                t.append(s1)
+            else:
+                r1 += 1
+                if r1 <= 1:
+                    t.append(s1)
+        return '\n'.join(t)
+def t1(u1, v1=d):
+    try:
+        w1 = u1.stat().st_size
+        if w1 > v1:
+            g.warning(f'File too large ({w1} bytes): {u1}')
+            return None
+        try:
+            x1 = u1.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            g.debug(f'UTF-8 decode failed, trying latin-1: {u1}')
+            x1 = u1.read_text(encoding='latin-1')
+        return x1
+    except OSError as e:
+        g.error(f'Failed to read {u1}: {e}')
+        return None
+    except Exception as e:
+        g.error(f'Unexpected error reading {u1}: {e}')
+        return None
+def y1(u1, x1):
+    z1 = u1.with_suffix(u1.suffix + '.tmp')
+    try:
+        z1.write_text(x1, encoding='utf-8')
+        z1.replace(u1)
+        return True
+    except Exception as e:
+        g.error(f'Failed to write {u1}: {e}')
+        try:
+            if z1.exists():
+                z1.unlink()
+        except Exception:
+            pass
+        return False
+def a2(b2):
+    if not b2:
+        b2 = [Path.cwd()]
+    c2 = set()
+    for u1 in b2:
+        try:
+            if u1.is_file():
+                if u1.suffix.lower() in c and u1 not in c2:
+                    c2.add(u1)
+                    yield u1
+            elif u1.is_dir():
+                for d2 in u1.rglob('*'):
+                    if d2.is_file() and d2.suffix.lower() in c and (d2 not in c2):
+                        c2.add(d2)
+                        yield d2
+            else:
+                g.warning(f'Path does not exist: {u1}')
+        except (OSError, PermissionError) as e:
+            g.error(f'Error accessing {u1}: {e}')
+            continue
+def e2(u1):
+    try:
+        x1 = t1(u1)
+        if x1 is None:
+            return h(path=u1, success=False, error='Failed to read file')
+        f2 = m()
+        g2, h2 = f2.format_html(x1)
+        l = g2 != x1
+        if l and (not y1(u1, g2)):
+            return h(path=u1, success=False, error='Failed to write file', bytes_processed=len(x1), tags_formatted=h2)
+        return h(path=u1, success=True, bytes_processed=len(x1), tags_formatted=h2, was_modified=l)
+    except Exception as e:
+        g.error(f'Unexpected error processing {u1}: {e}')
+        return h(path=u1, success=False, error=str(e))
+def a():
+    import argparse
+    i2 = argparse.ArgumentParser(description='Format HTML files so every tag starts on a new line', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  %(prog)s                    # Process current directory recursively\n  %(prog)s file.html          # Process single file\n  %(prog)s dir1/ dir2/        # Process multiple directories\n  %(prog)s *.html             # Process all HTML files in current dir\n        ')
+    i2.add_argument('paths', nargs='*', type=Path, help='Files or directories to process (default: current directory)')
+    i2.add_argument('-j', '--jobs', type=int, default=e, help=f'Number of parallel workers (default: {e})')
+    i2.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
+    i2.add_argument('--dry-run', action='store_true', help='Show what would be done without modifying files')
+    j2 = i2.parse_args()
+    if j2.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    print('Searching for HTML files...')
+    k2 = list(a2(j2.paths))
+    if not k2:
+        g.warning('No HTML files found')
+        return 0
+    print(f'Found {len(k2)} HTML file(s)')
+    if j2.dry_run:
+        for f in k2:
+            print(f'Would process: {f}')
+        return 0
+    l2 = 0
+    m2 = 0
+    n2 = 0
+    o2 = 0
+    p2 = 0
+    try:
+        with mp.Pool(processes=j2.jobs) as q2:
+            for t in q2.imap_unordered(e2, k2, chunksize=1):
+                if t.success:
+                    l2 += 1
+                    o2 += t.bytes_processed
+                    p2 += t.tags_formatted
+                    if t.was_modified:
+                        n2 += 1
+                        print(f'✓ Formatted: {t.path}')
+                    else:
+                        g.debug(f'✓ Already formatted: {t.path}')
+                else:
+                    m2 += 1
+                    g.error(f'✗ Failed: {t.path} - {t.error}')
+    except KeyboardInterrupt:
+        g.warning('\nInterrupted by user')
+        return 130
+    except Exception as e:
+        g.error(f'Fatal error: {e}')
+        return 1
+    print('\n' + '=' * 60)
+    print('SUMMARY')
+    print('=' * 60)
+    print(f'Files processed:  {l2 + m2}')
+    print(f'  Successful:     {l2}')
+    print(f'  Failed:         {m2}')
+    print(f'  Modified:       {n2}')
+    print(f'  Unchanged:      {l2 - n2}')
+    print(f'Total tags formatted: {p2}')
+    print(f'Total bytes processed: {o2:,}')
+    return 0 if m2 == 0 else 1
+if __name__ == '__main__':
+    sys.exit(a())
+
+# --- File: pret3.py ---
+from pathlib import Path
+import jsbeautifier
+def r2(u1):
+    x1 = u1.read_text(encoding='utf-8')
+    if u1.suffix == '.js':
+        s2 = jsbeautifier.beautify(x1)
+    elif u1.suffix == '.css':
+        s2 = jsbeautifier.css(x1)
+    elif u1.suffix == '.html':
+        s2 = jsbeautifier.html(x1)
+    else:
+        return
+    u1.write_text(s2, encoding='utf-8')
+def t2(u2):
+    v2 = Path(u2)
+    for u1 in v2.rglob('*'):
+        if u1.is_file() and u1.suffix in ('.js', '.css', '.html'):
+            print(f'Beautifying: {u1}')
+            r2(u1)
+if __name__ == '__main__':
+    t2('.')
+
+# --- File: pret4.py ---
+import shutil
+import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from dh import unique_path
+w2 = {'.js', '.css', '.html', '.json', '.mjs', '.cjs', '.ts', '.jsx', '.tsx'}
+x2 = {'.py', '.ipynb'}
+def y2(u1):
+    return u1.suffix in w2 and (not any((u1.name.endswith(p) for p in x2)))
+def z2(cwd='.'):
+    return [p for p in Path(cwd).resolve().rglob('*') if p.is_file() and 'error' not in p.parts and y2(p)]
+def a3(u1):
+    try:
+        t = subprocess.run(['prettier', '--write', str(u1)], capture_output=True, text=True, timeout=300)
+        if t.returncode == 0:
+            return (u1, True, None)
+        return (u1, False, t.stderr or 'Unknown error')
+    except Exception as e:
+        return (u1, False, str(e))
+def a():
+    cwd = Path.cwd()
+    b = z2(cwd)
+    if not b:
+        print('ℹ️  No files found to format')
+        return
+    print(f'📁 Scanning: {cwd} | 📝 Found {len(b)} files')
+    l2 = 0
+    b3 = 0
+    with ProcessPoolExecutor(max_workers=8) as c3:
+        d3 = {c3.submit(a3, f): f for f in b}
+        for e3 in as_completed(d3):
+            u1, f3, g3 = e3.result()
+            if f3:
+                print(f'  ✅ Formatted: {u1.name}')
+                l2 += 1
+            else:
+                print(f'  ❌ Error: {u1.name} -> {g3}')
+                h3 = u1.parent / 'error'
+                h3.mkdir(exist_ok=True)
+                i3 = unique_path(h3 / u1.name)
+                shutil.move(str(u1), str(i3))
+                b3 += 1
+    print(f'\n✅ Success: {l2} | ❌ Errors: {b3}')
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: pretp.py ---
+import concurrent.futures
+import subprocess
+from pathlib import Path
+from tqdm import tqdm
+def a3(u1):
+    try:
+        subprocess.run(['npx', 'prettier', '--write', str(u1)], capture_output=True, text=True, check=True)
+        return None
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        return f"{u1}: {(e.stderr if hasattr(e, 'stderr') else str(e))}"
+def a():
+    j3 = ('.js', '.css', '.htm', '.html', '.ts', '.jsx', '.tsx', '.xml', '.json')
+    k3 = {'.git'}
+    l3 = ('.min.js', '.min.css')
+    m3 = []
+    print('Scanning directory for files...')
+    v2 = Path('.')
+    for u1 in v2.rglob('*'):
+        if not u1.is_file():
+            continue
+        if any((n3 in k3 for n3 in u1.parts)):
+            continue
+        if (u1.suffix in j3 or any((u1.name.endswith(ext) for ext in j3))) and any((u1.name.endswith(ext) for ext in j3)) and (not any((u1.name.endswith(ext) for ext in l3))):
+            m3.append(str(u1))
+    if not m3:
+        print('No matching files found.')
+        return
+    o3 = []
+    with tqdm(total=len(m3), desc='Beautifying', unit='file') as p3, concurrent.futures.ThreadPoolExecutor(max_workers=8) as c3:
+        q3 = {c3.submit(a3, f): f for f in m3}
+        for e3 in concurrent.futures.as_completed(q3):
+            err = e3.result()
+            if err:
+                o3.append(err)
+            p3.update(1)
+    print('\n' + '=' * 30)
+    print(f'Finished processing {len(m3)} files.')
+    if o3:
+        print(f'Encountered {len(o3)} errors:')
+        for i in o3:
+            print(f'  - {i}')
+    else:
+        print('All files formatted successfully!')
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: pretret.py ---
+import sys
+from pathlib import Path
+from dh import mpf3, runcmd
+def e2(u1):
+    u1 = Path(u1)
+    if not u1.exists():
+        return (False, u1)
+    ret = runcmd(['prettier', '-w', str(u1).replace('/storage/emulated/0', '/sdcard')], show_output=True)
+    if not ret:
+        return (True, u1)
+    return (False, u1)
+def a():
+    cwd = str(Path.cwd())
+    j2 = sys.argv[1:]
+    b = [Path(f) for f in j2] if j2 else get_files(cwd, extensions=['.html', '.htm', '.js', '.jsx', '.ts', '.tsx', '.css', '.md', '.jsm', '.scss'])
+    mpf3(e2, b)
+if __name__ == '__main__':
+    raise SystemExit(a())
+
+# --- File: prettify.py ---
+from pathlib import Path
+import cssbeautifier
+import yapf
+from bs4 import BeautifulSoup
+def r3(u1):
+    try:
+        x1 = Path(u1).read_text(encoding='utf-8')
+        s3 = BeautifulSoup(x1, 'html.parser')
+        s2 = s3.prettify()
+        Path(u1).write_text(s2, encoding='utf-8')
+    except Exception as e:
+        print(f'Error beautifying HTML file {u1}: {e}')
+        return False
+    return True
+def t3(u1):
+    try:
+        x1 = Path(u1).read_text(encoding='utf-8')
+        s2 = cssbeautifier.beautify(x1)
+        Path(u1).write_text(s2, encoding='utf-8')
+    except Exception as e:
+        print(f'Error beautifying CSS file {u1}: {e}')
+        return False
+    return True
+def u3(u1):
+    try:
+        x1 = Path(u1).read_text(encoding='utf-8')
+        s2, _ = yapf.yapf_api.FormatCode(x1)
+        Path(u1).write_text(s2, encoding='utf-8')
+    except Exception as e:
+        print(f'Error beautifying JS file {u1}: {e}')
+        return False
+    return True
+def t2(u2):
+    v3 = []
+    v2 = Path(u2)
+    for u1 in v2.rglob('*'):
+        if not u1.is_file():
+            continue
+        w3 = u1.name
+        f3 = False
+        if w3.endswith('.html'):
+            print(f'Beautifying HTML: {u1}')
+            f3 = r3(u1)
+        elif w3.endswith('.css'):
+            print(f'Beautifying CSS: {u1}')
+            f3 = t3(u1)
+        elif w3.endswith('.js'):
+            print(f'Beautifying JS: {u1}')
+            f3 = u3(u1)
+        else:
+            continue
+        if not f3:
+            v3.append(str(u1))
+    if v3:
+        print('\nThe following files failed to be beautified:')
+        for x3 in v3:
+            print(x3)
+    else:
+        print('\nAll files beautified successfully.')
+if __name__ == '__main__':
+    t2('.')
+
+# --- File: pypret.py ---
+import json
+from pathlib import Path
+import jsbeautifier
+def y3(u1):
+    try:
+        with Path(u1).open(encoding='utf-8') as f:
+            z3 = json.load(f)
+        with Path(u1).open('w', encoding='utf-8') as f:
+            json.dump(z3, f, indent=4)
+        return True
+    except json.JSONDecodeError:
+        return False
+    except Exception:
+        return False
+def a4(u1, b4, c4):
+    try:
+        d4 = Path(u1).read_text(encoding='utf-8')
+        e4 = jsbeautifier.default_options()
+        e4.indent_size = 4
+        s2 = b4(d4, e4)
+        Path(u1).write_text(s2, encoding='utf-8')
+        return True
+    except Exception:
+        return False
+def f4(cwd='.'):
+    g4 = 0
+    h4 = 0
+    i4 = {'.js': (jsbeautifier.beautify, 'JS'), '.html': (jsbeautifier.beautify, 'HTML'), '.css': (jsbeautifier.beautify, 'CSS')}
+    v2 = Path(cwd)
+    for u1 in v2.rglob('*'):
+        if not u1.is_file():
+            continue
+        j4 = u1.name
+        if j4.endswith('.json'):
+            f3 = y3(str(u1))
+            if f3:
+                g4 += 1
+            else:
+                h4 += 1
+        for ext, (k4, c4) in i4.items():
+            if j4.endswith(ext):
+                f3 = a4(str(u1), k4, c4)
+                if f3:
+                    g4 += 1
+                else:
+                    h4 += 1
+                break
+if __name__ == '__main__':
+    f4(Path.cwd())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

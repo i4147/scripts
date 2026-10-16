@@ -1,0 +1,413 @@
+# filename: aptin.py
+def a():try:m=g.run(['pkg','list-all'],capture_output=True,text=True,check=True);h=[];n=m.stdout.split('\n')
+        for q in n:if q and (not q.startswith('Listing')) and (not q.startswith('Packages')):o=q.split('/')[0].split()
+                if o:h.append(o[0])
+        return h
+    except g.CalledProcessError:try:m=g.run(['apt','list','--installed'],capture_output=True,text=True);h=[]
+            for q in m.stdout.split('\n'):if '/' in q:i=q.split('/')[0];h.append(i)
+            return h
+        except:return []
+def c(l):f=a();d=l.replace('*','.*').replace('?','.');p=u.compile(d,u.IGNORECASE);k=[s for s in f if p.search(s)];return k
+def b(h):if not h:print('No packages to install.');return False
+    print(f'\nFound {len(h)} package(s) to install:')
+    for s in h:print(f'-{s}')
+    j=input('\nDo you want to install these packages? (y/N):').lower()
+    if j!='y':print('Installation cancelled.');return False
+    try:g.run(['pkg','install']+h,check=True);print('\n✓ Installation completed successfully!');return True
+    except g.CalledProcessError as e:print(f'\n✗ Installation failed:{e}');return False
+def r():if len(t.argv)<2:print('Usage:python install_wildcard.py<pattern>');print('Examples:');print("  python install_wildcard.py morse     # Install packages with 'morse' in name");print("  python install_wildcard.py python*# Install packages starting with 'python'");print("  python install_wildcard.py*sql*# Install packages containing 'sql'");t.exit(1)
+    l=t.argv[1];print(f"Searching for packages matching '{l}'...");k=c(l)
+    if k:b(k)
+    else:print(f"No packages found matching pattern '{l}'")
+if __name__=='__main__':raise SystemExit(r())
+# filename: install_wheels.py
+from loguru import logger;w=8;d='-none-any';b='Root-Is-Purelib:true';a='Root-Is-Purelib:false';e=('.so','.pyd','.dll','.dylib');g=('.dist-info/WHEEL','.dist-info/METADATA')
+def c(u):t=u.stem
+    if d in t:return True
+    try:with E.ZipFile(u,'r') as R:for M in R.namelist():if M.endswith(g):with R.open(M) as f:A=f.read().decode('utf-8')
+                        if b in A:return True
+                        if a in A:return False
+    except Exception as exc:logger.warning(f'Could not inspect {u.name}:{P}')
+    try:with E.ZipFile(u,'r') as R:for M in R.namelist():if M.endswith(e):return False
+        return True
+    except Exception as exc:logger.warning(f'Could not inspect {u.name}:{P}');return False
+def h(u):try:t=u.stem;H=t.split('-')
+        if len(H)>=4:n=H[-1]
+            if 'none-any' in t:return 'Pure Python (any platform)'
+            if 'android' in n.lower():return f'Android-specific ({n})'
+            if 'linux' in n.lower():return f'Linux-specific ({n})'
+            return f'Platform-specific ({n})'
+    except Exception:pass
+    return 'Unknown'
+def k(u,o):try:O=[Q.executable,'-m','pip','install',str(u)]
+        if o:O.insert(3,'--user')
+        r.run(O,capture_output=True,text=True,check=True);m='user site-packages' if o else 'system site-packages';return (u,True,f'✓ {u.name}->{m}')
+    except r.CalledProcessError as exc:x=P.stderr.strip() if P.stderr else str(P);return (u,False,f'✗ {u.name}:{x}')
+    except Exception as exc:return (u,False,f'✗ {u.name}:{P!s}')
+def L():p=J.cwd();q=list(p.glob('*.whl'))
+    if not q:print('No .whl files found in current directory.');return
+    print(f'Found {len(q)} wheel(s) in {p}');print(f'Python version:{Q.version}');print(f'Platform:{z.platform()}');print('-'*40);j=[]
+    for I in q:B=c(I);v=h(I);m='USER site-packages' if B else 'SYSTEM site-packages';print(f'Analyzing:{I.name}');print(f'  Type:{v}');print(f'  Target:{m}');j.append((I,B))
+    print('='*40);print('Starting parallel installation...');print('-'*40);s=[];F=[]
+    with K(processes=w) as N:i=[N.apply_async(k,(I,B)) for I,B in j]
+        for l in i:try:u,D,C=l.get();print(C)
+                if D:s.append(u)
+                else:F.append((u,C))
+            except Exception as exc:logger.error(f'✗ Error processing wheel:{P}');F.append((J('<unknown>'),str(P)))
+    print('='*40);print('INSTALLATION SUMMARY');print('-'*40);print(f'Total wheels:{len(q)}');print(f'✓ Successfully installed:{len(s)}');print(f'✗ Failed:{len(F)}')
+    if s:print('Successfully installed:')
+        for I in s:B=c(I);y='user site' if B else 'system site';print(f'  ✓ {I.name}->{y}')
+    if F:print('Failed installations:')
+        for I,G in F:print(f'  ✗ {I.name}:{G}')
+    print('Done!')
+if __name__=='__main__':try:L()
+    except KeyboardInterrupt:logger.warning('Installation interrupted by user.');Q.exit(1)
+    except Exception as exc:logger.error(f'Error:{P}');Q.exit(1)
+# filename: move_installed_wheels.py
+from dh import cprint;from packaging.utils import parse_wheel_filename;from packaging.version import Version;n=s('/sdcard/whl');l=s('/sdcard/installed');g=s('/sdcard/invalid')
+if not l.exists():l.mkdir()
+if not g.exists():g.mkdir()
+b={'pybind11','dh','pip','setuptools','wheel','packaging','importlib_metadata','importlib_resources','pkginfo','scikit_build_core','setuptools_scm','setuptools_rust'}
+def f():if w.prefix==w.base_prefix:print('⚠ Not running inside a virtual environment.');w.exit(1)
+def a():i={}
+    for t in m.distributions():v=t.metadata['Name'];o=t.version
+        if v:i[v.lower().replace('-','_')]=Version(o)
+    return i
+def k(v):return v.lower().replace('-','_')
+def u():if not n.exists():print(f'Directory not found:{n}');return
+    d=a();q=0
+    for r in n.rglob('*.whl'):try:h,o,*_=parse_wheel_filename(r.name);j=k(h)
+            if j in b:print(f'[EXCLUDED] {h}=={o} → skipped');continue
+            if j in d:c=d[j]
+                if c==Version(str(o)):cprint(f'[MATCH] {h}=={o} → removing','cyan');r.unlink();q+=1
+                else:r.unlink();q+=1;print(f'[DIFF VERSION] {h} (installed {c},wheel {o})->removed')
+        except Exception as e:print(f'[ERROR] {r.name}:{e}');p.move(str(r),g/r.name)
+    print(f'\nDone. Removed {q} wheel(s).')
+if __name__=='__main__':raise SystemExit(u())
+# filename: piprm.py
+from rapidfuzz import fuzz;f='/sdcard/data/pip.list'
+def b():l=j();n='\n'.join(l);r(f).write_text(n,encoding='utf-8');return l
+def a():t=r(f)
+    if g(t)>1.0 or not t.exists():return b()
+    return [s.strip() for s in t.read_text(encoding='utf-8').splitlines() if s.strip()]
+def e(q):o=[]
+    for y in u.getsitepackages():p=r(y)
+        for d in p.glob(f'{q}*.dist-info'):o.append(d)
+    for y in (u.getusersitepackages(),):p=r(y)
+        for d in p.glob(f'{q}*.dist-info'):o.append(d)
+    return o
+def c(m):try:i.run([x.executable,'-m','pip','uninstall','-y',m],check=True);print(f'Uninstalled {m}')
+    except i.CalledProcessError:print(f'Skipped {m} (not installed or error)')
+if __name__=='__main__':if len(x.argv)<2:print(f'Usage:{x.argv[0]}<package_prefix>');x.exit(1)
+    q=x.argv[1].lower();l=a();h=[w.lower() for w in l if q in w.lower() or fuzz.partial_ratio(q,w.lower())>95]
+    if not h:print('no match found');x.exit(0)
+    for k in h:v=input(f'remove {k}-->? (y/n)')
+        if v in {'y','Y','Yes','yes','YES','OK','ok'}:c(k)
+# filename: piu.py
+from pip._internal.cli.main import main as pip_main
+def d(a,b):if a==b:return 0
+    if not a:return len(b)
+    if not b:return len(a)
+    if len(a)<len(b):a,b=(b,a)
+    r=list(range(len(b)+1))
+    for i,M in enumerate(a,1):t=[i]
+        for j,N in enumerate(b,1):E=t[j-1]+1;A=r[j]+1;I=r[j-1]+(M!=N);t.append(min(E,A,I))
+        r=t
+    return r[-1]
+def c(a,b):if not a and (not b):return 1.0
+    B=d(a,b);return 1.0-B/max(len(a),len(b),1)
+def g(a,b):if not a and (not b):return 1.0
+    if not a or not b:return 0.0
+    if len(a)>len(b):a,b=(b,a)
+    z=0.0;O=len(a)
+    for i in range(len(b)-O+1):I=b[i:i+O];H=c(a,I)
+        if H>z:z=H
+            if z==1.0:break
+    return z*40
+s=x.cwd();n='-w' in J.argv
+def u(o):y=['install','--user','--no-compile','--no-deps',*o];return pip_main(y)
+def q(K):C=K.index('-');w=K.rfind('/');return K[w+1:C]
+def e(F):L={q(str(p)):str(p) for p in s.glob('*.whl')};l=[]
+    for k,v in L.items():P=g(F,k)
+        if F in k and P==100:l.append(v)
+    if not l:print(f"No .whl files found matching '{F}*'");return
+    try:G=u(l)
+        if not G:for f in l:print(f'-{x(f).name}');x(f).unlink()
+    except:return
+def h(F):L={q(str(p)):str(p) for p in s.glob('*.whl')};l=[]
+    for k,v in L.items():if F in k:l.append(v)
+    if not l:print(f"No .whl files found matching '{F}*'");return
+    try:G=u(l)
+        if not G:for f in l:print(f'-{x(f).name}');x(f).unlink()
+    except:return
+def m(D):u(D)
+    for F in D:p=x(F)
+        if p.exists():p.unlink();print(f'{p.name} removed')
+if __name__=='__main__':y=J.argv[1:]
+    for k in y:m(k)
+# filename: pu.py
+from pip._internal.cli.main import main as pip_main;from rapidfuzz import fuzz
+def l(m):u=['uninstall',*m];return pip_main(u)
+f='/sdcard/data/pip.list'
+def b():k=j();p='\n'.join(k);t(f).write_text(p,encoding='utf-8');return k
+def a():w=t(f);o=57600;y=g(w);print(y)
+    if y/o>1.0 or not w.exists():return b()
+    return [v.strip() for v in w.read_text(encoding='utf-8').splitlines() if v.strip()]
+def e(s):q=[]
+    for B in x.getsitepackages():r=t(B)
+        for d in r.glob(f'{s}*.dist-info'):q.append(d)
+    for B in (x.getusersitepackages(),):r=t(B)
+        for d in r.glob(f'{s}*.dist-info'):q.append(d)
+    return q
+def c(n):try:i.run([A.executable,'-m','pip','uninstall','-y',n],check=True);print(f'Uninstalled {n}')
+    except i.CalledProcessError:print(f'Skipped {n} (not installed or error)')
+if __name__=='__main__':if len(A.argv)<2:print(f'Usage:{A.argv[0]}<package_prefix>');A.exit(1)
+    s=A.argv[1].lower();k=a();h=[z.lower() for z in k if s in z.lower() or fuzz.partial_ratio(s,z.lower())>95]
+    if not h:print('no match found');A.exit(0)
+    l(h)
+# filename: pure_pypkg_reinstaller.py
+def d():for x in ['pip','pip3']:try:m.run([x,'--version'],capture_output=True,check=True);return x
+        except (m.CalledProcessError,FileNotFoundError):continue
+    return None
+def g(t,x='pip3',v=False):H=[x,'install','--force-reinstall','--upgrade','--no-deps',t]
+    if v:print(f"[DRY RUN] Would run:{' '.join(H)}");return (t,True,'Dry run')
+    print(f'Reinstalling:{t}')
+    try:B=m.run(H,capture_output=True,text=True,check=False,timeout=300)
+        if B.returncode==0:print(f'✓ Successfully reinstalled:{t}');return (t,True,B.stdout)
+        print(f'✗ Failed to reinstall {t}');p=B.stderr.strip() or B.stdout.strip();print(f'  Error:{p[:200]}');return (t,False,p)
+    except m.TimeoutExpired:print(f'✗ Timeout reinstalling {t}');return (t,False,'Timeout after 300 seconds')
+    except Exception as e:print(f'✗ Error reinstalling {t}:{e}');return (t,False,str(e))
+def b(E):s=[]
+    try:with open(E,'r') as f:for C in f:J=C.strip()
+                if J and (not J.startswith('#')):s.append(J)
+    except FileNotFoundError:print(f"Error:File '{E}' not found.");K.exit(1)
+    except Exception as e:print(f'Error reading file:{e}');K.exit(1)
+    return s
+def a(t):try:j=G.getsitepackages();q=G.getusersitepackages();B=m.run(['pip3','show','-f',t],capture_output=True,text=True,check=False)
+        if B.returncode==0:for C in B.stdout.split('\n'):if C.startswith('Location:'):r=C.split(':',1)[1].strip()
+                    if r in j:return True
+                    if r==q:return False
+        return False
+    except:return False
+def D():if len(K.argv)>1:l=K.argv[1]
+    else:l=L.path.expanduser('~/missing.txt')
+    v='--dry-run' in K.argv;o=h.cpu_count();i=min(max(1,o//2),8)
+    if '--workers' in K.argv:I=K.argv.index('--workers')
+        if I+1<len(K.argv):try:i=int(K.argv[I+1])
+            except ValueError:print(f'Invalid worker count,using default:{i}')
+    print(f'Reading packages from:{l}');print(f'Using {i} parallel workers')
+    if v:print('DRY RUN MODE-No packages will be installed')
+    print('-'*40);x=d()
+    if not x:print('Error:pip is not installed or not found in PATH');K.exit(1)
+    print(f'Using:{x}');s=b(l)
+    if not s:print('No packages found in file.');K.exit(0)
+    print(f'Found {len(s)} package(s) to reinstall.');print('-'*40)
+    if v:for J in s:g(J,x,v=True)
+        K.exit(0)
+    k=w(g,x=x);n=0;A=0;c=[]
+    try:with h.Pool(processes=i) as F:y=F.map(k,s)
+            for t,z,u in y:if z:n+=1
+                else:A+=1;c.append(t)
+    except KeyboardInterrupt:print('\n\nInterrupted by user. Terminating...');F.terminate();K.exit(1)
+    except Exception as e:print(f'\nError during parallel execution:{e}');K.exit(1)
+    print('\n'+'='*40);print(f'Summary:{n} successful,{A} failed')
+    if c:print('\nFailed packages:')
+        for J in c:print(f'-{J}')
+    print('-'*40);K.exit(0 if A==0 else 1)
+if __name__=='__main__':h.freeze_support();raise SystemExit(D())
+# filename: pure_teinstaller.py
+def f(k):y=f'https://pypi.org/pypi/{k}/json';x=q.request.Request(y,headers={'User-Agent':'Termux-Installer/1.0'})
+    try:with q.request.urlopen(x,timeout=5) as l:return l.status==200
+    except (q.error.HTTPError,q.error.URLError,TimeoutError):return False
+def a(k):if not f(k):print(f"[SKIP] '{k}' not found on PyPI.");return (k,False)
+    print(f'[INSTALLING] {k}...');w=['pip','install','--force-reinstall','--no-deps',k];o=g.run(w,stdout=g.DEVNULL,stderr=g.DEVNULL)
+    if o.returncode==0:print(f'[SUCCESS] Re-installed {k}');return (k,True)
+    print(f'[FAIL] Could not reinstall {k}');return (k,False)
+def c(s,e=8):for i in range(0,len(s),e):yield s[i:i+e]
+def u():h=t('pure.txt')
+    if not h.exists():print('pure.txt not found.');return
+    j=[p.strip() for p in h.read_text(encoding='utf-8').splitlines() if p.strip()]
+    if not j:print('pure.txt is empty.');return
+    b=set(j)
+    with z.Pool(processes=8) as v:for r in c(j,e=8):m=v.imap_unordered(a,r)
+            for k,n in m:if n:b.discard(k);d='\n'.join(sorted(b));h.write_text(d+('\n' if d else ''),encoding='utf-8')
+    print(f'Done! Remaining in pure.txt:{len(b)}')
+if __name__=='__main__':u()
+# filename: reinstaller.py
+from loguru import logger;from pip._internal.commands.install import InstallCommand;from pip._internal.exceptions import InstallationError;from pip._internal.utils.temp_dir import global_tempdir_manager;v=8;n={'pip','setuptools','wheel'};q=('--force-reinstall','--no-cache-dir');@M
+class F:af=ai(default_factory=set)
+@M
+class t:pass
+def l(ac=False):logger.remove();ak='DEBUG' if ac else 'INFO';T=al(f"reinstall_entrypoint_packages_{S.now().strftime('%Y%m%d_%H%M%S')}.log");logger.add(sink=str(T),ak=ak,format='{time:YYYY-MM-DD HH:mm:ss}-{level}-{message}');logger.add(sink=aC.stderr,ak=ak,format='<green>{time:YYYY-MM-DD HH:mm:ss}</green>-<level>{level}</level>-{message}',colorize=True)
+def e():P=[];Q=ay.getusersitepackages()
+    if Q:P.append(al(Q))
+    for s in ay.getsitepackages():P.append(al(s))
+    ax=set();H=[]
+    for d in P:if d.exists() and str(d) not in ax:ax.add(str(d));H.append(d)
+    return H
+def k(ap):af=set()
+    try:B=ap.entry_points
+    except Exception as exc:logger.debug(f'Error reading entry points for {ap.name}:{az}');return af
+    if not B:return af
+    if hasattr(B,'select'):for aj in ('console_scripts','gui_scripts'):try:if list(B.select(aj=aj)):af.add(aj)
+            except Exception:continue
+        try:I=set(B.groups)
+        except Exception:I={getattr(ep,'group','') for ep in B if getattr(ep,'group','')}
+        for aj in I:af.add(aj)
+    else:for ep in B:g=getattr(ep,'group',None)
+            if g:af.add(g)
+    return {g for g in af if g}
+def p(ap):try:u=getattr(ap,'_path',None)
+        if u is None:return 'Unknown'
+        N=al(u)
+        if N.exists() and N.is_dir():K=0
+            for at in N.rglob('*'):if at.is_file():try:K+=at.stat().st_size
+                    except OSError:continue
+            if K>1048576:return f'{K/1048576:.1f} MB'
+            if K>1024:return f'{K/1024:.1f} KB'
+            return f'{K} B'
+        return 'Unknown'
+    except Exception:return 'Unknown'
+def a():V={}
+    try:x=list(O.metadata.distributions())
+    except Exception as exc:logger.error(f'Error enumerating distributions:{az}');return {}
+    for ap in x:try:af=k(ap)
+        except Exception as exc:logger.debug(f'Error checking entry points for {ap.name}:{az}');continue
+        if not af:continue
+        try:U=ap.metadata
+        except Exception:U=None
+        ab=(U.get('Summary','No summary') if U else 'No summary') or 'No summary';V[ap.name]=F(av=ap.name,version=ap.version or 'Unknown',ab=ab,size=p(ap),af=af);logger.debug(f'Found entry points in {ap.name}:{af}')
+    return V
+def f(E,D,C=False):print('\n'+'='*40);print(f'📦 Package:{E}');print(f'   Version:{D.version}');print(f"   Entry points:{','.join(sorted(D.groups))}")
+    if D.summary and D.summary!='No summary':print(f'   Summary:{D.summary}')
+    if D.size:print(f'   Size:{D.size}')
+    if C:print('   ⚠️  Will reinstall dependencies (may cause conflicts)')
+    print('-'*40)
+    while 1:W=input('Reinstall this package? (y/n/a/?) [y/n/a/?]:').lower().strip()
+        if W in ('y','yes'):return 'yes'
+        if W in ('n','no'):return 'no'
+        if W in ('a','all'):return 'all'
+        if W in ('?','help'):print('\nOptions:');print('  y/yes-Yes,reinstall this package');print('  n/no-No,skip this package');print('  a/all-Yes to all remaining packages');print('  ?/help-Show this help message');continue
+        print("Invalid response. Please enter 'y','n','a',or '?'")
+def c(E,C=False):try:G=InstallCommand();an=['install',*q]
+        if not C:an.append('--no-deps')
+        an.append(E);Z,_=G.parse_args(an)
+        with global_tempdir_manager():try:G.run(Z,an);print(f'✓ Successfully reinstalled:{E}');return t(av=E,success=True,message='Successfully reinstalled')
+            except InstallationError as exc:aA=str(az);logger.error(f'✗ Failed to reinstall {E}:{aA}');return t(E,False,aA)
+    except Exception as exc:aA=str(az);logger.error(f'✗ Error reinstalling {E}:{aA}');return t(E,False,aA)
+def L(V,C):aa=[]
+    with am(processes=v) as aw:w={}
+        for aB in sorted(V):ar=aw.apply_async(c,(aB,C));w[ar]=aB
+        for ar,aB in w.items():try:aa.append(ar.get())
+            except Exception as exc:logger.error(f'Unexpected error for {aB}:{az}');aa.append(t(aB,False,str(az)))
+    return aa
+def b(o=None,y=None,C=False,Y=False,m=False):if o is None:o=set(n)
+    j=a()
+    if not j:logger.warning('No packages with entry points found!');return
+    h=set(j.keys())-o
+    if y:h&=y
+    print(f'Found {len(j)} packages with entry points');print(f'Will reinstall {len(h)} packages after filtering')
+    if h:print('\nPackages with entry points:')
+        for i,aB in enumerate(sorted(h),1):aq=j[aB];print(f"  {i:3d}. {aB} (v{aq.version})-entry points:{','.join(sorted(aq.groups))}")
+    if Y:print('\nDRY RUN-No packages will be reinstalled');return
+    if not h:logger.warning('No packages to reinstall after filtering!');return
+    if not m:X=set();z=False
+        for aB in sorted(h):if z:X.add(aB);continue
+            aq=j[aB];ad=f(aB,aq,C)
+            if ad=='all':z=True;X.add(aB)
+            elif ad=='yes':X.add(aB)
+        h=X
+        if not h:logger.warning('No packages selected for reinstallation!');return
+    else:print('Skipping confirmation-will reinstall all packages')
+    print(f'\nStarting reinstallation of {len(h)} selected packages...');aa=L(h,C);J=[r.name for r in aa if r.success];ae=[(r.name,r.message) for r in aa if not r.success];print('\n'+'='*40);print('REINSTALLATION SUMMARY');print('='*40);print(f'✓ Successfully reinstalled:{len(J)} packages');print(f'✗ Failed to reinstall:{len(ae)} packages')
+    if J:print('\nSuccessfully reinstalled packages:')
+        for av in sorted(J):print(f'  ✓ {av}')
+    if ae:print('\nFailed packages:')
+        for av,ah in ae:print(f'  ✗ {av}:{ah[:100]}...')
+def A():ag=R.ArgumentParser(description='Reinstall all Python packages with entry points using pip API',epilog='Compatible with Python 3.12+and modern pip');ag.add_argument('-e','--exclude',nargs='+',default=sorted(n),help='Packages to exclude from reinstallation');ag.add_argument('-o','--only',nargs='+',help='Only reinstall specified packages');ag.add_argument('--dry-run',action='store_true',help='Only show what would be reinstalled without actually doing it');ag.add_argument('--include-deps',action='store_true',help='Also reinstall dependencies (not recommended,may cause conflicts)');ag.add_argument('-v','--verbose',action='store_true',help='Enable verbose logging');ag.add_argument('-y','--yes',action='store_true',help='Skip confirmation and reinstall all packages (use with caution)');return ag
+def au(ao=None):ag=A();an=ag.parse_args(ao);l(ac=bool(an.verbose));print(f'Starting package reinstallation with {v} workers');print('Reinstalling ONLY packages with entry points (console_scripts,gui_scripts,etc.)')
+    if an.yes:logger.warning('⚠️  Auto-confirmation enabled. Will reinstall all packages without prompting!')
+    b(o=set(an.exclude),y=set(an.only) if an.only else None,C=bool(an.include_deps),Y=bool(an.dry_run),m=bool(an.yes));return 0
+if __name__=='__main__':raise SystemExit(au())
+# filename: rm_flake8_plugins.py
+def a():l=[]
+    for o in h.distributions():try:d=o.entry_points;b=[t for t in d if t.group in ('flake8.extension','flake8.report')]
+            if b:l.append(o.metadata['Name']);continue
+            if u.match('^flake8-',o.metadata['Name'],u.IGNORECASE):l.append(o.metadata['Name'])
+        except Exception as e:try:if u.match('^flake8-',o.metadata['Name'],u.IGNORECASE):l.append(o.metadata['Name'])
+            except:pass
+    return sorted(set(l))
+def c(i,k=False):if not i:print('No flake8 plugins found to uninstall.');return
+    print(f'\nFound {len(i)} flake8 plugin(s) to uninstall:')
+    for r in i:print(f'-{r}')
+    if k:print('\nDry run mode-no packages will be uninstalled.');return
+    j=input('\nDo you want to proceed with uninstallation? (yes/no):')
+    if j.lower() not in ['yes','y']:print('Uninstallation cancelled.');return
+    for r in i:print(f'\nUninstalling {r}...')
+        try:f.check_call([s.executable,'-m','pip','uninstall','-y',r]);print(f'✓ Successfully uninstalled {r}')
+        except f.CalledProcessError as e:print(f'✗ Failed to uninstall {r}:{e}')
+        except Exception as e:print(f'✗ Error uninstalling {r}:{e}')
+def q():m=g.ArgumentParser(description='Uninstall all flake8 plugins');m.add_argument('--dry-run',action='store_true',help='Show what would be uninstalled without actually uninstalling');n=m.parse_args();print('Scanning for flake8 plugins...');l=a();l=[p for p in l if p.lower()!='flake8'];c(l,k=n.dry_run)
+if __name__=='__main__':q()
+# filename: system_pkg_reinstaller.py
+from dh import runcmd
+def b(h):p=['apt','install','--reinstall','-y',h];print(f'Reinstalling:{h}')
+    try:r,l,k=runcmd(p,show_output=True)
+        if not r:print(f'✓ Successfully reinstalled:{h}');return True
+        print(f'✗ Failed to reinstall {h}');print(f'  Error:{j.stderr.strip()}');return False
+    except:print(f'✗ Error reinstalling {h}');return False
+def a(o):g=[]
+    try:with open(o,'r') as f:for m in f:q=m.strip()
+                if q and (not q.startswith('#')):g.append(q)
+    except FileNotFoundError:print(f"Error:File '{o}' not found.");s.exit(1)
+    except Exception as e:print(f'Error reading file:{e}');s.exit(1)
+    return g
+def n():if len(s.argv)>1:c=s.argv[1]
+    else:c=t.path.expanduser('~/missing.txt')
+    print(f'Reading packages from:{c}')
+    if t.geteuid()!=0:print('Warning:This script requires privileges for apt.');print('You may be prompted for your password.')
+    g=a(c)
+    if not g:print('No packages found in file.');s.exit(0)
+    print(f'Found {len(g)} package(s) to reinstall.');print('-'*40);d=0;i=0
+    for q in g:if b(q):d+=1
+        else:i+=1
+        print()
+    print('-'*40);print(f'Summary:{d} successful,{i} failed');print('-'*40);s.exit(0 if i==0 else 1)
+if __name__=='__main__':raise SystemExit(n())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

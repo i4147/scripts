@@ -1,0 +1,507 @@
+# --- File: gemc.py ---
+import ast
+import multiprocessing
+import operator
+import os
+from pathlib import Path
+import tree_sitter_python as tspython
+from tree_sitter import Language, Parser, Query, QueryCursor
+a = Language(tspython.language())
+b = Parser(a)
+c = '\n(comment) @comment\n(block\n  . (expression_statement\n    (string)) @docstring)\n(module\n  . (expression_statement\n    (string)) @docstring)\n'
+def d(e):
+    e = e.strip()
+    return any((e.startswith(p) for p in ['#!', '# type:', '# fmt:']))
+def f(g):
+    h = QueryCursor()
+    i = Query(a, c)
+    try:
+        j = Path(g).read_text(encoding='utf-8')
+        k = bytes(j, 'utf8')
+        l = b.parse(k)
+        m = h.captures(i, l.root_node)
+        n = []
+        for o, tag in m:
+            if tag == 'comment':
+                p = j[o.start_byte:o.end_byte]
+                if not d(p):
+                    n.append((o.start_byte, o.end_byte, ''))
+            elif tag == 'docstring':
+                q = o.parent
+                if q and q.named_child_count == 1:
+                    n.append((o.start_byte, o.end_byte, 'pass'))
+                else:
+                    n.append((o.start_byte, o.end_byte, ''))
+        if not n:
+            return
+        n.sort(key=operator.itemgetter(0), reverse=True)
+        r = j
+        for s, end, t in n:
+            r = r[:s] + t + r[end:]
+        try:
+            ast.parse(r)
+            Path(g).write_text(r, encoding='utf-8')
+        except SyntaxError:
+            pass
+    except Exception as e:
+        print(f'Error in {g}: {e}')
+def u():
+    v = [os.path.join(r, f) for r, _, fs in os.walk('.') for f in fs if f.endswith('.py')]
+    if not v:
+        return
+    print(f'Applying anchored query processing to {len(v)} files...')
+    with multiprocessing.get_context('spawn').Pool() as w:
+        w.map(f, v)
+    print('Done.')
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: t5.py ---
+import ast
+import sys
+from pathlib import Path
+import tree_sitter_python as tspython
+from dh import fsz, get_pyfiles, gsz, mpf_async as mpf, remove_blank_lines
+from tree_sitter import Language, Parser, Query, QueryCursor
+x = 1024 * 1024
+c = '\n(comment) @comment\n(block\n  . (expression_statement\n    (string)) @docstring)\n(module\n  . (expression_statement\n    (string)) @docstring)\n'
+class y:
+    def __init__(self):
+        self.language = Language(tspython.language())
+        self.parser = Parser(self.language)
+        self.query = Query(self.language, c)
+    def z(self, a1):
+        k = a1.encode('utf-8')
+        l = self.parser.parse(k)
+        h = QueryCursor(self.query)
+        b1 = h.matches(l.root_node)
+        c1 = []
+        d1 = 0
+        e1 = 0
+        for f1, g1 in b1:
+            for h1, i1 in g1.items():
+                for o in i1:
+                    s = o.start_byte
+                    end = o.end_byte
+                    j1 = k[s:end].decode('utf-8')
+                    if h1 == 'comment':
+                        k1 = j1.strip()
+                        if k1.startswith(('# type:', '# TODO', '# noqa', '#!', '# fmt:')):
+                            continue
+                        d1 += 1
+                    else:
+                        e1 += 1
+                    if end < len(k) and k[end:end + 1] == b'\n':
+                        end += 1
+                    c1.append((s, end))
+        c1 = sorted(set(c1), reverse=True)
+        l1 = k
+        for s, end in c1:
+            l1 = l1[:s] + l1[end:]
+        m1 = l1.decode('utf-8')
+        m1 = remove_blank_lines(m1)
+        return (m1, d1, e1)
+def n1(g):
+    g = Path(g)
+    o1 = y()
+    p1 = g.read_text(encoding='utf-8', errors='ignore')
+    o1.remove_comments(p1)
+    q1, r1, s1 = o1.remove_comments(p1)
+    if r1 == 0 and s1 == 0:
+        print(f'[NO CHANGE] : {g.name}')
+        return
+    try:
+        ast.parse(q1)
+        print(f'{g.name}: comments: {r1}   docstrings: {s1}')
+        g.write_text(q1, encoding='utf-8')
+    except:
+        print(f'{g.name} : invalid code')
+def u():
+    cwd = Path.cwd()
+    t1 = gsz('.')
+    u1 = sys.argv[1:]
+    v = [Path(p) for p in u1] if u1 else get_pyfiles(cwd)
+    print(f'Processing {len(v)} files using QueryCursor...')
+    mpf(n1, v)
+    v1 = t1 - gsz('.')
+    if v1 != 0:
+        print(fsz(v1))
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: grmc_ts.py ---
+import argparse
+import ast
+import sys
+from multiprocessing import Pool
+from multiprocessing.pool import AsyncResult
+from pathlib import Path
+from typing import Final
+import tree_sitter_python as tspython
+from tree_sitter import Language, Parser, Tree, TreeCursor
+w1 = 8
+x1 = ('#!', '# type:', '# fmt:')
+y1 = frozenset({'# fmt: skip', '# fmt: on', '# fmt: off'})
+a = Language(tspython.language())
+z1 = tuple[int, int, bytes]
+def a2():
+    return Parser(a)
+def d(b2):
+    j1 = b2.decode('utf-8', errors='ignore').strip()
+    return j1.startswith(x1) or j1 in y1
+def n1(c2):
+    try:
+        k = c2.read_bytes()
+    except Exception as exc:
+        return f'[ERROR] Failed to read {c2}: {exc}'
+    b = a2()
+    l = b.parse(k)
+    d2 = l.root_node
+    e2 = []
+    f2 = None
+    if d2.child_count > 0:
+        g2 = d2.child(0)
+        if g2 is not None and g2.type == 'expression_statement':
+            h2 = g2.child(0)
+            if h2 is not None and h2.type == 'string':
+                f2 = g2
+    h = l.walk()
+    i2 = False
+    while not i2:
+        o = h.node
+        if o.type == 'comment':
+            j2 = k[o.start_byte:o.end_byte]
+            if not d(j2):
+                e2.append((o.start_byte, o.end_byte, b''))
+        elif o.type == 'expression_statement' and o != f2:
+            h2 = o.child(0)
+            if h2 is not None and h2.type == 'string':
+                q = o.parent
+                if q is not None and q.type == 'block':
+                    if q.named_child_count == 1:
+                        e2.append((o.start_byte, o.end_byte, b'pass'))
+                    else:
+                        e2.append((o.start_byte, o.end_byte, b''))
+        if h.goto_first_child():
+            continue
+        if h.goto_next_sibling():
+            continue
+        while True:
+            if not h.goto_parent():
+                i2 = True
+                break
+            if h.goto_next_sibling():
+                break
+    if not e2:
+        return f'[SKIPPED] No structural modifications needed for {c2}'
+    e2.sort(key=lambda k2: k2[0], reverse=True)
+    l2 = bytearray(k)
+    for s, end, t in e2:
+        l2[s:end] = t
+    m2 = bytes(l2)
+    try:
+        ast.parse(m2, filename=str(c2))
+    except SyntaxError as exc:
+        return f'[WARNING] Validation failed for {c2} (Changes rejected): {exc}'
+    try:
+        c2.write_bytes(m2)
+        return f'[SUCCESS] Processed and stripped: {c2}'
+    except Exception as exc:
+        return f'[ERROR] Failed to save updates to {c2}: {exc}'
+def n2(o2):
+    v = set()
+    if not o2:
+        v.update(Path('.').rglob('*.py'))
+        return sorted(v)
+    for k2 in o2:
+        p = Path(k2)
+        if p.is_file() and p.suffix == '.py':
+            v.add(p)
+        elif p.is_dir():
+            v.update(p.rglob('*.py'))
+    return sorted(v)
+def u():
+    b = argparse.ArgumentParser(description='Strip comments and docstrings using Tree-Sitter safely.')
+    b.add_argument('paths', nargs='*', help="Target files or directories to process. Defaults to '.' if empty.")
+    u1 = b.parse_args()
+    p2 = n2(u1.paths)
+    if not p2:
+        print('No target Python source files detected.')
+        sys.exit(0)
+    print(f'Queue loaded. Processing {len(p2)} target files via Parallel Pipeline...')
+    with Pool(processes=w1) as w:
+        q2 = [w.apply_async(n1, (r2,)) for r2 in p2]
+        for s2 in q2:
+            t2 = s2.get()
+            print(t2)
+if __name__ == '__main__':
+    raise SystemExit(u())
+
+# --- File: tsrmc.py ---
+import argparse
+import ast
+import sys
+import time
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Final
+from loguru import logger
+try:
+    from tree_sitter import Language, Node, Parser, Query
+    from tree_sitter_python import language as python_language
+except ImportError:
+    logger.error('Install tree-sitter==0.25.2 and tree-sitter-python==0.25.0')
+    sys.exit(1)
+u2 = 8
+v2 = '\n(comment) @comment\n(string) @string\n'
+w2 = frozenset({'comment', 'NEWLINE', 'INDENT', 'DEDENT'})
+@dataclass
+class x2:
+    y2 = None
+    z2 = 0
+    a3 = 0
+    b3 = 0.0
+class c3:
+    d3 = v2
+    def __init__(self):
+        self.parser = Parser()
+        e3 = python_language()
+        self.parser.set_language(e3)
+        self.query = e3.query(self.QUERY)
+    def f3(self, a1):
+        k = a1.encode('utf-8')
+        l = self.parser.parse(k)
+        m = self.query.captures(l.root_node)
+        g3 = []
+        for o, h1 in m:
+            if h1 == 'comment' or (h1 == 'string' and self._is_docstring(o)):
+                g3.append((o.start_byte, o.end_byte))
+        g3.sort(reverse=True)
+        q1 = self._remove_ranges(k, g3)
+        return q1.decode('utf-8', errors='replace')
+    @staticmethod
+    def h3(o):
+        q = o.parent
+        if q is None or q.type != 'expression_statement':
+            return False
+        i3 = [j3 for j3 in q.children if j3.type not in w2]
+        return len(i3) == 1 and i3[0] == o
+    @staticmethod
+    def k3(k, l3):
+        if not l3:
+            return k
+        q1 = bytearray(k)
+        for s, end in l3:
+            m3 = k[s:end]
+            n3 = m3.count(b'\n')
+            t = b'\n' * n3 if n3 > 0 else b' ' * (end - s)
+            q1[s:end] = t
+        return bytes(q1)
+class o3:
+    def f3(self, a1):
+        p3 = a1.split('\n')
+        q3 = []
+        for r3 in p3:
+            q3.append(self._strip_line_comment(r3))
+        s3 = '\n'.join(q3)
+        try:
+            l = ast.parse(s3)
+        except SyntaxError:
+            return s3
+        t3 = self._extract_docstring_ranges(l, s3)
+        for s, end in sorted(t3, reverse=True):
+            s3 = s3[:s] + s3[end:]
+        return s3
+    @staticmethod
+    def u3(r3):
+        v3 = False
+        w3 = None
+        q1 = []
+        i = 0
+        while i < len(r3):
+            x3 = r3[i]
+            if x3 in ('"', "'") and (i == 0 or r3[i - 1] != '\\'):
+                if not v3:
+                    v3 = True
+                    w3 = x3
+                elif x3 == w3:
+                    v3 = False
+                    w3 = None
+                q1.append(x3)
+            elif x3 == '#' and (not v3):
+                break
+            else:
+                q1.append(x3)
+            i += 1
+        return ''.join(q1)
+    @staticmethod
+    def y3(l, a1):
+        l3 = []
+        for o in ast.walk(l):
+            z3 = ast.get_docstring(o)
+            if z3 and isinstance(o, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+                pass
+        _ = a1
+        return l3
+def a4(a1):
+    try:
+        ast.parse(a1)
+        return True
+    except SyntaxError:
+        return False
+def b4(g):
+    c4 = time.perf_counter()
+    try:
+        d4 = g.read_text(encoding='utf-8')
+        z2 = len(d4.encode('utf-8'))
+        e4 = c3()
+        f4 = e4.remove_comments_and_docstrings(d4)
+        if not a4(f4):
+            return x2(path=g, success=False, error='Syntax validation failed', processing_time=time.perf_counter() - c4)
+        g.write_text(f4, encoding='utf-8')
+        a3 = len(f4.encode('utf-8'))
+        return x2(path=g, success=True, original_size=z2, new_size=a3, processing_time=time.perf_counter() - c4)
+    except Exception as exc:
+        return x2(path=g, success=False, error=str(exc), processing_time=time.perf_counter() - c4)
+def g4(g):
+    c4 = time.perf_counter()
+    try:
+        d4 = g.read_text(encoding='utf-8')
+        z2 = len(d4.encode('utf-8'))
+        e4 = o3()
+        f4 = e4.remove_comments_and_docstrings(d4)
+        if not a4(f4):
+            return x2(path=g, success=False, error='Syntax validation failed', processing_time=time.perf_counter() - c4)
+        a3 = len(f4.encode('utf-8'))
+        return x2(path=g, success=True, original_size=z2, new_size=a3, processing_time=time.perf_counter() - c4)
+    except Exception as exc:
+        return x2(path=g, success=False, error=str(exc), processing_time=time.perf_counter() - c4)
+def h4(i4):
+    if i4 == 'tree-sitter':
+        return b4
+    return g4
+def j4(k4=Path.cwd(), i4='tree-sitter'):
+    l4 = list(k4.glob('**/*.py'))
+    if not l4:
+        logger.warning('No Python files found in {}', k4)
+        return ([], 0.0)
+    print('Processing {} files using {}', len(l4), i4)
+    c4 = time.perf_counter()
+    m4 = h4(i4)
+    n4 = []
+    w = Pool(processes=u2)
+    try:
+        q2 = [w.apply_async(m4, (g,)) for g in l4]
+        for o4 in q2:
+            q1 = o4.get()
+            n4.append(q1)
+            p4 = '✓' if q1.success else '✗'
+            q4 = f' ({q1.error})' if q1.error else ''
+            print('{status} {name}{err}', status=p4, name=q1.path.name, err=q4)
+    finally:
+        w.close()
+        w.join()
+    r4 = time.perf_counter() - c4
+    return (n4, r4)
+def s4(n4, r4, i4):
+    t4 = [r for r in n4 if r.success]
+    u4 = [r for r in n4 if not r.success]
+    v4 = sum((r.original_size for r in t4))
+    w4 = sum((r.new_size for r in t4))
+    x4 = v4 - w4 if v4 > 0 else 0
+    y4 = x4 / v4 * 100 if v4 > 0 else 0.0
+    z4 = sum((r.processing_time for r in n4)) / len(n4) if n4 else 0.0
+    print('=' * 40)
+    print('Results ({})', i4.upper())
+    print('=' * 40)
+    print('Total files:      {}', len(n4))
+    print('Successful:       {}', len(t4))
+    print('Failed:           {}', len(u4))
+    print('Total time:       {:.3f}s', r4)
+    print('Avg time/file:    {:.3f}s', z4)
+    print('Original size:    {:,} bytes', v4)
+    print('New size:         {:,} bytes', w4)
+    print('Reduction:        {:,} bytes ({:.1f}%)', x4, y4)
+    if u4:
+        logger.warning('Failed files:')
+        for r in u4:
+            logger.warning('  - {}: {}', r.path, r.error)
+def a5():
+    b = argparse.ArgumentParser(description='Remove comments and docstrings from Python files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='Examples:\n  %(prog)s\n  %(prog)s --method ast\n  %(prog)s --compare\n  %(prog)s /path/to/dir\n')
+    b.add_argument('directory', nargs='?', default='.', help='Directory to process (default: current directory)')
+    b.add_argument('--method', choices=['tree-sitter', 'ast'], default='tree-sitter', help='Processing method (default: tree-sitter)')
+    b.add_argument('--compare', action='store_true', help='Compare both methods (dry-run, no files modified)')
+    return b
+def b5(k4):
+    return k4.glob('**/*.py')
+def u():
+    b = a5()
+    u1 = b.parse_args()
+    k4 = Path(u1.directory).resolve()
+    if not k4.exists():
+        logger.error('Directory not found: {}', k4)
+        return 1
+    if u1.compare:
+        print('Comparing methods on {}', k4)
+        l4 = list(b5(k4))
+        print('Found {} Python files', len(l4))
+        print('[1/2] Testing tree-sitter method...')
+        c5, d5 = j4(k4, 'tree-sitter')
+        s4(c5, d5, 'tree-sitter')
+        print('[2/2] Testing AST method...')
+        e5, f5 = j4(k4, 'ast')
+        s4(e5, f5, 'ast')
+        print('=' * 40)
+        print('PERFORMANCE COMPARISON')
+        print('=' * 40)
+        print('Tree-sitter time: {:.3f}s', d5)
+        print('AST time:         {:.3f}s', f5)
+        g5 = f5 / d5 if d5 > 0 else 0.0
+        print('Speedup:          {:.2f}x', g5)
+        logger.warning('NOTE: Files were NOT modified (dry-run mode)')
+    else:
+        n4, r4 = j4(k4, u1.method)
+        s4(n4, r4, u1.method)
+    return 0
+if __name__ == '__main__':
+    raise SystemExit(u())
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
+
+

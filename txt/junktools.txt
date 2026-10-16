@@ -1,0 +1,197 @@
+# filename: clean_os_files.py
+b={'.exe','.dll','.bat','.com','.msi','.vbs','.ps1'};f={'.dmg','.app','.DS_Store','.plist','.pkg'}
+def a(l):d=[]
+    for m,_,i in u.walk(l):for k in i:if any((k.lower().endswith(t) for t in b)) or any((k.lower().endswith(t) for t in f)) or k=='.DS_Store':d.append(u.path.join(m,k))
+    return d
+def q():n=j.ArgumentParser(description='Search for Windows/macOS files in the current directory and optionally remove them.');n.add_argument('-a','--auto-remove',action='store_true',help='Automatically remove found files after confirmation.');p=n.parse_args();g=u.getcwd();print(f'Scanning directory:{g}\n');h=a(g)
+    if not h:print('No Windows or macOS related files found.');return
+    s=o.cwd().resolve();print(f'Found {len(h)} file(s):\n')
+    for r in h:print(f'  {r.relative_to(s)}')
+    if p.auto_remove:print('\n'+'='*35);c=0
+        for r in h:try:u.remove(r);print(f'Deleted:{r}');c+=1
+            except Exception as e:print(f'Error deleting {r}:{e}')
+        print(f'\nDeleted {c} of {len(h)} files.')
+if __name__=='__main__':raise SystemExit(q())
+# filename: cleanup_darwin.py
+from dh import fsz;c={'.DS_Store','.AppleDouble','.LSOverride','.TemporaryItems','.Spotlight-V100','.Trashes','._*','.com.apple.*'};b={'*.exe','*.dll','*.sys','*.bat','*.cmd','*.com','*.msi','*.scr','*.lnk','Thumbs.db','desktop.ini','$RECYCLE.BIN'};h=c|b
+def d(B,o):A=B.name
+    for q in o:if q.startswith('*'):if A.endswith(q[1:]):return True
+        elif q.startswith('._'):if A.startswith('._'):return True
+        elif q.startswith('.') and q!='.DS_Store':if A==q or (B.is_dir() and A==q):return True
+        elif A==q or B.name.startswith(q.split('*')[0]):return True
+    return False
+def g(p):try:for v in p.iterdir():yield v
+            if v.is_dir():yield from g(v)
+    except (OSError,PermissionError) as e:print(f'Error accessing {p}:{e}',file=D.stderr)
+def j(B):try:if B.is_file():C=B.stat().st_size;B.unlink();return (str(B),C)
+        if B.is_dir():m=0
+            for B in g(B):if B.is_file():m+=B.stat().st_size
+            u.rmtree(B);return (str(B),m)
+    except (OSError,PermissionError) as e:print(f'Error deleting {B}:{e}',file=D.stderr)
+    return (str(B),0)
+def a(p=None):if p is None:p=x.cwd()
+    else:p=x(p)
+    if not p.exists():print(f'Error:{p} does not exist',file=D.stderr);return {}
+    print(f'Scanning {p} for Darwin/Windows files...\n');f=[]
+    for B in g(p):if d(B,h):f.append(B)
+    if not f:print('No matching files found.');return {'files_removed':0,'total_freed_bytes':0,'total_freed_human':'0 B'}
+    print(f'Found {len(f)} file(s) to remove\n');r=[]
+    for B in f:print(f'Removing:{B}');t=j(B);r.append(t)
+    k=sum((C for _,C in r));l=sum((1 for _,C in r if C>0));w={'files_removed':l,'total_freed_bytes':k,'total_freed_human':fsz(k),'details':r};return w
+def i(w):print('\n'+'='*40);print('REMOVAL REPORT');print('-'*40);print(f"Files removed:{w['files_removed']}");print(f"Total disk space freed:{w['total_freed_human']} ({w['total_freed_bytes']} bytes)");print('-'*40)
+def z():s=n.ArgumentParser(description='Remove Darwin and Windows related files recursively');s.add_argument('directory',nargs='?',default='.',help='Directory to scan (default:current directory)');s.add_argument('-v','--verbose',action='store_true',help='Show details of each removed file');y=s.parse_args();w=a(y.directory);i(w)
+    if y.verbose and w.get('details'):print('Removed files:')
+        for B,C in w['details']:if C>0:print(f'  {B} ({C} bytes)')
+if __name__=='__main__':raise SystemExit(z())
+# filename: cnn.py
+a=['.pyc','.log','.bak'];d=['__pycache__','.ruff_cache','.mypy_cache']
+def c(m):try:if m.is_file():m.unlink();print(f'Removed file:{m.name}')
+        elif m.is_dir():h.rmtree(m)
+            try:p=m.relative_to(i.cwd())
+            except ValueError:p=m
+            print(f'Removed directory:{p}')
+    except Exception as e:print(f'Failed to remove {m}:{e}')
+def b(f):try:for k in f.iterdir():if k.is_file():if any((k.name.endswith(o) for o in a)):yield k
+            elif k.is_dir():if k.name in d:if k.parent.name=='site-packages':print(f'not allowed:{k}');continue
+                    yield k
+                else:yield from b(k)
+    except PermissionError:pass
+def l():f=i.cwd().resolve()
+    with j(g()) as n:n.map(c,b(f))
+if __name__=='__main__':raise SystemExit(l())
+# filename: find_empty.py
+def c():e=b.cwd()
+    for r,_,a in g.walk(e):for f in a:if f.startswith('__init__.py') or f.endswith('py.typed'):continue
+            d=b(r)/f
+            if d.is_symlink():continue
+            if d.is_file() and (not d.stat().st_size):print(d.relative_to(e))
+if __name__=='__main__':raise SystemExit(c())
+# filename: pdmp.py
+f={'tmp','cache','bin','.git','etc','config','var'};b={'.git','tmp','etc','var','config'}
+def j(w,k):if w.name in f:return True
+    try:g=w.relative_to(k).parts
+        if any((v in b for v in g)):return True
+    except ValueError:pass
+    return bool(w.name.startswith('mc') and w.parent.name=='tmp')
+def a(x,m=False,n=False):i=0;c=[];h=[d for d in x.rglob('*') if d.is_dir()];h.sort(key=lambda p:len(p.parts),reverse=True)
+    if x.is_dir():h.append(x)
+    for w in h:if not w.is_dir():continue
+        if j(w,x):if n:print(f'Skipping excluded directory:{w.relative_to(x)}')
+            continue
+        try:if not any((r for r in w.iterdir() if r.is_dir() or r.is_file())):if n:print(f'Empty directory found:{w.relative_to(x)}')
+                if not m:w.rmdir();i+=1;c.append(w)
+                    if n:print(f'-->Removed:{w.relative_to(x)}')
+                else:print(f'  (Dry Run) Would remove:{w.relative_to(x)}')
+        except PermissionError:print(f'[ERROR] Permission denied for:{w.relative_to(x)}',file=y.stderr)
+        except OSError as e:print(f'[ERROR] Could not process {w.relative_to(x)}:{e}',file=y.stderr)
+        except Exception as e:print(f'[ERROR] An unexpected error occurred with {w.relative_to(x)}:{e}',file=y.stderr)
+    return (i,c)
+def u():q=l.ArgumentParser(description='Find and remove empty directories,excluding specified ones.');q.add_argument('path',nargs='?',type=s,default=s.cwd(),help='The root directory to start scanning from (default:current working directory).');q.add_argument('--dry-run',action='store_true',help='Perform a dry run:show what would be deleted without actually deleting.');q.add_argument('-v','--verbose',action='store_true',help='Enable verbose output,showing skipped and found directories.');t=q.parse_args();k=t.path.resolve()
+    if not k.is_dir():print(f"Error:The provided path '{k}' is not a valid directory.",file=y.stderr);y.exit(1)
+    if t.dry_run:print('---DRY RUN MODE (no changes will be made)---')
+    i,c=a(k,m=t.dry_run,n=t.verbose)
+    if i>0:if t.dry_run:print(f'Would have removed {i} empty directories:')
+        else:print(f'removed {i}')
+        for o in sorted(c):print(f'-{o.relative_to(k)}')
+    else:print('No empty dir.')
+if __name__=='__main__':raise SystemExit(u())
+# filename: pydmp.py
+def e():b=0;f=c.cwd();d=[p for p in f.rglob('*') if p.is_dir()];d.sort(key=lambda p:len(p.parts),reverse=True)
+    for a in d:try:a.rmdir();print(f'removing empty dir:{a}');b+=1
+        except OSError:pass
+    print(f'total {b} empty dirs removed')
+if __name__=='__main__':raise SystemExit(e())
+# filename: pydmp2.py
+def c():a=0;e=b.cwd()
+    for d in sorted(e.rglob('*'),reverse=True):if d.is_dir() and (not any(d.iterdir())):print(f'removing empty dir:{d}');d.rmdir();a+=1
+    print(f'total {a} empty dirs removed')
+if __name__=='__main__':raise SystemExit(c())
+# filename: rmempty.py
+from dh import cprint,get_files;d=0
+def get_files(i):return [p for p in i.rglob('*') if p.is_file() and (not p.is_symlink()) and ('.git' not in p.parts)]
+def a(g):if g<=0:return False
+    q.stdout.flush();r,_,_=j.select([q.stdin],[],[],g)
+    if r:q.stdin.readline();return True
+    return False
+def n():o=m.cwd();k=get_files(o);b=[p for p in k if p.stat().st_size==0 and p.name!='__init__.py'];l=len(b)
+    if not l:cprint('no empty files found','cyan');q.exit(0)
+    cprint(f'{l} empty files found.','cyan')
+    for c in b:cprint(f'-{c.relative_to(o)}','yellow')
+    cprint(f'Press any key within {d} seconds to abort.','magenta')
+    if a(d):cprint('Aborted by user.','red');return 1
+    f=0;h=0
+    for c in b:try:if c.exists():c.unlink();f+=1
+        except Exception as e:h+=1;cprint(f'Failed to remove {c}:{e}','red')
+    cprint(f'Deleted:{f},Failed:{h}','green');return 0
+if __name__=='__main__':raise SystemExit(n())
+# filename: twin_files.py
+def a(l,g=True):h=0;f=0
+    for b in l.glob('*.json'):f+=1;d=b.with_suffix('.txt')
+        if d.exists():print(f'[MATCH] {b}->{d}')
+            if not g:try:d.unlink();print(f'[REMOVED] {d}');h+=1
+                except Exception as e:print(f'[ERROR] Could not remove {d}:{e}')
+            else:print(f'[DRY RUN] Would remove {d}')
+    print('\n---Summary---');print(f'Checked:{f}');print(f'Removed:{h}' if not g else 'Dry run only. No files removed.')
+if __name__=='__main__':i=c.ArgumentParser(description='Remove .txt files if a .json file with the same name exists.');i.add_argument('-a','--apply',action='store_true',help='Actually delete files (default is dry run).');k=i.parse_args();m=j.cwd();a(m,g=not k.apply)
+# filename: twinfiles.py
+def f():i=c.cwd();d=input('ext 1 :').strip();e=input('ext 2 :').strip();a=input('remove which one:1 or 2:').strip()
+    if not d.startswith('.'):d='.'+d
+    if not e.startswith('.'):e='.'+e
+    b=d if a=='1' else e
+    for g in i.rglob(f'*{d}'):if g.is_file() and g.suffix==d:h=g.with_suffix(e)
+            if h.exists():if b==d:print(f'[✖] {g}  (keeping {h})');g.unlink()
+                else:print(f'[✖] {h}  (keeping {g})');h.unlink()
+if __name__=='__main__':raise SystemExit(f())
+
+You are a senior Python engineer. You will be given N Python scripts that do
+nearly the same job with small differences. Merge them into ONE well-structured,
+runnable Python script.
+## Input
+are scripts provided above.
+## Deliverable
+A single runnable file named `<merged>.py`, invoked as:
+    python <merged>.py <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse`. Expose every behavioral difference between the original
+   scripts as a CLI argument.
+   - Use subcommands if the scripts are distinct modes/jobs.
+   - Use flags if they are variations of one pipeline.
+2. Factor shared logic (imports, helpers, config, error handling) into common
+   functions. Do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Include a mapping
+   block (see Output format §3).
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args, with
+   defaults equal to the original values.
+5. If differences cannot be unified, keep BOTH behind a flag/choice. Never
+   silently pick one.
+6. Sensible defaults so it runs out of the box. Print help if ambiguous.
+7. Type hints on all public functions. Docstrings on all public functions and
+   classes. Module-level docstring with usage examples.
+8. Standard library only, unless the originals already import third-party
+   packages — in that case list them explicitly at the top of the module
+   docstring and in the imports.
+## Output format (exactly these three sections, in order)
+### 1. Comparison table
+Markdown table: script name | what it does | shared with others | unique to it |
+proposed CLI mapping.
+### 2. Merged script
+One fenced code block containing the complete file.
+### 3. Mapping
+A fenced code block (plain text) showing the exact command for each original:
+    original_name1.py  ->  python merged.py mode-a ...
+    original_name2.py  ->  python merged.py mode-b --flag ...
+## Comment policy
+- Keep the module-level docstring (with usage examples).
+- Keep the mapping block from §3 as real comments in the file.
+- Strip ALL other comments and docstrings from the final code.
+- Exception: keep a short comment wherever a non-obvious behavior was
+  preserved behind a flag, so a future reader knows why the branch exists.
+## Ambiguity policy
+- If something is ambiguous, state your assumption in one line and proceed.
+- If something is impossible, say so plainly. Do not simulate or fake output.
+- Only ask a clarifying question if a wrong assumption would SILENTLY change
+  runtime behavior. Otherwise assume and move on.
+## Batch mode (optional)
+If the user says "batch mode", emit ONLY §2 (the code) for each input group,
+omit the table and mapping sections, and write each merged file to
+`<group>_merged.py` next to the inputs. Otherwise emit all three sections.

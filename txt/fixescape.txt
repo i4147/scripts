@@ -1,0 +1,1149 @@
+# --- File: find_and_fix_escape_sequence.py ---
+import argparse
+import concurrent.futures
+import contextlib
+import os
+import tokenize
+import warnings
+from pathlib import Path
+def a(b, c=False):
+    d = {'path': b, 'has_issues': False, 'fixed': False, 'errors': [], 'warnings': []}
+    try:
+        e = b.read_bytes()
+    except Exception as e:
+        d['errors'].append(f'Could not read file: {e}')
+        return d
+    with warnings.catch_warnings(record=True) as f:
+        warnings.simplefilter('always', SyntaxWarning)
+        try:
+            compile(e, str(b), 'exec')
+        except SyntaxError as se:
+            if 'invalid escape sequence' in str(se):
+                d['has_issues'] = True
+                d['errors'].append(f'Line {se.lineno}: SyntaxError: {se.msg}')
+            else:
+                return d
+        for w in f:
+            if issubclass(w.category, SyntaxWarning) and 'invalid escape sequence' in str(w.message):
+                d['has_issues'] = True
+                g = getattr(w, 'lineno', 'Unknown')
+                d['warnings'].append(f'Line {g}: SyntaxWarning: {w.message}')
+    if d['has_issues'] and c:
+        try:
+            h = []
+            i = False
+            with b.open('rb') as f:
+                j = list(tokenize.tokenize(f.readline))
+            for tok in j:
+                if tok.type == tokenize.STRING:
+                    k = ''
+                    l = tok.string
+                    for m in l:
+                        if m.lower() in 'frub':
+                            k += m
+                        else:
+                            break
+                    n = l[len(k):]
+                    if '\\' in n and 'r' not in k.lower():
+                        with warnings.catch_warnings(record=True) as o:
+                            warnings.simplefilter('always', SyntaxWarning)
+                            with contextlib.suppress(SyntaxError, SyntaxWarning):
+                                compile(f'_{k}{n}', '<string>', 'exec')
+                            if any(('invalid escape sequence' in str(sw.message) for sw in o)):
+                                p = 'r' + k if 'r' not in k.lower() else k
+                                tok = tok._replace(string=f'{p}{n}')
+                                i = True
+                h.append(tok)
+            if i:
+                q = tokenize.untokenize(h)
+                b.write_bytes(q)
+                d['fixed'] = True
+        except Exception as e:
+            d['errors'].append(f'Failed to auto-fix: {e}')
+    return d
+def r():
+    s = argparse.ArgumentParser(description='Find and optionally fix invalid escape sequences in Python files using parallel processing.')
+    s.add_argument('directory', type=str, nargs='?', default='.', help='The target directory to scan (default: current directory).')
+    s.add_argument('-a', '--auto-fix', action='store_true', help="Automatically fix invalid escapes by adding an 'r' prefix to offending strings.")
+    t = s.parse_args()
+    u = Path(t.directory)
+    if not u.is_dir():
+        print(f'❌ Error: {u} is not a valid directory.')
+        return
+    v = list(u.rglob('*.py'))
+    w = Path(__file__).resolve()
+    v = [f for f in v if f.resolve() != w]
+    print(f'🔍 Found {len(v)} Python files. Processing in parallel across {os.cpu_count() or 1} cores...')
+    if t.auto_fix:
+        print('🛠️  Auto-fix flag (-a) is active. Offending string literals will be converted to raw strings.')
+    print('-' * 40)
+    x = 0
+    y = 0
+    with concurrent.futures.ProcessPoolExecutor() as z:
+        a1 = {z.submit(a, f, t.auto_fix): f for f in v}
+        for b1 in concurrent.futures.as_completed(a1):
+            res = b1.result()
+            c1 = res['path'].relative_to(u)
+            if res['has_issues']:
+                x += 1
+                d1 = '🔧 FIXED' if res['fixed'] else '⚠️  WARNING'
+                print(f'[{d1}] {c1}')
+                for w in res['warnings']:
+                    print(f'   -> {w}')
+                for e in res['errors']:
+                    print(f'   -> {e}')
+                if res['fixed']:
+                    y += 1
+                print()
+    print('-' * 40)
+    print('📊 Scan Complete.')
+    print(f'   Files with issues: {x}')
+    if t.auto_fix:
+        print(f'   Files successfully fixed: {y}')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fix_escape.py ---
+import argparse
+import contextlib
+import os
+import tokenize
+import warnings
+from collections.abc import Iterator
+from pathlib import Path
+def e1(f1):
+    for g1, _, h1 in os.walk(f1):
+        i1 = Path(g1)
+        for j1 in h1:
+            b = i1 / j1
+            if b.is_symlink() or '.git' in b.parts:
+                continue
+            if b.suffix == '.py':
+                yield b
+def a(b, c=False):
+    d = {'path': b, 'has_issues': False, 'fixed': False, 'messages': []}
+    try:
+        k1 = b.read_bytes()
+    except Exception as exc:
+        d['messages'].append(f'Error reading file: {exc}')
+        return d
+    with warnings.catch_warnings(record=True) as f:
+        warnings.simplefilter('always', SyntaxWarning)
+        try:
+            compile(k1, str(b), 'exec')
+        except SyntaxError as exc:
+            if 'invalid escape sequence' in str(exc):
+                d['has_issues'] = True
+                d['messages'].append(f'Line {exc.lineno}: SyntaxError: {exc.msg}')
+            else:
+                return d
+    for l1 in f:
+        if issubclass(l1.category, SyntaxWarning) and 'invalid escape sequence' in str(l1.message):
+            d['has_issues'] = True
+            m1 = getattr(l1, 'lineno', 'Unknown')
+            d['messages'].append(f'Line {m1}: SyntaxWarning: {l1.message}')
+    if not d['has_issues'] or not c:
+        return d
+    try:
+        h = []
+        n1 = False
+        with b.open('rb') as o1:
+            j = tokenize.tokenize(o1.readline)
+            j = list(j)
+        for p1 in j:
+            if p1.type != tokenize.STRING:
+                h.append(p1)
+                continue
+            q1 = p1.string
+            r1 = 0
+            while r1 < len(q1) and q1[r1].lower() in 'frub':
+                r1 += 1
+            k = q1[:r1]
+            s1 = q1[r1:]
+            if '\\' not in s1 or 'r' in k.lower():
+                h.append(p1)
+                continue
+            t1 = False
+            with warnings.catch_warnings(record=True) as u1:
+                warnings.simplefilter('always', SyntaxWarning)
+                with contextlib.suppress(SyntaxError):
+                    compile(f'_{k}{s1}', '<string>', 'exec')
+            for l1 in u1:
+                if issubclass(l1.category, SyntaxWarning) and 'invalid escape sequence' in str(l1.message):
+                    t1 = True
+                    break
+            if t1:
+                v1 = f'r{k}{s1}'
+                p1 = p1._replace(string=v1)
+                n1 = True
+            h.append(p1)
+        if n1:
+            w1 = tokenize.untokenize(h)
+            b.write_bytes(w1)
+            d['fixed'] = True
+    except Exception as exc:
+        d['messages'].append(f'Error while fixing: {exc}')
+    return d
+def r():
+    s = argparse.ArgumentParser(description='Recursively scan and optionally fix Python files containing invalid escape sequences.')
+    s.add_argument('-a', '--auto-fix', action='store_true', help='Automatically fix invalid escape sequences by converting affected string literals to raw strings.')
+    t = s.parse_args()
+    f1 = Path.cwd()
+    x1 = 0
+    y1 = 0
+    for b in e1(f1):
+        print(f'Processing {b}')
+        d = a(b, auto_fix=t.auto_fix)
+        if not d['has_issues']:
+            continue
+        x1 += 1
+        d1 = '[FIXED]' if d['fixed'] else '[ISSUE]'
+        print(f'{d1} {b}')
+        for z1 in d['messages']:
+            print(f'  -> {z1}')
+        if d['fixed']:
+            y1 += 1
+    print('=' * 40)
+    print('Summary:')
+    print(f'  Files with invalid escape sequences: {x1}')
+    if t.auto_fix:
+        print(f'  Files successfully auto-fixed:      {y1}')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fix_escape2.py ---
+import argparse
+import contextlib
+import os
+import tokenize
+import warnings
+from pathlib import Path
+def a2(b):
+    b2 = False
+    c2 = []
+    try:
+        e = b.read_bytes()
+    except Exception as e:
+        return (False, [f'Error reading file: {e}'])
+    with warnings.catch_warnings(record=True) as f:
+        warnings.simplefilter('always', SyntaxWarning)
+        try:
+            compile(e, str(b), 'exec')
+        except SyntaxError as se:
+            if 'invalid escape sequence' in str(se):
+                b2 = True
+                c2.append(f'Line {se.lineno}: SyntaxError: {se.msg}')
+        for w in f:
+            if issubclass(w.category, SyntaxWarning) and 'invalid escape sequence' in str(w.message):
+                b2 = True
+                g = getattr(w, 'lineno', 'Unknown')
+                c2.append(f'Line {g}: SyntaxWarning: {w.message}')
+    return (b2, c2)
+def d2(b):
+    try:
+        with b.open('rb') as f:
+            j = list(tokenize.tokenize(f.readline))
+    except Exception as e:
+        print(f'  [!] Tokenize error in {b.name}: {e}')
+        return False
+    h = []
+    i = False
+    for tok in j:
+        if tok.type == tokenize.STRING:
+            l = tok.string
+            k = ''
+            for m in l:
+                if m.lower() in 'frub':
+                    k += m
+                else:
+                    break
+            n = l[len(k):]
+            if '\\' in n and 'r' not in k.lower():
+                p = 'r' + k
+                with warnings.catch_warnings(record=True) as u1:
+                    warnings.simplefilter('always', SyntaxWarning)
+                    with contextlib.suppress(SyntaxError, SyntaxWarning):
+                        compile(f'_{p}{n}', '<string>', 'exec')
+                    e2 = any(('invalid escape sequence' in str(tw.message) for tw in u1))
+                    if not e2:
+                        tok = tok._replace(string=f'{p}{n}')
+                        i = True
+        h.append(tok)
+    if i:
+        try:
+            q = tokenize.untokenize(h)
+            b.write_bytes(q)
+            return True
+        except Exception as e:
+            print(f'  [!] Error writing fixed content to {b.name}: {e}')
+    return False
+def a(b, c):
+    d = {'path': b, 'has_issues': False, 'fixed': False, 'messages': []}
+    b2, c2 = a2(b)
+    d['has_issues'] = b2
+    d['messages'] = c2
+    if b2 and c:
+        d['fixed'] = d2(b)
+    return d
+def r():
+    s = argparse.ArgumentParser(description='Recursively scan and fix Python files for invalid escape sequences.')
+    s.add_argument('-a', '--auto-fix', action='store_true', help='Automatically fix issues by converting offending string literals to raw strings.')
+    s.add_argument('directory', nargs='?', default='.', help='Directory to scan (default: current directory).')
+    t = s.parse_args()
+    f2 = Path(t.directory).resolve()
+    w = Path(__file__).resolve()
+    x1 = 0
+    y1 = 0
+    for g2, _, h1 in os.walk(f2):
+        for j1 in h1:
+            if not j1.endswith('.py'):
+                continue
+            b = Path(g2) / j1
+            if b.resolve() == w:
+                continue
+            print(f'Processing {b.name}...')
+            res = a(b, t.auto_fix)
+            if res['has_issues']:
+                x1 += 1
+                d1 = '[🔧 FIXED]' if res['fixed'] else '[⚠️  ISSUE]'
+                print(f"{d1} {res['path']}")
+                for msg in res['messages']:
+                    print(f'   -> {msg}')
+                if res['fixed']:
+                    y1 += 1
+                print()
+    print('=' * 40)
+    print('📊 Summary:')
+    print(f'   Files with invalid escape sequences: {x1}')
+    if t.auto_fix:
+        print(f'   Files successfully auto-fixed:     {y1}')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fix_re.py ---
+import argparse
+import ast
+import io
+import shutil
+import sys
+import time
+import tokenize
+from dataclasses import dataclass, field
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Final
+from loguru import logger
+h2 = {'compile', 'search', 'match', 'fullmatch', 'split', 'findall', 'finditer', 'sub', 'subn'}
+i2 = {tokenize.NL, tokenize.COMMENT, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING, tokenize.TYPE_COMMENT, tokenize.ERRORTOKEN}
+j2 = {'\\d', '\\w', '\\s', '\\S', '\\W', '\\D', '\\b', '\\B', '\\A', '\\Z', '\\z', '[', ']', '(', ')', '{', '}', '|', '^', '$', '+', '*', '?', '.', '\\1', '\\2', '\\3', '\\4', '\\5', '\\6', '\\7', '\\8', '\\9', '\\0'}
+k2 = 8
+@dataclass
+class l2:
+    m2 = 0
+@dataclass
+class n2:
+    o2 = 0
+    p2 = 0
+    q2 = 0
+    r2 = 0
+    s2 = 0
+    t2 = field(default_factory=time.time)
+    @property
+    def u2(self):
+        return time.time() - self.start_time
+class v2:
+    def __init__(self, w2=True, x2=False, y2=False):
+        self.create_backup = w2
+        self.dry_run = x2
+        self.verbose = y2
+        self.max_workers = k2
+        self.stats = n2()
+    def z2(self, a3):
+        if not a3:
+            return False
+        b3 = 0
+        i = 0
+        while i < len(a3) - 1:
+            if a3[i] == '\\':
+                if a3[i + 1] in '\\abfnrtv"\'01234567xNuU':
+                    b3 += 1
+                    if b3 >= 2:
+                        return True
+                    for c3 in j2:
+                        if a3[i:i + len(c3)] == c3:
+                            return True
+                i += 1
+            i += 1
+        return bool(any((c3 in a3 for c3 in j2)))
+    def d3(self, e3):
+        r1 = 0
+        for ch in e3:
+            if ch in ('"', "'"):
+                break
+            r1 += 1
+        else:
+            return (e3, '', '', False)
+        k = e3[:r1]
+        f3 = 'r' in k.lower()
+        g3 = e3[r1]
+        h3 = 1
+        if len(e3) >= r1 + 3 and e3[r1:r1 + 3] == g3 * 3:
+            h3 = 3
+        i3 = g3 * h3
+        j3 = r1 + h3
+        k3 = len(e3) - h3
+        if k3 <= j3:
+            return (k, i3, '', f3)
+        a3 = e3[j3:k3]
+        return (k, i3, a3, f3)
+    def l3(self, e3):
+        k, i3, a3, f3 = self.parse_string_literal(e3)
+        if f3:
+            return None
+        if 'b' in k.lower():
+            return None
+        if not self.should_convert_string(a3):
+            return None
+        m3 = a3.replace('\\\\', '\\')
+        p = k
+        if 'f' in k.lower() and 'r' not in k.lower():
+            p = 'rf' + k.replace('f', '').replace('F', '')
+        elif 'r' not in k.lower():
+            p = 'r' + k
+        return f'{p}{i3}{m3}{i3}'
+    def n3(self, o3):
+        p3 = []
+        try:
+            j = list(tokenize.generate_tokens(io.StringIO(o3).readline))
+        except tokenize.TokenError:
+            return p3
+        q3 = []
+        for tok in j:
+            if tok.type in i2:
+                continue
+            if tok.type in (tokenize.NAME, tokenize.OP, tokenize.STRING) or tok.type == tokenize.NUMBER:
+                q3.append(tok)
+        i = 0
+        while i < len(q3) - 4:
+            if q3[i].type == tokenize.NAME and q3[i].string == 're' and (i + 1 < len(q3)) and (q3[i + 1].type == tokenize.OP) and (q3[i + 1].string == '.') and (i + 2 < len(q3)) and (q3[i + 2].type == tokenize.NAME) and (q3[i + 2].string in h2) and (i + 3 < len(q3)) and (q3[i + 3].type == tokenize.OP) and (q3[i + 3].string == '(') and (i + 4 < len(q3)) and (q3[i + 4].type == tokenize.STRING):
+                r3 = q3[i + 4]
+                s3 = self.convert_string(r3.string)
+                if s3 is not None and s3 != r3.string:
+                    p3.append(l2(start=r3.start, end=r3.end, original=r3.string, modified=s3))
+                i += 5
+            else:
+                i += 1
+        return p3
+    def t3(self, o3, p3):
+        if not p3:
+            return o3
+        u3 = o3.splitlines(keepends=True)
+        v3 = [0]
+        for w3 in u3:
+            v3.append(v3[-1] + len(w3))
+        x3 = sorted(p3, key=lambda x: (x.start[0], x.start[1]), reverse=True)
+        y3 = []
+        z3 = len(o3)
+        for mod in x3:
+            a4 = v3[mod.start[0] - 1] + mod.start[1]
+            b4 = v3[mod.end[0] - 1] + mod.end[1]
+            y3.append(o3[b4:z3])
+            y3.append(mod.modified)
+            z3 = a4
+        y3.append(o3[:z3])
+        y3.reverse()
+        return ''.join(y3)
+    def c4(self, o3):
+        try:
+            ast.parse(o3)
+            return True
+        except SyntaxError:
+            return False
+    def a(self, b):
+        try:
+            d4 = b.read_text(encoding='utf-8')
+        except Exception as e:
+            return (b, False, f'Failed to read: {e}')
+        if 're.' not in d4:
+            return (b, True, 'No re calls found')
+        p3 = self.process_tokens(d4)
+        if not p3:
+            return (b, True, 'No changes needed')
+        if self.verbose:
+            print(f'Found {len(p3)} modification(s) in {b.name}')
+            for mod in p3:
+                logger.debug(f'  {mod.original} -> {mod.modified}')
+        e4 = self.apply_modifications(d4, p3)
+        if not self.validate_code(e4):
+            return (b, False, 'Validation failed - syntax error after conversion')
+        if self.dry_run:
+            return (b, True, f'Would modify {len(p3)} string(s)')
+        if self.create_backup:
+            f4 = b.with_suffix(b.suffix + '.bak')
+            try:
+                shutil.copy2(b, f4)
+            except Exception as e:
+                return (b, False, f'Failed to create backup: {e}')
+        try:
+            b.write_text(e4, encoding='utf-8')
+            return (b, True, f'✓ Modified {len(p3)} string(s)')
+        except Exception as e:
+            return (b, False, f'Failed to write: {e}')
+    def g4(self, h4):
+        i4 = set()
+        j4 = {'.venv', 'venv', 'env', '__pycache__', '.git', '.hg', '.svn', 'node_modules', 'dist', 'build', '.tox', '.pytest_cache'}
+        for b in h4:
+            if not b.exists():
+                logger.warning(f'Path does not exist: {b}')
+                continue
+            if b.is_file():
+                if b.suffix == '.py':
+                    i4.add(b)
+            elif b.is_dir():
+                for k4 in b.rglob('*.py'):
+                    if any((l4 in j4 for l4 in k4.parts)):
+                        continue
+                    i4.add(k4)
+        return sorted(i4)
+    def m4(self, n4):
+        if not n4:
+            return []
+        self.stats.total_files = len(n4)
+        if len(n4) == 1:
+            o4 = []
+            for b in n4:
+                d = self.process_file(b)
+                o4.append(d)
+                self._update_stats(d)
+            return o4
+        o4 = []
+        with Pool(processes=k2) as p4:
+            q4 = [p4.apply_async(self.process_file, (f,)) for f in n4]
+            for i, r4 in enumerate(q4, 1):
+                try:
+                    d = r4.get()
+                    o4.append(d)
+                    self._update_stats(d)
+                    if self.verbose and i % 10 == 0:
+                        print(f'Progress: {i}/{len(n4)}')
+                except Exception as e:
+                    o4.append((n4[i - 1], False, f'Error: {e}'))
+                    self.stats.errors += 1
+        return o4
+    def s4(self, d):
+        _, t4, z1 = d
+        if t4:
+            self.stats.processed += 1
+            if 'Modified' in z1 or 'Would modify' in z1:
+                self.stats.modified += 1
+            elif 'No changes' in z1:
+                self.stats.skipped += 1
+        else:
+            self.stats.errors += 1
+    def u4(self, o4):
+        if not o4:
+            print('No files processed.')
+            return
+        print('=' * 40)
+        q2 = []
+        v4 = []
+        r2 = []
+        for b, t4, z1 in o4:
+            if not t4:
+                r2.append((b, z1))
+            elif 'Modified' in z1 or 'Would modify' in z1:
+                q2.append((b, z1))
+            else:
+                v4.append((b, z1))
+        if q2:
+            print('📝 Modified files:')
+            for b, z1 in q2:
+                w4 = self._get_relative_path(b)
+                print(f'  ✓ {w4}')
+                if self.verbose:
+                    print(f'    {z1}')
+        if r2:
+            logger.error('❌ Errors:')
+            for b, z1 in r2:
+                w4 = self._get_relative_path(b)
+                logger.error(f'  ✗ {w4}: {z1}')
+        print('=' * 40)
+        print('📊 Summary:')
+        print(f'  Total files:     {self.stats.total_files}')
+        print(f'  Processed:       {self.stats.processed}')
+        print(f'  Modified:        {self.stats.modified}')
+        print(f'  Unchanged:       {self.stats.skipped}')
+        print(f'  Errors:          {self.stats.errors}')
+        print(f'  Time elapsed:    {self.stats.elapsed:.2f}s')
+        print(f'  Workers:         {self.max_workers}')
+        print(f"  Backup:          {('Enabled' if self.create_backup else 'Disabled')}")
+        print(f"  Dry run:         {('Yes' if self.dry_run else 'No')}")
+    def x4(self, b):
+        try:
+            return str(b.relative_to(Path.cwd()))
+        except ValueError:
+            return str(b)
+def r():
+    s = argparse.ArgumentParser(description='Fix regex string literals in Python files', formatter_class=argparse.RawDescriptionHelpFormatter, epilog='\nExamples:\n  # Fix all Python files in current directory\n  python fix_regex.py\n\n  # Fix specific files or directories\n  python fix_regex.py src/ tests/test_regex.py\n\n  # Preview changes without modifying files\n  python fix_regex.py --dry-run --verbose\n')
+    s.add_argument('paths', nargs='*', help='Files or directories to process (default: current directory)')
+    s.add_argument('--no-backup', default=True, action='store_true', help='Disable backup creation')
+    s.add_argument('--dry-run', '-n', default=True, action='store_true', help='Preview changes without modifying files')
+    s.add_argument('--verbose', '-v', default=True, action='store_true', help='Show detailed output')
+    s.add_argument('--quiet', '-q', action='store_true', help='Minimize output')
+    t = s.parse_args()
+    if t.quiet:
+        logger.remove()
+        logger.add(sys.stderr, level='ERROR')
+    if t.paths:
+        h4 = [Path(p).resolve() for p in t.paths]
+    else:
+        h4 = [Path.cwd()]
+    y4 = v2(create_backup=not t.no_backup, dry_run=t.dry_run, verbose=t.verbose)
+    print(f'📁 Collecting Python files from {len(h4)} path(s)...')
+    n4 = y4.collect_files(h4)
+    if not n4:
+        logger.warning('No Python files found.')
+        return 0
+    print(f'✅ Found {len(n4)} Python files')
+    print(f'🔧 Processing with {y4.max_workers} worker(s)')
+    print(f"💾 Backup: {('Enabled' if y4.create_backup else 'Disabled')}")
+    if y4.dry_run:
+        print('🔍 DRY RUN - No files will be modified')
+    o4 = y4.process_files(n4)
+    y4.print_summary(o4)
+    return 1 if y4.stats.errors > 0 else 0
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fix_regex_escape.py ---
+import ast
+from ast import Call
+from pathlib import Path
+from dh import get_pyfiles
+z4 = {'compile', 'search', 'match', 'fullmatch', 'findall', 'finditer', 'split', 'sub', 'subn'}
+class v2(ast.NodeTransformer):
+    def a5(self, b5):
+        self.generic_visit(b5)
+        if isinstance(b5.func, ast.Attribute) and (isinstance(b5.func.value, ast.Name) and b5.func.value.id == 're' and (b5.func.attr in z4) and b5.args):
+            c5 = b5.args[0]
+            if isinstance(c5, ast.Constant) and isinstance(c5.value, str):
+                d5 = c5.value
+                e5 = d5.encode('unicode_escape').decode('ascii')
+                e5 = e5.replace('\\\\n', '\\n')
+                e5 = e5.replace('\\\\t', '\\t')
+                e5 = e5.replace('\\\\r', '\\r')
+                b5.args[0] = ast.Constant(value=e5)
+                print(f'{d5}\n{e5}\n\n')
+        return b5
+def d2(b):
+    f5 = b.read_text(encoding='utf-8')
+    try:
+        g5 = ast.parse(f5)
+    except SyntaxError:
+        print(f'[SKIP] {b} (syntax error)')
+        return False
+    y4 = v2()
+    h5 = y4.visit(g5)
+    ast.fix_missing_locations(h5)
+    i5 = ast.unparse(h5)
+    if i5 != f5:
+        b.write_text(i5, encoding='utf-8')
+        print(f'[FIXED] {b}')
+        return True
+    return False
+def r():
+    cwd = Path()
+    n4 = get_pyfiles(cwd)
+    j5 = 0
+    for f in n4:
+        if d2(f):
+            j5 += 1
+    print(f'\nDone. Modified {j5} files.')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fix_warning.py ---
+import io
+import re
+import sys
+import tokenize
+from pathlib import Path
+k5 = re.compile('\\\\(?![\\\\\\\'\\"abfnrtv0-7xuUNN])')
+def l5(s):
+    return bool(k5.search(s))
+def m5(f5):
+    m = re.match('^([rubfRUBF]*)?(?P<quote>\\"\\"\\"|\\\'\\\'\\\'|\\"|\\\')(?P<body>.*)(?P=quote)$', f5, re.DOTALL)
+    if not m:
+        return f5
+    k = m.group(1) or ''
+    n5 = m.group('quote')
+    o5 = m.group('body')
+    if 'r' in k.lower():
+        return f5
+    if o5.endswith('\\') and (not o5.endswith('\\\\')):
+        return f5
+    if n5 == '"' and '"' in o5 and ('"""' not in f5):
+        return f5
+    if n5 == "'" and "'" in o5 and ("'''" not in f5):
+        return f5
+    p = k + ('r' if 'r' not in k.lower() else '')
+    return f'{p}{n5}{o5}{n5}'
+def d2(b):
+    try:
+        l = b.read_text(encoding='utf-8')
+    except Exception:
+        return False
+    j5 = False
+    p5 = []
+    try:
+        j = list(tokenize.generate_tokens(io.StringIO(l).readline))
+    except tokenize.TokenError:
+        return False
+    for tok in j:
+        if tok.type == tokenize.STRING and l5(tok.string):
+            e5 = m5(tok.string)
+            if e5 != tok.string:
+                tok = tokenize.TokenInfo(tok.type, e5, tok.start, tok.end, tok.line)
+                j5 = True
+        p5.append(tok)
+    if j5:
+        q5 = tokenize.untokenize(p5)
+        b.write_text(q5, encoding='utf-8')
+    return j5
+def r5(cwd):
+    f1 = Path(cwd)
+    s5 = []
+    for b in f1.rglob('*.py'):
+        if d2(b):
+            s5.append(str(b))
+    return s5
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Usage: python fix_invalid_escapes.py <directory>')
+        sys.exit(1)
+    g1 = sys.argv[1]
+    e5 = r5(g1)
+    if e5:
+        print('Fixed files:')
+        for f in e5:
+            print(' -', f)
+    else:
+        print('No files needed fixing.')
+
+# --- File: fixescape.py ---
+import argparse
+import multiprocessing as mp
+import re
+import sys
+from pathlib import Path
+t5 = re.compile('(?<!\\\\)\\\\(?![\\\\\\\'"abfnrtvNuUx0-7\\n])')
+def a(b, u5=False):
+    try:
+        a3 = b.read_text(encoding='utf-8')
+    except (UnicodeDecodeError, PermissionError):
+        return (b, 0, False)
+    v5 = list(t5.finditer(a3))
+    w5 = len(v5)
+    if w5 == 0:
+        return (b, 0, False)
+    if u5:
+        x5 = t5.sub('\\\\\\\\', a3)
+        b.write_text(x5, encoding='utf-8')
+        return (b, w5, True)
+    return (b, w5, False)
+def r():
+    s = argparse.ArgumentParser(description='Recursively check/fix invalid escape sequences in Python files.')
+    s.add_argument('-a', '--autofix', action='store_true', help='Automatically fix found invalid escape sequences by escaping backslashes.')
+    t = s.parse_args()
+    y5 = Path.cwd()
+    v = [p for p in y5.rglob('*.py') if p.is_file()]
+    if not v:
+        print('No Python files found.')
+        return
+    z5 = 8
+    q4 = []
+    with mp.Pool(processes=z5) as p4:
+        for b in v:
+            res = p4.apply_async(a, args=(b, t.autofix))
+            q4.append(res)
+        o4 = [res.get() for res in q4]
+    x = 0
+    a6 = 0
+    print(f'Scanning {len(v)} Python files using {z5} workers...\n')
+    for b, w5, e5 in o4:
+        if w5 > 0:
+            a6 += 1
+            x += w5
+            w4 = b.relative_to(y5)
+            d1 = 'FIXED' if e5 else 'FOUND'
+            print(f'[{d1}] {w4}: {w5} invalid escape sequence(s)')
+    print('\n--- Summary ---')
+    print(f'Files scanned: {len(v)}')
+    print(f'Files with issues: {a6}')
+    print(f'Total issues: {x}')
+    if a6 > 0 and (not t.autofix):
+        print('\nRun with -a or --autofix to automatically double-escape invalid backslashes.')
+        sys.exit(1)
+if __name__ == '__main__':
+    r()
+
+# --- File: fixre.py ---
+import ast
+import shutil
+import sys
+from dataclasses import dataclass
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+h2 = {'compile', 'search', 'match', 'fullmatch', 'split', 'findall', 'finditer', 'sub', 'subn'}
+j2 = {'\\d', '\\w', '\\s', '\\S', '\\W', '\\D', '[', ']', '(', ')', '|', '^', '$', '+', '*', '?', '{', '}', '.', '\\b', '\\B', '\\A', '\\Z', '\\z', '\\1', '\\2', '\\3', '\\4', '\\5', '\\6', '\\7', '\\8', '\\9'}
+b6 = {'\\n', '\\t', '\\r', '\\f', '\\v', '\\\\', "\\'", '\\"', '\\a', '\\b'}
+@dataclass
+class c6:
+    f3 = False
+    d6 = False
+    g3 = '"'
+def e6(f6):
+    if not f6:
+        return False
+    g6 = any((c3 in f6 for c3 in j2))
+    b3 = 0
+    i = 0
+    while i < len(f6) - 1:
+        if f6[i] == '\\':
+            if f6[i + 1] in '\\abfnrtv"\'':
+                b3 += 1
+                if b3 >= 2 or (b3 >= 1 and g6):
+                    return True
+            i += 1
+        i += 1
+    return False
+def h6(a3):
+    try:
+        g5 = ast.parse(a3)
+    except SyntaxError:
+        return None
+    i6 = []
+    class j6(ast.NodeVisitor):
+        def a5(self, b5):
+            if isinstance(b5.func, ast.Attribute) and isinstance(b5.func.value, ast.Name) and (b5.func.value.id == 're') and (b5.func.attr in h2) and b5.args:
+                arg = b5.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    f3 = False
+                    d6 = False
+                    if hasattr(arg, 'lineno') and hasattr(arg, 'col_offset'):
+                        k6 = arg.value
+                        if e6(k6):
+                            i6.append({'lineno': arg.lineno, 'col_offset': arg.col_offset, 'end_col': arg.end_col_offset, 'value': k6, 'is_raw': f3, 'is_fstring': d6})
+            self.generic_visit(b5)
+    l6 = j6()
+    l6.visit(g5)
+    if not i6:
+        return None
+    u3 = a3.split('\n')
+    m6 = False
+    i6.sort(key=lambda x: (x['lineno'], -x['col_offset']))
+    for n6 in i6:
+        o6 = n6['lineno'] - 1
+        if o6 >= len(u3):
+            continue
+        w3 = u3[o6]
+        p6 = n6['col_offset']
+        q6 = n6['end_col']
+        r6 = w3[p6:q6]
+        if r6.startswith(('r"', "r'", 'r"""', "r'''")):
+            continue
+        if r6.startswith(('"""', "'''")):
+            continue
+        g3 = r6[0] if r6 else '"'
+        if g3 not in ['"', "'"]:
+            continue
+        s6 = n6['value']
+        t6 = f'r{g3}{s6}{g3}'
+        u6 = w3[:p6] + t6 + w3[q6:]
+        u3[o6] = u6
+        m6 = True
+    if not m6:
+        return None
+    return '\n'.join(u3)
+def v6(a3):
+    try:
+        ast.parse(a3)
+        return True
+    except SyntaxError:
+        return False
+def a(b, w2=True):
+    try:
+        w6 = b.read_text(encoding='utf-8')
+    except Exception as e:
+        return (b, False, f'Failed to read: {e}')
+    if 're.' not in w6:
+        return (b, True, 'No re calls found')
+    x6 = h6(w6)
+    if x6 is None:
+        return (b, True, 'No changes needed')
+    if not v6(x6):
+        return (b, False, 'Validation failed - syntax error after conversion')
+    try:
+        if w2:
+            f4 = b.with_suffix(b.suffix + '.backup')
+            shutil.copy2(b, f4)
+        b.write_text(x6, encoding='utf-8')
+        return (b, True, '✓ Converted and saved')
+    except Exception as e:
+        return (b, False, f'Failed to write: {e}')
+def y6(z6):
+    i4 = set()
+    for a7 in z6:
+        if not a7.exists():
+            print(f'Warning: Path does not exist: {a7}', file=sys.stderr)
+            continue
+        if a7.is_file():
+            if a7.suffix == '.py':
+                i4.add(a7)
+        elif a7.is_dir():
+            b7 = {'.venv', 'venv', 'env', '__pycache__', '.git', 'node_modules'}
+            for k4 in a7.rglob('*.py'):
+                if any((l4 in b7 for l4 in k4.parts)):
+                    continue
+                i4.add(k4)
+    return sorted(i4)
+def c7():
+    t = sys.argv[1:]
+    if not t:
+        return ([], True)
+    w2 = True
+    if '--no-backup' in t:
+        w2 = False
+        t.remove('--no-backup')
+    z5 = min(cpu_count(), 4)
+    for i, arg in enumerate(t):
+        if arg == '--workers' and i + 1 < len(t):
+            try:
+                z5 = int(t[i + 1])
+                t.pop(i)
+                t.pop(i)
+            except ValueError:
+                pass
+            break
+    h4 = [Path(arg).resolve() for arg in t] if t else [Path.cwd()]
+    return (h4, w2, z5)
+def r():
+    h4, w2, z5 = c7()
+    i4 = y6(h4)
+    if not i4:
+        print('No Python files found')
+        return
+    print(f'Found {len(i4)} Python files')
+    print(f'Processing with {z5} workers')
+    print(f"Backup: {('Enabled' if w2 else 'Disabled')}")
+    print(f"Target re functions: {', '.join(sorted(h2))}\n")
+    o4 = []
+    d7 = len(i4)
+    if z5 > 1:
+        with Pool(processes=z5) as p4:
+            o4 = p4.starmap(a, [(f, w2) for f in i4])
+    else:
+        for i, b in enumerate(i4, 1):
+            if i % 100 == 0:
+                print(f'Progress: {i}/{d7}', flush=True)
+            o4.append(a(b, w2))
+    e7 = sum((1 for _, t4, _ in o4 if t4))
+    j5 = sum((1 for _, t4, msg in o4 if t4 and 'Converted' in msg))
+    print('\n' + '=' * 40)
+    for b, t4, z1 in o4:
+        d1 = '✓' if t4 else '✗'
+        try:
+            w4 = b.relative_to(Path.cwd())
+        except ValueError:
+            w4 = b
+        print(f'{d1} {w4}: {z1}')
+    print('-' * 40)
+    print('\nSummary:')
+    print(f'  Total files: {len(i4)}')
+    print(f'  Processed successfully: {e7}')
+    print(f'  Files converted: {j5}')
+    if not w2:
+        print('\n⚠️  Backup disabled. Use --no-backup with caution.')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+# --- File: fregex.py ---
+import os
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from tqdm import tqdm
+def f7(b):
+    g7 = []
+    h7 = re.compile('re\\.(compile|search|match|findall|fullmatch|finditer)\\(\\s*([rR]?[\\r\'\\"])(.*?)(?<!\\)\\2')
+    try:
+        a3 = Path(b).read_text(encoding='utf-8')
+        g7 = h7.findall(a3)
+    except (OSError, UnicodeDecodeError):
+        pass
+    return [i7[2] for i7 in g7]
+def a(b, j7):
+    Path(b)
+    g7 = f7(b)
+    if g7:
+        k7 = os.path.relpath(b, Path.cwd())
+        l7 = j7 / f"{k7.replace(os.sep, '_')}.txt"
+        l7.parent.mkdir(parents=True, exist_ok=True)
+        Path(l7).write_text('\n'.join(g7), encoding='utf-8')
+    return (b, len(g7))
+def m7(n7, j7, o7=4):
+    j7 = Path(j7)
+    j7.mkdir(parents=True, exist_ok=True)
+    p7 = [os.path.join(f1, q7) for f1, _, n4 in os.walk(n7) for q7 in n4 if q7.endswith('.py')]
+    o2 = len(p7)
+    r7 = tqdm(total=o2, desc='Progress', unit='file')
+    with ThreadPoolExecutor(max_workers=8) as z:
+        a1 = {z.submit(a, b, j7): b for b in p7}
+        s7 = 0
+        for b1 in as_completed(a1):
+            _, t7 = b1.result()
+            if t7:
+                print(f"Processed file '{a1[b1]}' with {t7} regex patterns.")
+            s7 += 1
+            r7.update(1)
+    r7.close()
+    print(f'Scanning complete. Processed {o2} files.')
+if __name__ == '__main__':
+    u7 = 'output'
+    m7(Path.cwd(), u7, max_workers=4)
+    print(f'Regex extraction complete. Results saved in {u7}')
+
+# --- File: gfixre.py ---
+import ast
+import sys
+from difflib import unified_diff
+from multiprocessing.pool import Pool as mp_pool
+from pathlib import Path
+from dh import get_pyfiles
+class v7(ast.NodeTransformer):
+    def __init__(self, w7, x7):
+        self.source_lines = w7
+        self.source_text = x7
+        self.modified = False
+        self.changes = []
+    def a5(self, b5):
+        if isinstance(b5.func, ast.Attribute) and b5.func.attr in ('compile', 'match', 'search', 'sub', 'findall', 'split', 'fullmatch') and b5.args and isinstance(b5.args[0], ast.Constant):
+            y7 = b5.args[0]
+            if (isinstance(y7.value, str) and '\\' in y7.value and (not y7.value.startswith('\\x'))) and y7.lineno <= len(self.source_lines):
+                w3 = self.source_lines[y7.lineno - 1]
+                if "'" in w3 or '"' in w3:
+                    self.modified = True
+                    self.changes.append({'line': y7.lineno, 'col': y7.col_offset, 'value': y7.value})
+        return self.generic_visit(b5)
+def z7(x7):
+    u3 = x7.split('\n')
+    try:
+        g5 = ast.parse(x7)
+    except SyntaxError:
+        return x7
+    a8 = v7(u3, x7)
+    a8.visit(g5)
+    if not a8.modified:
+        return x7
+    for b8 in sorted(a8.changes, key=lambda x: x['line'], reverse=True):
+        o6 = b8['line'] - 1
+        w3 = u3[o6]
+        g3 = None
+        for m in ['"', "'"]:
+            if m in w3:
+                g3 = m
+                break
+        if g3:
+            c8 = w3
+            d8 = f"{g3}{b8['value']}{g3}"
+            e8 = f"r{g3}{b8['value']}{g3}"
+            if d8 in w3 and (not w3.count('r' + g3)):
+                w3 = w3.replace(d8, e8, 1)
+                u3[o6] = w3
+    return '\n'.join(u3)
+def a(b, u5=False):
+    try:
+        d5 = b.read_text(encoding='utf-8')
+        m6 = z7(d5)
+        if d5 != m6:
+            if u5:
+                b.write_text(m6, encoding='utf-8')
+                return {'status': 'fixed', 'path': b}
+            else:
+                f8 = d5.splitlines(keepends=True)
+                g8 = m6.splitlines(keepends=True)
+                h8 = list(unified_diff(f8, g8, fromfile=str(b), tofile=str(b)))
+                return {'status': 'diff', 'path': b, 'diff': h8}
+        return {'status': 'unchanged', 'path': b}
+    except (SyntaxError, UnicodeDecodeError) as e:
+        return {'status': 'error', 'path': b, 'error': str(e)}
+def i8(t):
+    return a(*t)
+def r():
+    cwd = Path.cwd()
+    t = sys.argv[1:]
+    u5 = False
+    j8 = []
+    for arg in t:
+        if arg in ('-a', '--autofix'):
+            u5 = True
+        else:
+            j8.append(arg)
+    n4 = [Path(p) for p in j8] if j8 else get_pyfiles(cwd)
+    if len(n4) == 1:
+        a(n4[0], u5)
+        sys.exit(0)
+    o4 = {'fixed': 0, 'diff': 0, 'unchanged': 0, 'error': 0}
+    with mp_pool(processes=8) as p4:
+        k8 = [(f, u5) for f in n4]
+        for d in p4.starmap(a, k8):
+            d1 = d['status']
+            o4[d1] += 1
+            if d1 == 'fixed':
+                print(f"✅ {d['path'].name}")
+            elif d1 == 'diff':
+                print(f"⚠️  {d['path'].name}")
+                print(''.join(d['diff']))
+            elif d1 == 'error':
+                print(f"❌ {d['path'].name}: {d['error']}")
+    print(f"\n📊 Fixed: {o4['fixed']}, Changed: {o4['diff']}, Unchanged: {o4['unchanged']}, Errors: {o4['error']}")
+    if o4['diff'] > 0 and (not u5):
+        print('\n💡 Run with -a/--autofix to apply changes')
+if __name__ == '__main__':
+    raise SystemExit(r())
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code

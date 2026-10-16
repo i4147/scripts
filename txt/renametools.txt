@@ -1,0 +1,311 @@
+# filename: addimgsize_to_filenames.py
+import cv2;from tqdm import tqdm
+class b:def __init__(self,w='.',q='_'):self.root_dir=J(w);self.separator=q;self.supported_formats={'.jpg','.jpeg','.png','.bmp','.tiff','.gif','.webp'};print('-'*40);print('IMAGE DIMENSION RENAMER');print('-'*40);print(f'[INIT] Root directory:{self.root_dir.resolve()}');print(f"[INIT] Separator:'{q}'");print(f'[INIT] CPU cores available:{p()}')
+    def d(self):print('\n[SCAN] Scanning for image files...');j=[]
+        for P in self.supported_formats:j.extend(self.root_dir.rglob(f'*{P}'));j.extend(self.root_dir.rglob(f'*{P.upper()}'))
+        j=list(set(j));j=sorted(j);print(f'[SCAN] Found {len(j)} image file(s)')
+        if j:print('[SCAN] Sample paths:')
+            for s in j[:3]:print(f'-{s.relative_to(self.root_dir)}')
+            if len(j)>3:print(f'       ... and {len(j)-3} more')
+        return j
+    @staticmethod
+    def a(r):y='\\d+[xX]\\d+';return bool(T.search(y,r))
+    def h(self,L):m,q,i=L;w=J(i)
+        try:Q=cv2.imread(str(m))
+            if Q is None:return (m,False,'Failed to read image')
+            F,I=Q.shape[:2];l=f'{I}x{F}'
+            if self.has_dimensions_in_name(m.stem):x='Already has dimensions in name';return (m,False,x)
+            O=m.stem;H=m.suffix;g=f'{O}{q}{l}{H}';t=m.parent/g
+            if t.exists() and t!=m:return (m,False,f'Target filename already exists:{g}')
+            m.rename(t);A=m.relative_to(w);z=t.relative_to(w);x=f'{A.name} → {z.name} ({l})';return (t,True,x)
+        except Exception as e:return (m,False,f'Error:{e!s}')
+    def f(self,k):if not k:print('[WARN] No images to process!');return
+        print(f'\n[PROCESS] Renaming {len(k)} image(s) with {p()} process(es)...');i=str(self.root_dir.resolve());o=[(s,self.separator,i) for s in k];n=0;E=0;c=0
+        with K(processes=p()) as N:C=list(tqdm(N.imap_unordered(self.rename_image,o),total=len(k),desc='Processing',unit='img',ncols=80))
+        print('\n[RESULTS]');print('-'*40)
+        for m,D,x in C:if D:n+=1;G='✓ OK'
+            elif 'Already has dimensions' in x:c+=1;G='⊘ SKIP'
+            else:E+=1;G='✗ FAIL'
+            try:v=m.relative_to(self.root_dir);u=str(v)
+            except ValueError:u=str(m)
+            print(f'{G}  {u:<50} {x}')
+        print('-'*40);print(f'[SUMMARY] Renamed:{n}|Skipped:{c}|Failed:{E}|Total:{len(k)}')
+    def R(self):k=self.get_all_images()
+        if not k:print('\n[WARN] No images found in directory!');return
+        self.process_images(k);print('\n'+'='*40);print('PROCESS COMPLETE-Images renamed with dimensions');print('-'*40)
+def M():q='_'
+    if len(S.argv)>1:q=S.argv[1]
+        if len(q)>1:print(f"[WARN] Separator should be single character,using first character:'{q[0]}'");q=q[0]
+    B=b(w='.',q=q);B.run()
+if __name__=='__main__':raise SystemExit(M())
+# filename: clean_names.py
+from dh import colored;d=['\\bOutcast\\b','\\bS\\d{2}\\b','\\b720p\\b','\\b1080p\\b','\\bBluRay\\b','\\bx264\\b','-REWARD_HI'];g={'.srt','.mkv','.mp4','.avi'}
+def b(l):return h(l)
+def c(l):return h([s[::-1] for s in l])[::-1]
+def e(x):for z in d:x=B.sub(z,'',x,flags=B.IGNORECASE)
+    return B.sub('\\.+','.',x).strip('. ')
+def a(y,i):if i:return [p for p in y.rglob('*') if p.suffix.lower() in g]
+    return [p for p in y.iterdir() if p.is_file() and p.suffix.lower() in g]
+def w():A=j.ArgumentParser(description='Clean repeated words from filenames');A.add_argument('-r','--recursive',action='store_true',help='scan recursively');A.add_argument('-w','--write',action='store_true',help='actually rename files');u=A.parse_args();q=a(t(),u.recursive)
+    if not q:print('No matching files found');return
+    r=[f.name for f in q];m=b(r);n=c(r);print(colored('\nPreview:','cyan',attrs=['bold']))
+    for f in q:x=f.name;v=x[len(m):len(x)-len(n)];v=e(v);k=f"{f.stem.split('.')[0]}.{v}{f.suffix}";k=B.sub('\\.+','.',k)
+        if x==k:continue
+        print(colored('OLD:','red'),x,colored('->NEW:','green'),k)
+        if u.write:o=f.with_name(k)
+            if o.exists():print(colored('SKIPPED (exists)','yellow'),k)
+            else:f.rename(o)
+    if not u.write:print(colored('\nDry-run only. Use-w to apply changes.','yellow'))
+if __name__=='__main__':raise SystemExit(w())
+# filename: fname_recommender.py
+from loguru import logger;p=8;g=8;@x
+class v:N=None;H=False;D=None
+class k:def __init__(self,Z):self.path=Z;self.tree=None;self.content=''
+        try:self.content=Z.read_text(encoding='utf-8',K='ignore');self.tree=ab.parse(self.content)
+        except SyntaxError:pass
+        except Exception as e:raise RuntimeError(f'Failed to read {Z}:{e}') from e
+    def a(self):if not self.tree:return None
+        return ab.get_docstring(self.tree)
+    def b(self):F='epilog\\s*=\\s*[\\\'"]([^\\\'"]+)[\\\'"]';O=re.search(F,self.content,re.IGNORECASE);return O.group(1) if O else None
+    def c(self):if not self.tree:return None
+        for Y in ab.walk(self.tree):if isinstance(Y,ab.FunctionDef) and Y.name=='main':return ab.get_docstring(Y)
+        return None
+    def h(self):return self.get_module_docstring() or self.get_argparse_epilog() or self.get_main_docstring()
+    def d(self):X=self.path.stem
+        if len(X)<3 or X in {'main','run','test','script','app'}:return False
+        return not re.match('^[a-z0-9]{1,2}$',X)
+    def o(self):G=self.extract_purpose()
+        if not G:return None
+        R=re.findall('\\b[a-z][a-z0-9]*\\b',G.lower())
+        if not R:return None
+        u={'this','that','from','with','for','the','and','or','are','is'};B=[w for w in R if len(w)>3 and w not in u]
+        if B:return '_'.join(B[:3])
+        return '_'.join(R[:2]) if len(R)>=2 else None
+def f(P):for Z in P:if Z.is_file() and Z.suffix=='.py':yield Z
+        elif Z.is_dir():yield from Z.rglob('*.py')
+def l(Z):Q=v(Z=Z,current_name=Z.stem,suggestion=None,has_meaning=False)
+    try:z=k(Z);Q.has_meaning=z.is_meaningful_name()
+        if not Q.has_meaning:Q.suggestion=z.suggest_name()
+    except Exception as e:Q.error=str(e)
+    return Q
+def q(Z,C):try:D=Z.parent/f'{C}.py'
+        if D==Z:return (False,'New name is identical to current')
+        if D.exists():return (False,f'Target already exists:{D.name}')
+        Z.rename(D);return (True,None)
+    except Exception as e:return (False,str(e))
+def j(P,M=False):I=[];y=list(f(P))
+    if not y:return I
+    with T(processes=p) as aa:i=[(aa.apply_async(l,(Z,)),Z) for Z in y]
+        for m,Z in i:try:Q=m.get()
+            except Exception as e:Q=v(Z=Z,current_name=Z.stem,suggestion=None,has_meaning=False,N=str(e))
+            if not Q.has_meaning and Q.suggestion and M:H,N=q(Q.path,Q.suggestion)
+                if H:Q.renamed=True;Q.new_path=Q.path.parent/f'{Q.suggestion}.py'
+                else:Q.error=f'Rename failed:{N}'
+            I.append(Q)
+    return sorted(I,key=lambda s:s.path)
+def n(t,ac,M):r=sum((1 for s in t if s.has_meaning));J=sum((1 for s in t if not s.has_meaning));H=sum((1 for s in t if s.renamed));K=sum((1 for s in t if s.error));W='APPLY' if M else 'DRY RUN';print('='*78);print(f'  Mode:{W}');print(f'  Total files:{len(t)}|Meaningful:{r}|Unnamed:{J}');print(f'  Errors:{K}|Renamed:{H}');print('='*78)
+    if J>0:print('UNNAMED FILES:')
+        for Q in t:if not Q.has_meaning:try:E=Q.path.relative_to(ac)
+                except ValueError:E=Q.path
+                print(f'  📄 {E}');print(f'     Current:{Q.current_name}')
+                if Q.suggestion:print(f'     Suggest:{Q.suggestion}')
+                else:print('     Suggest:(no suggestion available)')
+                if Q.error:print(f'     Error:{Q.error}')
+                elif Q.renamed:print(f'     ✓ Renamed to:{Q.suggestion}')
+    if K>0:print('FILES WITH ERRORS:')
+        for Q in t:if Q.error:try:E=Q.path.relative_to(ac)
+                except ValueError:E=Q.path
+                logger.error(f'  ❌ {E}');logger.error(f'     {Q.error}')
+def V():L=A.ArgumentParser(description='Analyze Python files and suggest meaningful filenames',formatter_class=A.RawDescriptionHelpFormatter,epilog='\nExamples:\n  python script.py\n  python script.py ./path/to/project\n  python script.py-a\n  python script.py file1.py file2.py-a\n        ');L.add_argument('paths',nargs='*',type=S,default=[S('.')],help='Files or directories to analyze (default:current directory)');L.add_argument('-a','--apply',action='store_true',help='Apply suggestions and rename files in place');U=L.parse_args()
+    try:ac=S.cwd();I=j(U.paths,M=U.apply)
+        if I:n(I,ac,U.apply)
+        else:logger.warning('No Python files found.');return 1
+    except Exception as e:logger.exception(f'Error:{e}');return 1
+    return 0
+if __name__=='__main__':raise SystemExit(V())
+# filename: loname.py
+from dh import mpf_async,unique_path
+def a(g):g=e(g)
+    if not g.exists():g=e(str(g).lower())
+        if not g.exists():return
+    b=g.name.lower()
+    if b==g.name:return
+    c=g.with_name(b)
+    if c.exists():c=unique_path(c)
+    g.rename(c);print(f'{g.name}->{c.name}')
+if __name__=='__main__':h=e.cwd();f=i.argv[1:];d=list(h.glob('*')) if not f else [p for p in h.rglob('*') if '.git' not in p.parts and (not p.is_symlink())];mpf_async(a,d)
+# filename: lower_ext.py
+def a(g,k=False):b=[]
+    for p in g.rglob('*'):if not p.is_file():continue
+        if p.suffix:h=p.suffix[1:]
+            if any((c.isupper() for c in h)):b.append(p)
+                if k:d='.'+h.lower();j=p.with_suffix(d)
+                    try:p.rename(j);print(f'✓ Renamed:{p.name} → {j.name}')
+                    except Exception as e:print(f'✗ Failed to rename {p.name}:{e}',file=q.stderr)
+    return b
+def o():l=i.ArgumentParser(description='Find files with uppercase extensions in current directory recursively');l.add_argument('-a','--autofix',action='store_true',help='Convert uppercase extensions to lowercase');n=l.parse_args();f=m.cwd();print(f'Searching for files with uppercase extensions in:{f}');print('-'*40);b=a(f,n.autofix)
+    if b:if not n.autofix:print(f'\nFound {len(b)} file(s) with uppercase extensions:')
+            for p in b:print(f'  • {p.relative_to(f)} (extension:.{p.suffix[1:]})')
+            print('\nRun with-a or--autofix to convert them to lowercase')
+        else:print(f'\n✓ Processed {len(b)} file(s)')
+    else:print('\n✓ No files with uppercase extensions found')
+    return 0
+if __name__=='__main__':raise SystemExit(o())
+# filename: lowerer.py
+def d():f=c(e.argv[1]);b=f.read_text(encoding='utf-8');a=b.lower();f.write_text(a,encoding='utf-8')
+if __name__=='__main__':raise SystemExit(d())
+# filename: lowername.py
+from dh import mpf3,unique_path
+def a(s,j=False,m=False):if not s.exists():if m:print(f'Warning:{s} does not exist. Skipping.',file=u.stderr)
+        return None
+    f=s.name.lower()
+    if f==s.name:if m:print(f'Skipping {s.name}:already lowercase.')
+        return None
+    c=s.parent/f
+    if c.exists() and c!=s:i=unique_path(c)
+        if m:print(f'Note:Target {c.name} already exists. Using unique path:{i.name}')
+    else:i=c
+    if j:print(f"DRY RUN:Would rename '{s}' to '{i}'");return (s,i)
+    try:n(s).rename(i)
+        if m:print(f"Renamed '{s.name}' to '{i.name}'")
+        return (s,i)
+    except OSError as e:print(f"Error renaming '{s.name}' to '{i.name}':{e}",file=u.stderr);return None
+    except Exception as e:print(f"An unexpected error occurred for '{s.name}':{e}",file=u.stderr);return None
+def q():t=n.cwd();o=u.argv[1:];j='--dry-run' in o
+    if j:o.remove('--dry-run');print('---DRY RUN MODE:No changes will be made---')
+    m='--verbose' in o
+    if m:o.remove('--verbose')
+    if o:d=[n(p) for p in o]
+    else:h=list(t.rglob('*'));d=sorted(h,key=lambda p:len(p.parts),reverse=True)
+    if not d:print('No files or directories found to process.');return
+    print(f'Found {len(d)} items to potentially rename.');b=k(a,j=j,m=m);l=mpf3(b,d)
+    if j:print('---DRY RUN COMPLETE---')
+    else:g=sum((1 for r in l if r is not None));print(f'\nSummary:Renamed {g} items.')
+if __name__=='__main__':raise SystemExit(q())
+# filename: normalize_jscss_filenames.py
+from dh import unique_path
+def d(m):q='(\\.(?:js|css))([?#].*)?$';k=B.sub(q,'\\1',m,flags=B.IGNORECASE);return k
+def a(y):q='\\b([^\\s<>\\"\\\']*?\\.(?:js|css))([?#][^\\s<>\\"\\\']*)?\\b'
+    def j(t):return t.group(1)
+    h=B.sub(q,j,y,flags=B.IGNORECASE);return h
+def c(w):with open(w,encoding='utf-8') as f:p=f.read()
+    g=a(p)
+    with open(w,'w',encoding='utf-8') as f:f.write(g)
+    print(f'Processed:{w}')
+def b(l):i=0
+    for x,r,s in A.walk(l):for v in s:if ('.js' in v or '.css' in v) and (not v.endswith(('.js','.css'))):w=u(x)/v
+                if w.suffix=='.json':continue
+                try:n=d(v);o=w.with_name(n)
+                    if o.exists():o=unique_path(o)
+                    print(f'{w.name}->{o.name}');w.rename(o);i+=1
+                except Exception as e:print(f'Error processing {w}:{e}')
+    print(f'\nProcessed {i} files')
+if __name__=='__main__':z=u.cwd();b(z)
+# filename: normjscss.py
+k=[l()];e=p.compile('\\?[a-zA-Z0-9_-]+=[^\\"\\\'\\s>]+',p.IGNORECASE)
+def b(g):return e.sub('',g)
+def c(m):for n in m.rglob('*'):if not n.is_file():continue
+        h=b(n.name)
+        if h!=n.name:i=n.with_name(h);print(f'Renaming:{n}->{i}')
+            try:n.rename(i)
+            except FileExistsError:print(f'  Skipped (target exists):{i}')
+def a(m):for f in m.rglob('*.html'):o=f.read_text(encoding='utf-8',errors='ignore');j=b(o)
+        if j!=o:print(f'Updating HTML:{f}');f.write_text(j,encoding='utf-8')
+if __name__=='__main__':for d in k:c(d);a(d)
+    print('\nDone. All ?ver=... removed from filenames and HTML files.')
+# filename: pnr.py
+from dh import unique_path;n={'.git'}
+def a(d,t=False,o=False,h=B.cwd()):g=0
+    try:A=h.iterdir()
+    except PermissionError:print(f'Permission denied:{h}');return g
+    for D in A:if k(D):continue
+        if (D.is_file() or D.is_dir()) and d in D.name:q=D.name.replace(d,'')
+            if not q.strip():print(f"Warning:Removing '{d}' would make name empty for '{D.name}'");continue
+            r=h/q
+            if r.exists():r=unique_path(r)
+            if t:print(f'[DRY RUN] Would rename:{D}->{q}')
+            else:try:D.rename(r);print(f'{D}->{q}');g+=1
+                except OSError as e:print(f"Error renaming '{D.name}':{e}")
+        if o and D.is_dir():g+=a(d,t,o,D)
+    return g
+def b(H,I,t=False,o=False,h=B.cwd()):g=0
+    try:A=h.iterdir()
+    except PermissionError:print(f'Permission denied:{h}');return g
+    for D in A:if k(D):continue
+        if (D.is_file() or D.is_dir()) and H in D.name:q=D.name.replace(H,I)
+            if not q.strip():print(f"Warning:Replacing '{H}' with '{I}' would make name empty for '{D.name}'");continue
+            r=h/q
+            if r.exists():r=unique_path(r)
+            if t:print(f'[DRY RUN] Would rename:{D}->{q}')
+            else:try:D.rename(r);print(f'{D}->{q}');g+=1
+                except OSError as e:print(f"Error renaming '{D.name}':{e}")
+        if o and D.is_dir():g+=b(H,I,t,o,D)
+    return g
+def k(G):G=B(G)
+    if G.is_symlink():return True
+    return any((F in n for F in G.parts))
+def c(s,t=False,o=False,h=B.cwd()):g=0
+    try:y=[f for f in h.iterdir() if f.is_file() and (not k(f))];j=B(__file__).name;y=[f for f in y if f.name!=j]
+        if y:l=len(y)
+            if l<10:u=1
+            elif l<100:u=2
+            elif l<1000:u=3
+            else:u=4
+            for i,G in enumerate(sorted(y),1):w,K=(G.stem,G.suffix);m=str(i).zfill(u);q=f'{s}{m}{K}'
+                if q==G.name:continue
+                r=h/q
+                if r.exists():r=unique_path(r)
+                if t:print(f'[DRY RUN] Would rename:{G.name}->{q}')
+                else:try:G.rename(r);print(f'{G.name}->{q}');g+=1
+                    except OSError as e:print(f"Error renaming '{G.name}':{e}")
+    except PermissionError:print(f'Permission denied:{h}');return g
+    if o:try:for D in h.iterdir():if D.is_dir() and (not k(D)):g+=c(s,t,o,D)
+        except PermissionError:print(f'Permission denied accessing subdirectory in {h}')
+    return g
+def E():v=p.ArgumentParser(description='Rename files and directories using pathlib',formatter_class=p.RawDescriptionHelpFormatter,epilog='\n  Examples:\n  python pnr.py-r "old_string"\n        ');z=v.add_mutually_exclusive_group(required=True);z.add_argument('-r','--remove',metavar='STRING',help='Remove specified string from file and directory names');z.add_argument('-s','--replace',nargs=2,metavar=('STR1','STR2'),help='Replace STR1 with STR2 in file and directory names');z.add_argument('-t','--template',metavar='NAME',help='Rename files using template with sequential numbering');v.add_argument('--dry-run',action='store_true',help='Show what would be renamed without actually doing it');v.add_argument('--recursive',action='store_true',help='Process directories recursively');C=v.parse_args();J=B.cwd();print(f'Working in directory:{J}')
+    if C.recursive:print('Recursive mode enabled')
+    if C.dry_run:print('DRY RUN MODE-No actual changes will be made\n')
+    try:if C.remove:print(f"Removing '{C.remove}' from names...");x=a(C.remove,C.dry_run,C.recursive);print(f'\nOperation completed. {x} items processed.')
+        elif C.replace:H,I=C.replace;print(f"Replacing '{H}' with '{I}' in names...");x=b(H,I,C.dry_run,C.recursive);print(f'\nOperation completed. {x} items processed.')
+        elif C.template:print(f"Renaming files using template '{C.template}'...");x=c(C.template,C.dry_run,C.recursive);print(f'\nOperation completed. {x} items processed.')
+    except KeyboardInterrupt:print('\nOperation cancelled by user.');L.exit(1)
+    except Exception as e:print(f'An error occurred:{e}');L.exit(1)
+if __name__=='__main__':raise SystemExit(E())
+
+
+You are a senior Python developer. I'm giving you N Python scripts that do
+approximately the same job but with small differences. Merge them into ONE
+well-structured, runnable Python script.
+## Input scripts are shared above
+  the files are compressed, so you can change var,func, names, as needed
+  stdlib imports are removed too
+## Goal
+A single file, `<choose a wise name>.py`, runnable as:
+    python <merged script filename> <subcommand-or-flags> [options]
+## Requirements
+1. Use `argparse` for the CLI. Expose every behavior that differs between
+   the original scripts as a CLI argument.
+   - Prefer **subcommands** if the scripts are distinct "modes"/jobs.
+   - Prefer **flags** if they're just variations of one pipeline.
+2. Factor out shared logic (imports, helpers, config, error handling) into
+   common functions — do NOT duplicate code.
+3. Every original script's behavior must remain reachable. Add a mapping
+   (in comments or module docstring) like:
+       original name1.py  ->  python merged.py mode-a ...
+       original name2.py  ->  python merged.py mode-b --flag ...
+4. Move hardcoded values (paths, constants, magic numbers) into CLI args,
+   with defaults equal to the original values.
+5. If the scripts differ in logic that genuinely cannot be unified, keep
+   BOTH behaviors behind a flag/choice — never silently pick one.
+6. Sensible defaults so it works out of the box; print help if ambiguous.
+7. Add type hints, docstrings, and a module-level docstring with usage
+   examples.
+8. Standard library only, unless the originals already use third-party
+   packages — in that case list them explicitly at the top.
+## Process
+Step 1: Give me a short comparison table — what each script does, what is
+        shared, what differs, and your proposed CLI design.
+Step 2: Output the full merged script in one code block.
+Step 3: Show the exact command for each original script's equivalent.
+If anything is ambiguous, state your assumption and proceed. Only ask me a
+question if a wrong assumption would silently change behavior. at the end return fully annotated code
