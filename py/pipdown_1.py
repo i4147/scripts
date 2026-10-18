@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import hashlib
 import json
@@ -11,7 +10,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable, Iterator
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
-
 import httpx
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -32,7 +30,6 @@ from packaging.version import InvalidVersion, Version
 from packaging.version import parse as parse_version
 
 log = logging.getLogger("pkgfetch")
-
 __all__ = [
     "Link",
     "Package",
@@ -41,9 +38,7 @@ __all__ = [
     "download",
     "main",
 ]
-
 DEFAULT_INDEX = "https://pypi.org/simple/"
-
 ARCHIVE_SUFFIXES: tuple[str, ...] = (
     ".tar.gz",
     ".tgz",
@@ -58,7 +53,6 @@ ARCHIVE_SUFFIXES: tuple[str, ...] = (
     ".whl",
     ".tar",
 )
-
 HASH_ALGORITHMS: tuple[str, ...] = (
     "sha256",
     "sha512",
@@ -67,19 +61,16 @@ HASH_ALGORITHMS: tuple[str, ...] = (
     "sha1",
     "md5",
 )
-
 SIMPLE_ACCEPT = ", ".join((
     "application/vnd.pypi.simple.v1+json",
     "application/vnd.pypi.simple.v1+html; q=0.1",
     "text/html; q=0.01",
 ))
-
 JSON_CONTENT_TYPES = frozenset({"application/vnd.pypi.simple.v1+json"})
 HTML_CONTENT_TYPES = frozenset({
     "text/html",
     "application/vnd.pypi.simple.v1+html",
 })
-
 CHUNK_SIZE = 64 * 1024
 
 
@@ -92,7 +83,6 @@ class Link:
     hashes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-
         fragment = urlparse(self.url).fragment
         if not fragment:
             return
@@ -174,7 +164,6 @@ class TargetPython:
         py_ver = self.py_ver[:2] if self.py_ver else None
         nodel = "".join(map(str, py_ver)) if py_ver else interpreter_version()
         interp = f"{impl}{nodel}"
-
         tags: list[Tag] = []
         if impl == "cp":
             tags.extend(cpython_tags(py_ver, self.abis, self.platforms))
@@ -237,7 +226,6 @@ def _parse_json_index(response: httpx.Response) -> Iterator[Link]:
 def fetch_index(client: httpx.Client, url: str) -> list[Link]:
     response = client.get(url, headers={"Accept": SIMPLE_ACCEPT})
     response.raise_for_status()
-
     content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type in JSON_CONTENT_TYPES:
         return list(_parse_json_index(response))
@@ -287,7 +275,6 @@ def evaluate_link(
         return None
     if not is_wheel and only_binary:
         return None
-
     if is_wheel:
         try:
             name, version, _, tags = parse_wheel_filename(link.filename)
@@ -297,7 +284,6 @@ def evaluate_link(
             return None
         if not requirement.specifier.contains(version, prereleases=allow_prereleases):
             return None
-
         if not any(t in tag_priorities for t in tags):
             return None
     else:
@@ -315,10 +301,8 @@ def evaluate_link(
             return None
         if not requirement.specifier.contains(version, prereleases=allow_prereleases):
             return None
-
     if link.requires_python and not _check_requires_python(link.requires_python, target):
         return None
-
     return Package(name=requirement.name, version=str(version), link=link)
 
 
@@ -335,7 +319,6 @@ class PackageFinder:
         self.sources.extend(("find_links", url) for url in find_links)
         if not self.sources:
             self.sources.append(("index", DEFAULT_INDEX))
-
         self.target_python = target_python or TargetPython()
         self._client = client
         self._tag_priorities: dict[Tag, int] = {tag: i for i, tag in enumerate(self.target_python.supported_tags())}
@@ -370,14 +353,12 @@ class PackageFinder:
     ) -> list[Package]:
         packages: list[Package] = []
         seen: set[str] = set()
-
         for kind, source in self.sources:
             try:
                 links = self._collect_links(kind, source, requirement)
             except (httpx.HTTPError, ValueError, OSError) as exc:
                 log.warning("skipping %s %s: %s", kind, source, exc)
                 continue
-
             for link in links:
                 pkg = evaluate_link(
                     link,
@@ -392,7 +373,6 @@ class PackageFinder:
                     continue
                 seen.add(pkg.link.url)
                 packages.append(pkg)
-
         packages.sort(key=self._sort_key, reverse=True)
         return packages
 
@@ -430,31 +410,25 @@ def _verify_file(path: Path, expected: dict[str, str]) -> bool:
 
 def download(client: httpx.Client, link: Link, dest_dir: Path) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
-
     if link.is_file:
         src = link.file_path
         if not src.is_file():
             raise FileNotFoundError(src)
         return src
-
     filename = link.filename or "download.bin"
     target = dest_dir / filename
-
     if target.exists() and _verify_file(target, link.hashes):
         log.info("using cached %s", target)
         return target
-
     log.info("downloading %s", link.url)
     with client.stream("GET", link.url) as response:
         response.raise_for_status()
         with target.open("wb") as fp:
             for chunk in response.iter_bytes(CHUNK_SIZE):
                 fp.write(chunk)
-
     if not _verify_file(target, link.hashes):
         target.unlink(missing_ok=True)
         raise ValueError(f"hash mismatch for {link.url}")
-
     return target
 
 
@@ -537,19 +511,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s: %(message)s",
     )
-
     target = TargetPython(
         py_ver=args.py_version,
         abis=args.abi or None,
         impl=args.impl,
         platforms=args.platform or None,
     )
-
     with PackageFinder(
         index_urls=args.index_url,
         find_links=args.find_link,
@@ -561,17 +532,13 @@ def main(argv: list[str] | None = None) -> int:
             no_binary=args.no_binary,
             only_binary=args.only_binary,
         )
-
         if not matches:
             print("No matching distributions found.", file=sys.stderr)
             return 1
-
         if not args.all:
             matches = matches[:1]
-
         dest = Path(args.dest)
         results: list[dict] = []
-
         for pkg in matches:
             info = pkg.as_json()
             if not args.no_download:
@@ -582,14 +549,12 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 info["local_path"] = str(path)
             results.append(info)
-
     if args.json or args.no_download:
         payload = results[0] if len(results) == 1 else results
         print(json.dumps(payload, indent=2))
     else:
         for info in results:
             print(info.get("local_path", info["link"]))
-
     return 0
 
 

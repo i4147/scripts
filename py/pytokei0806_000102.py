@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import re
 from pathlib import Path
 from dh.fileutils import is_binary
 
 CHUNK_SIZE = 1024 * 1024
-
 SKIP_DIRS = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})
-
 LANG_EXTENSIONS = {
     "python": [".py", ".pyi"],
     "javascript": [".js"],
@@ -88,7 +85,6 @@ def scan_directory(directory: str = ".") -> dict[str, dict[str, dict[str, int]] 
     for file_path in base_path.rglob("*"):
         if not file_path.is_file():
             continue
-
         file_extension = file_path.suffix.lower()
         if not file_extension:
             lang = get_language_from_shebang(str(file_path))

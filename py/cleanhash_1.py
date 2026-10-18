@@ -1,12 +1,8 @@
-#!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-
-from dh import should_skip  # type: ignore[import-untyped]
+from dh import should_skip
 
 EXT = {
     ".zsh",

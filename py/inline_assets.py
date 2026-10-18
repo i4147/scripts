@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import base64
 import mimetypes
@@ -9,7 +8,6 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
-
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger

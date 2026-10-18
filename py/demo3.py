@@ -1,5 +1,4 @@
 import os
-
 from weasyprint import HTML
 
 test_sentence = "هنر برتر از گوهر آمد پدید \n\nThis is a test sentence using a custom font. \nهنر برتر از گوهر آمد پدید"

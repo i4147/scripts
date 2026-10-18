@@ -4,7 +4,6 @@ import re
 import sys
 import urllib.parse
 from pathlib import Path
-
 import requests
 from dh import cprint
 from packaging.version import Version

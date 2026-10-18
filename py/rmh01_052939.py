@@ -23,9 +23,7 @@ class ProcessResult:
 
 class CommentRemover:
     STRING_PATTERN = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')"""
-
     SINGLE_COMMENT_PATTERN = r"//.*?(?=\n|$)"
-
     MULTI_COMMENT_PATTERN = r"/\*.*?\*/"
 
     def __init__(self):
@@ -52,23 +50,17 @@ class CommentRemover:
         return text
 
     def remove_comments(self, text: str) -> Tuple[str, int]:
-
         protected_text, protected_strings = self._protect_strings(text)
-
         single_count = len(self.single_comment_regex.findall(protected_text))
         multi_count = len(self.multi_comment_regex.findall(protected_text))
         total_comments = single_count + multi_count
-
         protected_text = self.single_comment_regex.sub("", protected_text)
-
         protected_text = self.multi_comment_regex.sub("", protected_text)
-
         lines = protected_text.split("\n")
         cleaned_lines = []
         for line in lines:
             stripped = line.rstrip()
             cleaned_lines.append(stripped)
-
         final_lines = []
         prev_empty = False
         for line in cleaned_lines:
@@ -79,26 +71,19 @@ class CommentRemover:
             else:
                 final_lines.append(line)
                 prev_empty = False
-
         protected_text = "\n".join(final_lines)
-
         cleaned_text = self._restore_strings(protected_text, protected_strings)
-
         return cleaned_text, total_comments
 
     def process_file(self, file_path: Path) -> ProcessResult:
         try:
             original_content = file_path.read_text(encoding="utf-8")
             original_lines = len(original_content.split("\n"))
-
             cleaned_content, comments_removed = self.remove_comments(original_content)
             final_lines = len(cleaned_content.split("\n"))
-
             backup_path = file_path.with_suffix(file_path.suffix + ".bak")
             backup_path.write_text(original_content, encoding="utf-8")
-
             file_path.write_text(cleaned_content, encoding="utf-8")
-
             return ProcessResult(
                 file_path=file_path,
                 success=True,
@@ -106,7 +91,6 @@ class CommentRemover:
                 final_lines=final_lines,
                 comments_removed=comments_removed,
             )
-
         except UnicodeDecodeError as e:
             return ProcessResult(
                 file_path=file_path,
@@ -138,7 +122,6 @@ def find_source_files(root_dir: Path) -> list:
 def process_files_parallel(file_paths: list, num_workers: int = None) -> list:
     num_workers = num_workers or cpu_count()
     remover = CommentRemover()
-
     with Pool(num_workers) as pool:
         results = list(
             tqdm(
@@ -148,17 +131,14 @@ def process_files_parallel(file_paths: list, num_workers: int = None) -> list:
                 unit="file",
             )
         )
-
     return results
 
 
 def print_summary(results: list) -> None:
     successful = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
-
     total_comments = sum(r.comments_removed for r in successful)
     total_lines_removed = sum(r.original_lines - r.final_lines for r in successful)
-
     logger.info("=" * 60)
     logger.info("Processing Summary:")
     logger.info(f"  Files processed: {len(results)}")
@@ -167,7 +147,6 @@ def print_summary(results: list) -> None:
     logger.info(f"  Total comments removed: {total_comments}")
     logger.info(f"  Total lines removed: {total_lines_removed}")
     logger.info("=" * 60)
-
     if successful:
         logger.info("Successful files:")
         for result in sorted(successful, key=lambda r: r.file_path):
@@ -176,7 +155,6 @@ def print_summary(results: list) -> None:
                 f"{result.comments_removed} comments, "
                 f"{result.original_lines - result.final_lines} lines removed"
             )
-
     if failed:
         logger.warning("Failed files:")
         for result in failed:
@@ -190,24 +168,18 @@ def main(
     dry_run: bool = False,
 ) -> int:
     root_path = Path(root_dir)
-
     if not root_path.exists():
         logger.error(f"Root directory not found: {root_path}")
         return 1
-
     logger.info(f"Scanning for C/C++ files in {root_path}...")
     source_files = find_source_files(root_path)
-
     if not source_files:
         logger.warning("No C/C++ source files found.")
         return 0
-
     logger.info(f"Found {len(source_files)} source files")
     logger.info(f"File types: .h, .hpp, .c, .cpp, .cc, .cxx, .hxx")
-
     if dry_run:
         logger.info("DRY RUN MODE: No files will be modified")
-
         remover = CommentRemover()
         for file_path in source_files[:3]:
             try:
@@ -217,12 +189,9 @@ def main(
             except Exception as e:
                 logger.error(f"  {file_path.name}: {e}")
         return 0
-
     logger.info(f"Using {num_workers or cpu_count()} workers for parallel processing")
     results = process_files_parallel(source_files, num_workers)
-
     print_summary(results)
-
     if not keep_backups:
         logger.info("Removing backup files...")
         backup_count = 0
@@ -233,7 +202,6 @@ def main(
                     backup_path.unlink()
                     backup_count += 1
         logger.info(f"Removed {backup_count} backup files")
-
     failed = [r for r in results if not r.success]
     return 1 if failed else 0
 
@@ -264,7 +232,6 @@ if __name__ == "__main__":
         action="store_true",
         help="Preview changes without modifying files",
     )
-
     args = parser.parse_args()
     exit_code = main(
         args.root,

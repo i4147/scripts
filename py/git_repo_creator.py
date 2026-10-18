@@ -1,10 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as a command-line utility for automating GitHub repository workflows. The tool should accept a repository identifier and an optional access token, resolving the token from command-line arguments, environment variables, or a local configuration file in that order of priority. It should support reading and parsing simple key-value environment files, safely handle missing or malformed configuration, and fail gracefully with clear, user-friendly error messages when required credentials are absent.
-
 The script should interact with the GitHub REST API to retrieve and report repository information such as metadata, branches, recent commits, open issues, and pull requests, and it should be able to perform common actions like creating a new repository or cloning and syncing local copies when requested. It should handle HTTP errors, network failures, and API rate-limit responses with retries or informative messages, and never print or log the access token in plain text.
-
 Local filesystem operations should be supported where relevant, including checking whether a target directory already exists, creating directories as needed, and invoking the system's Git executable through subprocess calls while capturing output and return codes. The tool should validate that Git is installed before attempting Git operations and report a clear error if it is not.
-
 The command-line interface should be built with a standard argument parser offering subcommands or flags for each action, help text for every option, and sensible defaults. Results should be output in a human-readable format by default, with an option to emit machine-readable JSON. Timestamps in output should use a consistent, readable format. The script should return meaningful exit codes (zero on success, non-zero on distinct categories of failure) and should be structured so that its core logic can be imported and reused by other Python programs without triggering execution.
 ---"""
 
@@ -331,7 +328,6 @@ def cmd_gh(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mkghrepo")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
     api = subparsers.add_parser("api")
     api.add_argument("name", nargs="?", default=None)
     api.add_argument("-d", "--description", default="created with python")
@@ -348,7 +344,6 @@ def build_parser() -> argparse.ArgumentParser:
     api.add_argument("--git-user")
     api.add_argument("--git-email")
     api.add_argument("--pull-rebase", action="store_true")
-
     gh = subparsers.add_parser("gh")
     gh.add_argument("name", nargs="?", default=None)
     gh.add_argument("-d", "--description")
@@ -369,7 +364,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_bool_argument(gh, "push", True)
     add_bool_argument(gh, "pull-rebase", True)
     add_bool_argument(gh, "rename-branch", True)
-
     return parser
 
 

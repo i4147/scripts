@@ -4,7 +4,6 @@ import string
 import sys
 import tokenize
 from io import StringIO
-
 from cy_heu import heuristic_score
 from tqdm import tqdm
 

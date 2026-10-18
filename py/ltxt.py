@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from dh import BIN_EXT
 
 EXCLUDED_EXTENSIONS = BIN_EXT

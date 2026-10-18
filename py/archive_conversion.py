@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import os
 import gzip
 import bz2
@@ -7,7 +6,6 @@ import lzma
 import brotli
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
 import zstandard as zstd
 import lz4.frame
 import py7zr
@@ -36,7 +34,6 @@ def dir_files_total_bytes(p: Path) -> int:
 
 
 def decode_filename_to_tar_path(src: Path) -> Path:
-
     return Path(str(src)[: -len("." + src.suffixes[-1])])
 
 
@@ -71,7 +68,6 @@ def open_tar_bytes_reader(src: Path):
 
 def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
-
     if codec == "gz":
         with gzip.open(src, "rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -79,7 +75,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                 if not chunk:
                     break
                 f_out.write(chunk)
-
     elif codec == "bz2":
         with bz2.open(src, "rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -87,7 +82,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                 if not chunk:
                     break
                 f_out.write(chunk)
-
     elif codec == "xz":
         with lzma.open(src, "rb", format=lzma.FORMAT_XZ) as f_in, dst.open("wb") as f_out:
             while True:
@@ -95,7 +89,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                 if not chunk:
                     break
                 f_out.write(chunk)
-
     elif codec == "zst":
         dctx = zstd.ZstdDecompressor()
         with src.open("rb") as f_in:
@@ -105,7 +98,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                     if not chunk:
                         break
                     f_out.write(chunk)
-
     elif codec == "br":
         dec = brotli.Decompressor()
         with src.open("rb") as f_in, dst.open("wb") as f_out:
@@ -115,7 +107,6 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                     break
                 f_out.write(dec.process(data))
             f_out.write(dec.finish())
-
     elif codec == "lz4":
         with lz4.frame.open(src, "rb") as f_in, dst.open("wb") as f_out:
             while True:
@@ -123,14 +114,12 @@ def write_tar_bytes_with_decoder_to_file(src: Path, dst: Path, codec: str) -> No
                 if not chunk:
                     break
                 f_out.write(chunk)
-
     else:
         raise ValueError(f"Unsupported codec for tar bytes decoding: {codec}")
 
 
 def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
-
     if codec == "gz":
         with src_tar.open("rb") as f_in, gzip.open(dst, "wb", compresslevel=9) as f_out:
             while True:
@@ -138,7 +127,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
                 if not chunk:
                     break
                 f_out.write(chunk)
-
     elif codec == "bz2":
         compressor = bz2.BZ2Compressor(compresslevel=9)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
@@ -152,7 +140,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
             tail = compressor.flush()
             if tail:
                 f_out.write(tail)
-
     elif codec == "xz":
         comp = lzma.LZMACompressor(format=lzma.FORMAT_XZ, check=-1, preset=XZ_PRESET_9)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
@@ -166,7 +153,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
             tail = comp.flush()
             if tail:
                 f_out.write(tail)
-
     elif codec == "zst":
         cctx = zstd.ZstdCompressor(level=22)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
@@ -176,7 +162,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
                     if not chunk:
                         break
                     zw.write(chunk)
-
     elif codec == "br":
         compressor = brotli.Compressor(quality=11)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
@@ -190,7 +175,6 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
             tail = compressor.finish()
             if tail:
                 f_out.write(tail)
-
     elif codec == "lz4":
         comp = lz4.frame.LZ4FrameCompressor(block_size=lz4.frame.BLOCKSIZE_MAX)
         with src_tar.open("rb") as f_in, dst.open("wb") as f_out:
@@ -204,13 +188,11 @@ def write_compressed_tar_bytes_from_tar(src_tar: Path, dst: Path, codec: str) ->
             tail = comp.flush()
             if tail:
                 f_out.write(tail)
-
     else:
         raise ValueError(f"Unsupported codec for tar bytes encoding: {codec}")
 
 
 def convert_tar7z_via_py7zr(src: Path, dst: Path) -> None:
-
     import tempfile
 
     tmpdir = Path(tempfile.mkdtemp(prefix="tar7z_conv_"))
@@ -218,7 +200,6 @@ def convert_tar7z_via_py7zr(src: Path, dst: Path) -> None:
         tar_path = tmpdir / (src.stem + ".tar")
         with py7zr.SevenZipFile(src, mode="r") as z:
             z.extractall(path=tmpdir)
-
         extracted = next(tmpdir.glob("*.tar"), None)
         if extracted is None:
             files = [p for p in tmpdir.rglob("*") if p.is_file()]
@@ -226,7 +207,6 @@ def convert_tar7z_via_py7zr(src: Path, dst: Path) -> None:
                 raise RuntimeError("No files extracted from .tar.7z")
             extracted = files[0]
         tmp_tar = extracted
-
         codec = dst.suffixes[-1].lower()
         write_compressed_tar_bytes_from_tar(tmp_tar, dst, codec)
     finally:
@@ -255,12 +235,9 @@ def convert_one_task(src_str: str, dst_codec: str) -> tuple[str, str, bool, str,
         return (src.name, "", False, "Not in form *.tar.<codec>", 0)
     stem, src_codec = parse
     dst = tar_output_from_codec(stem, dst_codec)
-
     if dst.exists():
         return (src.name, dst.name, True, f"skipped (exists): {dst.name}", 0)
-
     tmp_tar = Path(f".__tmp_tar_conv_{os.getpid()}_{stem}.tar")
-
     try:
         if src_codec == "7z":
             import tempfile
@@ -280,13 +257,11 @@ def convert_one_task(src_str: str, dst_codec: str) -> tuple[str, str, bool, str,
                 shutil_rmtree_quiet(tmpdir)
         else:
             write_tar_bytes_with_decoder_to_file(src, tmp_tar, src_codec)
-
         if dst_codec == "7z":
             with py7zr.SevenZipFile(dst, mode="w") as z:
                 z.write(tmp_tar, arcname=tmp_tar.name)
         else:
             write_compressed_tar_bytes_from_tar(tmp_tar, dst, dst_codec)
-
         src.unlink()
         return (src.name, dst.name, True, f"converted -> {dst.name} (removed original)", 0)
     except Exception as e:
@@ -311,20 +286,17 @@ def shutil_copyfile_quiet(src: Path, dst: Path) -> None:
 
 
 def guess_target_codecs(src_codec: str) -> list[str]:
-
     order = ["gz", "zst", "xz", "bz2", "7z", "lz4", "br"]
     return [c for c in order if c != src_codec]
 
 
 def main() -> None:
     cwd = Path(".").resolve()
-
     files = [
         p
         for p in cwd.glob("*.tar.*")
         if len(p.suffixes) >= 2 and p.suffixes[-2] == ".tar" or p.name.endswith(".tar." + p.suffixes[-1])
     ]
-
     tar_inputs = []
     for p in cwd.iterdir():
         if not p.is_file():
@@ -335,19 +307,14 @@ def main() -> None:
         _, codec = parse
         if codec in SUPPORTED:
             tar_inputs.append(p)
-
     tar_inputs = sorted(tar_inputs)
     if not tar_inputs:
         print("No *.tar.<codec> files found in current directory.")
         return
-
     initial_bytes = dir_files_total_bytes(cwd)
-
     max_workers = max(1, min(os.cpu_count() or 1, len(tar_inputs)))
     results = []
-
     target_set = {"gz", "zst", "bz2", "lz4", "7z", "br", "xz"}
-
     tasks = []
     with ProcessPoolExecutor(max_workers=max_workers) as ex:
         futures = []
@@ -357,18 +324,14 @@ def main() -> None:
                 futures.append(ex.submit(convert_one_task, str(src), dst_codec))
         for f in as_completed(futures):
             results.append(f.result())
-
     final_bytes = dir_files_total_bytes(cwd)
     delta = final_bytes - initial_bytes
-
     ok_count = sum(1 for r in results if r[2])
     fail_count = len(results) - ok_count
-
     print(f"Converted tasks: {len(results)}; OK: {ok_count}; Failed/Skipped: {fail_count}")
     for src_name, dst_name, ok, msg, _ in sorted(results, key=lambda x: (x[0], x[1])):
         status = "OK" if ok else "FAIL"
         print(f"[{status}] {src_name} -> {dst_name}: {msg}")
-
     print(f"Disk usage (files in cwd) initial: {human_bytes(initial_bytes)}")
     print(f"Disk usage (files in cwd) final:   {human_bytes(final_bytes)}")
     if delta < 0:

@@ -2,7 +2,6 @@ from pathlib import Path
 import os
 import pathlib
 import sys
-
 from jsmin import jsmin
 
 

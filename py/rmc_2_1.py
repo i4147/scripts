@@ -1,322 +1,154 @@
-from __future__ import annotations
-
+#!/data/data/com.termux/files/usr/bin/python
 import argparse
-import multiprocessing as mp
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Iterable, Iterator, Optional
-
 import libcst as cst
-from libcst import (
-    BaseStatement,
-    ClassDef,
-    EmptyLine,
-    FunctionDef,
-    Module,
-    SimpleStatementLine,
-    TrailingWhitespace,
-)
-from loguru import logger
 
 
-DEFAULT_WORKERS: Final[int] = 8
-PRAGMA_PREFIXES: Final[tuple[str, ...]] = ("# type:", "# fmt:", "# fmt: skip", "# noqa")
-SHEBANG_PREFIX: Final[str] = "#!"
-PY_EXTENSIONS: Final[frozenset[str]] = frozenset({".py", ".pyi", ".pyw"})
-
-
-PY_SHEBANG_HINTS: Final[tuple[str, ...]] = ("python",)
-
-
-def configure_logging(verbose: bool = False) -> None:
-    logger.remove()
-    level = "DEBUG" if verbose else "INFO"
-    logger.add(
-        sys.stderr,
-        level=level,
-        format=(
-            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{function}</cyan> - <level>{message}</level>"
-        ),
-        colorize=True,
-        backtrace=False,
-        diagnose=False,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class ProcessResult:
-    path: Path
-    success: bool
-    changed: bool
-    message: str = ""
-
-
-def _looks_like_python_shebang(first_line: str) -> bool:
-    if not first_line.startswith(SHEBANG_PREFIX):
-        return False
-    lowered = first_line.lower()
-    return any(hint in lowered for hint in PY_SHEBANG_HINTS)
-
-
-def _is_extensionless_python_file(path: Path) -> bool:
-    try:
-        with path.open("r", encoding="utf-8", errors="ignore") as fh:
-            first_line = fh.readline()
-    except OSError as exc:
-        logger.debug(f"Could not sniff {path}: {exc}")
-        return False
-    return _looks_like_python_shebang(first_line)
-
-
-def is_python_file(path: Path) -> bool:
-    if not path.is_file():
-        return False
-    if path.suffix in PY_EXTENSIONS:
-        return True
-    if path.suffix == "":
-        return _is_extensionless_python_file(path)
-    return False
-
-
-def iter_target_files(inputs: Iterable[Path]) -> Iterator[Path]:
-    skip_dirs = {".git", ".venv", "venv", "__pycache__", ".mypy_cache", ".tox", "node_modules"}
-    seen: set[Path] = set()
-
-    for raw in inputs:
-        path = raw.resolve()
-        if path.is_file():
-            if is_python_file(path) and path not in seen:
-                seen.add(path)
-                yield path
-        elif path.is_dir():
-            for candidate in path.rglob("*"):
-                if any(part in skip_dirs for part in candidate.parts):
-                    continue
-                if candidate.is_file() and is_python_file(candidate):
-                    resolved = candidate.resolve()
-                    if resolved not in seen:
-                        seen.add(resolved)
-                        yield resolved
-        else:
-            logger.warning(f"Path does not exist, skipping: {path}")
-
-
-def _is_pragma_comment(comment_value: str) -> bool:
-    stripped = comment_value.strip()
-    return any(stripped.startswith(prefix) for prefix in PRAGMA_PREFIXES)
-
-
-def _is_shebang_comment(comment_value: str) -> bool:
-    return comment_value.startswith(SHEBANG_PREFIX)
-
-
-class CommentDocstringStripper(cst.CSTTransformer):
-    def __init__(self) -> None:
-        super().__init__()
-        self._is_module_level: bool = True
-        self._module_docstring_seen: bool = False
-
-    def leave_EmptyLine(self, original_node: EmptyLine, updated_node: EmptyLine) -> EmptyLine:
-        comment = updated_node.comment
-        if comment is None:
-            return updated_node
-        value = comment.value
-        if _is_shebang_comment(value) or _is_pragma_comment(value):
-            return updated_node
-        return updated_node.with_changes(comment=None)
-
+class CommentStripper(cst.CSTTransformer):
     def leave_TrailingWhitespace(
-        self, original_node: TrailingWhitespace, updated_node: TrailingWhitespace
-    ) -> TrailingWhitespace:
-        comment = updated_node.comment
-        if comment is None:
-            return updated_node
-        value = comment.value
-        if _is_pragma_comment(value):
-            return updated_node
+        self, original_node: cst.TrailingWhitespace, updated_node: cst.TrailingWhitespace
+    ) -> cst.TrailingWhitespace:
         return updated_node.with_changes(comment=None)
 
-    def visit_Module(self, node: Module) -> Optional[bool]:
-        self._is_module_level = True
-        return None
-
-    def leave_Module(self, original_node: Module, updated_node: Module) -> Module:
-        return updated_node
-
-    def leave_FunctionDef(self, original_node: FunctionDef, updated_node: FunctionDef) -> FunctionDef:
-        return updated_node.with_changes(body=self._strip_docstring_body(updated_node.body))
-
-    def leave_ClassDef(self, original_node: ClassDef, updated_node: ClassDef) -> ClassDef:
-        return updated_node.with_changes(body=self._strip_docstring_body(updated_node.body))
-
-    @staticmethod
-    def _is_docstring_statement(stmt: BaseStatement) -> bool:
-        if not isinstance(stmt, SimpleStatementLine):
-            return False
-        if len(stmt.body) != 1:
-            return False
-        expr_stmt = stmt.body[0]
-        if not isinstance(expr_stmt, cst.Expr):
-            return False
-        value = expr_stmt.value
-        return isinstance(value, (cst.SimpleString, cst.ConcatenatedString))
-
-    def _strip_docstring_body(self, body: cst.IndentedBlock) -> cst.IndentedBlock:
-        if not body.body:
-            return body
-
-        first_stmt = body.body[0]
-        if not self._is_docstring_statement(first_stmt):
-            return body
-
-        remaining = list(body.body[1:])
-        if not remaining:
-            pass_stmt = SimpleStatementLine(body=[cst.Pass()])
-            remaining = [pass_stmt]
-
-        return body.with_changes(body=tuple(remaining))
-
-
-class ModuleDocstringPreserver(cst.CSTTransformer):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def leave_Module(self, original_node: Module, updated_node: Module) -> Module:
+    def leave_EmptyLine(self, original_node: cst.EmptyLine, updated_node: cst.EmptyLine) -> cst.EmptyLine:
+        if updated_node.comment is not None:
+            return updated_node.with_changes(comment=None)
         return updated_node
 
 
-def strip_comments_and_docstrings(source: str) -> str:
-    module = cst.parse_module(source)
-    transformed = module.visit(CommentDocstringStripper())
-    return transformed.code
+class DocstringStripper(cst.CSTTransformer):
+    def _is_docstring(self, node) -> bool:
+        return isinstance(node, cst.Expr) and isinstance(node.value, (cst.SimpleString, cst.ConcatenatedString))
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
+        if updated_node.body and self._is_docstring(updated_node.body[0]):
+            return updated_node.with_changes(body=updated_node.body[1:])
+        return updated_node
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        body_seq = updated_node.body.body
+        if body_seq and self._is_docstring(body_seq[0]):
+            items = list(body_seq)
+            new_body = [cst.SimpleStatementLine([cst.Pass()])] if len(items) == 1 else items[1:]
+            return updated_node.with_changes(body=updated_node.body.with_changes(body=new_body))
+        return updated_node
+
+    def leave_AsyncFunctionDef(
+        self, original_node: cst.AsyncFunctionDef, updated_node: cst.AsyncFunctionDef
+    ) -> cst.AsyncFunctionDef:
+        body_seq = updated_node.body.body
+        if body_seq and self._is_docstring(body_seq[0]):
+            items = list(body_seq)
+            new_body = [cst.SimpleStatementLine([cst.Pass()])] if len(items) == 1 else items[1:]
+            return updated_node.with_changes(body=updated_node.body.with_changes(body=new_body))
+        return updated_node
+
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
+        body_seq = updated_node.body.body
+        if body_seq and self._is_docstring(body_seq[0]):
+            items = list(body_seq)
+            new_body = [cst.SimpleStatementLine([cst.Pass()])] if len(items) == 1 else items[1:]
+            return updated_node.with_changes(body=updated_node.body.with_changes(body=new_body))
+        return updated_node
 
 
-def validate_python_source(source: str, filename: str) -> None:
-    compile(source, filename=filename, mode="exec", dont_inherit=True)
+def discover_python_files(inputs):
+    for path in inputs:
+        p = Path(path).resolve()
+        if p.is_file() and p.suffix.lower() == ".py":
+            yield p
+        elif p.is_dir():
+            for child in p.rglob("*.py"):
+                if child.is_file():
+                    yield child
 
 
-def process_file(path_str: str, dry_run: bool) -> ProcessResult:
-    path = Path(path_str)
-    try:
-        original_source = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        return ProcessResult(path=path, success=False, changed=False, message=f"read error: {exc}")
+def process_file(file_path: Path, strip_comments: bool, strip_docstrings: bool) -> int:
+    original_bytes = file_path.read_bytes()
+    code = original_bytes.decode("utf-8", errors="replace")
 
-    try:
-        new_source = strip_comments_and_docstrings(original_source)
-    except cst.ParserSyntaxError as exc:
-        return ProcessResult(path=path, success=False, changed=False, message=f"parse error: {exc}")
-    except Exception as exc:  # noqa: BLE001 - isolate worker from crashing pool
-        return ProcessResult(path=path, success=False, changed=False, message=f"transform error: {exc}")
+    # Parse with LibCST
+    module = cst.parse_module(code)
 
-    try:
-        validate_python_source(new_source, filename=str(path))
-    except SyntaxError as exc:
-        return ProcessResult(
-            path=path, success=False, changed=False, message=f"validation failed, aborting write: {exc}"
-        )
+    # Apply requested transformations
+    if strip_comments:
+        module = module.visit(CommentStripper())
+    if strip_docstrings:
+        module = module.visit(DocstringStripper())
 
-    if new_source == original_source:
-        return ProcessResult(path=path, success=True, changed=False, message="no changes")
+    new_code = module.code
 
-    if dry_run:
-        return ProcessResult(path=path, success=True, changed=True, message="dry-run: would change")
+    # Validate resulting code syntax
+    cst.parse_module(new_code)
 
-    try:
-        path.write_text(new_source, encoding="utf-8")
-    except OSError as exc:
-        return ProcessResult(path=path, success=False, changed=False, message=f"write error: {exc}")
+    new_bytes = new_code.encode("utf-8")
+    file_path.write_bytes(new_bytes)
 
-    return ProcessResult(path=path, success=True, changed=True, message="stripped")
+    reduced = len(original_bytes) - len(new_bytes)
+    return reduced
 
 
-def run(paths: list[Path], workers: int, dry_run: bool) -> int:
-    search_roots = paths if paths else [Path.cwd()]
-    targets = list(iter_target_files(search_roots))
+def format_bytes(cr: int, use_color: bool = True) -> str:
+    dB = f"{cr:,}"
+    if not use_color:
+        return dB
+    if cr == 0:
+        return f"\x1b[2m{dB}\x1b[0m"  # Dim
+    return f"\x1b[32m{dB}\x1b[0m"  # Green
 
-    if not targets:
-        logger.warning("No Python files found to process.")
-        return 0
 
-    logger.info(f"Discovered {len(targets)} Python file(s). Processing with {workers} workers...")
+def main():
+    parser = argparse.ArgumentParser(description="Strip comments and/or docstrings from Python files using LibCST.")
+    parser.add_argument(
+        "inputs", nargs="*", type=Path, help="Files or directories to process (default: current directory)"
+    )
+    parser.add_argument("-c", action="store_true", help="Remove all comments")
+    parser.add_argument("-d", action="store_true", help="Remove all docstrings")
+    parser.add_argument("-a", "--all", action="store_true", help="Remove all comments and docstrings")
+    parser.add_argument("--color", choices=("auto", "always", "never"), default="auto", help="Color output")
 
-    failures: list[ProcessResult] = []
-    changed_count = 0
+    args = parser.parse_args()
+
+    inputs = args.inputs if args.inputs else [Path(".")]
+
+    strip_comments = args.c or args.all
+    strip_docstrings = args.d or args.all
+
+    if not strip_comments and not strip_docstrings:
+        print("Error: Specify at least one flag: -c, -d, or -a.", file=sys.stderr)
+        sys.exit(1)
+
+    py_files = list(discover_python_files(inputs))
+    if not py_files:
+        print("No Python files found.")
+        sys.exit(0)
+
+    use_color = args.color == "always" or (
+        args.color == "auto" and sys.stdout.isatty() and "NO_COLOR" not in __import__("os").environ
+    )
+
+    max_name_len = max((len(f.name) for f in py_files), default=0)
+    total_space_freed = 0
     processed_count = 0
+    error_count = 0
 
-    with mp.Pool(processes=workers) as pool:
-        async_results = [pool.apply_async(process_file, args=(str(target), dry_run)) for target in targets]
-
-        for async_result in async_results:
-            try:
-                result: ProcessResult = async_result.get()
-            except Exception as exc:  # noqa: BLE001 - guard against unexpected pool errors
-                logger.error(f"Worker raised an unexpected exception: {exc}")
-                continue
-
+    for file_path in py_files:
+        try:
+            reduced = process_file(file_path, strip_comments, strip_docstrings)
+            total_space_freed += reduced
             processed_count += 1
-            if not result.success:
-                failures.append(result)
-                logger.error(f"{result.path}: {result.message}")
-            elif result.changed:
-                changed_count += 1
-                logger.info(f"{result.path}: {result.message}")
-            else:
-                logger.debug(f"{result.path}: {result.message}")
+            print(f"{file_path.name:<{max_name_len}}    {format_bytes(reduced, use_color)}")
+        except Exception as exc:
+            error_count += 1
+            print(f"{file_path.name:<{max_name_len}}    Error: {exc}", file=sys.stderr)
 
-    logger.info(f"Done. processed={processed_count} changed={changed_count} failed={len(failures)} dry_run={dry_run}")
-
-    if failures:
-        logger.error(f"{len(failures)} file(s) failed to process.")
-        return 1
-    return 0
-
-
-def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Strip comments and docstrings from Python files using LibCST.")
-    parser.add_argument(
-        "paths",
-        nargs="*",
-        type=Path,
-        help="Files or directories to process. Defaults to current directory (recursive).",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=DEFAULT_WORKERS,
-        help=f"Number of worker processes (default: {DEFAULT_WORKERS}).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Report what would change without writing any files.",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose (DEBUG-level) logging.",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: Optional[list[str]] = None) -> int:
-    args = parse_args(argv)
-    configure_logging(verbose=args.verbose)
-
-    workers = max(1, args.workers)
-    if workers != DEFAULT_WORKERS:
-        logger.debug(f"Using {workers} workers (overridden from default {DEFAULT_WORKERS}).")
-
-    try:
-        return run(paths=args.paths, workers=workers, dry_run=args.dry_run)
-    except KeyboardInterrupt:
-        logger.warning("Interrupted by user.")
-        return 130
+    print("\n--- Summary ---")
+    print(f"Successfully processed: {processed_count} file(s)")
+    if error_count > 0:
+        print(f"Errors encountered: {error_count} file(s)")
+    print(f"Overall space freed: {format_bytes(total_space_freed, use_color)} bytes")
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn", force=False)
-    sys.exit(main())
+    main()

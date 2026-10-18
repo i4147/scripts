@@ -40,7 +40,6 @@ import os
 from pathlib import Path
 import sys
 
-
 SKIP_DIRS: frozenset[str] = frozenset({
     ".git",
     ".hg",

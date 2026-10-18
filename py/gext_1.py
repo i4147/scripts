@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import os
@@ -12,7 +11,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from multiprocessing import cpu_count
 from pathlib import Path
-
 from loguru import logger
 
 try:
@@ -21,7 +19,6 @@ try:
     HAS_ZSTD = True
 except ImportError:
     HAS_ZSTD = False
-
 SKIP_DIRS = frozenset({
     ".git",
     "__pycache__",
@@ -30,7 +27,6 @@ SKIP_DIRS = frozenset({
     ".env",
     ".pytest_cache",
 })
-
 COMMON_IMPORTS: dict[str, set[str]] = {
     "typing": {
         "List",
@@ -215,7 +211,6 @@ class CodeValidator:
         try:
             tree = ast.parse(source)
             compile(source, "<validation>", "exec")
-
             undefined_names = CodeValidator._find_undefined_names(tree)
             if undefined_names:
                 builtins = set(dir(__builtins__)) if isinstance(__builtins__, dict) else set(dir(__builtins__))
@@ -250,7 +245,6 @@ class CodeValidator:
                 truly_undefined = undefined_names - builtins - common_names
                 if truly_undefined:
                     logger.debug(f"Potential undefined names: {truly_undefined}")
-
             return (True, None)
         except SyntaxError as e:
             return (False, f"Syntax error: {e}")
@@ -261,7 +255,6 @@ class CodeValidator:
     def _find_undefined_names(tree: ast.AST) -> set[str]:
         undefined = set()
         defined = set()
-
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 defined.add(node.name)
@@ -281,7 +274,6 @@ class CodeValidator:
                     name = alias.asname or alias.name
                     if name != "*":
                         defined.add(name)
-
         return undefined - defined
 
 
@@ -290,20 +282,15 @@ class MethodConverter:
     def method_to_function(source: str) -> str:
         try:
             tree = ast.parse(source)
-
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     if node.args.args and node.args.args[0].arg == "self":
                         node.args.args.pop(0)
                     if node.args.posonlyargs and node.args.posonlyargs[0].arg == "self":
                         node.args.posonlyargs.pop(0)
-
                     MethodConverter._remove_self_references(node)
-
                     node.decorator_list = [d for d in node.decorator_list if not MethodConverter._is_class_decorator(d)]
-
                     return ast.unparse(node)
-
             return source
         except Exception as e:
             logger.warning(f"Failed to convert method to function: {e}")
@@ -391,7 +378,6 @@ class ImportAnalyzer:
         stdlib_imports: list[str] = []
         thirdparty_imports: list[str] = []
         local_imports: list[str] = []
-
         for imp in sorted(all_imports):
             if imp.startswith(("from .", "import .")):
                 local_imports.append(imp)
@@ -415,7 +401,6 @@ class ImportAnalyzer:
                 stdlib_imports.append(imp)
             else:
                 thirdparty_imports.append(imp)
-
         organized.extend(sorted(stdlib_imports))
         if thirdparty_imports:
             organized.extend([""] + sorted(thirdparty_imports))
@@ -465,7 +450,6 @@ class EntityVisitor(ast.NodeVisitor):
         self.current_class = old_class
 
     def visit_Assign(self, node: ast.Assign) -> None:
-
         if self.current_class is None:
             for target in node.targets:
                 if isinstance(target, ast.Name) and self._is_constant_name(target.id):
@@ -489,7 +473,6 @@ class EntityVisitor(ast.NodeVisitor):
         in_class: bool = False,
     ) -> None:
         source = self._get_source_slice(node)
-
         if in_class:
             entity_type = "function"
             source = MethodConverter.method_to_function(source)
@@ -497,7 +480,6 @@ class EntityVisitor(ast.NodeVisitor):
         else:
             entity_type = "function"
             full_name = node.name
-
         self.entities.append(
             Entity(
                 name=node.name,
@@ -719,7 +701,6 @@ def scan_directory(directory: str) -> tuple[list[Path], list[tuple[str, str]]]:
     base_dir = Path(directory).resolve()
     python_files: list[Path] = []
     archive_members: list[tuple[str, str]] = []
-
     for root, dirs, files in os.walk(base_dir):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         root_path = Path(root)
@@ -784,11 +765,9 @@ def write_entity(output_dir: Path, entity: Entity) -> Path | None:
     while path.exists():
         counter += 1
         path = entity_dir / f"{base_filename}_{counter}.py"
-
     existing_imports = ImportAnalyzer.extract_imports_from_source(entity.source)
     needed_imports = ImportAnalyzer.detect_needed_imports(entity.source)
     imports = ImportAnalyzer.consolidate_imports(existing_imports, needed_imports)
-
     lines: list[str] = []
     lines.append(f"# Extracted from: {entity.source_file}:{entity.line_number}\n")
     if imports:
@@ -797,14 +776,11 @@ def write_entity(output_dir: Path, entity: Entity) -> Path | None:
     lines.append(entity.source)
     if not entity.source.endswith("\n"):
         lines.append("\n")
-
     complete_code = "".join(lines)
     is_valid, error_msg = CodeValidator.validate_python_code(complete_code)
-
     if not is_valid:
         logger.warning(f"Skipping invalid entity {entity.full_name}: {error_msg}")
         return None
-
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(complete_code)
@@ -818,7 +794,6 @@ def write_imports_file(output_dir: Path, all_imports: set[str]) -> None:
     organized = ImportAnalyzer.consolidate_imports(all_imports, set())
     path = output_dir / "imports.py"
     content = "# Aggregated imports from extracted entities\n\n" + "".join(imp + "\n" for imp in organized)
-
     is_valid, error_msg = CodeValidator.validate_python_code(content)
     if is_valid:
         with open(path, "w", encoding="utf-8") as f:
@@ -868,15 +843,12 @@ def run_full_mode(
 ) -> int:
     print(f"Scanning directory: {Path(directory).resolve()}")
     print(f"Output directory: {output_dir.resolve()}\n")
-
     python_files, archive_members = scan_directory(directory)
     print(f"Found {len(python_files):,} Python files and {len(archive_members):,} archive members\n")
-
     all_entities: list[Entity] = []
     all_imports: set[str] = set()
     entity_count: dict[str, int] = {"function": 0, "class": 0, "constant": 0}
     error_count = 0
-
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures: dict = {executor.submit(process_file_worker, fpath): ("file", str(fpath)) for fpath in python_files}
         for virtual_path, source in archive_members:
@@ -884,7 +856,6 @@ def run_full_mode(
                 "archive",
                 virtual_path,
             )
-
         processed = 0
         for future in as_completed(futures):
             _source_type, source_path = futures[future]
@@ -904,12 +875,10 @@ def run_full_mode(
             except Exception as e:
                 error_count += 1
                 logger.error(f"Error processing {source_path}: {e}")
-
     print(f"\nExtracted {len(all_entities):,} entities:")
     for etype, count in entity_count.items():
         if count > 0:
             print(f"  {etype}: {count}")
-
     print("\nValidating and writing entities to output directory...")
     written_count = 0
     skipped_count = 0
@@ -919,16 +888,13 @@ def run_full_mode(
             written_count += 1
         else:
             skipped_count += 1
-
     print(f"Saved {written_count}/{len(all_entities)} entities")
     if skipped_count > 0:
         logger.warning(f"Skipped {skipped_count} invalid entities")
     print()
-
     write_imports_file(output_dir, all_imports)
     print("Saved aggregated imports to imports.py")
     print(f"\nTotal unique imports: {len(all_imports)}")
-
     if error_count > 0:
         logger.warning(f"Errors encountered: {error_count}")
     return 0
@@ -943,17 +909,14 @@ def run_index_mode(
     if not root_path.exists():
         logger.error(f"Root directory not found: {root_path}")
         sys.exit(1)
-
     print(f"Scanning for Python files in {root_path}...")
     py_files = find_python_files(root_path)
     if not py_files:
         logger.warning("No Python files found.")
         return
     print(f"Found {len(py_files)} Python files")
-
     num_workers = workers or cpu_count()
     print(f"Using {num_workers} workers for parallel processing")
-
     from multiprocessing import Pool
     from tqdm import tqdm
 
@@ -962,7 +925,6 @@ def run_index_mode(
     unique_functions = set()
     unique_constants = set()
     imports_by_dir = defaultdict(set)
-
     with Pool(num_workers) as pool:
         results = list(
             tqdm(
@@ -972,7 +934,6 @@ def run_index_mode(
                 unit="file",
             )
         )
-
     print("Aggregating results...")
     for result in results:
         for entity in result.classes:
@@ -986,17 +947,13 @@ def run_index_mode(
             unique_constants.add(entity.name)
         dir_name = result.path.parent.name or "root"
         imports_by_dir[dir_name].update(result.imports)
-
     entities_by_file = {key: dict(val) for key, val in entities_by_file.items()}
-
     print(f"Saving results to {output_dir}...")
     output_dir.mkdir(parents=True, exist_ok=True)
-
     index_save_entities(output_dir, "class", entities_by_file.get("classes", {}), unique_classes)
     index_save_entities(output_dir, "func", entities_by_file.get("functions", {}), unique_functions)
     index_save_entities(output_dir, "const", entities_by_file.get("constants", {}), unique_constants)
     index_save_imports(output_dir, imports_by_dir)
-
     print("=" * 40)
     print("Extraction Summary:")
     print(f"  Files processed: {len(py_files)}")
@@ -1017,28 +974,22 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-
   # Full extraction (default) from current directory:
   python extract_entities.py
-
   # Full extraction to ~/tmp/output with 16 workers:
   python extract_entities.py --mode full -t --workers 16
-
   # Index-only extraction from a specific repo:
   python extract_entities.py --mode index -r /path/to/repo -o index_out
-
   # Index mode with custom worker count:
   python extract_entities.py --mode index -r . -o index_out --workers 8
         """,
     )
-
     parser.add_argument(
         "--mode",
         choices=["full", "index"],
         default="full",
         help="Extraction mode: 'full' (source code) or 'index' (names only). Default: full",
     )
-
     parser.add_argument(
         "-d",
         "--directory",
@@ -1051,7 +1002,6 @@ Examples:
         default=".",
         help="Root directory to scan in index mode (default: current directory).",
     )
-
     parser.add_argument(
         "-o",
         "--output",
@@ -1067,7 +1017,6 @@ Examples:
         action="store_true",
         help="In full mode, save to ~/tmp/output/ instead of ./output/.",
     )
-
     parser.add_argument(
         "-w",
         "--workers",
@@ -1075,16 +1024,13 @@ Examples:
         default=None,
         help="Number of parallel workers (default: 8 for full, CPU count for index).",
     )
-
     args = parser.parse_args()
-
     logger.remove()
     logger.add(
         sys.stderr,
         level="INFO",
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
     )
-
     if args.mode == "full":
         if args.temp:
             output_dir = Path.home() / "tmp" / "output"

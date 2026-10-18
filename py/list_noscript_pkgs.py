@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import site
 from pathlib import Path
 

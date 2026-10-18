@@ -4,9 +4,7 @@ import sys
 from pathlib import Path
 
 JSON_PATH = Path("/sdcard/data/pip.json")
-
 DICT_PATTERN = re.compile(rb'"([^"\\]+)"\s*:\s*(\d+)')
-
 PAIR_PATTERN = re.compile(rb'"([^"\\]+)"\s*,\s*(\d+)')
 
 
@@ -25,10 +23,8 @@ def main():
         if not keyword:
             print("No keyword given.")
             return
-
     kw = keyword.lower().encode()
     matches = []
-
     with JSON_PATH.open("rb") as f:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
             pattern = pick_pattern(mm)
@@ -36,11 +32,9 @@ def main():
                 name = m.group(1)
                 if kw in name.lower():
                     matches.append((name.decode("utf-8"), int(m.group(2))))
-
     if not matches:
         print(f"No matches for '{keyword}'.")
         return
-
     matches.sort(key=lambda x: x[1], reverse=True)
     for name, dl in matches:
         print(f"{name}  {dl}")

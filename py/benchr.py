@@ -1,6 +1,5 @@
 import random
 import string
-
 from pbar import Pbar
 from rapidfuzz import fuzz
 

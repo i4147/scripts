@@ -2,7 +2,6 @@ import ast
 import re
 import sys
 from pathlib import Path
-
 from dh import cprint, fsz, get_pyfiles, get_removed_lines, gsz, mpf3
 
 SPECIAL_COMMENT_RE = re.compile("#\\s*(type:|fmt:|pylint|mypy)", re.IGNORECASE)

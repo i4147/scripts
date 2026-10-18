@@ -1,5 +1,4 @@
 from typing import Iterator, Tuple, Any
-
 from .cyjson_backend import CythonJSONParser
 
 

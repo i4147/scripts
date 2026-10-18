@@ -1,7 +1,6 @@
 import pathlib
 from sys import exit
 from time import perf_counter
-
 from dh import BIN_EXT, TXT_EXT
 
 

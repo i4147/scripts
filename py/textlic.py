@@ -21,11 +21,9 @@ def extract_blocks(lines: List[str], start_line: int, min_lines: int = 2) -> Lis
         raw_line = lines[i]
         original = raw_line.rstrip("\n\r")
         stripped = original.strip()
-
         if stripped.startswith("#!"):
             i += 1
             continue
-
         block_start = i
         block_lines = []
         block_stripped = []
@@ -33,15 +31,12 @@ def extract_blocks(lines: List[str], start_line: int, min_lines: int = 2) -> Lis
             raw_line = lines[i]
             original = raw_line.rstrip("\n\r")
             stripped = original.strip()
-
             if stripped.startswith("#!"):
                 i += 1
                 break
-
             block_lines.append(original)
             block_stripped.append(stripped)
             i += 1
-
         if len(block_stripped) >= min_lines:
             block_text = "\n".join(block_stripped)
             blocks.append((block_text, start_line + block_start, block_lines))
@@ -94,7 +89,6 @@ def remove_repeated_blocks(repeated: Dict[str, List[Tuple[Path, int, List[str]]]
     for block_text, occurrences in repeated.items():
         for filepath, start_lineno, original_lines in occurrences:
             file_removals[filepath].append((start_lineno, original_lines))
-
     removed_total = 0
     files_changed = 0
     for filepath, removals in file_removals.items():
@@ -104,12 +98,10 @@ def remove_repeated_blocks(repeated: Dict[str, List[Tuple[Path, int, List[str]]]
         except OSError as e:
             print(f"Warning: cannot read {filepath} for removal: {e}", file=sys.stderr)
             continue
-
         lines_to_remove = set()
         for start_lineno, block_lines in removals:
             for offset in range(len(block_lines)):
                 lines_to_remove.add(start_lineno + offset - 1)
-
         new_lines = []
         file_removed = 0
         for idx, raw_line in enumerate(original_lines):
@@ -117,10 +109,8 @@ def remove_repeated_blocks(repeated: Dict[str, List[Tuple[Path, int, List[str]]]
                 file_removed += 1
                 continue
             new_lines.append(raw_line)
-
         if file_removed == 0:
             continue
-
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.writelines(new_lines)
@@ -130,7 +120,6 @@ def remove_repeated_blocks(repeated: Dict[str, List[Tuple[Path, int, List[str]]]
             print(f"Removed {file_removed} line(s) from {rel_path}")
         except Exception as e:
             print(f"Error: cannot write {filepath}: {e}", file=sys.stderr)
-
     if files_changed > 0:
         print(f"\nDone. Removed {removed_total} repeated line(s) from {files_changed} file(s).")
     else:

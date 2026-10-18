@@ -5,7 +5,6 @@ from pathlib import Path
 EMPTY_MODE = "-e" in sys.argv
 REMOVE_MODE = "-r" in sys.argv
 SKIP_DIRS = {"lazy", ".git", "var"}
-
 JUNK_FILES = {
     "license",
     "license.rst",
@@ -25,7 +24,6 @@ JUNK_FILES = {
     "simz.json",
     "copyright",
 }
-
 JUNK_EXTENSIONS = {".tmp", ".bak", ".log", ".pyc"}
 
 
@@ -53,32 +51,26 @@ def should_skip(path: Path) -> bool:
 def main() -> None:
     cwd = Path.cwd()
     removed_count = 0
-
     for path in cwd.rglob("*"):
         if should_skip(path):
             continue
-
         loname = path.name.lower()
         rel_path = path.relative_to(cwd)
-
         if loname in JUNK_FILES:
             remove_it(path)
             print(f"{rel_path} removed.")
             removed_count += 1
             continue
-
         if path.is_file() and any(loname.endswith(ext) for ext in JUNK_EXTENSIONS):
             remove_it(path)
             print(rel_path)
             removed_count += 1
             continue
-
         if path.is_dir() and loname == "licenses" and "dist-info" in path.parent.name:
             remove_it(path)
             print(rel_path)
             removed_count += 1
             continue
-
         if any(junk in loname for junk in JUNK_FILES):
             if REMOVE_MODE:
                 remove_it(path)
@@ -86,7 +78,6 @@ def main() -> None:
                 empty_it(path)
             print(rel_path)
             removed_count += 1
-
     if removed_count:
         print(f"\n{removed_count} item(s) removed")
     return 0

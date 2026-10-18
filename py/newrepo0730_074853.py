@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import os
 import shutil
 from pathlib import Path
-
 from dotenv import load_dotenv
 from git import InvalidGitRepositoryError, NoSuchPathError, Repo
 from github import Github
@@ -20,7 +18,6 @@ def get_dir_name() -> str:
 def copy_gitignore() -> None:
     src = Path.home() / ".gitignore"
     dst = REPO_ROOT / ".gitignore"
-
     if src.exists() and not dst.exists():
         shutil.copy2(src, dst)
         print(f"Copied {src} -> {dst}")
@@ -69,7 +66,6 @@ def github_repo_exists(repo_name: str) -> bool:
 
 def ensure_origin(repo: Repo, origin_url: str) -> None:
     origin = next((r for r in repo.remotes if r.name == "origin"), None)
-
     if origin is None:
         repo.create_remote("origin", origin_url)
         print(f"Added remote origin: {origin_url}")
@@ -110,13 +106,11 @@ def push_changes(repo: Repo) -> None:
 def main() -> None:
     repo_name = get_dir_name()
     print(f"Repository name: {repo_name}")
-
     copy_gitignore()
     repo = ensure_local_repo()
     ensure_origin(repo, repo_name)
     commit_if_needed(repo)
     push_changes(repo)
-
     print(f"\n✅ Success! Repository '{repo_name}' is now on GitHub or updated there.")
     print(f"View it at: https://github.com/{repo_name}")
 

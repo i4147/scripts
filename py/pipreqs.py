@@ -7,7 +7,6 @@ import re
 import sys
 import traceback
 from contextlib import contextmanager
-
 import requests
 from docopt import docopt
 from pipreqs import __version__

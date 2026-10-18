@@ -1,6 +1,5 @@
 import subprocess
 import threading
-
 from termuxgui import Activity, Button, Connection, EditText, LinearLayout, NestedScrollView, TextView
 
 conn = Connection()

@@ -11,13 +11,11 @@ try:
 except Exception as e:
     print("Missing dependency: gcld3. Install with: pip install gcld3", file=sys.stderr)
     raise
-
 try:
     import pycld2 as cld2
 except Exception as e:
     print("Missing dependency: pycld2. Install with: pip install pycld2", file=sys.stderr)
     raise
-
 try:
     from langdetect import detect_langs, DetectorFactory
 
@@ -25,11 +23,9 @@ try:
 except Exception as e:
     print("Missing dependency: langdetect. Install with: pip install langdetect", file=sys.stderr)
     raise
-
 _print_lock = threading.Lock()
 _results_lock = threading.Lock()
 _results: list[dict[str, Any]] = []
-
 _gcld3_detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 
 
@@ -102,7 +98,6 @@ def combine_votes(g3: Optional[str], p2: Optional[str], ld: Optional[str]) -> di
 
     non_en_votes = sum(1 for v in votes.values() if (not is_unknown(v)) and (not is_english(v)))
     known_votes = sum(1 for v in votes.values() if not is_unknown(v))
-
     if non_en_votes >= 2:
         decision = True
     elif non_en_votes == 1 and known_votes == 1:
@@ -114,7 +109,6 @@ def combine_votes(g3: Optional[str], p2: Optional[str], ld: Optional[str]) -> di
             decision = False
     else:
         decision = False
-
     return {"votes": votes, "non_english": decision}
 
 
@@ -141,15 +135,12 @@ def detect_line_task(file_path: Path, lineno: int, line: str, max_len: int) -> O
 def process_inputs(paths: list[str], workers: int, max_line_length: int) -> int:
     input_paths = [Path(p) for p in paths] if paths else [Path(".")]
     files_iter = iter_files(input_paths)
-
     files = []
     for f in files_iter:
         files.append(f)
-
     if not files:
         print("No files found to process.", file=sys.stderr)
         return 1
-
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = []
         for f in files:
@@ -158,7 +149,6 @@ def process_inputs(paths: list[str], workers: int, max_line_length: int) -> int:
                     continue
                 fut = ex.submit(detect_line_task, f, lineno, raw_line, max_line_length)
                 futures.append(fut)
-
         for fut in as_completed(futures):
             try:
                 rec = fut.result()
@@ -171,7 +161,6 @@ def process_inputs(paths: list[str], workers: int, max_line_length: int) -> int:
             except Exception as e:
                 with _print_lock:
                     print(f"Error in line detection task: {e}", file=sys.stderr)
-
     return 0
 
 
@@ -194,7 +183,6 @@ def main(argv=None) -> int:
     parser.add_argument("--out", "-o", default="noneng.json", help="Output JSON file.")
     parser.add_argument("--max-line-length", type=int, default=2000, help="Max chars of a line to consider/display.")
     args = parser.parse_args(argv)
-
     rc = process_inputs(args.paths, args.workers, args.max_line_length)
     if rc != 0:
         return rc

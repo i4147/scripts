@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import multiprocessing as mp
+import sys
 import time
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import (
@@ -15,9 +16,16 @@ from enum import Enum
 from functools import partial
 from typing import Any
 
+__all__ = [
+    "MAX_WORKERS",
+    "DEFAULT_CHUNKSIZE",
+    "DEFAULT_EXECUTOR_CHUNKSIZE",
+    "PoolMethod",
+    "mpf",
+]
 logger = logging.getLogger(__name__)
 MAX_WORKERS: int = 8
-DEFAULT_CHUNKSIZE: int | None = 4
+DEFAULT_CHUNKSIZE: int | None = None
 DEFAULT_EXECUTOR_CHUNKSIZE: int = 1
 ExecutorType = type[ProcessPoolExecutor] | type[ThreadPoolExecutor]
 
@@ -36,7 +44,7 @@ class PoolMethod(str, Enum):
     THREAD_POOL = "thread_pool"
 
     @classmethod
-    def parse(cls, value: str | PoolMethod) -> PoolMethod:
+    def parse(cls, value: "str | PoolMethod") -> "PoolMethod":
         if isinstance(value, cls):
             return value
         try:
@@ -63,7 +71,7 @@ _MP_POOL_METHODS = frozenset({
 
 
 def _dispatch_mp_pool(
-    pool: mp.pool.Pool,
+    pool: "mp.pool.Pool",
     method: PoolMethod,
     func: Callable[..., Any],
     items: list[Any],
@@ -116,7 +124,7 @@ def _run_mp_pool(
         return _dispatch_mp_pool(pool, method, func, items_list, chunksize)
 
 
-def _submit_args(item: Any, unpack: bool) -> tuple[Any, ...]:
+def _submit_args(item: Any, unpack: bool) -> tuple:
     if unpack:
         return item if isinstance(item, tuple) else (item,)
     return (item,)
@@ -146,6 +154,8 @@ def _run_executor(
     if maxtasksperchild is not None:
         if not is_process:
             raise ValueError("maxtasksperchild is only supported by ProcessPoolExecutor")
+        if sys.version_info < (3, 11):
+            raise ValueError("maxtasksperchild requires Python 3.11+")
         kwargs["max_tasks_per_child"] = maxtasksperchild
     if not unpack and timeout is None and on_progress is None and not return_exceptions and max_pending is None:
         with executor_cls(**kwargs) as ex:
@@ -161,10 +171,10 @@ def _run_executor(
     cap = max(cap, 1)
     results: list[Any] = [None] * n
     item_iter = iter(enumerate(items_list))
-    pending: dict[Future[Any], tuple[int, float]] = {}
+    pending: dict[Future, tuple[int, float]] = {}
     exhausted = False
 
-    def _fill(ex: ProcessPoolExecutor | ThreadPoolExecutor) -> None:
+    def _fill(ex) -> None:
         nonlocal exhausted
         while len(pending) < cap and not exhausted:
             try:
@@ -241,7 +251,7 @@ def _run_joblib(
 def mpf(
     func: Callable[..., Any],
     items: Iterable[Any],
-    method: str | PoolMethod = PoolMethod.IMAP_UNORDERED,
+    method: "str | PoolMethod" = PoolMethod.IMAP_UNORDERED,
     *,
     workers: int = MAX_WORKERS,
     chunksize: int | None = DEFAULT_CHUNKSIZE,

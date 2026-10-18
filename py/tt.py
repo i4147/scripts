@@ -60,7 +60,6 @@ with open("sp.txt", "w") as f:
 with open("space.txt", "w") as f:
     for x in space:
         f.write(x)
-
 with open("w2.txt", "w") as fo:
     for x in rest:
         fo.write(x)

@@ -1,13 +1,9 @@
-#!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import sys
 import time
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Final, Optional
-
 from dh import fsz
 
 _parser: Optional[Any] = None
@@ -18,8 +14,8 @@ _NAME_WIDTH: Final[int] = 50
 def _get_parser() -> Any:
     global _parser
     if _parser is None:
-        import tree_sitter_toml as tstoml  # type: ignore[import-untyped]
-        from tree_sitter import Language  # type: ignore[import-untyped]
+        import tree_sitter_toml as tstoml
+        from tree_sitter import Language
         from tree_sitter import Parser
 
         _parser = Parser(Language(tstoml.language()))

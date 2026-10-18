@@ -10,7 +10,5 @@ for f in os.listdir("."):
     if not parts[0] in lst:
         print(parts[0])
         cleaned.append(parts[0])
-
-
 with open("txt2.txt", "w") as fo:
     fo.write("\n".join(cleaned))

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
@@ -41,26 +40,21 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> None:
     args = parse_args(argv)
     cwd = Path.cwd()
-
     dirs = [p for p in cwd.glob("*") if p.is_dir()]
-
     sizes: dict[str, int] = {}
     formatted_sizes: dict[str, str] = {}
     max_size_len = 0
-
     if args.size:
         for d in dirs:
             sizes[d.name] = dir_size(d)
         formatted_sizes = {name: human_size(b) for name, b in sizes.items()}
         if formatted_sizes:
             max_size_len = max(len(s) for s in formatted_sizes.values())
-
     for d in dirs:
         line = f"  -  {d.name}"
         if args.size:
             line += f"  {formatted_sizes[d.name]:>{max_size_len}}"
         print(line)
-
     total_line = f"total: {len(dirs)} dirs"
     if args.size:
         total_line += f"  {human_size(sum(sizes.values()))}"

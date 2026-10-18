@@ -47,15 +47,12 @@ class WebsterParser(HTMLParser):
     def _append(self, text):
         if not text:
             return
-
         if self.current_collocation is not None:
             self.current_collocation["definition"] += text
             return
-
         if self.current_sense is not None:
             self.current_sense["text"] += text
             return
-
         if self.in_hw:
             self.entry["word"] += text
         elif self.in_pos:
@@ -77,7 +74,6 @@ class WebsterParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         self.tag_stack.append(tag)
-
         if tag == "hw":
             self.in_hw = True
         elif tag == "pos":
@@ -107,7 +103,6 @@ class WebsterParser(HTMLParser):
     def handle_endtag(self, tag):
         if self.tag_stack and self.tag_stack[-1] == tag:
             self.tag_stack.pop()
-
         if tag == "hw":
             self.in_hw = False
         elif tag == "pos":
@@ -116,7 +111,6 @@ class WebsterParser(HTMLParser):
             self.in_def = False
         elif tag == "sn":
             self.in_sn = False
-
         elif tag == "plw":
             self.in_plw = False
         elif tag == "u":
@@ -141,38 +135,30 @@ class WebsterParser(HTMLParser):
 
     def handle_data(self, data):
         text = data
-
         if "i" in self.tag_stack and not self.current_sense and self.current_collocation is None:
             if self.current_quote is not None:
                 self.current_quote["source"] += text
                 return
-
             if self.in_def:
                 self._append(text)
                 return
-
             if not self.in_hw and not self.in_pos and not self.in_def:
                 self.in_etymology = True
                 self.entry["etymology"] += text
                 return
-
         if self.current_collocation is not None and "col" in self.tag_stack:
             self.current_collocation["phrase"] += text
             return
-
         if self.current_quote is not None:
             self.current_quote["text"] += text
             return
-
         if self.in_sn:
             self._append(text)
             return
-
         self._append(text)
 
     def finish(self):
         entry = self.entry
-
         if not entry["senses"] and entry.get("definition_raw"):
             entry["senses"].append({
                 "number": "1",
@@ -186,33 +172,27 @@ class WebsterParser(HTMLParser):
                 "quotes": [],
             })
         entry.pop("definition_raw", None)
-
         if self.current_sense is not None:
             self.current_sense["text"] = " ".join(self.current_sense["text"].split())
             if self.current_sense["text"] or self.current_sense["quotes"]:
                 entry["senses"].append(self.current_sense)
             self.current_sense = None
-
         for key in ("word", "pronunciation", "part_of_speech", "etymology", "synonyms"):
             if key in entry and isinstance(entry[key], str):
                 entry[key] = " ".join(entry[key].split())
-
         for s in entry["senses"]:
             s["text"] = " ".join(s["text"].split())
             for q in s.get("quotes", []):
                 q["text"] = " ".join(q["text"].split())
                 q["source"] = " ".join(q["source"].split())
-
         if entry["word"]:
             self.entries.append(entry)
-
         self.reset_entry()
 
 
 def parse_file(path):
     with open(path, encoding="utf-8") as f:
         raw = f.read()
-
     parts = []
     last = 0
     current_page = None
@@ -221,22 +201,18 @@ def parse_file(path):
         current_page = int(m.group(1))
         last = m.end()
     parts.append((current_page, raw[last:]))
-
     entries = []
     for page, chunk in parts:
         for p_match in re.finditer(r"<p>(.*?)</p>", chunk, re.DOTALL):
             body = p_match.group(1).strip()
-
             if not body or re.fullmatch(r"<!\s*.*?\s*!>", body):
                 continue
-
             parser = WebsterParser()
             parser.feed("<p>" + body + "</p>")
             parser.finish()
             for e in parser.entries:
                 e["page"] = page
                 entries.append(e)
-
     return entries
 
 
@@ -244,12 +220,10 @@ def main():
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <input_file>")
         sys.exit(1)
-
     entries = parse_file(sys.argv[1])
     out = sys.argv[1].rsplit(".", 1)[0] + ".json"
     with open(out, "w", encoding="utf-8") as f:
         json.dump(entries, f, indent=2, ensure_ascii=False)
-
     print(f"Wrote {len(entries)} entries to {out}")
     if entries:
         for e in entries:

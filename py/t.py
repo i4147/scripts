@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import sys
 from pathlib import Path
 from fastwalk import walk_files
@@ -16,7 +15,6 @@ def process_file(path):
 
 
 def main():
-
     cwd = Path.home() / "isaac"
     for path in walk_files(cwd):
         if path.suffix == ".py":

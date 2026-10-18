@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 import argparse
 from pathlib import Path
-
 from dh import get_pyfiles_iter, runcmd
 
 
@@ -18,7 +16,6 @@ def run_tool(tool: str, file_path: Path) -> tuple[str, str | None]:
             cmd = ["radon", "cc", str(file_path)]
         else:
             return tool, None
-
         _result, output, _err = runcmd(
             cmd,
             show_output=True,
@@ -45,16 +42,13 @@ def append_tool_outputs(file_path: Path, outputs: dict[str, str | None]) -> None
 
 def process_file(file_path: Path, tools: list[str]) -> None:
     print(f"Processing: {file_path}")
-
     outputs = {}
     for tool in tools:
         tool_name, output = run_tool(tool, file_path)
         outputs[tool_name] = output
-
     if tools == ["ty"] and outputs.get("ty") and "all checks passed" in outputs["ty"].lower():
         print(f"✓ Skipped (ty: all checks passed): {file_path}")
         return
-
     append_tool_outputs(file_path, outputs)
     print(f"✓ Updated: {file_path}")
 
@@ -81,7 +75,6 @@ Examples:
   python script.py file1.py file2.py -g -p   # Run pyright & pylint on both files
         """,
     )
-
     parser.add_argument(
         "paths",
         nargs="*",
@@ -117,13 +110,9 @@ Examples:
         action="store_true",
         help="Run ty",
     )
-
     args = parser.parse_args()
-
     paths = args.paths if args.paths else ["."]
-
     enabled_tools = []
-
     if args.all:
         enabled_tools = ["ty", "pyright", "pylint", "ruff"]
     else:
@@ -135,10 +124,8 @@ Examples:
             enabled_tools.append("pylint")
         if args.ruff:
             enabled_tools.append("ruff")
-
         if not enabled_tools:
             enabled_tools = ["ty", "pyright", "pylint", "ruff"]
-
     for p in collect_pyfiles(paths):
         process_file(p, enabled_tools)
 

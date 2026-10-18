@@ -1,15 +1,17 @@
+from __future__ import annotations
 import argparse
 import fnmatch
 import tarfile
 import threading
 import zipfile
-from multiprocessing.pool import Pool
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from queue import Queue
 from fastwalk import walk_files
-from loguru import logger
 
 pause_event = threading.Event()
 pause_event.set()
+results_queue = Queue()
 DEFAULT_EXCLUDED_DIRS = {".git"}
 DEFAULT_SKIPPED_EXTS = {".pyc", ".bak"}
 ARCHIVE_EXTENSIONS = (
@@ -22,71 +24,65 @@ ARCHIVE_EXTENSIONS = (
     ".whl",
     ".apk",
 )
-WORKER_COUNT = 8
-SearchResult = tuple[str, int | None]
 
 
-def setup_keyboard_listener():
+def setup_keyboard_listener() -> bool:
     try:
         import keyboard
 
-        def on_key_press(event):
+        def on_key_press(event) -> None:
             if event.name in {"space", "p"} and pause_event.is_set():
                 pause_event.clear()
-                print("PAUSED - press 'c' to continue...")
+                print("\n[PAUSED] Press 'c' to continue...")
             elif event.name == "c" and not pause_event.is_set():
                 pause_event.set()
-                print("RESUMED - searching...")
+                print("\n[RESUMED] Searching...")
 
         keyboard.on_press(on_key_press)
         return True
     except ImportError:
-        logger.warning("'keyboard' not installed. Pause disabled.")
+        print("Warning: 'keyboard' not installed. Pause disabled.")
         return False
 
 
-def is_excluded(
-    path,
-    excluded_dirs,
-    excluded_patterns,
-):
+def is_excluded(path: Path, excluded_dirs, excluded_patterns) -> bool:
     for part in path.parts:
         if part in excluded_dirs:
             return True
     return any(fnmatch.fnmatch(path.name, pattern) for pattern in excluded_patterns)
 
 
-def should_skip_file(path):
+def should_skip_file(path: Path) -> bool:
     return path.suffix in DEFAULT_SKIPPED_EXTS
 
 
-def search_in_file(
-    path,
-    search_string,
-    search_content,
-):
+def report_result(file_path, line_num=None) -> None:
+    if line_num:
+        print(f"[FOUND] {file_path} (Line: {line_num})")
+    else:
+        print(f"[FOUND] {file_path}")
+    results_queue.put((file_path, line_num))
+
+
+def search_in_file(file_path: Path, search_string, search_content):
     pause_event.wait()
     results = []
     if not search_content:
-        if search_string.lower() in path.name.lower():
-            results.append((str(path), None))
+        if search_string.lower() in file_path.name.lower():
+            results.append((str(file_path), None))
         return results
     try:
-        with path.open(encoding="utf-8", errors="ignore") as f:
+        with Path(file_path).open(encoding="utf-8", errors="ignore") as f:
             for ln, line in enumerate(f, 1):
                 pause_event.wait()
                 if search_string in line:
-                    results.append((str(path), ln))
+                    results.append((str(file_path), ln))
     except Exception:
         pass
     return results
 
 
-def extract_and_search_archive(
-    archive_path,
-    search_string,
-    search_content,
-):
+def extract_and_search_archive(archive_path: Path, search_string, search_content):
     results = []
     try:
         if archive_path.suffix == ".zip" or archive_path.name.endswith((".whl", ".apk")):
@@ -130,45 +126,17 @@ def extract_and_search_archive(
     return results
 
 
-def process_file(
-    path,
-    search_string,
-    search_content,
-):
+def process_file(path: Path, search_string, search_content) -> None:
     path = Path(path)
     if path.name.endswith(ARCHIVE_EXTENSIONS):
-        return extract_and_search_archive(path, search_string, search_content)
-    return search_in_file(path, search_string, search_content)
+        results = extract_and_search_archive(path, search_string, search_content)
+    else:
+        results = search_in_file(path, search_string, search_content)
+    for r in results:
+        report_result(*r)
 
 
-def collect_files(
-    root,
-    excluded_dirs,
-    excluded_patterns,
-):
-    files = []
-    for pth in walk_files(root):
-        path = Path(pth)
-        if path.is_dir():
-            continue
-        if should_skip_file(path):
-            continue
-        if is_excluded(path, excluded_dirs, excluded_patterns):
-            continue
-        files.append(path)
-    return files
-
-
-def _report(results):
-    for path, line_num in results:
-        if line_num is not None:
-            print(f"[FOUND] {path} (Line: {line_num})")
-        else:
-            print(f"[FOUND] {path}")
-    return len(results)
-
-
-def parse_args(argv=None):
+def main() -> None:
     parser = argparse.ArgumentParser(description="Fast recursive string search")
     parser.add_argument("search_string")
     parser.add_argument("-c", "--content", action="store_true")
@@ -180,38 +148,32 @@ def parse_args(argv=None):
         default=[],
         help="Exclude dir or glob (repeatable)",
     )
-    return parser.parse_args(argv)
-
-
-def main(argv=None):
-    args = parse_args(argv)
+    args = parser.parse_args()
     excluded_dirs = DEFAULT_EXCLUDED_DIRS | {e for e in args.exclude if not any(ch in e for ch in "*?[]")}
     excluded_patterns = {e for e in args.exclude if any(ch in e for ch in "*?[]")}
     setup_keyboard_listener()
     root = Path(args.directory).resolve()
-    print(f"Root: {root}")
-    print(f"Mode: {'content' if args.content else 'filename'}")
-    print(f"Excluded dirs: {sorted(excluded_dirs)}")
-    print(f"Excluded patterns: {sorted(excluded_patterns)}")
+    print(f"[INFO] Root: {root}")
+    print(f"[INFO] Mode: {'content' if args.content else 'filename'}")
+    print(f"[INFO] Excluded dirs: {sorted(excluded_dirs)}")
+    print(f"[INFO] Excluded patterns: {sorted(excluded_patterns)}")
     print("-" * 40)
-    files = collect_files(root, excluded_dirs, excluded_patterns)
-    print(f"Files queued: {len(files)}")
-    total = 0
-    pool = Pool(processes=WORKER_COUNT)
-    try:
-        async_results = [pool.apply_async(process_file, (p, args.search_string, args.content)) for p in files]
-        pool.close()
-        for ar in async_results:
-            try:
-                results = ar.get()
-            except Exception as exc:
-                logger.error(f"Worker failed: {exc}")
-                continue
-            total += _report(results)
-    finally:
-        pool.join()
-    print(f"Total results: {total}")
-    return 0
+    files = []
+    for pth in walk_files(root):
+        path = Path(pth)
+        if path.is_dir():
+            continue
+        if should_skip_file(path):
+            continue
+        if is_excluded(path, excluded_dirs, excluded_patterns):
+            continue
+        files.append(path)
+    print(f"[INFO] Files queued: {len(files)}\n")
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = [ex.submit(process_file, p, args.search_string, args.content) for p in files]
+        for _f in as_completed(futures):
+            pass
+    print(f"[INFO] Total results: {results_queue.qsize()}")
 
 
 if __name__ == "__main__":

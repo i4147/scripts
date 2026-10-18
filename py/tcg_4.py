@@ -1,63 +1,117 @@
+from __future__ import annotations
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-TERMUX_PYTHON = "#!/data/data/com.termux/files/usr/bin/python\n"
-TERMUX_BASH = "#!/data/data/com.termux/files/usr/bin/bash\n"
-cwd = Path.cwd()
-homebin = Path.home() / "bin"
-homebin2 = Path.home() / "bashbin"
+TERMUX_SHEBANGS = {
+    "python": "#!/data/data/com.termux/usr/bin/python3.12",
+    "bash": "#!/data/data/com.termux/files/usr/bin/bash",
+    "sh": "#!/data/data/com.termux/files/usr/bin/sh",
+    "rust": "#!/data/data/com.termux/files/home/.cargo/bin/rust-script",
+}
+EXTENSION_MAP = {
+    ".py": "python",
+    ".sh": "bash",
+    ".bash": "bash",
+    ".rs": "rust",
+}
+SCRIPT_DIRS = {
+    Path.home() / "bin",
+    Path.home() / "bashbin",
+    Path.home() / ".cargo" / "bin",
+}
+ARCHIVE_DIR = Path.home() / "isaac" / "may" / "scripts"
 
 
-def get_clipboard() -> str:
+def get_clipboard_content() -> str:
     try:
-        return subprocess.check_output(["termux-clipboard-get"], text=True)
-    except subprocess.CalledProcessError:
+        result = subprocess.run(["termux-clipboard-get"], capture_output=True, text=True, check=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to read clipboard: {e}", file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError:
+        print("Error: termux-clipboard-get not found", file=sys.stderr)
         sys.exit(1)
 
 
-def detect_shebang(content: str) -> str | None:
-    stripped = content.lstrip()
-    if stripped.startswith("#!") and "python" in stripped[5:200]:
-        return TERMUX_PYTHON
-    if stripped.startswith(("import ", "def ", "class ", "!python", "from ")):
-        return TERMUX_PYTHON
-    if stripped.startswith(("echo ", "cd ", "export ", "set ", "if ", "for ", "#!/bin/sh")):
-        return TERMUX_BASH
-    return None
+def get_language_from_extension(filename: str) -> str:
+    return EXTENSION_MAP.get(Path(filename).suffix.lower(), "bash")
 
 
-def create_symlink(out_file: Path) -> None:
-    ext = out_file.suffix
-    if ext and cwd in {homebin, homebin2}:
-        symlink_path = out_file.parent / out_file.stem
-        if not symlink_path.exists():
-            symlink_path.symlink_to(out_file)
-            print(f"{symlink_path} -> {out_file}")
-        else:
-            print("symlink exists.")
+def replace_shebang(content: str, lang: str) -> str:
+    lines = content.splitlines()
+    if lines and lines[0].startswith("#!"):
+        lines.pop(0)
+    lines.insert(0, TERMUX_SHEBANGS[lang])
+    result = "\n".join(lines)
+    return result if result.endswith("\n") else result + "\n"
+
+
+def archive_existing_file(path: Path) -> None:
+    if not path.exists():
+        return
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    archive_path = ARCHIVE_DIR / path.name
+    counter = 1
+    while archive_path.exists():
+        archive_name = f"{path.stem}_{counter}{path.suffix}"
+        archive_path = ARCHIVE_DIR / archive_name
+        counter += 1
+    try:
+        shutil.move(str(path), str(archive_path))
+        print(f"📦 Archived to: {archive_path}")
+    except OSError as e:
+        print(f"❌ Failed to archive: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def create_symlink(script_path: Path) -> None:
+    if script_path.suffix.lower() == ".rs":
+        return
+    symlink_path = script_path.parent / script_path.stem
+    if symlink_path.exists() and symlink_path.is_symlink():
+        symlink_path.unlink()
+    if not symlink_path.exists():
+        try:
+            symlink_path.symlink_to(script_path)
+            print(f"  → Symlink: {symlink_path.name}")
+        except OSError as e:
+            print(f"  ⚠️  Symlink failed: {e}", file=sys.stderr)
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
+    archive = "-a" in sys.argv
+    args = [arg for arg in sys.argv[1:] if arg != "-a"]
+    if len(args) != 1:
+        print(f"Usage: {sys.argv[0]} [-a] <filename>", file=sys.stderr)
         sys.exit(1)
-    out_file = Path(sys.argv[1])
-    content = get_clipboard()
-    if not content:
-        content = "\n"
-    if cwd in {homebin, homebin2}:
-        shebang = detect_shebang(content)
-        if shebang:
-            content = shebang + content
-    lines = content.splitlines()
-    if lines[0].startswith("#!") and lines[1].startswith("#!"):
-        lines.pop(1)
-        content = "\n".join(lines)
-    out_file.write_text(content, encoding="utf-8")
-    if cwd in {homebin, homebin2}:
-        out_file.chmod(493)
-        create_symlink(out_file)
+    filename = args[0]
+    if not "." in filename.strip():
+        print("you didnt provide an extension,continue?")
+        ans = input("y/n")
+        if not ans == "y":
+            sys.exit(0)
+    output_path = Path(filename)
+    is_script_dir = Path.cwd() in SCRIPT_DIRS or Path.cwd().name == "bin"
+    if archive and output_path.exists():
+        archive_existing_file(output_path)
+    content = get_clipboard_content()
+    if not content.strip():
+        content = (TERMUX_SHEBANGS[get_language_from_extension(filename)] + "\n\n") if is_script_dir else "\n"
+    elif is_script_dir:
+        lang = get_language_from_extension(filename)
+        content = replace_shebang(content, lang)
+    try:
+        output_path.write_text(content)
+    except OSError as e:
+        print(f"Error writing file: {e}", file=sys.stderr)
+        sys.exit(1)
+    if is_script_dir:
+        output_path.chmod(0o755)
+        create_symlink(output_path)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

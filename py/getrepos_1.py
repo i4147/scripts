@@ -1,5 +1,4 @@
 #!/data/data/com.termux/files/usr/bin/env python
-
 from __future__ import annotations
 import json
 from os import getenv
@@ -7,7 +6,6 @@ from pathlib import Path
 import sys
 import threading
 import time
-
 from dotenv import load_dotenv
 from github import Auth, Github, GithubException
 

@@ -1,224 +1,221 @@
-from __future__ import annotations
-
 import argparse
-import concurrent.futures
-import os
+import logging
 import shutil
 import sys
+import tarfile
+from io import BytesIO
+from multiprocessing.pool import Pool
 from pathlib import Path
-
 import zstandard as zstd
 
-try:
-    from dh import cprint, gsz
-except Exception:
+ZST_EXT = ".zst"
+SKIP_EXTS = frozenset({
+    ".xz",
+    ".br",
+    ".7z",
+    ".zip",
+    ".gz",
+    ".bz2",
+    ".zst",
+    ".whl",
+    ".mp4",
+    ".mp3",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".webm",
+})
+SKIP_DIRS = frozenset({".git", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache"})
+FIXED_WORKERS = 8
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger(__name__)
 
-    def gsz(p: Path | str) -> int:
-        try:
-            return int(Path(p).stat().st_size)
-        except Exception:
-            return 0
 
-    def cprint(msg: str) -> None:
-        print(msg)
-
-
-COMPRESSED_EXTS = {".xz", ".br", ".7z", ".zip", ".gz", ".bz2", ".zst", ".whl"}
+def fsize(num):
+    for unit in ["B", "KB", "MB", "GB"]:
+        if num < 1024:
+            return f"{num:.1f} {unit}"
+        num /= 1024
+    return f"{num:.1f} TB"
 
 
-def human_size(size: float) -> str:
-    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
-        if abs(size) < 1024.0:
-            return f"{size:3.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} PiB"
-
-
-def should_compress_entry(entry: os.DirEntry) -> bool:
+def get_dir_size(path):
+    total = 0
     try:
-        if not entry.is_file(follow_symlinks=False):
-            return False
-        suffix = Path(entry.name).suffix
-        if suffix in COMPRESSED_EXTS:
-            return False
-
-        return entry.stat(follow_symlinks=False).st_size > 0
-    except (OSError, PermissionError):
-        return False
+        for entry in path.rglob("*"):
+            if entry.is_file():
+                total += entry.stat().st_size
+    except Exception:
+        pass
+    return total
 
 
-def list_dirs(path: Path) -> list[Path]:
-    out = []
-    with os.scandir(path) as it:
-        for entry in it:
-            try:
-                if entry.is_dir(follow_symlinks=False):
-                    out.append(Path(entry.path))
-            except Exception:
-                continue
-    return sorted(out)
-
-
-def list_files(path: Path) -> list[Path]:
-    out = []
-    with os.scandir(path) as it:
-        for entry in it:
-            try:
-                if should_compress_entry(entry):
-                    out.append(Path(entry.path))
-            except Exception:
-                continue
-    return sorted(out)
-
-
-def compress_folder_sync(folder_path: Path, output_base_name: str, fmt: str = "tar") -> tuple[bool, str | None]:
-    try:
-        archive = shutil.make_archive(output_base_name, fmt, str(folder_path))
-        return True, archive
-    except Exception as e:
-        return False, str(e)
-
-
-def compress_file_sync(path: Path, level: int, zstd_threads: int) -> dict:
-    result = {
-        "path": path,
-        "success": False,
-        "skipped": False,
-        "error": None,
-        "before": 0,
-        "after": 0,
-    }
-    dst = path.with_suffix(path.suffix + ".zst")
+def compress_file(path, level=21):
+    dst = path.with_suffix(path.suffix + ZST_EXT)
     if dst.exists():
-        result["skipped"] = True
-        return result
+        return {"status": "skip", "path": str(path)}
     try:
-        st = path.stat()
-        before = st.st_size
-        if before == 0:
-            result["skipped"] = True
-            return result
-        result["before"] = before
-
-        cctx = zstd.ZstdCompressor(level=level, threads=zstd_threads)
-
-        with path.open("rb") as fin, dst.open("wb") as fout:
-            cctx.copy_stream(fin, fout)
-
-        after = dst.stat().st_size if dst.exists() else 0
-        result["after"] = after
-
-        if after == 0:
-            try:
-                dst.unlink(missing_ok=True)
-            except Exception:
-                pass
-            result["error"] = "empty destination"
-            return result
-
-        try:
+        size = path.stat().st_size
+        if size == 0:
             path.unlink()
-        except Exception as e:
-            result["error"] = f"compressed but failed to delete original: {e}"
-            result["success"] = True
-            return result
-
-        result["success"] = True
-        return result
+            return {"status": "skip", "path": str(path), "reason": "empty"}
+        cctx = zstd.ZstdCompressor(level=level, write_content_size=True)
+        data = path.read_bytes()
+        compressed = cctx.compress(data)
+        dst.write_bytes(compressed)
+        path.unlink()
+        return {
+            "status": "ok",
+            "path": str(path),
+            "original": size,
+            "compressed": len(compressed),
+        }
     except Exception as e:
-        result["error"] = str(e)
-
-        try:
-            if dst.exists() and dst.stat().st_size == 0:
-                dst.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return result
+        dst.unlink(missing_ok=True)
+        return {"status": "error", "path": str(path), "error": str(e)}
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Fast parallel zstd compressor for a directory.")
-    parser.add_argument("--level", type=int, default=3, help="zstd compression level (lower = faster, default 3).")
+def decompress_file(path):
+    if path.suffix != ZST_EXT:
+        return {"status": "skip", "path": str(path)}
+    dst = path.with_suffix("")
+    if dst.exists():
+        return {"status": "skip", "path": str(path)}
+    try:
+        dctx = zstd.ZstdDecompressor()
+        data = path.read_bytes()
+        decompressed = dctx.decompress(data)
+        dst.write_bytes(decompressed)
+        if dst.suffix == ".tar":
+            try:
+                with tarfile.open(dst, "r") as tar:
+                    tar.extractall(path=dst.parent)
+                dst.unlink()
+                path.unlink()
+                return {
+                    "status": "ok",
+                    "path": str(path),
+                    "extracted": True,
+                    "original": len(data),
+                    "decompressed": len(decompressed),
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "path": str(path),
+                    "error": f"tar extract: {e}",
+                }
+        path.unlink()
+        return {
+            "status": "ok",
+            "path": str(path),
+            "dst": str(dst),
+            "original": len(data),
+            "decompressed": len(decompressed),
+        }
+    except Exception as e:
+        dst.unlink(missing_ok=True)
+        return {"status": "error", "path": str(path), "error": str(e)}
+
+
+def compress_dir(path, level=21):
+    zst_path = path.with_name(f"{path.name}.tar{ZST_EXT}")
+    try:
+        buf = BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            tar.add(path, arcname=path.name)
+        tar_data = buf.getvalue()
+        cctx = zstd.ZstdCompressor(level=level, write_content_size=True)
+        compressed = cctx.compress(tar_data)
+        orig_size = get_dir_size(path)
+        zst_path.write_bytes(compressed)
+        shutil.rmtree(path)
+        return {
+            "status": "ok",
+            "path": str(path),
+            "original": orig_size,
+            "compressed": len(compressed),
+        }
+    except Exception as e:
+        zst_path.unlink(missing_ok=True)
+        return {"status": "error", "path": str(path), "error": str(e)}
+
+
+def process_files_async(files, operation, level=21):
+    with Pool(processes=FIXED_WORKERS) as pool:
+        async_results = []
+        for path in files:
+            if operation == "compress":
+                async_result = pool.apply_async(compress_file, (path, level))
+            else:
+                async_result = pool.apply_async(decompress_file, (path,))
+            async_results.append(async_result)
+        for async_result in async_results:
+            try:
+                res = async_result.get(timeout=300)
+                if res["status"] == "ok":
+                    if operation == "compress":
+                        print(f"  ✓ {Path(res['path']).name}: {fsize(res['original'])} → {fsize(res['compressed'])}")
+                    else:
+                        print(f"  ✓ {Path(res['path']).name}")
+                elif res["status"] == "error":
+                    logger.error(f"  ✗ {res['path']}: {res.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"  ✗ Failed to process task: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="zser – modern parallel Zstandard compressor")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-c", "--compress", action="store_true", default=True)
+    group.add_argument("-d", "--decompress", action="store_true")
+    parser.add_argument("-l", "--level", type=int, default=21, help="Compression level (1-22)")
     parser.add_argument(
-        "--workers", type=int, default=0, help="number of parallel worker threads (default auto based on CPU)."
+        "-w",
+        "--workers",
+        type=int,
+        default=FIXED_WORKERS,
+        help=f"Number of workers (fixed at {FIXED_WORKERS})",
     )
-    parser.add_argument(
-        "--format",
-        type=str,
-        default="tar",
-        choices=("tar", "zip"),
-        help="archive format for directories (default: tar)",
-    )
-    parser.add_argument("path", nargs="?", default=".", help="target directory (default: current)")
+    parser.add_argument("-p", "--path", type=Path, default=Path.cwd())
+    parser.add_argument("--no-dirs", action="store_true")
     args = parser.parse_args()
-
-    target = Path(args.path).resolve()
+    target = args.path.resolve()
     if not target.is_dir():
-        print("Target must be a directory", file=sys.stderr)
-        return 2
-
-    cpu = os.cpu_count() or 1
-    workers = args.workers if args.workers > 0 else min(32, cpu * 2)
-    zstd_threads = max(1, min(4, cpu))
-
-    before_total = gsz(target)
-
-    dirs = list_dirs(target)
-    if dirs:
-        for d in dirs:
-            base = str(d.parent / d.name)
-            ok, info = compress_folder_sync(d, base, fmt=args.format)
-            if ok:
-                print(f"compressed {d.relative_to(target)} -> {Path(base + '.' + args.format).name}")
-                try:
-                    shutil.rmtree(d)
-                except Exception as e:
-                    print(f"warning: failed to remove {d}: {e}")
-            else:
-                print(f"failed to compress directory {d}: {info}")
-
-    files = list_files(target)
-    if not files:
-        print("No files to compress")
-        return 0
-
-    total_original = 0
-    total_compressed = 0
-    successful = 0
-    total_files = len(files)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(compress_file_sync, path, args.level, zstd_threads): path for path in files}
-
-        for i, fut in enumerate(concurrent.futures.as_completed(futures), 1):
-            path = futures[fut]
-            print(f"\n[{i}/{total_files}] {path.name}")
-            res = fut.result()
-            before = res.get("before", 0) or (path.stat().st_size if path.exists() else 0)
-            total_original += before
-            if res["skipped"]:
-                print(f"skipped {path.name}")
-                continue
-            if res["success"]:
-                successful += 1
-                after = res.get("after", 0)
-                total_compressed += after
-                reduction = 0.0
-                if before:
-                    reduction = (before - after) / before * 100
-                print(f"{path.name} | {human_size(before)} → {human_size(after)} ({reduction:.2f}%)")
-            else:
-                print(f"Compression failed for {path}: {res.get('error')}")
-
-    if total_original > 0 and successful > 0:
-        savings = total_original - total_compressed
-        savings_percent = (savings / total_original) * 100
-        print(f"\nSpace saved: {human_size(savings)} ({savings_percent:.1f}%)")
-
-    after_total = gsz(target)
-    dsz = abs(before_total - after_total)
-    ratio = (dsz / before_total * 100) if before_total else 0.0
-    cprint(f"space saved: {human_size(dsz)} | {ratio:.2f}%")
+        logger.error("Target must be a directory")
+        return 1
+    initial_size = get_dir_size(target)
+    mode = "decompress" if args.decompress else "compress"
+    print(f"zser - {mode} | {target} | workers={FIXED_WORKERS} | size={fsize(initial_size)}")
+    if args.decompress:
+        files = list(target.glob(f"*{ZST_EXT}"))
+        if not files:
+            print("No .zst files found")
+            return 0
+        process_files_async(files, "decompress")
+    else:
+        if not args.no_dirs:
+            dirs = [p for p in target.iterdir() if p.is_dir() and p.name not in SKIP_DIRS]
+            for d in dirs:
+                print(f"  dir  {d.name}...")
+                res = compress_dir(d, args.level)
+                if res["status"] == "ok":
+                    print(f"    ✓ {fsize(res['original'])} → {fsize(res['compressed'])}")
+                elif res["status"] == "error":
+                    logger.error(f"    ✗ {res.get('error', 'Unknown error')}")
+        files = [p for p in target.iterdir() if p.is_file() and p.suffix not in SKIP_EXTS]
+        if files:
+            process_files_async(files, "compress", args.level)
+        else:
+            print("Nothing to compress")
+    final_size = get_dir_size(target)
+    print(f"\nFinal size: {fsize(final_size)} (saved {fsize(initial_size - final_size)})")
     return 0
 
 

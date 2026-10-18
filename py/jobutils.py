@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import multiprocessing
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
@@ -11,7 +10,6 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 R = TypeVar("R")
-
 MAX_WORKERS = 8
 _MP_CONTEXT = get_context("spawn")
 

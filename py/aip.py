@@ -1,12 +1,9 @@
-#!/data/data/com.termux/files/usr/bin/python
-
 import sys
 import time
 import requests
 
 
 def get_connection_info():
-    # Define backends with their configuration and standardizing parser functions
     backends = [
         {
             "name": "ip-api.com",
@@ -54,26 +51,19 @@ def get_connection_info():
             ),
         },
     ]
-
     for backend in backends:
         try:
-            # Using a 5-second timeout per backend attempt
             response = requests.get(backend["url"], timeout=5)
             response.raise_for_status()
             data = response.json()
-
             info = backend["parser"](data)
             if info:
                 return info
             else:
                 print(f"[{backend['name']}] Data parsing error or API error response.")
-
         except requests.exceptions.RequestException as e:
             print(f"[{backend['name']}] Connection failed: {e}")
-            # Loop continues to the next available backend
             continue
-
-    # If all backends in the loop fail
     print("All IP service backends failed.")
     return None
 

@@ -1,10 +1,8 @@
-import argparse
 import re
 import sys
 import time
 from io import BytesIO
 from pathlib import Path
-
 import pycurl
 from bs4 import BeautifulSoup
 from dh import cprint
@@ -14,7 +12,6 @@ TIMEOUT = 30
 DOWNLOAD_DIR = Path.cwd()
 MAX_RETRIES = 3
 RETRY_DELAY = 2
-
 ARCH_TAGS = [
     "win32",
     "win_amd64",
@@ -63,7 +60,6 @@ ARCH_TAGS = [
     "32",
     "64",
 ]
-
 WHEEL_PLATFORM_RE = re.compile(
     r"-(cp\d+|pp\d+|py\d+)"
     r"(-(cp\d+|pp\d+|py\d+))?"
@@ -117,55 +113,31 @@ def select_best_url(links: list, pkg_name: str) -> tuple[str, str, str] | None:
     sdist_candidates = []
     pure_wheel_candidates = []
     arch_skipped = []
-
     for link in links:
         href = link.get("href", "").strip()
         if not href:
             continue
         url = href.split("#")[0]
         filename = link.get_text().strip() or url.split("/")[-1]
-
         if is_windows_url(url):
             continue
-
         if has_arch_tag(url):
             arch_skipped.append((url, filename))
             continue
-
         if is_sdist(url):
             sdist_candidates.append((url, filename))
         elif is_pure_wheel(url):
             pure_wheel_candidates.append((url, filename))
-
     if sdist_candidates:
         url, filename = sdist_candidates[-1]
         return (url, filename, "download")
-
     if pure_wheel_candidates:
         url, filename = pure_wheel_candidates[-1]
         return (url, filename, "download")
-
     if arch_skipped:
         url, filename = arch_skipped[-1]
         return (url, filename, "skip")
-
     return None
-
-
-def find_existing_package(pkg_name: str) -> bool:
-    normalized = pkg_name.lower().replace("-", "_").replace(".", "_")
-    pattern = re.compile(
-        r"^" + re.escape(normalized) + r"[-_.]v?\d",
-        re.IGNORECASE,
-    )
-
-    for f in DOWNLOAD_DIR.iterdir():
-        if not f.is_file() or f.stat().st_size == 0:
-            continue
-        fname = f.name.lower().replace("-", "_")
-        if pattern.match(fname):
-            return True
-    return False
 
 
 def fetch_package_page(pkg_name: str) -> str:
@@ -273,6 +245,7 @@ def download_file(url: str, filename: str) -> bool:
             response_code = curl.getinfo(curl.RESPONSE_CODE)
             if response_code == 200:
                 print()
+                file_size = output_path.stat().st_size
                 return True
             else:
                 if response_code == 402:
@@ -299,112 +272,22 @@ def process_package(pkg_name: str) -> tuple[bool, bool]:
     download_info = extract_latest_download_url(html, pkg_name)
     if not download_info:
         return (False, False)
-
     url, filename, status = download_info
-
     if status == "skip":
         return (True, True)
-
     print(f"Download URL: {url}")
     ok = download_file_with_retry(url, filename)
     return (ok, False)
 
 
-def load_packages_from_file(file_path: str) -> list[str]:
-    path = Path(file_path)
-    if not path.is_file():
-        print(f"Error: file not found: {file_path}", file=sys.stderr)
-        sys.exit(1)
-
-    packages = []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for raw_line in f:
-                line = raw_line.split("#", 1)[0].strip()
-                if not line:
-                    continue
-
-                m = re.match(r"^([A-Za-z0-9_.\-]+)", line)
-                if m:
-                    packages.append(m.group(1))
-    except OSError as e:
-        print(f"Error reading file {file_path}: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    return packages
-
-
 def main():
-    parser = argparse.ArgumentParser(
-        prog="pypi-mirror-dl",
-        description="Download packages from a PyPI mirror (source distributions "
-        "and pure-Python wheels preferred; arch-specific wheels skipped).",
-    )
-    parser.add_argument(
-        "packages",
-        nargs="*",
-        help="Package name(s) to download.",
-    )
-    parser.add_argument(
-        "-f",
-        "--file",
-        dest="file",
-        metavar="FILE",
-        help="Read package names from FILE (one per line; blank lines and '#' comments are ignored).",
-    )
-    parser.add_argument(
-        "-d",
-        "--dir",
-        dest="directory",
-        metavar="DIR",
-        help="Download directory (default: current directory).",
-    )
-    args = parser.parse_args()
-
-    global DOWNLOAD_DIR
-    if args.directory:
-        DOWNLOAD_DIR = Path(args.directory).expanduser().resolve()
-        if not DOWNLOAD_DIR.is_dir():
-            print(
-                f"Error: download directory does not exist: {DOWNLOAD_DIR}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-    packages = list(args.packages)
-    if args.file:
-        file_pkgs = load_packages_from_file(args.file)
-        print(f"Loaded {len(file_pkgs)} package(s) from {args.file}")
-        packages.extend(file_pkgs)
-
-    if not packages:
-        parser.print_help()
-        sys.exit(1)
-
-    seen = set()
-    unique_packages = []
-    for p in packages:
-        key = p.lower()
-        if key not in seen:
-            seen.add(key)
-            unique_packages.append(p)
-    packages = unique_packages
-
-    print(f"Processing {len(packages)} package(s)...\n")
-
+    packages = sys.argv[1:]
     start_time = time.time()
     successful = []
     failed = []
     skipped = []
-    already_exists = []
-
     for pkg_name in packages:
-        print(f"[{pkg_name}]")
         try:
-            if find_existing_package(pkg_name):
-                print(f"  Already exists, skipping")
-                already_exists.append(pkg_name)
-                continue
             ok, was_skipped = process_package(pkg_name)
             if was_skipped:
                 skipped.append(pkg_name)
@@ -413,19 +296,11 @@ def main():
             else:
                 failed.append(pkg_name)
         except Exception as e:
-            print(f"  Error: {e}")
             failed.append(pkg_name)
-
-    elapsed = time.time() - start_time
-
     if successful:
         print(f"\nSuccessfully downloaded:")
         for pkg in successful:
             print(f"  ✓ {pkg}")
-    if already_exists:
-        print(f"\nAlready present:")
-        for pkg in already_exists:
-            print(f"  • {pkg}")
     if skipped:
         print(f"\nSkipped (arch-specific, no pure source/wheel available):")
         for pkg in skipped:
@@ -434,17 +309,6 @@ def main():
         print(f"\nFailed to download:")
         for pkg in failed:
             print(f"  ✗ {pkg}")
-
-    print(
-        f"\nDone in {elapsed:.1f}s — "
-        f"{len(successful)} downloaded, "
-        f"{len(already_exists)} already present, "
-        f"{len(skipped)} skipped, "
-        f"{len(failed)} failed"
-    )
-
-    if failed:
-        sys.exit(1)
 
 
 if __name__ == "__main__":

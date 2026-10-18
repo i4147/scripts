@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 import sys
 from pathlib import Path
-
 import tree_sitter_cpp as tscpp
 from dh import cprint, getfiles, mpf3
 from tree_sitter import Language, Node, Parser

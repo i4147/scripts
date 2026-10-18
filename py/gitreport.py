@@ -3,11 +3,9 @@
 ---"""
 
 from __future__ import annotations
-
 import argparse
 import json
 import subprocess
-
 import pygit2
 from dulwich.repo import Repo
 from git import Repo as GitRepo
@@ -151,7 +149,6 @@ def get_added_files_per_commit_gitcli(repo_path: str) -> dict:
         text=True,
         check=True,
     ).stdout
-
     for line in log.splitlines():
         parts = line.split()
         if not parts:
@@ -190,9 +187,7 @@ def main():
     parser.add_argument("output_path", nargs="?", default="added_files.json")
     parser.add_argument("-b", "--backend", choices=list(BACKENDS), default="dulwich")
     args = parser.parse_args()
-
     data = BACKENDS[args.backend](args.repo_path)
-
     with open(args.output_path, "w") as f:
         json.dump(data, f, indent=2)
     print(f"Wrote {len(data)} commits to {args.output_path} using {args.backend}")

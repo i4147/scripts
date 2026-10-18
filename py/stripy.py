@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import ast
 import sys
 from pathlib import Path
 from typing import Sequence
-
 import libcst as cst
 
 
@@ -40,7 +38,6 @@ def _strip_suite(body: cst.BaseSuite, ensure_body: bool = True) -> cst.BaseSuite
     if isinstance(body, cst.IndentedBlock):
         new_inner = _strip_first_docstring(body.body, ensure_body=ensure_body)
         return body.with_changes(body=new_inner)
-
     if isinstance(body, cst.SimpleStatementSuite):
         new_inner = list(body.body)
         if new_inner and _is_docstring_small(new_inner[0]):
@@ -48,13 +45,11 @@ def _strip_suite(body: cst.BaseSuite, ensure_body: bool = True) -> cst.BaseSuite
         if ensure_body and not new_inner:
             new_inner = [cst.Pass()]
         return body.with_changes(body=new_inner)
-
     return body
 
 
 class StripTransformer(cst.CSTTransformer):
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-
         return updated_node.with_changes(body=_strip_first_docstring(updated_node.body, ensure_body=False))
 
     def _strip_func(self, updated_node):
@@ -92,17 +87,14 @@ def process_file(path: Path) -> bool:
     except UnicodeDecodeError:
         print(f"  skip (not utf-8): {path}", file=sys.stderr)
         return False
-
     try:
         module = cst.parse_module(source)
     except cst.ParserSyntaxError as exc:
         print(f"  skip (parse error): {path}: {exc}", file=sys.stderr)
         return False
-
     new_code = module.visit(StripTransformer()).code
     if new_code == source:
         return False
-
     try:
         ast.parse(new_code)
     except SyntaxError as exc:
@@ -119,7 +111,6 @@ def process_file(path: Path) -> bool:
             file=sys.stderr,
         )
         return False
-
     path.write_text(new_code, encoding="utf-8")
     return True
 
@@ -129,7 +120,6 @@ def main() -> int:
     if not root.is_dir():
         print(f"Not a directory: {root}", file=sys.stderr)
         return 1
-
     changed = 0
     total = 0
     for path in sorted(root.rglob("*.py")):
@@ -137,7 +127,6 @@ def main() -> int:
         if process_file(path):
             changed += 1
             print(f"  updated {path}")
-
     print(f"\nDone. {changed}/{total} file(s) modified.")
     return 0
 

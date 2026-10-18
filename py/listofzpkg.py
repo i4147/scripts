@@ -126,6 +126,5 @@ if __name__ == "__main__":
         ret, txt, err = runcmd(cmd, show_output=True)
         if ret:
             errors.append(pkg)
-
     if errors:
         print(errors)

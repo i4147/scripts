@@ -1,7 +1,6 @@
 import sys
 
 nl = []
-
 fn = sys.argv[1]
 with open(fn) as f:
     for line in f:

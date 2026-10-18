@@ -1,7 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import argparse
 import subprocess
 import sys
@@ -10,7 +8,6 @@ from enum import Enum
 from multiprocessing import Pool
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
-
 from loguru import logger
 
 if TYPE_CHECKING:

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed

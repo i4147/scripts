@@ -5,7 +5,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import requests
 
 PART_SIZE = 10 * 1024 * 1024

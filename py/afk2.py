@@ -14,10 +14,8 @@ def parse_import(line):
         from_, module, import_, rest = line.split(None, 3)
     except ValueError:
         raise ImportParseException(line)
-
     if (from_, import_) != ("from", "import"):
         raise ImportParseException(line)
-
     symbols = [s.strip() for s in rest.split(",")]
     return module, symbols
 
@@ -28,7 +26,6 @@ def parse_splat_import(line):
         assert import_ == "import"
     except (ValueError, AssertionError):
         raise ImportParseException(line)
-
     return set((s.strip() for s in rest.split(",")))
 
 
@@ -46,20 +43,16 @@ class DefaultDict(dict):
 def gather_imports(lines):
     imports = DefaultDict(set())
     splats = set()
-
     prev = ""
     for line in lines:
         if prev:
             line = prev + line
             prev = ""
-
         if line.endswith("\\"):
             prev = line[:-1]
             continue
-
         if not line.strip():
             continue
-
         try:
             module, symbols = parse_import(line)
         except ImportParseException:
@@ -67,7 +60,6 @@ def gather_imports(lines):
         else:
             for s in symbols:
                 imports[module].add(s)
-
     return imports, splats
 
 
@@ -109,7 +101,6 @@ def add_wrapped_import(output, module, symbols, maxlen=78) -> None:
     lower_syms = []
     upper_syms = []
     other_syms = []
-
     for s in symbols:
         if s.islower():
             lower_syms.append(s)
@@ -117,7 +108,6 @@ def add_wrapped_import(output, module, symbols, maxlen=78) -> None:
             upper_syms.append(s)
         else:
             other_syms.append(s)
-
     line = "from %s import " % module
 
     def stricmp(a, b):
@@ -130,7 +120,6 @@ def add_wrapped_import(output, module, symbols, maxlen=78) -> None:
             line = "from %s import %s, " % (module, s)
         else:
             line += s + ", "
-
     if line:
         output.append(line[:-2])
 
@@ -146,11 +135,9 @@ def format_imports(imports: DefaultDict, splats):
 def cleanup_imports(input_lines):
     used_tokens = used_symbols(input_lines)
     imports, splats = gather_imports(input_lines)
-
     cull_unused(used_tokens, splats)
     for i in imports.values():
         cull_unused(used_tokens, i)
-
     return format_imports(imports, splats)
 
 

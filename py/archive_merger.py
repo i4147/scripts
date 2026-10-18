@@ -25,11 +25,9 @@ def compress_tgz_parallel(folder: Path, num_workers: int = 8, cleanup: bool = Tr
         folder = folder.resolve()
         archive_name = f"{folder.name}.tar.gz"
         archive_path = folder.parent / archive_name
-
         print(f"Creating archive: {archive_path}")
         with tarfile.open(archive_path, "w:gz") as tar:
             tar.add(folder, arcname=folder.name)
-
         if cleanup:
             print("Removing original files...")
             items = [item for item in folder.iterdir() if item.resolve() != archive_path]
@@ -60,19 +58,15 @@ def _remove_items_fast(items: list[Path], num_workers: int) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Archive creation and cleanup tool")
     subparsers = parser.add_subparsers(dest="mode", required=True)
-
     tar_parser = subparsers.add_parser("tar", help="Create TAR archive and optionally remove folder")
     tar_parser.add_argument("folder", type=Path, help="Folder to archive")
     tar_parser.add_argument("--output", type=Path, default=None, help="Output archive path")
     tar_parser.add_argument("--cleanup", action="store_true", default=False, help="Remove folder after compression")
-
     tgz_parser = subparsers.add_parser("tgz", help="Create TAR.GZ archive and cleanup contents")
     tgz_parser.add_argument("folder", type=Path, help="Folder to archive")
     tgz_parser.add_argument("--workers", type=int, default=8, help="Number of parallel workers")
     tgz_parser.add_argument("--no-cleanup", action="store_true", help="Keep original files")
-
     args = parser.parse_args()
-
     folder = Path(args.folder)
     if not folder.exists():
         print(f"Error: Folder '{folder}' not found.")
@@ -80,14 +74,12 @@ def main() -> int:
     if not folder.is_dir():
         print(f"Error: '{folder}' is not a directory.")
         return 1
-
     if args.mode == "tar":
         success = compress_tar(folder, args.output, args.cleanup)
     elif args.mode == "tgz":
         success = compress_tgz_parallel(folder, args.workers, not args.no_cleanup)
     else:
         return 1
-
     return 0 if success else 1
 
 

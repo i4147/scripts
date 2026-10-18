@@ -1,7 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import argparse
 import multiprocessing
 import runpy
@@ -10,7 +8,6 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
-
 from loguru import logger
 
 NUM_WORKERS: int = 8

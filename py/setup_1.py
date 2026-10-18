@@ -2,41 +2,34 @@ from distutils.core import Command
 from setuptools import setup
 from setuptools.command.install import install
 from distutils.command.build import build
-
 import subprocess
 import sys
 import os
 import re
 
 __VERSION__ = "0.1.4"
-
 _ENC_TMPL = """
 #include <cstdio>
 #include <cstring>
 #include "compact_lang_det.h"
 #include "encodings.h"
 #include "shims.h"
-
 struct cld_encoding {
   const char *name;
   CLD2::Encoding encoding;
 };
-
 extern const char* const cld_encodings[] = {
 %(names)s
 };
-
 extern const cld_encoding cld_encoding_info[] = {
 %(encodings)s
 };
-
 CLD2::Encoding EncodingFromName(const char *name) {
   for(int i=0;i<CLD2::NUM_ENCODINGS;i++) {
     if (!strcasecmp(cld_encoding_info[i].name, name)) {
       return cld_encoding_info[i].encoding;
     }
   }
-
   return CLD2::UNKNOWN_ENCODING;
 }
 """
@@ -56,12 +49,10 @@ def generate_encodings(encoding_header, output_file):
                     continue
                 lines.append('  {"%s", CLD2::%s},' % (name, name))
                 names.append('"%s",' % name)
-
         enc_table = _ENC_TMPL % {
             "encodings": "\n".join(lines),
             "names": "\n".join(names),
         }
-
         with open(output_file, "w") as output:
             output.write(enc_table)
 

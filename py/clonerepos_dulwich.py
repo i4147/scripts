@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import requests
 from dh import fsz
 from dulwich import porcelain

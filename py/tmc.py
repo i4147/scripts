@@ -1,13 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Strip Python comments/docstrings recursively, updating files atomically.
-
 Requires Python 3.14 for cf.interpreter; other backends work on 3.11+.
 Install: python -m pip install tree-sitter tree-sitter-python
 Optional: python -m pip install joblib
 """
 
 from __future__ import annotations
-
 import argparse
 import ast
 import codecs
@@ -24,7 +22,6 @@ from dataclasses import dataclass
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from typing import Iterable
-
 import tree_sitter
 import tree_sitter_python
 
@@ -282,7 +279,6 @@ def main() -> int:
 
         if importlib.util.find_spec("joblib") is None:
             parser.error("install joblib: python -m pip install joblib")
-
     # pathlib does not follow directory symlinks by default. Skip file symlinks too.
     paths = sorted(p for p in Path.cwd().rglob("*.py") if p.is_file() and not p.is_symlink())
     tasks = [(p, args.c, args.d) for p in paths]

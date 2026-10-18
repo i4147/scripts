@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import os
 import shutil
 import sys
 from pathlib import Path
-
 from git import Repo, InvalidGitRepositoryError, NoSuchPathError
 from github import Github
 from github.Auth import Token
@@ -20,7 +18,6 @@ def get_dir_name():
 def copy_gitignore():
     src = Path.home() / ".gitignore"
     dst = Path.cwd() / ".gitignore"
-
     if src.exists() and not dst.exists():
         shutil.copy2(src, dst)
         print(f"Copied {src} -> {dst}")
@@ -70,7 +67,6 @@ def ensure_origin(repo: Repo, repo_name: str):
     if "origin" in [r.name for r in repo.remotes]:
         print("Remote 'origin' already exists.")
         return
-
     if repo_exists_on_github(repo_name):
         print(f"GitHub repo '{repo_name}' already exists on your account.")
         origin_url = f"git@github.com:{repo_name}.git"
@@ -86,7 +82,6 @@ def ensure_origin(repo: Repo, repo_name: str):
         if result.returncode != 0:
             print(f"Error: {result.stderr}")
             sys.exit(1)
-
         origin_url = f"git@github.com:{repo_name}.git"
         repo.create_remote("origin", origin_url)
         print(f"Added remote origin: {origin_url}")
@@ -121,13 +116,11 @@ def push_changes(repo: Repo):
 def main():
     repo_name = get_dir_name()
     print(f"Repository name: {repo_name}")
-
     copy_gitignore()
     repo = ensure_local_repo()
     ensure_origin(repo, repo_name)
     commit_if_needed(repo)
     push_changes(repo)
-
     print(f"\n✅ Success! Repository '{repo_name}' is on GitHub or updated there.")
     print(f"View it at: https://github.com/{repo_name}")
 

@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import json
 import logging
 import re
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
 from dh import get_nobinary
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

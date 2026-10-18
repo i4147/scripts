@@ -1,6 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
 from __future__ import annotations
-
 import contextlib
 import io
 import os
@@ -18,7 +17,6 @@ from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Optional, Sequence
 from urllib.parse import urlparse
-
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -26,7 +24,6 @@ from rich.table import Table
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
 err_console = Console(stderr=True)
-
 DEFAULT_GITHUB_USERNAME = "i4147"
 DEFAULT_GIT_EMAIL = "adnanonagh@gmail.com"
 DEFAULT_GIT_USER = "i4147"

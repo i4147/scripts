@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import os
 import shutil
 import subprocess
@@ -32,15 +31,12 @@ def get_dir_name():
 def copy_gitignore():
     src = Path.home() / ".gitignore"
     dst = Path.cwd() / ".gitignore"
-
     if not src.exists():
         print(f"No global .gitignore found at {src}")
         return
-
     if dst.exists():
         print(".gitignore already exists in current directory.")
         return
-
     shutil.copy2(src, dst)
     print(f"Copied {src} -> {dst}")
 
@@ -48,21 +44,17 @@ def copy_gitignore():
 def main():
     repo_name = get_dir_name()
     print(f"Repository name: {repo_name}")
-
     copy_gitignore()
-
     if not is_git_repo():
         print("Initializing git repository...")
         run_command(["git", "init"])
     else:
         print("Git repository already initialized.")
-
     result = subprocess.run(
         ["git", "remote", "get-url", "origin"],
         capture_output=True,
         text=True,
     )
-
     if result.returncode != 0:
         print(f"Creating GitHub repository '{repo_name}'...")
         run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
@@ -78,10 +70,8 @@ def main():
         else:
             print("Remote exists but seems inaccessible. You might need to authenticate.")
             print(f"Remote URL: {result.stdout.strip()}")
-
     print("Adding all files...")
     run_command(["git", "add", "-A"])
-
     status = subprocess.run(
         ["git", "status", "--porcelain"],
         capture_output=True,
@@ -92,7 +82,6 @@ def main():
         run_command(["git", "commit", "-m", "initial"])
     else:
         print("No changes to commit.")
-
     print("Pushing to GitHub...")
     branch_result = subprocess.run(
         ["git", "branch", "--show-current"],
@@ -102,13 +91,11 @@ def main():
     current_branch = (
         branch_result.stdout.strip() if branch_result.returncode == 0 and branch_result.stdout.strip() else "main"
     )
-
     push_result = subprocess.run(
         ["git", "push", "--set-upstream", "origin", current_branch],
         capture_output=True,
         text=True,
     )
-
     if push_result.returncode != 0:
         if "remote contains work that you do not have" in push_result.stderr:
             print("Remote has changes. Pulling first...")
@@ -118,7 +105,6 @@ def main():
         else:
             print(f"Push failed: {push_result.stderr}")
             sys.exit(1)
-
     print(f"\n✅ Success! Repository '{repo_name}' is now on GitHub.")
     print(f"View it at: https://github.com/{repo_name}")
 

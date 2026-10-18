@@ -1,333 +1,269 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from deep_translator import GoogleTranslator
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential_jitter,
-    retry_if_exception_type,
-    before_sleep_log,
-)
+from dh import get_files
 import sys
 import time
-import json
+import random
 import signal
-import logging
+import json
 from datetime import datetime
-from dh import get_nobinary
 
-DELAY_BETWEEN_SEGMENTS = 0.01
-DELAY_BETWEEN_FILES = 1.0
-MAX_RETRIES = 1
-PROGRESS_SAVE_EVERY = 10
-
-logging.basicConfig(level=logging.WARNING)
-log = logging.getLogger(__name__)
-
-_interrupted = False
-
-
-def _sigint_handler(sig, frame):
-    global _interrupted
-    print("\n⚠️  Ctrl+C caught — will stop after current segment.")
-    _interrupted = True
+MAX_WORKERS = 6
+DELAY_BETWEEN_REQUESTS = 0.5
+DELAY_BETWEEN_FILES = 2.0
+RATE_LIMIT_BACKOFF = 5
+MAX_TRANSLATION_RETRIES = 3
+interrupt_occurred = False
+temp_state_file = None
+current_file_path = None
+current_translations = {}
+current_file_lines = []
 
 
-signal.signal(signal.SIGINT, _sigint_handler)
-
-_CHINESE_RANGES = (
-    (0x3400, 0x4DBF),
-    (0x4E00, 0x9FFF),
-    (0xF900, 0xFAFF),
-    (0x20000, 0x2A6DF),
-    (0x2A700, 0x2B73F),
-    (0x2B740, 0x2B81F),
-    (0x2B820, 0x2CEAF),
-    (0x2CEB0, 0x2EBEF),
-)
+def signal_handler(sig, frame):
+    global interrupt_occurred
+    print("\n\n⚠️  Interrupt received! Saving progress...")
+    interrupt_occurred = True
+    save_temp_state()
+    print("✅ Progress saved. Exiting...")
+    sys.exit(0)
 
 
-def is_chinese_ideograph(ch: str) -> bool:
-    return any(lo <= ord(ch) <= hi for lo, hi in _CHINESE_RANGES)
-
-
-def has_chinese(text: str) -> bool:
-    return any(is_chinese_ideograph(ch) for ch in text)
-
-
-def find_chinese_segments(text: str) -> list[tuple[int, int, str]]:
-    segments = []
-    i = 0
-    while i < len(text):
-        if is_chinese_ideograph(text[i]):
-            start = i
-            while i < len(text) and is_chinese_ideograph(text[i]):
-                i += 1
-            segments.append((start, i, text[start:i]))
-        else:
-            i += 1
-    return segments
-
-
-def reassemble_line(original: str, translations: dict[tuple[int, int], str]) -> str:
-    result = []
-    last_end = 0
-
-    for (start, end), translated in sorted(translations.items()):
-        result.append(original[last_end:start])
-
-        result.append(translated)
-        last_end = end
-
-    result.append(original[last_end:])
-    return "".join(result)
-
-
-def read_text(path: Path) -> tuple[str, str]:
-    for enc in ("utf-8", "utf-8-sig", "gb18030", "gbk", "cp1252"):
-        try:
-            return path.read_text(encoding=enc, errors="strict"), enc
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return path.read_bytes().decode("utf-8", errors="replace"), "utf-8"
-
-
-class RateLimitError(Exception):
-    pass
-
-
-class TranslationError(Exception):
-    pass
-
-
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(MAX_RETRIES),
-    wait=wait_exponential_jitter(initial=2, max=60, jitter=3),
-    retry=retry_if_exception_type((RateLimitError, TranslationError)),
-    before_sleep=before_sleep_log(log, logging.DEBUG),
-)
-def _translate(text: str) -> str:
+def save_temp_state():
+    global temp_state_file, current_file_path, current_translations, current_file_lines
+    if not current_file_path or not current_translations:
+        return
     try:
-        result = GoogleTranslator(source="auto", target="en").translate(text)
-        if result is None:
-            raise TranslationError("Translator returned None")
-        if has_chinese(result):
-            raise TranslationError(f"Result still contains Chinese: {result[:40]}")
-        return result
-    except (RateLimitError, TranslationError):
-        raise
-    except Exception as e:
-        msg = str(e).lower()
-        if any(k in msg for k in ("429", "rate limit", "too many", "quota")):
-            print(f"   ⏳ Rate limited — backing off…")
-            raise RateLimitError(str(e))
-        if any(k in msg for k in ("timeout", "timed out", "connection")):
-            raise TranslationError(str(e))
-        raise TranslationError(str(e))
-
-
-def translate_safe(text: str) -> tuple[str, bool]:
-    try:
-        return _translate(text), True
-    except Exception as e:
-        print(f"   ❌ Gave up translating: {e}")
-        return text, False
-
-
-def _progress_path(file_path: Path) -> Path:
-    return file_path.with_suffix(file_path.suffix + ".xlprogress")
-
-
-def save_progress(file_path: Path, done: dict, total: int) -> None:
-    try:
-        serializable_done = {}
-        for line_num, segments in done.items():
-            if isinstance(segments, dict):
-                serializable_segments = {}
-                for (start, end), trans in segments.items():
-                    key = f"{start},{end}"
-                    serializable_segments[key] = trans
-                serializable_done[str(line_num)] = serializable_segments
-            else:
-                serializable_done[str(line_num)] = segments
-
+        temp_file = current_file_path.with_suffix(current_file_path.suffix + ".translation_progress")
         state = {
-            "file": str(file_path),
-            "saved_at": datetime.now().isoformat(),
-            "total_lines": total,
-            "translations": serializable_done,
+            "file_path": str(current_file_path),
+            "timestamp": datetime.now().isoformat(),
+            "translations": current_translations,
+            "total_lines": len(current_file_lines),
+            "translated_count": len(current_translations),
         }
-        _progress_path(file_path).write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        print(f"💾 Progress saved to: {temp_file}")
+        temp_state_file = temp_file
     except Exception as e:
-        print(f"   ⚠️  Could not save progress: {e}")
+        print(f"⚠️  Error saving temp state: {e}")
 
 
-def load_progress(file_path: Path) -> dict:
-    p = _progress_path(file_path)
-    if not p.exists():
-        return {}
+def load_temp_state(file_path: Path) -> dict | None:
+    temp_file = file_path.with_suffix(file_path.suffix + ".translation_progress")
+    if not temp_file.exists():
+        return None
     try:
-        state = json.loads(p.read_text(encoding="utf-8"))
-        if Path(state.get("file", "")) != file_path:
-            return {}
-
-        restored = {}
-        for line_num_str, segments in state["translations"].items():
-            line_num = int(line_num_str)
-            if isinstance(segments, dict):
-                restored_segments = {}
-                for key, trans in segments.items():
-                    start, end = map(int, key.split(","))
-                    restored_segments[(start, end)] = trans
-                restored[line_num] = restored_segments
-            else:
-                restored[line_num] = segments
-
-        total_segments = sum(len(v) if isinstance(v, dict) else 1 for v in restored.values())
-        print(f"   🔄 Resuming: {len(restored)} lines with {total_segments} segments already done")
-        return restored
-    except Exception:
-        return {}
+        with open(temp_file, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        if Path(state["file_path"]) != file_path:
+            return None
+        print(f"🔄 Found saved progress: {state['translated_count']} lines already translated")
+        return state["translations"]
+    except Exception as e:
+        print(f"⚠️  Error loading temp state: {e}")
+        return None
 
 
-def drop_progress(file_path: Path) -> None:
-    p = _progress_path(file_path)
-    if p.exists():
+def cleanup_temp_state(file_path: Path):
+    temp_file = file_path.with_suffix(file_path.suffix + ".translation_progress")
+    if temp_file.exists():
         try:
-            p.unlink()
-        except Exception:
-            pass
+            temp_file.unlink()
+            print(f"🧹 Cleaned up temp file: {temp_file}")
+        except Exception as e:
+            print(f"⚠️  Error cleaning up temp file: {e}")
 
 
-def process_file(path: Path) -> bool:
-    global _interrupted
-
-    print(f"\n📄 {path}")
+def translate_line(line: str, retry_count: int = 0) -> tuple[str, bool]:
     try:
-        text, enc = read_text(path)
-    except Exception as e:
-        print(f"   ❌ Cannot read file: {e}")
-        return False
-
-    lines = text.splitlines(keepends=True)
-
-    line_segments = {}
-    for i, ln in enumerate(lines):
-        stripped = ln.rstrip("\r\n")
-        segments = find_chinese_segments(stripped)
-        if segments:
-            line_segments[i] = segments
-
-    if not line_segments:
-        print(f"   ✅ No Chinese characters found — skipping")
-        drop_progress(path)
-        return True
-
-    total_segments = sum(len(segs) for segs in line_segments.values())
-    print(f"   🔍 {len(line_segments)} line(s) with {total_segments} Chinese segment(s) to translate")
-
-    done: dict = load_progress(path)
-
-    for line_idx in line_segments:
-        if line_idx not in done:
-            done[line_idx] = {}
-
-    completed_segments = sum(len(v) if isinstance(v, dict) else 1 for v in done.values())
-    segment_count = completed_segments
-
-    for line_idx, segments in line_segments.items():
-        if _interrupted:
-            save_progress(path, done, len(lines))
-            print("   💾 Progress saved. Stopping.")
-            return False
-
-        stripped = lines[line_idx].rstrip("\r\n")
-
-        for start, end, chinese_text in segments:
-            if _interrupted:
-                save_progress(path, done, len(lines))
-                print("   💾 Progress saved. Stopping.")
-                return False
-
-            if (start, end) in done[line_idx]:
-                continue
-
-            translated, ok = translate_safe(chinese_text)
-
-            if ok:
-                done[line_idx][(start, end)] = translated
-                status = "✓"
+        result = GoogleTranslator(source="auto", target="en").translate(line)
+        if has_chinese_chars(result):
+            if retry_count < MAX_TRANSLATION_RETRIES:
+                wait_time = RATE_LIMIT_BACKOFF * (retry_count + 1) + random.uniform(0, 2)
+                print(
+                    f"🔄 Translation still has Chinese chars, retry {retry_count + 1}/{MAX_TRANSLATION_RETRIES} in {wait_time:.1f}s"
+                )
+                time.sleep(wait_time)
+                return translate_line(line, retry_count + 1)
             else:
-                done[line_idx][(start, end)] = chinese_text
-                status = "✗"
-
-            segment_count += 1
-
-            print(
-                f"   [{segment_count:>4}/{total_segments}] {status} line {line_idx + 1}: "
-                f"{chinese_text[:20].strip()!r} → {translated[:20].strip()!r}"
-            )
-
-            if segment_count % PROGRESS_SAVE_EVERY == 0:
-                save_progress(path, done, len(lines))
-
-            time.sleep(DELAY_BETWEEN_SEGMENTS)
-
-    out_lines = []
-    for i, line in enumerate(lines):
-        if i in done and done[i]:
-            eol = line[len(line.rstrip("\r\n")) :]
-            stripped = line.rstrip("\r\n")
-            reassembled = reassemble_line(stripped, done[i])
-            out_lines.append(reassembled + eol)
+                print(f"❌ Failed to translate after {MAX_TRANSLATION_RETRIES} retries: {line[:50]}...")
+                return (line, False)
+        return (result, True)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "rate limit" in error_msg or "too many" in error_msg or "429" in error_msg:
+            if retry_count < MAX_TRANSLATION_RETRIES:
+                wait_time = RATE_LIMIT_BACKOFF * (retry_count + 1) + random.uniform(0, 2)
+                print(f"⏳ Rate limit hit! Retry {retry_count + 1}/{MAX_TRANSLATION_RETRIES} in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                return translate_line(line, retry_count + 1)
+            else:
+                print(f"❌ Rate limit persists after {MAX_TRANSLATION_RETRIES} retries")
+                return (line, False)
+        elif "timeout" in error_msg or "timed out" in error_msg:
+            if retry_count < MAX_TRANSLATION_RETRIES:
+                wait_time = 2 * (retry_count + 1) + random.uniform(0, 1)
+                print(f"⏱️ Timeout! Retry {retry_count + 1}/{MAX_TRANSLATION_RETRIES} in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                return translate_line(line, retry_count + 1)
+            else:
+                print(f"❌ Timeout persists after {MAX_TRANSLATION_RETRIES} retries")
+                return (line, False)
         else:
-            out_lines.append(line)
+            print(f"❌ Translation error: {e}")
+            return (line, False)
 
-    tmp = path.with_suffix(path.suffix + ".xltmp")
-    try:
-        tmp.write_text("".join(out_lines), encoding=enc, errors="replace")
-        tmp.rename(path)
-    except Exception as e:
-        print(f"   ❌ Failed to write output: {e}")
+
+def has_chinese_chars(s: str) -> bool:
+    for ch in s:
+        code = ord(ch)
+        if (
+            13312 <= code <= 19903
+            or 19968 <= code <= 40959
+            or 63744 <= code <= 64255
+            or (131072 <= code <= 173791)
+            or (173824 <= code <= 177983)
+            or (177984 <= code <= 178207)
+            or (178208 <= code <= 183983)
+            or (183984 <= code <= 191471)
+        ):
+            return True
+    return False
+
+
+def read_text_maybe(path: Path) -> tuple[str, str]:
+    encodings = ("utf-8", "utf-8-sig", "gb18030", "gbk", "cp1252")
+    for enc in encodings:
         try:
-            tmp.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return False
+            with open(path, "r", encoding=enc, errors="strict") as f:
+                return (f.read(), enc)
+        except UnicodeDecodeError:
+            continue
+    with open(path, "rb") as f:
+        return (f.read().decode("utf-8", errors="replace"), "utf-8")
 
-    drop_progress(path)
 
-    failed_segments = 0
-    for line_idx, segments in line_segments.items():
-        if line_idx in done:
-            for (start, end), trans in done[line_idx].items():
-                if has_chinese(trans):
-                    failed_segments += 1
+def translate_chinese_lines(lines: list[str], line_indices: list[int]) -> dict[int, str]:
+    global current_translations, current_file_lines
+    translations = {}
+    failed_indices = set(line_indices)
+    saved_translations = load_temp_state(current_file_path)
+    if saved_translations:
+        translations.update(saved_translations)
+        for idx in saved_translations:
+            if idx in failed_indices:
+                failed_indices.remove(idx)
+        print(f"📂 Loaded {len(saved_translations)} previously translated lines")
+    if not failed_indices:
+        print("✅ All lines already translated!")
+        return translations
 
-    success_segments = total_segments - failed_segments
-    print(f"   ✅ Done — {success_segments}/{total_segments} segments translated successfully")
-    return True
+    def translate_single(idx_line):
+        idx, line = idx_line
+        time.sleep(random.uniform(0.1, 0.3))
+        translated, success = translate_line(line)
+        return (idx, translated, success)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(translate_single, (idx, lines[idx])): idx for idx in failed_indices}
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                idx, translated, success = future.result()
+                if success:
+                    translations[idx] = translated
+                    current_translations = translations
+                    if len(translations) % 5 == 0:
+                        save_temp_state()
+                else:
+                    translations[idx] = lines[idx].rstrip("\r\n")
+                    print(f"⚠️  Keeping original for line {idx + 1} (translation failed)")
+                time.sleep(DELAY_BETWEEN_REQUESTS)
+            except Exception as e:
+                print(f"❌ Error processing translation: {e}")
+                translations[idx] = lines[idx].rstrip("\r\n")
+    return translations
+
+
+def process_file_inplace(path: Path) -> None:
+    global current_file_path, current_translations, current_file_lines, interrupt_occurred
+    current_file_path = path
+    current_translations = {}
+    current_file_lines = []
+    interrupt_occurred = False
+    try:
+        print(f"\n📁 Processing: {path}")
+        text, enc = read_text_maybe(path)
+        lines = text.splitlines(keepends=True)
+        current_file_lines = lines
+        chinese_lines = []
+        for i, line in enumerate(lines):
+            content = line.rstrip("\r\n")
+            if has_chinese_chars(content):
+                chinese_lines.append(i)
+        if not chinese_lines:
+            print(f"✅ No Chinese chars found: {path}")
+            cleanup_temp_state(path)
+            return
+        print(f"🔍 Found {len(chinese_lines)} Chinese lines to translate")
+        print(f"⚙️  Using {MAX_WORKERS} parallel workers with {DELAY_BETWEEN_REQUESTS}s delay")
+        translations = translate_chinese_lines(lines, chinese_lines)
+        still_chinese = []
+        for idx, translated in translations.items():
+            if has_chinese_chars(translated):
+                still_chinese.append(idx)
+        if still_chinese:
+            print(f"⚠️  {len(still_chinese)} lines still contain Chinese after all retries")
+        out_lines = []
+        for i, line in enumerate(lines):
+            if i in translations:
+                content = line.rstrip("\r\n")
+                out_lines.append(translations[i] + line[len(content) :])
+            else:
+                out_lines.append(line)
+        tmp_path = path.with_suffix(path.suffix + ".tmp_translate")
+        with open(tmp_path, "w", encoding=enc, errors="replace", newline="") as f:
+            f.writelines(out_lines)
+        Path(tmp_path).rename(path)
+        print(f"✅ Updated: {path}")
+        cleanup_temp_state(path)
+    except Exception as e:
+        print(f"❌ Error processing {path}: {e}")
+        save_temp_state()
+
+
+def process_files_sequentially(files: list[Path]) -> None:
+    for idx, file in enumerate(files):
+        if interrupt_occurred:
+            break
+        print(f"\n{'=' * 50}")
+        print(f"📄 File {idx + 1}/{len(files)}: {file.name}")
+        print(f"{'=' * 50}")
+        process_file_inplace(file)
+        if idx < len(files) - 1 and (not interrupt_occurred):
+            print(f"\n⏳ Waiting {DELAY_BETWEEN_FILES}s before next file...")
+            time.sleep(DELAY_BETWEEN_FILES)
 
 
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
+    root = Path.cwd()
     args = sys.argv[1:]
-
-    if args:
-        files = [Path(p) for p in args if Path(p).is_file()]
+    files = [Path(p) for p in args] if args else get_files(root)
+    print(f"\n🚀 Starting translation process")
+    print(f"📁 Found {len(files)} files to process")
+    print(f"⚙️  Settings: {MAX_WORKERS} workers, {DELAY_BETWEEN_REQUESTS}s between requests")
+    print(f"🔄 Max retries: {MAX_TRANSLATION_RETRIES}")
+    print(f"💾 Temp files will be saved automatically")
+    print(f"⚠️  Press Ctrl+C to save progress and exit\n")
+    if len(files) == 1:
+        process_file_inplace(files[0])
     else:
-        files = get_nobinary(Path.cwd())
-
-    for i, f in enumerate(files):
-        if _interrupted:
-            break
-        process_file(f)
-        if i < len(files) - 1 and not _interrupted:
-            time.sleep(DELAY_BETWEEN_FILES)
-
-    if _interrupted:
-        print("\n⚠️  Stopped early. Run again to resume from saved progress.")
-    else:
-        print("\n✅ All done.")
+        process_files_sequentially(files)
+    print(f"\n✅ All processing complete!")
 
 
 if __name__ == "__main__":

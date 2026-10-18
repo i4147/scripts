@@ -258,7 +258,6 @@ def decompress_archive(archive_path):
     try:
         archive_size = archive_path.stat().st_size
         extracted_size = 0
-
         with (
             _open_decompressed_stream(archive_path) as stream,
             tarfile.open(fileobj=stream, mode="r|") as tar,

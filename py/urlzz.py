@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import re
 import sys
 import tarfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import py7zr
 from dh import cprint, get_nobinary
 

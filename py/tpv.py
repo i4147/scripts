@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import os
 import re
@@ -19,9 +18,7 @@ SHOW_CURSOR = "\x1b[?25h"
 ENTER_ALT = "\x1b[?1049h"
 LEAVE_ALT = "\x1b[?1049l"
 REVERSE = "\x1b[7m"
-
 HALF_BLOCK = "\u2580"
-
 DEVNULL = subprocess.DEVNULL
 WHITESPACE = b" \t\r\n\v\f"
 PAGES_RE = re.compile(rb"^Pages:\s*(\d+)", re.MULTILINE)
@@ -30,11 +27,9 @@ PAGES_RE = re.compile(rb"^Pages:\s*(\d+)", re.MULTILINE)
 def parse_ppm(data: bytes) -> tuple[int, int, bytes]:
     if len(data) < 2 or data[:2] != b"P6":
         raise RuntimeError("renderer did not produce a P6 PPM image")
-
     pos = 2
     n = len(data)
     fields: list[int] = []
-
     while len(fields) < 3:
         while pos < n and data[pos] in WHITESPACE:
             pos += 1
@@ -51,12 +46,10 @@ def parse_ppm(data: bytes) -> tuple[int, int, bytes]:
             fields.append(int(data[start:pos]))
         except ValueError:
             raise RuntimeError("malformed PPM header") from None
-
     pos += 1
     w, h, maxval = fields
     if maxval != 255:
         raise RuntimeError(f"unsupported PPM maxval {maxval}")
-
     need = w * h * 3
     raster = data[pos : pos + need]
     if len(raster) != need:
@@ -97,7 +90,6 @@ class Renderer:
     def page_count(self) -> int:
         if self._count is not None:
             return self._count
-
         for argv in (["pdfinfo", self.path], ["mutool", "info", self.path]):
             if not shutil.which(argv[0]):
                 continue
@@ -111,7 +103,6 @@ class Renderer:
             if m:
                 self._count = int(m.group(1))
                 return self._count
-
         raise RenderError("could not determine the page count (install poppler's pdfinfo or mupdf's mutool)")
 
     def _wipe_tmp(self) -> None:
@@ -141,14 +132,12 @@ class Renderer:
         res = subprocess.run(argv, stdout=DEVNULL, stderr=subprocess.PIPE, timeout=300)
         if res.returncode != 0:
             raise RenderError(res.stderr.decode("utf-8", "replace").strip() or "pdftoppm failed")
-
         out = root + ".ppm"
         if not os.path.exists(out):
             leftovers = [os.path.join(self._tmp, f) for f in sorted(os.listdir(self._tmp))]
             if not leftovers:
                 raise RenderError("pdftoppm produced no output")
             out = leftovers[0]
-
         with open(out, "rb") as fh:
             return fh.read()
 
@@ -180,7 +169,6 @@ class Renderer:
         hit = self._cache.get(key)
         if hit is not None:
             return hit
-
         try:
             if self.tool == "pdftoppm":
                 raw = self._run_pdftoppm(index, width)
@@ -188,9 +176,7 @@ class Renderer:
                 raw = self._run_mutool(index, width)
         except subprocess.TimeoutExpired:
             raise RenderError("renderer timed out") from None
-
         result = parse_ppm(raw)
-
         if len(self._cache) >= self.CACHE_LIMIT:
             self._cache.clear()
         self._cache[key] = result
@@ -201,13 +187,11 @@ def read_key(fd: int, timeout: float | None = None) -> str | None:
     ready, _, _ = select.select([fd], [], [], timeout)
     if not ready:
         return None
-
     first = os.read(fd, 1)
     if not first:
         return "q"
     if first != b"\x1b":
         return first.decode("utf-8", "replace")
-
     seq = bytearray(first)
     while len(seq) < 8:
         ready, _, _ = select.select([fd], [], [], 0.03)
@@ -231,7 +215,6 @@ class Viewer:
         self.page_count = self.renderer.page_count()
         if self.page_count == 0:
             raise RenderError("document contains no pages")
-
         self.page_index = max(0, min(page - 1, self.page_count - 1))
         self.zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, zoom))
         self.x = 0
@@ -261,12 +244,10 @@ class Viewer:
         have_bot = 0 <= bottom < h
         base_t = top * w * 3
         base_b = bottom * w * 3
-
         out: list[str] = []
         last_fg: tuple[int, int, int] | None = None
         last_bg: tuple[int, int, int] | None = None
         blank = False
-
         for i in range(cols):
             x = x0 + i
             if x >= w:
@@ -276,20 +257,17 @@ class Viewer:
                     blank = True
                 out.append(" ")
                 continue
-
             blank = False
             if have_top:
                 p = base_t + x * 3
                 fg = (data[p], data[p + 1], data[p + 2])
             else:
                 fg = (0, 0, 0)
-
             if have_bot:
                 p = base_b + x * 3
                 bg = (data[p], data[p + 1], data[p + 2])
             else:
                 bg = (0, 0, 0)
-
             if fg != last_fg:
                 out.append(f"\x1b[38;2;{fg[0]};{fg[1]};{fg[2]}m")
                 last_fg = fg
@@ -297,7 +275,6 @@ class Viewer:
                 out.append(f"\x1b[48;2;{bg[0]};{bg[1]};{bg[2]}m")
                 last_bg = bg
             out.append(HALF_BLOCK)
-
         out.append(RESET)
         return "".join(out)
 
@@ -323,7 +300,6 @@ class Viewer:
         cols, _ = self.term_size()
         rows = self.view_rows()
         width = self.render_width()
-
         error: str | None = None
         try:
             w, h, data = self.renderer.page(self.page_index, width)
@@ -335,13 +311,11 @@ class Viewer:
             error = f"{type(exc).__name__}: {exc}"
             w = h = 1
             data = b"\x00\x00\x00"
-
         if error is None:
             max_y = max(0, h - rows * 2)
             self.y = max(0, min(self.y, max_y))
             max_x = max(0, w - cols)
             self.x = max(0, min(self.x, max_x))
-
         buf = [HOME]
         if error:
             buf.append(RESET)
@@ -352,7 +326,6 @@ class Viewer:
             for row in range(rows):
                 buf.append(self._paint_row(data, w, h, self.y + row * 2, self.x, cols))
                 buf.append("\r\n")
-
         buf.append(RESET)
         buf.append(self._status(cols, error or ""))
         sys.stdout.write("".join(buf))
@@ -400,7 +373,6 @@ class Viewer:
     def handle(self, key: str) -> None:
         if key in ("q", "Q", "\x03") or key == "\x1b":
             self.running = False
-
         elif key in ("j", "\x1b[B", "\n", "\r"):
             self.y += 2
         elif key in ("k", "\x1b[A"):
@@ -409,22 +381,18 @@ class Viewer:
             self.x -= 4
         elif key in ("l", "\x1b[C"):
             self.x += 4
-
         elif key in (" ", "\x1b[6~", "f", "J"):
             self.screen_down()
         elif key in ("b", "\x1b[5~", "K"):
             self.screen_up()
-
         elif key == "n":
             self.goto_page(self.page_index + 1)
         elif key in ("N", "p"):
             self.goto_page(self.page_index - 1)
-
         elif key in ("g", "\x1b[H", "\x1b[1~", "\x1b[7~", "\x1bOH"):
             self.x = self.y = 0
         elif key in ("G", "\x1b[F", "\x1b[4~", "\x1b[8~", "\x1bOF"):
             self.y = 1 << 30
-
         elif key in ("+", "="):
             self.set_zoom(self.zoom * self.ZOOM_STEP)
         elif key in ("-", "_"):
@@ -436,18 +404,15 @@ class Viewer:
     def run(self, fd: int) -> None:
         dirty = True
         last_size = (0, 0)
-
         while self.running:
             size = self.term_size()
             if size != last_size:
                 last_size = size
                 self.renderer._cache.clear()
                 dirty = True
-
             if dirty:
                 self.draw()
                 dirty = False
-
             key = read_key(fd, 0.25)
             if key is None:
                 continue
@@ -464,17 +429,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-p", "--page", type=int, default=1, help="page to open first (1-based, default 1)")
     parser.add_argument("-z", "--zoom", type=float, default=1.0, help="initial zoom factor (default 1.0)")
     args = parser.parse_args(argv)
-
     if not os.path.isfile(args.file):
         parser.error(f"no such file: {args.file}")
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         parser.error("must be run from an interactive terminal")
-
     try:
         viewer = Viewer(args.file, args.page, args.zoom)
     except Exception as exc:
         sys.exit(f"tpv: could not open {args.file!r}: {exc}")
-
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     try:
@@ -489,7 +451,6 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(RESET + SHOW_CURSOR + LEAVE_ALT)
         sys.stdout.flush()
         viewer.renderer.close()
-
     return 0
 
 

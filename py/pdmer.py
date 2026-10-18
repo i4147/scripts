@@ -1,7 +1,6 @@
 import os
 import sys
 
-
 if sys.version_info < (3, 11):
     import tomli as tomllib
 else:
@@ -12,62 +11,46 @@ def parse_pdm_project():
     if not os.path.exists("pyproject.toml"):
         print("Error: No pyproject.toml found in this directory.")
         sys.exit(1)
-
     with open("pyproject.toml", "rb") as f:
         config = tomllib.load(f)
-
     backend = config.get("build-system", {}).get("build-backend", "")
     if "pdm.backend" not in backend:
         print(f"Warning: This project uses '{backend}', not pdm.backend. Proceeding anyway...")
-
     project = config.get("project", {})
     if not project:
         print("Error: No [project] table found in pyproject.toml.")
         sys.exit(1)
-
     name = project.get("name")
     if not name:
         print("Error: Project name is missing from pyproject.toml.")
         sys.exit(1)
-
     authors_list = project.get("authors", []) or project.get("maintainers", [])
     author_name = ", ".join([a["name"] for a in authors_list if "name" in a])
     author_email = ", ".join([a["email"] for a in authors_list if "email" in a])
-
     dynamic_fields = project.get("dynamic", [])
-
     readme = project.get("readme", "")
     readme_path = readme.get("file", "") if isinstance(readme, dict) else readme
-
     license_val = project.get("license", "")
     license_str = license_val.get("text", "") if isinstance(license_val, dict) else license_val
-
     install_requires = project.get("dependencies", [])
     extras_require = project.get("optional-dependencies", {})
-
     pdm_build = config.get("tool", {}).get("pdm", {}).get("build", {})
-
     package_dir_src = pdm_build.get("package-dir", "")
     custom_includes = pdm_build.get("includes", [])
     py_modules = [m.replace(".py", "") for m in custom_includes if m.endswith(".py")]
-
     pdm_version_cfg = config.get("tool", {}).get("pdm", {}).get("version", {})
     version_source = pdm_version_cfg.get("source", "file" if "version" in dynamic_fields else "static")
     version_path = pdm_version_cfg.get("path", "")
-
     setup_code = f"""import os
 import sys
 from setuptools import setup, find_packages
-
 # --- Dynamic Metadata Extraction For PDM Conventions ---
 version = {repr(project.get("version", "0.1.0"))}
 description = {repr(project.get("description", ""))}
-
 def extract_pdm_metadata():
     global version
     if "version" not in {repr(dynamic_fields)}:
         return
-
     # Case A: PDM version sourced from SCM / Git Tag
     if {repr(version_source)} == "scm":
         try:
@@ -78,14 +61,12 @@ def extract_pdm_metadata():
                 return
         except Exception:
             pass
-
     # Case B: PDM version sourced from a designated file attribute
     explicit_path = {repr(version_path)}
     search_paths = [explicit_path] if explicit_path else [
         "{name.replace("-", "_")}/__init__.py",
         "src/{name.replace("-", "_")}/__init__.py",
     ]
-
     import ast
     for path in search_paths:
         if path and os.path.exists(path):
@@ -98,9 +79,7 @@ def extract_pdm_metadata():
                             return
                         except Exception:
                             pass
-
 extract_pdm_metadata()
-
 # --- Structural Directory Evaluation ---
 # If a package-dir was specified, target it. Fall back to standard routes otherwise.
 pdm_pkg_dir = {repr(package_dir_src)}
@@ -113,7 +92,6 @@ elif os.path.exists("src"):
 else:
     packages = find_packages()
     package_dir = {{}}
-
 # --- Execution Setup ---
 setup(
     name={repr(name)},
@@ -134,10 +112,8 @@ setup(
     zip_safe=False,
 )
 """
-
     with open("setup.py", "w", encoding="utf-8") as out:
         out.write(setup_code)
-
     print(f"Successfully generated a universal fallback setup.py for PDM-based project: '{name}'")
 
 

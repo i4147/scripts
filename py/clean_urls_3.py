@@ -1,8 +1,11 @@
+from __future__ import annotations
 from urllib.parse import urlparse
+import sys
 
 seen = set()
 gl = []
-with open("urls.txt") as f:
+fn = sys.argv[1]
+with open(fn) as f:
     lines = f.readlines()
     for line in lines:
         try:
@@ -15,7 +18,7 @@ with open("urls.txt") as f:
                 continue
         except:
             print(line)
-with open("cleaned_urls", "w") as fo:
+with open("urls.txt", "w") as fo:
     fo.writelines(f"{k}\n" for k in seen)
-with open("git_urls", "a") as fg:
+with open("gitlinks.txt", "a") as fg:
     fg.write("".join(gl))

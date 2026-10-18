@@ -1,113 +1,82 @@
-from __future__ import annotations
-
+from fontTools.ttLib.ttFont import TTFont
+import sys
 from pathlib import Path
-
-from dh import FONTEXT, unique_path
+import regex as re
+from dh import get_files, mpf, unique_path
 from fontTools.ttLib import TTFont
-
-STYLE_MAPPING = {
-    "normal": "Regular",
-    "regular": "Regular",
-    "bold": "Bold",
-    "italic": "Italic",
-    "bold italic": "BoldItalic",
-    "bolditalic": "BoldItalic",
-    "semibold": "SemiBold",
-    "light": "Light",
-    "thin": "Thin",
-    "black": "Black",
-    "medium": "Medium",
-    "ultra light": "UltraLight",
-    "extra bold": "ExtraBold",
-    "condensed": "Condensed",
-    "extended": "Extended",
-    "narrow": "Narrow",
-}
+from termcolor import cprint
 
 
-def get_font_name_and_style(font_path):
-    font_path.suffix.lower()
-    try:
-        font = TTFont(font_path)
-        name_table = font.get("name")
-        if not name_table:
-            return (None, None)
-        family_name = subfamily_name = None
-        for record in name_table.names:
-            name_str = record.string.decode("utf-16-be", errors="ignore").strip()
-            if not name_str:
-                continue
-            if record.nameID == 1:
-                family_name = name_str
-            elif record.nameID == 2:
-                subfamily_name = name_str
-        font.close()
-        style = "Regular"
-        if subfamily_name:
-            subfamily_lower = subfamily_name.lower().strip()
-            for key, value in STYLE_MAPPING.items():
-                if key in subfamily_lower:
-                    style = value
-                    break
-            if style == "Regular" and subfamily_name.lower() != "regular":
-                style = subfamily_name
-        return (family_name, style)
-    except Exception as e:
-        print(f"  Warning: Could not read {font_path.name}: {e}")
+def is_ascii_printable(s: str) -> bool:
+    return all((32 <= ord(c) <= 126 for c in s))
+
+
+def clean_filename(s: str) -> str:
+    s = re.sub("[^\\w\\-\\.]", "", s)
+    return s.strip("_-.")
+
+
+def get_best_name(font: TTFont, name_id: int):
+    fallback = None
+    for rec in font["name"].names:
+        if rec.nameID != name_id:
+            continue
+        try:
+            name = rec.toUnicode().strip()
+        except Exception:
+            continue
+        if rec.platformID == 3 and rec.langID == 1033:
+            return name
+        if is_ascii_printable(name):
+            fallback = name
+    return fallback
+
+
+def get_font_names(path) -> tuple[str, str] | tuple[None, None] | None:
+    font = TTFont(path)
+    family = get_best_name(font, 1)
+    subfamily = get_best_name(font, 2)
+    if not family:
         return (None, None)
+    family = clean_filename(family)
+    subfamily = "Regular" if not subfamily else clean_filename(subfamily)
+    if subfamily.lower() == family.lower():
+        return (family, subfamily)
 
 
-def sanitize_filename(name) -> str:
-    if not name:
-        return "Unknown"
-    sanitized = "".join(c if c.isalnum() or c in ("-", "_", " ") else "_" for c in name)
-    sanitized = sanitized.replace(" ", "_").strip("_")
-    while "__" in sanitized:
-        sanitized = sanitized.replace("__", "_")
-    return sanitized
-
-
-def rename_font_file(font_path: Path) -> str | None:
-    family_name, style = get_font_name_and_style(font_path)
-    if not family_name:
-        print(f"  Skipping {font_path.name}: Could not extract font family name")
-        return None
-    family_name = sanitize_filename(family_name)
-    style = sanitize_filename(style)
-    ext = font_path.suffix
-    new_name = f"{family_name}-{style}{ext}"
-    new_path = font_path.parent / new_name
-    if font_path == new_path:
-        print(f"  {font_path.name} -> already has correct name")
-        return None
+def process_file(fn: Path) -> int:
+    try:
+        family, style = get_font_names(fn)
+    except Exception as e:
+        cprint(f"error: {e}", "magenta")
+        return 1
+    if not family:
+        cprint("name not found", "magenta")
+        return 1
+    ext = fn.suffix.lower()
+    new_path = fn.parent / f"{family}-{style}{ext}"
+    if fn.name == new_path.name:
+        cprint("no change", "blue")
+        return 0
     if new_path.exists():
         new_path = unique_path(new_path)
-    try:
-        font_path.rename(new_path)
-        return new_name
-    except Exception as e:
-        print(f"  Error renaming {font_path.name}: {e}")
-        return None
-
-
-def process_directory(directory: Path, recursive=True) -> int:
-    directory = Path(directory)
-    renamed_count = 0
-    for item in directory.iterdir():
-        if item.is_file() and item.suffix.lower() in FONTEXT:
-            new_name = rename_font_file(item)
-            if new_name:
-                print(f"  {item.name} -> {new_name}")
-                renamed_count += 1
-        elif item.is_dir() and recursive:
-            renamed_count += process_directory(item, recursive)
-    return renamed_count
+    fn.rename(new_path)
+    print(f"{fn.name} -> ", end="")
+    cprint(f"{new_path.name}", "green")
+    return 0
 
 
 def main() -> None:
     cwd = Path.cwd()
-    renamed_count = process_directory(cwd, recursive=True)
-    print(f"\n{renamed_count} font file(s).")
+    args = sys.argv[1:]
+    files = [Path(arg) for arg in args] if args else get_files(cwd, ext=[".ttf", ".woff", ".woff2", ".bin", ".otf"])
+    if not files:
+        print("no files found")
+        return
+    if len(files) == 1:
+        process_file(files[0])
+        sys.exit(0)
+    _ = mpf(process_file, files)
 
 
 if __name__ == "__main__":

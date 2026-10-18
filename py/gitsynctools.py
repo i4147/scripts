@@ -1,14 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as a command-line tool for automating Git repository and GitHub workflows. The tool should load configuration such as access tokens from a user-level environment file, accept a local project directory and optional settings from the command line, and locate an existing Git repository at that path (optionally searching parent directories). If no repository exists, it should be able to initialize one when requested, and otherwise report a clear error message.
-
 The script should support authenticating with GitHub using one or more candidate token environment variable names, selecting the first one that is set, and failing gracefully with an informative message when no valid token is available. It should be able to inspect the repository's current state (branch, changed or untracked files, remote configuration), stage and commit changes with a user-supplied or auto-generated commit message that includes a timestamp, push the current branch to a remote, and optionally create a corresponding repository on GitHub when one does not already exist, linking it as remote origin.
-
 Design the t step prints clear, user-friendly status messages with success andles Git and GitHub API errors without crashing unexpectedly, and exits with a meaningful status code. Include a dry-run mode that reports what would be done without making changes, and a verbose mode for extra diagnostic output. The tool should avoid exposing secrets in its output, validate inputs before performing destructive or networked operations, and be safe to run repeatedly on the same project.
 ---"""
 
-
 from __future__ import annotations
-
 import argparse
 import contextlib
 import os
@@ -19,7 +15,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
-
 from dotenv import load_dotenv
 from git import GitCommandError, InvalidGitRepositoryError, Repo
 from github import Github, GithubException

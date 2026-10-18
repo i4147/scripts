@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import sys
@@ -7,19 +6,15 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from translate import Translator
 
 SAVE_EVERY = 50
 DEFAULT_WORKERS = 1
 REQUEST_INTERVAL = 0.5
-
 MAX_RETRIES = 5
 BACKOFF_BASE = 1.5
-
 DEFAULT_SOURCE = "zh"
 DEFAULT_TARGET = "en"
-
 MAX_CHARS = 450
 CHUNK_SIZE = MAX_CHARS
 
@@ -42,7 +37,6 @@ class RateLimiter:
 
 
 _limiter = RateLimiter(0.0)
-
 _print_lock = threading.Lock()
 
 
@@ -65,10 +59,8 @@ def translate_text(
 ) -> str:
     if not text.strip():
         return text
-
     delay = BACKOFF_BASE
     last_err: Exception | None = None
-
     for attempt in range(1, MAX_RETRIES + 1):
         if apply_limiter:
             _limiter.wait()
@@ -83,43 +75,34 @@ def translate_text(
                 )
             time.sleep(delay)
             delay *= BACKOFF_BASE
-
     raise RuntimeError(f"Translation failed after {MAX_RETRIES} retries: {last_err}")
 
 
 def split_long_line(line: str, max_chars: int = MAX_CHARS) -> list[str]:
     if len(line) <= max_chars:
         return [line]
-
     pieces: list[str] = []
     remaining = line
-
     soft_seps = ["。", "！", "？", "；", ".", "!", "?", ";", "\n"]
     hard_seps = ["，", "、", ",", ":", "：", " "]
-
     while len(remaining) > max_chars:
         window = remaining[:max_chars]
         cut = -1
-
         for sep in soft_seps:
             pos = window.rfind(sep)
             if pos > 0:
                 cut = pos + len(sep)
                 break
-
         if cut <= 0:
             for sep in hard_seps:
                 pos = window.rfind(sep)
                 if pos > 0:
                     cut = pos + len(sep)
                     break
-
         if cut <= 0:
             cut = max_chars
-
         pieces.append(remaining[:cut])
         remaining = remaining[cut:]
-
     if remaining:
         pieces.append(remaining)
     return pieces
@@ -129,7 +112,6 @@ def chunk_lines(lines: list[str], max_chars: int = CHUNK_SIZE) -> list[list[str]
     chunks: list[list[str]] = []
     current: list[str] = []
     current_len = 0
-
     for line in lines:
         line_len = len(line)
         if current and current_len + line_len > max_chars:
@@ -138,7 +120,6 @@ def chunk_lines(lines: list[str], max_chars: int = CHUNK_SIZE) -> list[list[str]
             current_len = 0
         current.append(line)
         current_len += line_len
-
     if current:
         chunks.append(current)
     return chunks
@@ -205,10 +186,8 @@ def translate_sequential(
 ) -> tuple[dict[tuple[int, int], str], list[str]]:
     results: dict[tuple[int, int], str] = {}
     errors: list[str] = []
-
     total_pieces = sum(len(p) for p in jobs.values())
     completed = 0
-
     for unit_idx in sorted(jobs):
         for piece_idx, piece in enumerate(jobs[unit_idx]):
             try:
@@ -216,10 +195,8 @@ def translate_sequential(
             except Exception as err:
                 errors.append(f"{progress_label} {unit_idx + 1}, piece {piece_idx + 1}: {err}")
             completed += 1
-
             if completed % SAVE_EVERY == 0 or completed == total_pieces:
                 print(f"  … {completed}/{total_pieces} pieces translated")
-
     return results, errors
 
 
@@ -232,17 +209,14 @@ def translate_concurrent(
 ) -> tuple[dict[tuple[int, int], str], list[str]]:
     results: dict[tuple[int, int], str] = {}
     errors: list[str] = []
-
     total_pieces = sum(len(p) for p in jobs.values())
     completed = 0
-
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {}
         for unit_idx, pieces in jobs.items():
             for piece_idx, piece in enumerate(pieces):
                 fut = pool.submit(translate_text, translator, piece)
                 futures[fut] = (unit_idx, piece_idx)
-
         for fut in as_completed(futures):
             unit_idx, piece_idx = futures[fut]
             try:
@@ -250,10 +224,8 @@ def translate_concurrent(
             except Exception as err:
                 errors.append(f"{progress_label} {unit_idx + 1}, piece {piece_idx + 1}: {err}")
             completed += 1
-
             if completed % SAVE_EVERY == 0 or completed == total_pieces:
                 print(f"  … {completed}/{total_pieces} pieces translated")
-
     return results, errors
 
 
@@ -280,9 +252,7 @@ def run_chunked(
     if chunk_size > MAX_CHARS:
         print(f"  ! --chunk-size capped at {MAX_CHARS} (backend limit)", file=sys.stderr)
         chunk_size = MAX_CHARS
-
     prog_path = progress_path(out_path)
-
     start_chunk = 0
     if prog_path.is_file():
         try:
@@ -291,30 +261,23 @@ def run_chunked(
         except ValueError:
             print("  ! Progress file unreadable, starting from scratch", file=sys.stderr)
             start_chunk = 0
-
     with in_path.open("r", encoding="utf-8") as f:
         src_lines = [ln.rstrip("\n") for ln in f]
-
     chunks = chunk_lines(src_lines, chunk_size)
     total = len(chunks)
-
     if start_chunk >= total:
         print("✔ Nothing to do — file already fully translated.")
         return 0
-
     translator = make_translator(source, target)
     mode_label = "sequential" if workers <= 1 else f"{workers} workers"
     print(f"→ {source} → {target}, {total} chunk(s), {mode_label}")
-
     jobs: dict[int, list[str]] = {}
     for idx in range(start_chunk, total):
         sub_pieces: list[str] = []
         for line in chunks[idx]:
             sub_pieces.extend(split_long_line(line, chunk_size))
         jobs[idx] = sub_pieces
-
     results, errors = run_jobs(translator, jobs, workers=workers, progress_label="chunk")
-
     with out_path.open("a" if start_chunk > 0 else "w", encoding="utf-8") as fout:
         if errors:
             print(
@@ -324,20 +287,16 @@ def run_chunked(
             done_chunks = _count_complete_chunks(jobs, results)
             prog_path.write_text(str(done_chunks), encoding="utf-8")
             return 2
-
         for chunk_idx in range(start_chunk, total):
             piece_translations = [results[(chunk_idx, p_idx)] for p_idx in range(len(jobs[chunk_idx]))]
             translated = "\n".join(piece_translations)
             fout.write(translated)
             if not translated.endswith("\n"):
                 fout.write("\n")
-
             if (chunk_idx + 1) % SAVE_EVERY == 0 or (chunk_idx + 1) == total:
                 prog_path.write_text(str(chunk_idx + 1), encoding="utf-8")
                 print(f"  ✓ saved progress at chunk {chunk_idx + 1}/{total}")
-
         fout.flush()
-
     prog_path.write_text(str(total), encoding="utf-8")
     print(f"\n✔ Done. Output written to {out_path}")
     return 0
@@ -385,7 +344,6 @@ def run_line_mode(
 ) -> int:
     prog_path = progress_path(out_path)
     pairs = load_pairs(out_path, source, target)
-
     start_line = len(pairs)
     if prog_path.is_file():
         try:
@@ -393,62 +351,47 @@ def run_line_mode(
             start_line = max(start_line, stored)
         except ValueError:
             pass
-
     if start_line:
         print(f"↻ Resuming from line {start_line} ({len(pairs)} pairs loaded)")
-
     with in_path.open("r", encoding="utf-8") as f:
         src_lines = [ln.rstrip("\n") for ln in f]
     total = len(src_lines)
-
     if start_line >= total:
         print("✔ Nothing to do — file already fully translated.")
         return 0
-
     translator = make_translator(source, target)
     mode_label = "sequential" if workers <= 1 else f"{workers} workers"
     print(f"→ {source} → {target}, {total} line(s), {mode_label}")
-
     pairs = pairs[:start_line]
-
     line_pieces: dict[int, list[str]] = {}
     for idx in range(start_line, total):
         line_pieces[idx] = split_long_line(src_lines[idx], MAX_CHARS)
-
     results, errors = run_jobs(translator, line_pieces, workers=workers, progress_label="line")
-
     if errors:
         print(
             f"\n✖ {len(errors)} piece(s) failed. First few:\n  " + "\n  ".join(errors[:5]),
             file=sys.stderr,
         )
-
     for idx in range(start_line, total):
         pieces = line_pieces[idx]
-
         if not all((idx, p) in results for p in range(len(pieces))):
             print(f"  ! skipping line {idx + 1} (missing pieces)", file=sys.stderr)
             continue
-
         translated_pieces = [results[(idx, p)] for p in range(len(pieces))]
         translated_full = " ".join(p.strip() for p in translated_pieces).strip()
-
         pairs.append({source: src_lines[idx], target: translated_full})
-
         preview_src = src_lines[idx]
         preview_tgt = translated_full
         if len(preview_src) > 120:
             preview_src = preview_src[:117] + "…"
         if len(preview_tgt) > 120:
             preview_tgt = preview_tgt[:117] + "…"
-
         print(f"[{idx + 1}/{total}]")
         print(f"  {source}: {preview_src}")
         print(f"  {target}: {preview_tgt}")
         if len(pieces) > 1:
             print(f"  (line split into {len(pieces)} pieces)")
         print()
-
         if (idx + 1) % SAVE_EVERY == 0 or (idx + 1) == total:
             out_path.write_text(
                 json.dumps(pairs, ensure_ascii=False, indent=2),
@@ -456,7 +399,6 @@ def run_line_mode(
             )
             prog_path.write_text(str(idx + 1), encoding="utf-8")
             print(f"  ✓ saved {len(pairs)} pairs to {out_path.name}")
-
     out_path.write_text(
         json.dumps(pairs, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -468,34 +410,27 @@ def run_line_mode(
 
 def main() -> int:
     global _limiter
-
     args = parse_args()
-
     if args.workers < 1:
         print(f"  ! --workers must be >= 1 (got {args.workers}), using 1", file=sys.stderr)
         args.workers = 1
-
     if args.workers > 1:
         delay = args.delay if args.delay is not None else REQUEST_INTERVAL
         _limiter = RateLimiter(delay)
     else:
         _limiter = RateLimiter(0.0)
-
     in_path = Path(args.input).expanduser().resolve()
     if not in_path.is_file():
         print(f"Input file not found: {in_path}", file=sys.stderr)
         return 1
-
     source = args.source
     target = args.target
-
     if args.output:
         out_path = Path(args.output).expanduser().resolve()
     elif args.line:
         out_path = in_path.with_suffix(".json")
     else:
         out_path = in_path.with_name(f"{in_path.stem}.{target}{in_path.suffix}")
-
     if args.line:
         return run_line_mode(in_path, out_path, source, target, args.workers)
     return run_chunked(in_path, out_path, args.chunk_size, source, target, args.workers)

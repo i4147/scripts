@@ -1,201 +1,226 @@
+from __future__ import annotations
+import argparse
 import ast
-import sys
-import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional, Tuple
+from dh import get_pyfiles
 
 
-class DocstringRemover(ast.NodeTransformer):
-    def __init__(self) -> None:
-        self.removed_count = 0
-
-    def remove_docstring(self, node) -> Optional[str]:
-        if not node.body:
-            return None
-
-        first_node = node.body[0]
-
-        if isinstance(first_node, ast.Expr):
-            is_docstring = False
-
-            if isinstance(first_node.value, ast.Constant):
-                is_docstring = True
-            elif isinstance(first_node.value, ast.Constant) and isinstance(first_node.value.value, str):
-                is_docstring = True
-
-            if is_docstring:
-                if len(node.body) == 1:
-                    node.body = [ast.Pass()]
-                    return "replaced_with_pass"
-                else:
-                    node.body = node.body[1:]
-                    return "removed"
-
-        return None
-
-    def visit_ClassDef(self, node):
-        result = self.remove_docstring(node)
-        if result == "removed":
-            self.removed_count += 1
-        elif result == "replaced_with_pass":
-            self.removed_count += 1
-
-        self.generic_visit(node)
-        return node
-
-    def visit_FunctionDef(self, node):
-        result = self.remove_docstring(node)
-        if result == "removed":
-            self.removed_count += 1
-        elif result == "replaced_with_pass":
-            self.removed_count += 1
-
-        self.generic_visit(node)
-        return node
-
-    def visit_AsyncFunctionDef(self, node):
-        result = self.remove_docstring(node)
-        if result == "removed":
-            self.removed_count += 1
-        elif result == "replaced_with_pass":
-            self.removed_count += 1
-
-        self.generic_visit(node)
-        return node
-
-
-def has_module_docstring(tree: ast.AST) -> bool:
+def _first_statement_is_docstring(tree: ast.Module) -> bool:
     if not tree.body:
         return False
-
-    first_node = tree.body[0]
-    if isinstance(first_node, ast.Expr):
-        if isinstance(first_node.value, ast.Constant):
-            return True
-        elif isinstance(first_node.value, ast.Constant) and isinstance(first_node.value.value, str):
-            return True
-
-    return False
+    node = tree.body[0]
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(getattr(node, "value", None), ast.Constant)
+        and isinstance(node.value.value, str)
+    )
 
 
-def process_file(file_path: Path) -> Tuple[Path, bool, int, float]:
-    start_time = time.perf_counter()
-
+def _remove_docstrings_from_source(source: str) -> tuple[str, int]:
     try:
-        content = file_path.read_text(encoding="utf-8")
-
-        tree = ast.parse(content)
-
-        has_docstring = has_module_docstring(tree)
-
-        remover = DocstringRemover()
-        modified_tree = remover.visit(tree)
-        ast.fix_missing_locations(modified_tree)
-
-        if remover.removed_count > 0:
-            if has_docstring:
-                original_docstring = ast.get_docstring(tree)
-                if original_docstring:
-                    docstring_node = ast.Expr(
-                        value=ast.Constant(value=original_docstring)
-                        if hasattr(ast, "Constant")
-                        else ast.Str(s=original_docstring)
-                    )
-
-                    modified_tree.body.insert(0, docstring_node)
-
-            try:
-                import astor
-
-                new_content = astor.to_source(modified_tree)
-            except ImportError:
-                try:
-                    new_content = ast.unparse(modified_tree)
-                except AttributeError:
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    return file_path, False, 0, elapsed_ms
-
-            try:
-                _ = ast.parse(new_content)
-                file_path.write_text(new_content, encoding="utf-8")
-                was_modified = True
-            except:
-                print("ast parse error")
-                return file_path, False, 0, elapsed_ms
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source, 0
+    to_remove: list[tuple[int, int, int, int]] = []
+    preserve_module = _first_statement_is_docstring(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr):
+            continue
+        val = getattr(node, "value", None)
+        if not isinstance(val, ast.Constant) or not isinstance(val.value, str):
+            continue
+        if preserve_module and tree.body and node is tree.body[0]:
+            continue
+        if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
+            to_remove.append((node.lineno, node.col_offset, node.end_lineno, node.end_col_offset))
+    if not to_remove:
+        return source, 0
+    lines = source.splitlines(keepends=True)
+    to_remove.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    for sline, scol, eline, ecol in to_remove:
+        sidx = sline - 1
+        eidx = eline - 1
+        if sidx < 0 or eidx >= len(lines):
+            continue
+        if sidx == eidx:
+            line = lines[sidx]
+            lines[sidx] = line[:scol] + "" + line[ecol:]
         else:
-            was_modified = False
-
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        return file_path, was_modified, remover.removed_count, elapsed_ms
-
-    except Exception as e:
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        print(f"Error processing {file_path}: {e}", file=sys.stderr)
-        return file_path, False, 0, elapsed_ms
-
-
-def find_python_files(directory: Path) -> list:
-    return list(directory.rglob("*.py"))
+            first = lines[sidx]
+            last = lines[eidx]
+            lines[sidx] = first[:scol]
+            lines[eidx] = last[ecol:]
+            for mid in range(sidx + 1, eidx):
+                lines[mid] = ""
+    new_source = "".join(lines)
+    return new_source, len(to_remove)
 
 
-def format_report(file_path: Path, was_modified: bool, count: int, elapsed_ms: float) -> str:
-    if was_modified:
-        status = f"{count} docstring{'s' if count != 1 else ''} removed"
-        return f"{file_path} {elapsed_ms:.0f}ms ({status})"
-    else:
-        return f"{file_path} {elapsed_ms:.0f}ms (no change)"
+def _validate_syntax(source: str) -> bool:
+    try:
+        ast.parse(source)
+        return True
+    except SyntaxError:
+        return False
+
+
+def _split_code_and_comment(line: str) -> tuple[str, str | None]:
+    in_squote = False
+    in_dquote = False
+    escaped = False
+    for i, ch in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if in_squote:
+            if ch == "'":
+                in_squote = False
+            continue
+        if in_dquote:
+            if ch == '"':
+                in_dquote = False
+            continue
+        if ch == "'":
+            in_squote = True
+            continue
+        if ch == '"':
+            in_dquote = True
+            continue
+        if ch == "#":
+            return line[:i], line[i:]
+    return line, None
+
+
+def _should_preserve_comment(comment: str, *, is_line_start: bool) -> bool:
+    s = comment.strip()
+    if is_line_start and s.startswith("#!"):
+        return True
+    if is_line_start and ("coding" in s) and s.startswith("#"):
+        lower = s.lower()
+        if lower.startswith("# coding:") or "coding:" in lower:
+            return True
+    if s.startswith("# type:"):
+        return True
+    if s.startswith(("# fmt", "#fmt")):
+        return True
+    return bool(s.startswith(("# noqa", "# nosec", "# lint")))
+
+
+def _remove_comments_from_source(source: str) -> tuple[str, int]:
+    out_lines: list[str] = []
+    removed = 0
+    lines = source.splitlines(keepends=True)
+    for _idx, line in enumerate(lines):
+        if line.strip() == "":
+            out_lines.append(line)
+            continue
+        code, comment = _split_code_and_comment(line)
+        if comment is None:
+            out_lines.append(line)
+            continue
+        is_line_start = len(code.strip()) == 0
+        if _should_preserve_comment(comment, is_line_start=is_line_start):
+            out_lines.append(line)
+            continue
+        newline = ""
+        if line.endswith("\r\n"):
+            newline = "\r\n"
+            code_part = code
+        elif line.endswith("\n"):
+            newline = "\n"
+            code_part = code
+        else:
+            code_part = code
+        if code_part.strip() == "":
+            new_line = newline
+        else:
+            new_line = code_part.rstrip("\r\n") + newline
+        out_lines.append(new_line)
+        removed += 1
+    return "".join(out_lines), removed
+
+
+def _collect_py_files(paths: list[Path], *, recursive: bool = True) -> list[Path]:
+    py_files: list[Path] = []
+    for target in paths:
+        if target.is_file():
+            if target.suffix == ".py":
+                py_files.append(target)
+        elif target.is_dir():
+            pattern = "**/*.py" if recursive else "*.py"
+            py_files.extend(target.glob(pattern))
+    return sorted({p.resolve() for p in py_files})
+
+
+def process_file(path: Path, cwd: Path, *, strip_comments: bool) -> tuple[str, int, int] | None:
+    rel = str(path.relative_to(cwd))
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = path.read_text(encoding="latin-1")
+    except Exception:
+        return None
+    new_source, doc_count = _remove_docstrings_from_source(source)
+    comment_count = 0
+    if strip_comments and new_source == source:
+        pass
+    if strip_comments:
+        new_source, comment_count = _remove_comments_from_source(new_source)
+    if new_source == source:
+        return None
+    if not _validate_syntax(new_source):
+        return None
+    try:
+        path.write_text(new_source, encoding="utf-8")
+    except Exception:
+        return None
+    return rel, doc_count, comment_count
 
 
 def main() -> None:
-    current_dir = Path.cwd()
-
-    print(f"Scanning Python files in: {current_dir}")
-    print("-" * 60)
-
-    python_files = find_python_files(current_dir)
-
-    if not python_files:
-        print("No Python files found.")
+    parser = argparse.ArgumentParser(
+        description="Strip docstrings from Python files (preserves module docstrings). Optionally remove comments."
+    )
+    parser.add_argument(
+        "-c",
+        "--comments",
+        action="store_true",
+        help="Remove comments too (preserve shebangs, # type:, # fmt:, coding cookies).",
+    )
+    parser.add_argument(
+        "targets",
+        nargs="*",
+        help="Files or directories to process (default: current directory, recursive).",
+    )
+    args = parser.parse_args()
+    cwd = Path.cwd()
+    if args.targets:
+        targets = [Path(t).resolve() for t in args.targets]
+        py_files = _collect_py_files(targets, recursive=True)
+    else:
+        py_files = get_pyfiles(cwd)
+        py_files = sorted(set(py_files))
+    if not py_files:
         return
-
-    print(f"Found {len(python_files)} Python file(s) to process\n")
-
-    results = []
-    total_start = time.perf_counter()
-
-    with ProcessPoolExecutor() as executor:
-        future_to_file = {executor.submit(process_file, file_path): file_path for file_path in python_files}
-
-        for future in as_completed(future_to_file):
-            try:
-                result = future.result()
-                results.append(result)
-            except Exception as e:
-                file_path = future_to_file[future]
-                print(f"Error processing {file_path}: {e}", file=sys.stderr)
-
-    total_elapsed = (time.perf_counter() - total_start) * 1000
-
-    results.sort(key=lambda x: str(x[0]))
-
-    total_removed = 0
-    total_modified = 0
-
-    for file_path, was_modified, count, elapsed_ms in results:
-        print(format_report(file_path, was_modified, count, elapsed_ms))
-        if was_modified:
-            total_removed += count
-            total_modified += 1
-
-    print("-" * 60)
-    print(f"Summary: {total_modified} file(s) modified, {total_removed} docstring(s) removed")
-    print(f"Total time: {total_elapsed:.0f}ms")
-
-    if len(results) < len(python_files):
-        skipped = len(python_files) - len(results)
-        print(f"Warning: {skipped} file(s) could not be processed")
+    strip_comments = True
+    changed: list[tuple[str, int, int]] = []
+    with ProcessPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(process_file, p, cwd, strip_comments=strip_comments): p for p in py_files}
+        for fut in as_completed(futures):
+            res = fut.result()
+            if res is not None:
+                changed.append(res)
+    for rel, doc_count, comment_count in sorted(changed, key=lambda x: x[0]):
+        print(rel)
+        if doc_count > 0:
+            print(f"  docstrings removed: {doc_count}")
+        if strip_comments and comment_count > 0:
+            print(f"  comments removed: {comment_count}")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

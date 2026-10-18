@@ -17,7 +17,6 @@ from struct import pack
 import datetime
 import contextlib
 from collections import namedtuple
-
 from Crypto.Hash import HMAC
 from Crypto.Hash import SHA256
 from Crypto.Hash import SHA384

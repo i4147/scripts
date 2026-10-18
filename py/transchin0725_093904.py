@@ -1,16 +1,13 @@
 from __future__ import annotations
-
 import logging
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Final
-
 from deep_translator import GoogleTranslator
 
 CHUNK_SIZE = 1024 * 1024
-
 CHUNK_SIZE: Final[int] = 4500
 MAX_WORKERS: Final[int] = 16
 SKIP_DIRS: Final[frozenset[str]] = frozenset({

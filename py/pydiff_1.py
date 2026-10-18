@@ -1,175 +1,87 @@
-import multiprocessing
+from __future__ import annotations
+import hashlib
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Sequence, Set
-
-KNOWN_SOURCE_EXTENSIONS: Set[str] = {
-    ".c",
-    ".h",
-    ".cc",
-    ".cpp",
-    ".cxx",
-    ".hpp",
-    ".hh",
-    ".hxx",
-    ".cs",
-    ".java",
-    ".kt",
-    ".kts",
-    ".scala",
-    ".groovy",
-    ".clj",
-    ".py",
-    ".pyi",
-    ".pyw",
-    ".rb",
-    ".php",
-    ".pl",
-    ".pm",
-    ".lua",
-    ".js",
-    ".jsx",
-    ".mjs",
-    ".cjs",
-    ".ts",
-    ".tsx",
-    ".vue",
-    ".svelte",
-    ".go",
-    ".rs",
-    ".swift",
-    ".m",
-    ".mm",
-    ".dart",
-    ".r",
-    ".jl",
-    ".sh",
-    ".bash",
-    ".zsh",
-    ".fish",
-    ".ps1",
-    ".bat",
-    ".cmd",
-    ".sql",
-    ".css",
-    ".scss",
-    ".sass",
-    ".less",
-    ".html",
-    ".htm",
-    ".xml",
-    ".xsl",
-    ".xslt",
-    ".svg",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".ini",
-    ".cfg",
-    ".conf",
-    ".gradle",
-    ".cmake",
-    ".mk",
-    ".tex",
-}
-
-LARGE_FILE_THRESHOLD: int = 10000
-POOL_SIZE: int = 8
-CHUNKS_PER_WORKER: int = 4
-
-_OTHER_LINES: Set[str] = set()
+from dh import cprint, read_lines
 
 
-def _init_worker(other_lines: Set[str]) -> None:
-    global _OTHER_LINES
-    _OTHER_LINES = other_lines
+def count_lines(path: Path) -> int:
+    return path.read_bytes().count(b"\n") + 1
 
 
-def _filter_chunk(chunk: Sequence[str]) -> List[str]:
-    other = _OTHER_LINES
-    return [line for line in chunk if line not in other]
+def file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
-def read_lines(path: Path) -> List[str]:
-    strip_whitespace = path.suffix.lower() in KNOWN_SOURCE_EXTENSIONS
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        raw_lines = handle.readlines()
-    lines: List[str] = []
-    for raw in raw_lines:
-        line = raw.rstrip("\n").rstrip("\r")
-        if strip_whitespace:
-            line = line.strip(" \t")
-        lines.append(line)
-    return lines
+def strip_indentation(lines: list[str]) -> list[str]:
+    return [line.strip(" \t") for line in lines]
 
 
-def compute_only_in_first(
-    lines1: Sequence[str],
-    lines2: Sequence[str],
-    set1: Set[str],
-    set2: Set[str],
-) -> Set[str]:
-    if len(lines1) > LARGE_FILE_THRESHOLD and len(lines2) > LARGE_FILE_THRESHOLD:
-        chunk_size = max(1, len(lines1) // (POOL_SIZE * CHUNKS_PER_WORKER))
-        chunks = [list(lines1[i : i + chunk_size]) for i in range(0, len(lines1), chunk_size)]
-        collected: Set[str] = set()
-        with multiprocessing.Pool(
-            processes=POOL_SIZE,
-            initializer=_init_worker,
-            initargs=(set2,),
-        ) as pool:
-            for partial in pool.imap_unordered(_filter_chunk, chunks):
-                collected.update(partial)
-        return collected
-    return set1 - set2
+def read_file_task(path: Path, use_mmap: bool) -> tuple[Path, list[str]]:
+    lines = read_lines(path, ke=False)
+    return path, lines
 
 
-def main(argv: Sequence[str]) -> int:
-    if len(argv) != 3:
-        print(f"usage: {Path(argv[0]).name} FILE1 FILE2", file=sys.stderr)
-        return 2
+def filter_diff_chunk(chunk: list[str], exclude_set: frozenset[str], mode: str) -> list[str]:
+    if mode == "only_in_first":
+        return [p for p in chunk if p not in exclude_set]
+    else:
+        return [p for p in chunk if p in exclude_set]
 
-    path1 = Path(argv[1])
-    path2 = Path(argv[2])
 
-    for path in (path1, path2):
-        if not path.is_file():
-            print(f"error: not a regular file: {path}", file=sys.stderr)
-            return 1
-
-    try:
-        lines1 = read_lines(path1)
-        lines2 = read_lines(path2)
-    except OSError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-
-    set1: Set[str] = set(lines1)
-    set2: Set[str] = set(lines2)
-
-    common = set1 & set2
-    only1 = compute_only_in_first(lines1, lines2, set1, set2)
-    only2 = set2 - set1
-
-    print(f"only in {path1}:")
-    for line in sorted(only1):
-        print(line)
-    print()
-
-    print(f"only in {path2}:")
-    for line in sorted(only2):
-        print(line)
-    print()
-
-    print("summary:")
-    print(f"  {path1}: {len(lines1)} lines read, {len(set1)} unique")
-    print(f"  {path2}: {len(lines2)} lines read, {len(set2)} unique")
-    print(f"  common lines: {len(common)}")
-    print(f"  only in {path1}: {len(only1)}")
-    print(f"  only in {path2}: {len(only2)}")
-    return 0
+def report_diff_lines(path1: Path, path2: Path, num_workers: int = 2) -> None:
+    if file_hash(path1) == file_hash(path2):
+        cprint(f"{path1.name} and {path2.name} are identical", "blue")
+        return
+    lines1_count = count_lines(path1)
+    lines2_count = count_lines(path2)
+    use_mmap1 = lines1_count > 5000
+    use_mmap2 = lines2_count > 5000
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        future1 = executor.submit(read_file_task, path1, use_mmap1)
+        future2 = executor.submit(read_file_task, path2, use_mmap2)
+        _, lines1 = future1.result()
+        _, lines2 = future2.result()
+    set1 = set(lines1)
+    set2 = set(lines2)
+    if lines1_count > 10000 and lines2_count > 10000:
+        chunk_size = max(1000, len(lines1) // num_workers)
+        chunks = [lines1[i : i + chunk_size] for i in range(0, len(lines1), chunk_size)]
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = [executor.submit(filter_diff_chunk, chunk, frozenset(set2), "only_in_first") for chunk in chunks]
+            only_in_first = []
+            for future in as_completed(futures):
+                only_in_first.extend(future.result())
+    else:
+        only_in_first = [p for p in lines1 if p not in set2]
+    only_in_second = [p for p in lines2 if p not in set1]
+    common_count = len(set1 & set2)
+    if only_in_first:
+        cprint(f"only in {path1.name}:", "cyan")
+        for line in only_in_first[:5]:
+            cprint(f"  - {line}", "green")
+        if len(only_in_first) > 5:
+            cprint(f"  ... and {len(only_in_first) - 5} lines more", "green")
+    if only_in_second:
+        cprint(f"only in {path2.name}:", "cyan")
+        for line in only_in_second[:5]:
+            cprint(f"  - {line}", "yellow")
+        if len(only_in_second) > 5:
+            cprint(f"  ... and {len(only_in_second) - 5} lines more", "yellow")
+    cprint(
+        f"common lines: {common_count}\n"
+        f"only in {path1.name}: {len(only_in_first)}\n"
+        f"only in {path2.name}: {len(only_in_second)}",
+        "blue",
+    )
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    f1 = Path(sys.argv[1])
+    f2 = Path(sys.argv[2])
+    report_diff_lines(f1, f2)

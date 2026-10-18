@@ -2,13 +2,11 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-
 import pygit2
 from dotenv import load_dotenv
 from github import Github, GithubException
 
 SKIP_DIRS = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})
-
 GITHUB_USERNAME = "i4147"
 ENV_FILE = Path.home() / ".env"
 REPO_DIR = Path.cwd()

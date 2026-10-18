@@ -1,5 +1,4 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 import argparse
 import asyncio
 import ast
@@ -9,14 +8,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-
 from dh import DOC_TH1, DOC_TH2
 
 FELO_SUPERAGENT = "/data/data/com.termux/files/home/bashbin/felo-sa.mjs"
 FELO_TIMEOUT = int(environ.get("FELO_TIMEOUT", "300"))
 PROMPT_TEMPLATE = """
 You are an expert software requirements writer. Analyze the Python code below and write a clear, high-level prompt or specification that can be given to an AI coding agent to build a similar script from scratch. The prompt must begin with a phrase like "Write a Python script that..." or "Generate a Python tool that...". Focus strictly on the high-level purpose, main inputs and outputs, and key behaviors. Do NOT describe the code line-by-line, and do not restrict low-level implementation details such as specific function names, loop types, internal variables, or imported libraries, allowing the AI complete creative freedom. Do not include code snippets. Output only the generated prompt in English without explanations or preamble.
-
 Python code:
 {code}
 """
@@ -24,7 +21,8 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 FENCE_RE = re.compile(r"^\s*```.*$", re.MULTILINE)
 SHELL_PROMPT_RE = re.compile(r"^\s*(?:\$|>|>>>)\s.*$", re.MULTILINE)
 PREAMBLE_RE = re.compile(
-    r"^(?:sure[,!.]?|certainly[,!.]?|here(?:'s| is)[^\n]*|of course[,!.]?)\s*\n",    re.IGNORECASE,
+    r"^(?:sure[,!.]?|certainly[,!.]?|here(?:'s| is)[^\n]*|of course[,!.]?)\s*\n",
+    re.IGNORECASE,
 )
 LIVEDOC_RE = re.compile(r"^\s*LiveDoc\s*:.*$", re.MULTILINE | re.IGNORECASE)
 
@@ -164,10 +162,8 @@ def strip_module_docstring(body: str) -> str:
         quote = DOC_TH1
     elif s.startswith(DOC_TH2):
         quote = DOC_TH2
-
     if not quote:
         return body
-
     end_idx = s.find(quote, len(quote))
     if end_idx != -1:
         return s[end_idx + len(quote) :].lstrip("\r\n")
@@ -199,7 +195,6 @@ async def ask_felo(code: str) -> str:
         proc.kill()
         await proc.wait()
         raise subprocess.TimeoutExpired(cmd, FELO_TIMEOUT)
-
     if proc.returncode != 0:
         msg = f"felo exited {proc.returncode}: {stderr.decode('utf-8', errors='replace').strip()[:300]}"
         raise RuntimeError(msg)
@@ -219,20 +214,16 @@ async def annotate(path: Path, dry_run: bool, force: bool, sem: asyncio.Semaphor
         }:
             stats["skipped_ignored"] += 1
             return
-
         if path.stat().st_size > 30 * 1024:
             stats["skipped_size"] += 1
             return
-
         content = path.read_text(encoding="utf-8")
         header, body = split_header(content)
-
         if has_module_docstring(body):
             if not force:
                 stats["skipped_docstring"] += 1
                 return
             body = strip_module_docstring(body)
-
         try:
             raw = await ask_felo(content)
         except FileNotFoundError:
@@ -243,12 +234,10 @@ async def annotate(path: Path, dry_run: bool, force: bool, sem: asyncio.Semaphor
         except RuntimeError:
             stats["errors"] += 1
             return
-
         cleaned = clean_response(raw)
         if not cleaned:
             stats["errors"] += 1
             return
-
         docstring = make_docstring(cleaned)
         new_content = header + docstring + body
         if dry_run:
@@ -298,7 +287,6 @@ async def process_paths(paths: list[Path], dry_run: bool, force: bool, concurren
             tg.create_task(annotate(p, dry_run, force, sem, stats))
             if delay > 0:
                 await asyncio.sleep(delay)
-
     print("\n--- Execution Summary ---")
     print(f"Successfully processed:     {stats['success']}")
     print(f"Skipped (>30KB limit):      {stats['skipped_size']}")

@@ -1,11 +1,9 @@
 from __future__ import annotations
-
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Final
-
 from deep_translator import GoogleTranslator
 from dh import is_binary
 

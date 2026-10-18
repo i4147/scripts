@@ -122,7 +122,6 @@ class Hunspell(Spellchecker):
             cmd_args = [self.cmd, "-d", lang, "-a"]
             if self.personal_dict.exists():
                 cmd_args.extend(["-p", str(self.personal_dict)])
-
             result = subprocess.run(cmd_args, input=text, capture_output=True, text=True, timeout=30)
             for line in result.stdout.strip().split("\n"):
                 if line.startswith("&"):
@@ -131,7 +130,6 @@ class Hunspell(Spellchecker):
                     count = int(parts[2])
                     offset = int(parts[3].rstrip(":"))
                     suggestions = parts[4 : 4 + count]
-
                     line_num = 1
                     col = offset
                     for i, text_line in enumerate(text.split("\n"), 1):
@@ -139,7 +137,6 @@ class Hunspell(Spellchecker):
                             line_num = i
                             break
                         col -= len(text_line) + 1
-
                     yield Misspelling(word, line_num, offset, suggestions, context)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return
@@ -148,7 +145,6 @@ class Hunspell(Spellchecker):
         if not self.personal_dict.exists():
             self.personal_dict.touch()
             self.personal_dict.write_text("0\n")
-
         words = self.personal_dict.read_text(encoding="utf-8").strip().split("\n")
         if len(words) > 0 and words[0].isdigit():
             count = int(words[0])
@@ -156,7 +152,6 @@ class Hunspell(Spellchecker):
         else:
             count = 0
             word_list = words
-
         if word not in word_list:
             word_list.append(word)
             content = f"{len(word_list)}\n" + "\n".join(sorted(word_list))
@@ -234,12 +229,10 @@ class MisspellingFinder:
     def find(self, source: Source | str, languages: Sequence[str], context: list[str] | None = None) -> None:
         if isinstance(source, str):
             source = StringSource(source)
-
         ctx = context or []
         for text in source.to_texts(ctx):
             for processor in self.processors:
                 text = processor.process(text)
-
             for misspelling in self.spellchecker.check(text.content, languages, text.context):
                 self.handler.handle(misspelling)
 
@@ -254,13 +247,10 @@ class ParallelMisspellingFinder:
     def find(self, source: Source | str, languages: Sequence[str], context: list[str] | None = None) -> None:
         if isinstance(source, str):
             source = StringSource(source)
-
         ctx = context or []
         texts = list(source.to_texts(ctx))
-
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {executor.submit(self._process_text, text, languages): text for text in texts}
-
             for future in as_completed(futures):
                 for misspelling in future.result():
                     self.handler.handle(misspelling)
@@ -273,13 +263,10 @@ class ParallelMisspellingFinder:
 
 def check_files(*paths: str, languages: list[str] | None = None, apply_fixes: bool = False) -> None:
     languages = languages or ["en_US"]
-
     spellchecker = Hunspell()
     sources = [FileSource(p) for p in (paths or [Path.cwd()])]
     source = MultiSource(sources) if len(sources) > 1 else sources[0]
-
     finder = ParallelMisspellingFinder(spellchecker, EchoHandler(apply_fixes), MarkdownRemover())
-
     finder.find(source, languages)
 
 
@@ -291,7 +278,6 @@ def main():
     parser.add_argument("-a", "--apply", action="store_true", help="Apply spelling fixes")
     parser.add_argument("paths", nargs="*", help="Files or directories to check")
     args = parser.parse_args()
-
     check_files(*args.paths, apply_fixes=args.apply)
 
 

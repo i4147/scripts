@@ -4,7 +4,6 @@ from multiprocessing import Pool
 from subprocess import run
 from sys import exit
 from time import perf_counter
-
 from rignore import walk
 
 txt_file = pathlib.Path("/sdcard/txt").open(encoding="utf-8")

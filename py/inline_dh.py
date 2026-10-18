@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import ast
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
 from dh import get_files
 
 DH_SRC_DIR = Path("~/projects/py/dh/src/dh").expanduser()

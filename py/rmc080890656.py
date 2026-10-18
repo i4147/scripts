@@ -50,7 +50,6 @@ class CommentDocstringRemover:
         if parent.type == "expression_statement":
             module_body = [c for c in tree.root_node.children if c.type not in ("comment",)]
             return module_body and module_body[0] == parent
-
         return False
 
     def _should_preserve_comment(self, text):
@@ -68,36 +67,28 @@ class CommentDocstringRemover:
             source = filepath.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError) as e:
             return filepath, {"comments": 0, "docstrings": 0, "error": str(e)}
-
         tree = self.parser.parse(source.encode("utf-8"))
         removals = []
-
         for node in self._find_docstrings(tree.root_node):
             if self._is_module_docstring(node, tree, source) and not self.remove_module_docstring:
                 continue
             removals.append((node.start_byte, node.end_byte))
-
         for node in tree.root_node.children:
             if node.type == "comment" and not self._should_preserve_comment(source[node.start_byte : node.end_byte]):
                 removals.append((node.start_byte, node.end_byte))
-
         if not removals:
             return filepath, {"comments": 0, "docstrings": 0, "changed": False}
-
         removals.sort(reverse=True)
         modified = source
         for start, end in removals:
             modified = modified[:start] + modified[end:]
-
         try:
             ast.parse(modified)
         except SyntaxError:
             return filepath, {"comments": 0, "docstrings": 0, "error": "SyntaxError after removal"}
-
         filepath.write_text(modified, encoding="utf-8")
         doc_count = sum(1 for start, end in removals if source[start : start + 1] in ('"', "'"))
         comment_count = len(removals) - doc_count
-
         return filepath, {"comments": comment_count, "docstrings": doc_count, "changed": True}
 
 
@@ -112,14 +103,11 @@ def main():
     parser.add_argument("-r", "--remove-module-docstrings", action="store_true")
     parser.add_argument("-j", "--jobs", type=int, default=None)
     args = parser.parse_args()
-
     remover = CommentDocstringRemover(args.remove_module_docstrings)
     files = list(remover._walk_files(args.paths))
-
     if not files:
         print("No Python files found.")
         return
-
     with Pool(processes=args.jobs) as pool:
         results = pool.imap_unordered(process_wrapper, ((remover, f) for f in files))
         total_comments = total_docstrings = 0
@@ -130,7 +118,6 @@ def main():
                 print(f"✓ {filepath}: {stats['comments']} comments, {stats['docstrings']} docstrings")
                 total_comments += stats["comments"]
                 total_docstrings += stats["docstrings"]
-
     print(f"\nTotal: {total_comments} comments, {total_docstrings} docstrings removed")
 
 

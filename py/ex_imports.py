@@ -1,7 +1,6 @@
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import tree_sitter_python as tsp
 from dh import get_pyfiles
 from tree_sitter import Language, Parser

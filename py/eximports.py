@@ -1,7 +1,6 @@
 from tree_sitter import Tree
 import sys
 from pathlib import Path
-
 import tree_sitter_python as tsp
 from dh import STDLIB, cprint, get_installed_pkgs, get_pyfiles
 from tree_sitter import Language, Parser
@@ -12,7 +11,6 @@ VALID = {"import_statement", "import_from_statement"}
 
 
 def mpf3(process_function: Callable, files: list[Path], **kwargs):
-
     return Parallel(n_jobs=-1)((delayed(process_function)(file, **kwargs) for file in files))
 
 

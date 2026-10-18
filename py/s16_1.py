@@ -12,7 +12,6 @@ def process_file(path):
                     break
                 outpath = path.with_stem(path.stem + "_" + str(part_num))
                 outpath.write_text(chunk, encoding="utf-8")
-
                 print(f"Saved part {part_num} to '{output_path}'")
                 part_num += 1
         print(f"File splitting complete. {part_num} parts created in '{output_dir}'.")
@@ -22,7 +21,6 @@ def process_file(path):
 
 import sys
 from pathlib import Path
-
 from dh import get_files, mpf3
 
 
@@ -30,7 +28,6 @@ def main():
     cwd = Path.cwd()
     args = sys.argv[1:]
     files = []
-
     if args:
         for arg in args:
             p = Path(arg)
@@ -43,7 +40,6 @@ def main():
     if len(files) == 1:
         process_file(files[0])
         sys.exit(1)
-
     mpf3(process_file, files)
 
 

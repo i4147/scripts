@@ -4,7 +4,6 @@ import re
 import sys
 from pathlib import Path
 from urllib.parse import urljoin
-
 import requests
 from bs4 import BeautifulSoup
 

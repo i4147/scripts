@@ -1,11 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import re
 import sys
 from urllib.parse import quote
-
 import requests
 
 

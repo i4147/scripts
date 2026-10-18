@@ -1,8 +1,14 @@
+import re
 import sys
 from pathlib import Path
 
+ITEM_START_RE = re.compile(
+    '\n    ^\\s*\n    (?:pub(?:\\([^)]*\\))?\\s+)*\n    (?:async\\s+)?(?:const\\s+)?(?:unsafe\\s+)?\n    (?:extern\\s+"[^"]+"\\s+)?\n    (fn|impl|trait|mod|enum|struct|union)\\b\n    ',
+    re.VERBOSE,
+)
 
-def strip_comments(src: str) -> str:
+
+def remove_comments(src: str) -> str:
     out = []
     i = 0
     n = len(src)
@@ -69,27 +75,35 @@ def strip_comments(src: str) -> str:
     return "".join(out)
 
 
-def compress_top_level_blocks(src: str) -> str:
-    out = []
-    i = 0
+def find_matching_brace(src: str, open_pos: int) -> int:
     n = len(src)
-    depth = 0
+    i = open_pos + 1
+    depth = 1
     in_str = False
     in_char = False
     in_line_comment = False
     in_block_comment = 0
     escape = False
-
-    def is_item_start(text: str, pos: int) -> bool:
-        head = text[max(0, pos - 200) : pos]
-        keywords = ["fn", "impl", "trait", "enum", "struct", "mod"]
-        return any((k in head for k in keywords))
-
-    while i < n:
+    while i < n and depth > 0:
         ch = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+        if in_block_comment > 0:
+            if ch == "/" and nxt == "*":
+                in_block_comment += 1
+                i += 2
+                continue
+            if ch == "*" and nxt == "/":
+                in_block_comment -= 1
+                i += 2
+                continue
+            i += 1
+            continue
         if in_str:
-            out.append(ch)
             if escape:
                 escape = False
             elif ch == "\\":
@@ -99,7 +113,6 @@ def compress_top_level_blocks(src: str) -> str:
             i += 1
             continue
         if in_char:
-            out.append(ch)
             if escape:
                 escape = False
             elif ch == "\\":
@@ -108,57 +121,71 @@ def compress_top_level_blocks(src: str) -> str:
                 in_char = False
             i += 1
             continue
+        if ch == "/" and nxt == "/":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            in_block_comment = 1
+            i += 2
+            continue
         if ch == '"':
-            out.append(ch)
             in_str = True
             i += 1
             continue
         if ch == "'":
-            out.append(ch)
             in_char = True
             i += 1
             continue
         if ch == "{":
-            if is_item_start(src, i):
-                j = i + 1
-                d = 1
-                j_in_str = False
-                j_in_char = False
-                j_escape = False
-                while j < n and d > 0:
-                    cj = src[j]
-                    if j_in_str:
-                        if j_escape:
-                            j_escape = False
-                        elif cj == "\\":
-                            j_escape = True
-                        elif cj == '"':
-                            j_in_str = False
-                        j += 1
-                        continue
-                    if j_in_char:
-                        if j_escape:
-                            j_escape = False
-                        elif cj == "\\":
-                            j_escape = True
-                        elif cj == "'":
-                            j_in_char = False
-                        j += 1
-                        continue
-                    if cj == '"':
-                        j_in_str = True
-                    elif cj == "'":
-                        j_in_char = True
-                    elif cj == "{":
-                        d += 1
-                    elif cj == "}":
-                        d -= 1
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        i += 1
+    return i
+
+
+def compress_rust_items(src: str) -> str:
+    lines = src.splitlines(keepends=True)
+    out = []
+    i = 0
+    n = len(lines)
+    pending_attrs = []
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("#[") or stripped.startswith("#!["):
+            pending_attrs.append(line)
+            i += 1
+            continue
+        if ITEM_START_RE.match(line):
+            out.extend(pending_attrs)
+            pending_attrs.clear()
+            text = "".join(lines[i:])
+            brace_pos = text.find("{")
+            if brace_pos != -1:
+                before = text[: brace_pos + 1]
+                body_start_global = sum((len(x) for x in lines[:i])) + brace_pos
+                body_end_global = find_matching_brace(src, body_start_global)
+                out.append(before)
+                out.append("...}")
+                consumed = body_end_global
+                prefix_len = sum((len(x) for x in lines[:i]))
+                remaining = consumed - prefix_len
+                j = i
+                acc = 0
+                while j < n and acc + len(lines[j]) <= remaining:
+                    acc += len(lines[j])
                     j += 1
-                out.append("{...}")
                 i = j
                 continue
-        out.append(ch)
+        if pending_attrs:
+            out.extend(pending_attrs)
+            pending_attrs.clear()
+        out.append(line)
         i += 1
+    if pending_attrs:
+        out.extend(pending_attrs)
     return "".join(out)
 
 
@@ -167,7 +194,7 @@ def cleanup_whitespace(src: str) -> str:
     blank = False
     for line in src.splitlines():
         line = line.rstrip()
-        if line.strip() == "":
+        if not line.strip():
             if not blank:
                 lines.append("")
             blank = True
@@ -186,8 +213,8 @@ def main() -> None:
         print(f"Error: file not found: {in_path}", file=sys.stderr)
         sys.exit(1)
     src = in_path.read_text(encoding="utf-8")
-    src = strip_comments(src)
-    src = compress_top_level_blocks(src)
+    src = remove_comments(src)
+    src = compress_rust_items(src)
     src = cleanup_whitespace(src)
     out_path = in_path.with_name(in_path.stem + "_compressed" + in_path.suffix)
     out_path.write_text(src, encoding="utf-8")

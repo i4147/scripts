@@ -1,15 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/env python
-
 from __future__ import annotations
 import argparse
 import logging
 import os
 from pathlib import Path
 import sys
-
 from dotenv import load_dotenv
 from github import Github, GithubException
-
 
 logging.basicConfig(
     level=logging.INFO,

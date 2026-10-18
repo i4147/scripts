@@ -95,13 +95,11 @@ class CommentDocstringRemover:
             source = filepath.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError) as e:
             return filepath, {"comments": 0, "docstrings": 0, "error": str(e)}
-
         tree = self.parser.parse(source.encode("utf-8"))
         lines = source.splitlines(keepends=True)
         removals = []
         docstring_count = 0
         comment_count = 0
-
         for node in self._find_string_nodes(tree.root_node):
             if self._is_module_docstring(node, tree) and not self.remove_module_docstring:
                 continue
@@ -109,24 +107,19 @@ class CommentDocstringRemover:
             end_byte = node.end_byte
             removals.append((start_byte, end_byte, "docstring"))
             docstring_count += 1
-
         for node in tree.root_node.children:
             if node.type == "comment":
                 text = source[node.start_byte : node.end_byte]
                 if not self._should_preserve_comment(text):
                     removals.append((node.start_byte, node.end_byte, "comment"))
                     comment_count += 1
-
         if not removals:
             return filepath, {"comments": 0, "docstrings": 0, "changed": False}
-
         removals.sort(reverse=True)
         modified = source
         for start, end, _ in removals:
             modified = modified[:start] + modified[end:]
-
         modified = self._remove_trailing_newlines(modified)
-
         try:
             ast.parse(modified)
         except SyntaxError:
@@ -135,13 +128,11 @@ class CommentDocstringRemover:
                 ast.parse(modified)
             except SyntaxError as e:
                 return filepath, {"comments": 0, "docstrings": 0, "error": f"SyntaxError: {e}"}
-
         if modified != source:
             try:
                 filepath.write_text(modified, encoding="utf-8")
             except OSError as e:
                 return filepath, {"comments": 0, "docstrings": 0, "error": f"Write failed: {e}"}
-
         return filepath, {"comments": comment_count, "docstrings": docstring_count, "changed": True}
 
     def _remove_trailing_newlines(self, source):
@@ -155,7 +146,6 @@ class CommentDocstringRemover:
             tree = ast.parse(source)
         except SyntaxError:
             return source
-
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 if not node.body or (
@@ -166,7 +156,6 @@ class CommentDocstringRemover:
                     lines = source.splitlines(keepends=True)
                     indent = len(lines[node.lineno - 1]) - len(lines[node.lineno - 1].lstrip())
                     node.body = [ast.Pass()]
-
         try:
             return ast.unparse(tree)
         except Exception:
@@ -188,14 +177,11 @@ def main():
     )
     parser.add_argument("-j", "--jobs", type=int, default=None, help="Number of parallel jobs (default: CPU count)")
     args = parser.parse_args()
-
     remover = CommentDocstringRemover(remove_module_docstring=args.remove_module_docstrings)
     files = list(remover._walk_files(args.paths))
-
     if not files:
         print("No Python files found.")
         return
-
     with Pool(processes=args.jobs) as pool:
         results = pool.imap_unordered(process_file_wrapper, ((remover, f) for f in files))
         total_comments = 0
@@ -209,7 +195,6 @@ def main():
                 )
                 total_comments += stats["comments"]
                 total_docstrings += stats["docstrings"]
-
     print(f"\nTotal: {total_comments} comments, {total_docstrings} docstrings removed")
 
 

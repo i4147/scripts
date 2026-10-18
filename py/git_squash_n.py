@@ -1,17 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as a git-based workflow helper for a local repository. The tool should accept a repository path from the command line (defaulting to the current directory) and verify that the target directory is a valid git repository before doing anything else, exiting with a clear error message if it is not.
-
 The script should wrap common git operations behind a simple, consistent interface so that other automation or a human operator can drive them. It must be able to check whether the working tree is clean and report uncommitted changes, create and switch between branches, stage and commit changes with a supplied message, and report the current status, branch, and recent history in a readable form. Where the operation is query-oriented (status, branch name, log), the script should be able to emit results as structured JSON when requested, so the output can be consumed by other programs.
-
 Design the tool around a pluggable backend abstraction: the primary backend should use a dedicated git library if one is available, and it should transparently fall back to invoking the git command-line executable through subprocesses when that library is not installed. Both backends must expose the same set of operations, so callers never need to know which one is in use. The script should also allow the user to select the backend explicitly from the command line.
-
 Error handling must be robust: commands that fail should produce informative messages that include the underlying git error output, the process should return a non-zero exit code on failure and zero on success, and operations that would destroy work (such as discarding uncommitted changes or force-switching branches with local modifications) must require explicit confirmation via a flag. Every action should be logged with a timestamp to a log file or standard error so that an audit trail of what the tool did is available.
-
 The command-line interface should be organized into subcommands (for example: status, branch, commit, switch, log, and a clean-check command), each with clear help text, and the tool should print a concise human-readable summary by default. Keep the implementation self-contained, cross-platform (Windows, macOS, and Linux), and suitable for use from shell scripts and CI pipelines.
 ---"""
 
 from __future__ import annotations
-
 import argparse
 import json
 import os

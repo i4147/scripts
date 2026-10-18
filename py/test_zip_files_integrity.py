@@ -1,7 +1,6 @@
 import os
 import sys
 import zipfile
-
 from termcolor import cprint
 
 

@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import argparse
 import shutil
 import sys
 import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
 import brotlicffi
 
 
@@ -215,19 +213,14 @@ def main() -> None:
 Examples:
   # Compress current directory (default when no args)
   python brotli_tool.py
-
   # Compress a single file
   python brotli_tool.py -c document.txt
-
   # Compress a directory (creates .tar.br)
   python brotli_tool.py -c myfolder -q 11
-
   # Decompress a file
   python brotli_tool.py -d document.txt.br
-
   # Decompress a .tar.br file (extracts to directory)
   python brotli_tool.py -d myfolder.tar.br
-
   # Decompress all files in a directory
   python brotli_tool.py -d compressed_folder -t 8
         """,

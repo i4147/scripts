@@ -8,7 +8,6 @@ try:
 except ImportError:
     print("cramjam is required: pip install cramjam", file=sys.stderr)
     sys.exit(1)
-
 CODECS = {
     "snappy": (
         ".sz",
@@ -60,7 +59,6 @@ CODECS = {
     ),
 }
 DEFAULT_ALGO = "snappy"
-
 EXT_TO_ALGO = {ext: name for name, (ext, _, _, _) in CODECS.items()}
 
 
@@ -100,7 +98,6 @@ def compress_file(path, algo, level, keep, dry_run):
     except Exception as e:
         result["error"] = f"compress failed: {type(e).__name__}: {e}"
         return result
-
     try:
         restored = decomp_fn(compressed)
         if restored != data:
@@ -172,7 +169,6 @@ def decompress_file(path, algo, keep, dry_run):
     except Exception as e:
         result["error"] = f"decompress failed: {type(e).__name__}: {e}"
         return result
-
     try:
         recompressed = comp_fn(restored, level) if level is not None else comp_fn(restored, None)
         rechecked = decomp_fn(recompressed)
@@ -229,7 +225,6 @@ def collect_files_for_decompress(root, algo_filter):
 def detect_algo(path, forced):
     if forced is not None:
         return forced
-
     for ext in sorted(EXT_TO_ALGO, key=len, reverse=True):
         if path.name.endswith(ext):
             return EXT_TO_ALGO[ext]

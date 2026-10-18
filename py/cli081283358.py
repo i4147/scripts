@@ -14,27 +14,21 @@ def main():
     parser.add_argument("-d", "--deps", action="store_true", help="Resolve dependencies")
     parser.add_argument("-w", "--workers", type=int, default=4, help="Parallel workers")
     parser.add_argument("-t", "--timeout", type=int, default=10, help="Request timeout (s)")
-
     args = parser.parse_args()
-
     try:
         downloader = Downloader(output_dir=args.output, timeout=args.timeout, max_workers=args.workers)
-
         if args.deps:
             resolver = DependencyResolver(downloader)
             packages = resolver.resolve(args.package, args.version)
             print(f"Resolved {len(packages)} packages: {', '.join(sorted(packages))}")
         else:
             packages = [args.package]
-
         all_files = []
         for pkg in packages:
             files = downloader.download(pkg, version=args.version, prefer_wheels=not args.source, parallel=True)
             all_files.extend(files)
             print(f"Downloaded {pkg}: {len(files)} file(s)")
-
         print(f"\nTotal: {len(all_files)} file(s) → {Path(args.output).resolve()}")
-
     except PackageNotFound as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

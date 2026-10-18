@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import multiprocessing
@@ -14,17 +13,14 @@ WORKERS = 8
 def format_dictionary_of_lists(data: dict[str, list[str]], indent: int = 2) -> str:
     if not data:
         return "{}"
-
     lines = ["{"]
     items = list(data.items())
-
     for i, (key, value) in enumerate(items):
         comma = "," if i < len(items) - 1 else ""
         indent_str = " " * indent
         lines.append(
             f"{indent_str}{json.dumps(key, ensure_ascii=False)}: {json.dumps(value, ensure_ascii=False)}{comma}"
         )
-
     lines.append("}")
     return "\n".join(lines)
 
@@ -32,7 +28,6 @@ def format_dictionary_of_lists(data: dict[str, list[str]], indent: int = 2) -> s
 def format_json(data: Any, indent: int = 2, compact: bool = False) -> str:
     if compact:
         return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-
     return json.dumps(
         data,
         ensure_ascii=False,
@@ -53,13 +48,15 @@ def process_file(file_path: Path, indent: int = 2, compact: bool = False) -> tup
         return file_path, False, f"Invalid JSON: {error}"
     except OSError as error:
         return file_path, False, f"Cannot read: {error}"
-
     if not is_dictionary_of_lists(data):
         return file_path, False, "Structure does not match; skipped"
-
     formatted = format_dictionary_of_lists(data, indent)
-    if formatted == data:
-        return file_path, False, f"No Change"
+    try:
+        original_content = file_path.read_text(encoding="utf-8")
+    except OSError as error:
+        return file_path, False, f"Cannot read: {error}"
+    if formatted == original_content:
+        return file_path, False, "No Change"
     try:
         file_path.write_text(formatted, encoding="utf-8")
         return file_path, True, "Formatted"
@@ -74,10 +71,8 @@ def process_file_wrapper(args: tuple[Path, int, bool]) -> tuple[Path, bool, str]
 
 def discover_json_files(paths: list[Path]) -> list[Path]:
     json_files: list[Path] = []
-
     if not paths:
         paths = [Path.cwd()]
-
     for path in paths:
         if path.is_file():
             if path.suffix.lower() == ".json":
@@ -86,7 +81,6 @@ def discover_json_files(paths: list[Path]) -> list[Path]:
             json_files.extend(path.rglob("*.json"))
         else:
             print(f"Warning: {path} does not exist; skipping", file=sys.stderr)
-
     return list(dict.fromkeys(json_files))
 
 
@@ -120,17 +114,12 @@ def main() -> int:
         action="store_true",
         help="Show what would be formatted without modifying files",
     )
-
     args = parser.parse_args()
-
     json_files = discover_json_files(args.paths)
-
     if not json_files:
         print("No .json files found.", file=sys.stderr)
         return 0
-
     print(f"Found {len(json_files)} JSON file(s) to process.")
-
     if args.dry_run:
         for file_path in json_files:
             try:
@@ -143,13 +132,10 @@ def main() -> int:
             except (json.JSONDecodeError, OSError) as error:
                 print(f"Would skip (error): {file_path} — {error}")
         return 0
-
     tasks = [(file_path, args.indent, args.compact) for file_path in json_files]
-
     formatted_count = 0
     skipped_count = 0
     error_count = 0
-
     with multiprocessing.Pool(processes=args.workers) as pool:
         for file_path, changed, message in pool.imap_unordered(process_file_wrapper, tasks):
             if changed:
@@ -161,9 +147,7 @@ def main() -> int:
             else:
                 error_count += 1
                 cprint(f"✗ {file_path.name}: {message}", file=sys.stderr)
-
     print(f"\nSummary: {formatted_count} formatted, {skipped_count} skipped, {error_count} errors")
-
     return 1 if error_count else 0
 
 

@@ -3,7 +3,6 @@ import platform
 import struct
 import sys
 import time
-
 from colorama import Back, Fore, Style, init
 
 

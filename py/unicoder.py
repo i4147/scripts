@@ -2,7 +2,6 @@ import pathlib
 import re
 from sys import exit
 from time import perf_counter
-
 import regex
 from dh import hex2dec
 

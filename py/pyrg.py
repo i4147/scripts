@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import fnmatch
 import operator
@@ -8,7 +7,6 @@ import sys
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from loguru import logger
 
 logger.remove()

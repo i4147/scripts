@@ -2,7 +2,6 @@ import io
 import sys
 import tokenize
 from pathlib import Path
-
 from dh import cprint, get_pyfiles, mpf3
 
 FUNC_NAMES = {"sub", "search", "find", "findall", "match", "finditer", "subn", "split"}
@@ -110,7 +109,6 @@ if __name__ == "__main__":
     cwd = Path.cwd()
     args = sys.argv[1:]
     files = []
-
     if args:
         for arg in args:
             p = Path(arg)
@@ -120,5 +118,4 @@ if __name__ == "__main__":
                 files.extend(get_pyfiles(p))
     else:
         files = get_pyfiles(cwd)
-
     mpf3(process_file, files)

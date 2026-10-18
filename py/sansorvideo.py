@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -8,7 +7,6 @@ import sys
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-
 import cv2
 import numpy as np
 
@@ -26,7 +24,6 @@ try:
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
-
 interrupted = False
 checkpoint_data = None
 
@@ -277,13 +274,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-
   python video_filter.py input.mp4
-
   python video_filter.py input.mp4 -a
-
   python video_filter.py input.mp4 -a --resume
-
   python video_filter.py input.mp4 -a --threshold 0.7
         """,
     )

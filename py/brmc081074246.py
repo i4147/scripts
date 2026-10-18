@@ -21,35 +21,27 @@ def _remove_docstrings_from_source(source: str) -> tuple[str, int]:
         tree = ast.parse(source)
     except SyntaxError:
         return source, 0
-
     to_remove = []
     preserve_module = _first_statement_is_docstring(tree)
-
     for node in ast.walk(tree):
         if not isinstance(node, ast.Expr):
             continue
         val = getattr(node, "value", None)
         if not isinstance(val, ast.Constant) or not isinstance(val.value, str):
             continue
-
         if preserve_module and tree.body and node is tree.body[0]:
             continue
-
         if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
             to_remove.append((node.lineno, node.col_offset, node.end_lineno, node.end_col_offset))
-
     if not to_remove:
         return source, 0
-
     lines = source.splitlines(keepends=True)
     to_remove.sort(key=lambda r: (r[0], r[1]), reverse=True)
-
     for sline, scol, eline, ecol in to_remove:
         sidx = sline - 1
         eidx = eline - 1
         if sidx < 0 or eidx >= len(lines):
             continue
-
         if sidx == eidx:
             line = lines[sidx]
             lines[sidx] = line[:scol] + "" + line[ecol:]
@@ -60,7 +52,6 @@ def _remove_docstrings_from_source(source: str) -> tuple[str, int]:
             lines[eidx] = last[ecol:]
             for mid in range(sidx + 1, eidx):
                 lines[mid] = ""
-
     new_source = "".join(lines)
     return new_source, len(to_remove)
 
@@ -94,9 +85,7 @@ def process_file(path: Path, cwd: Path) -> tuple[str, int] | None:
     except Exception as e:
         print(f"ERROR reading {rel}: {e}", flush=True)
         return None
-
     new_source, count = _remove_docstrings_from_source(source)
-
     if new_source != source:
         if not _validate_syntax(new_source):
             print(f"VALIDATION FAILED {rel}: output is invalid Python", flush=True)
@@ -107,7 +96,6 @@ def process_file(path: Path, cwd: Path) -> tuple[str, int] | None:
         except Exception as e:
             print(f"ERROR writing {rel}: {e}", flush=True)
             return None
-
     return None
 
 
@@ -119,9 +107,7 @@ def main() -> None:
         help="Files or directories to process (default: current directory, recursive)",
     )
     args = parser.parse_args()
-
     cwd = Path(".").resolve()
-
     if args.targets:
         targets = [Path(t).resolve() for t in args.targets]
         py_files = _collect_py_files(targets, recursive=True)
@@ -130,7 +116,6 @@ def main() -> None:
             return
     else:
         py_files = _collect_py_files([cwd], recursive=True)
-
     results = {}
     with ProcessPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(process_file, p, cwd): p for p in py_files}
@@ -139,7 +124,6 @@ def main() -> None:
             if result is not None:
                 rel, count = result
                 results[rel] = count
-
     if results:
         for rel in sorted(results.keys()):
             count = results[rel]

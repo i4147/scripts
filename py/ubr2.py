@@ -2,7 +2,6 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-
 import brotlicffi
 from dh import get_size
 from termcolor import cprint

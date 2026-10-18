@@ -1,12 +1,15 @@
+from __future__ import annotations
 import argparse
 import fnmatch
 import operator
 import re
 import sys
+from collections.abc import Generator
 from multiprocessing import Pool
 from pathlib import Path
 from dh import is_binary
 from loguru import logger
+from fastwalk import walk_files
 
 logger.remove()
 logger.add("/data/data/com.termux/files/home/tmp/apps/pyrg.log")
@@ -30,12 +33,12 @@ TEXT_CHARS = bytes(range(32, 127)) + b"\n\r\t\x08"
 
 
 def get_files(
-    paths,
-    include_globs,
-    exclude_globs,
-    search_hidden,
-    max_size,
-):
+    paths: list[str],
+    include_globs: list[str],
+    exclude_globs: list[str],
+    search_hidden: bool,
+    max_size: int,
+) -> Generator[Path, None, None]:
     for p_str in paths:
         path = Path(p_str)
         if path.is_file() and not path.is_symlink():
@@ -51,29 +54,24 @@ def get_files(
             continue
         if not path.is_dir() or path.is_symlink():
             continue
-        for root, dirs, walk_files in path.walk(top_down=True, follow_symlinks=False):
-            if not search_hidden:
-                dirs[:] = [d for d in dirs if not d.startswith(".")]
-            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS]
-            for f in walk_files:
-                if not search_hidden and f.startswith("."):
+        for filepath in walk_files(path):
+            if not search_hidden and filepath.name.startswith("."):
+                continue
+            if filepath.is_symlink():
+                continue
+            try:
+                if max_size and filepath.stat().st_size > max_size:
                     continue
-                path = root / f
-                if path.is_symlink():
-                    continue
-                try:
-                    if max_size and path.stat().st_size > max_size:
-                        continue
-                except OSError:
-                    continue
-                if include_globs and not matches_any_glob(path, include_globs):
-                    continue
-                if exclude_globs and matches_any_glob(path, exclude_globs):
-                    continue
-                yield path
+            except OSError:
+                continue
+            if include_globs and not matches_any_glob(filepath, include_globs):
+                continue
+            if exclude_globs and matches_any_glob(filepath, exclude_globs):
+                continue
+            yield filepath
 
 
-def colorize_line(line, spans):
+def colorize_line(line: str, spans: list[tuple[int, int]]) -> str:
     chars = list(line)
     for s, e in sorted(spans, key=operator.itemgetter(0), reverse=True):
         chars.insert(e, ANSI_RESET)
@@ -81,13 +79,15 @@ def colorize_line(line, spans):
     return "".join(chars)
 
 
-def matches_any_glob(path, patterns):
+def matches_any_glob(path: Path, patterns: list[str]) -> bool:
     basename = path.name
     path_str = str(path)
     return any(fnmatch.fnmatch(path_str, p) or fnmatch.fnmatch(basename, p) for p in patterns)
 
 
-def search_file_text_mode(path, cwd, regex, fixed, ignore_case):
+def search_file_text_mode(
+    path: Path, cwd: Path, regex: re.Pattern | None, fixed: str, ignore_case: bool
+) -> tuple[str, list[tuple[int, str, list[tuple[int, int]]]]]:
     matches = []
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
@@ -133,7 +133,7 @@ def worker(args_tuple):
     )
 
 
-def build_argparser():
+def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="ripgrep-like recursive search in Python")
     p.add_argument("pattern", nargs="?", help="Regex pattern (positional) or use -e")
     p.add_argument("-e", "--regexp", dest="pattern_e", help="Pattern (alternative to positional)")
@@ -185,7 +185,7 @@ def build_argparser():
     return p
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     cwd = Path.cwd()
     args = build_argparser().parse_args(argv)
     pattern = args.pattern_e or args.pattern

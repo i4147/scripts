@@ -33,7 +33,6 @@ PERSIAN_LETTERS = {
     "ی": ("\u06cc", "\ufbfc", "\ufbfe", "\ufbfd"),
     " ": (" ", " ", " ", " "),
 }
-
 NON_CONNECTING = {"ا", "د", "ذ", "ر", "ز", "ژ", "و"}
 
 
@@ -44,15 +43,11 @@ def reshape_word(word: str) -> str:
         if char not in PERSIAN_LETTERS:
             reshaped.append(char)
             continue
-
         prev_char = word[i - 1] if i > 0 else ""
         next_char = word[i + 1] if i < length - 1 else ""
-
         connects_prev = prev_char and prev_char not in NON_CONNECTING and prev_char in PERSIAN_LETTERS
         connects_next = next_char and char not in NON_CONNECTING and next_char in PERSIAN_LETTERS
-
         forms = PERSIAN_LETTERS[char]
-
         if connects_prev and connects_next:
             reshaped.append(forms[2])
         elif connects_prev:
@@ -61,14 +56,12 @@ def reshape_word(word: str) -> str:
             reshaped.append(forms[1])
         else:
             reshaped.append(forms[0])
-
     return "".join(reshaped)
 
 
 def reshape_sentence(sentence: str) -> str:
     words = sentence.split(" ")
     reshaped_words = [reshape_word(word) for word in words]
-
     return " ".join(reversed(reshaped_words))
 
 

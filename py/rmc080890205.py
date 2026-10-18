@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import io
@@ -9,7 +8,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 SKIP_DIRS = {".git", "__pycache__"}
-
 PRESERVE_COMMENT_PREFIXES = (
     "#!",
     "# fmt",
@@ -44,7 +42,6 @@ class _DocstringInfo:
         if self.remove_module_doc and tree.body and _is_docstring_node(tree.body[0]):
             node = tree.body[0]
             self.to_remove.add((node.lineno, node.col_offset))
-
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 continue
@@ -96,64 +93,48 @@ def process_source(source: str, remove_module_doc: bool) -> tuple[str, int, int]
         tree = ast.parse(source)
     except SyntaxError as exc:
         raise ValueError(f"Source has syntax error: {exc}") from exc
-
     offsets = _lines_to_offsets(source)
-
     doc_info = _DocstringInfo(source, tree, remove_module_doc)
-
     expr_nodes: dict[tuple[int, int], ast.Expr] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Expr):
             expr_nodes[(node.lineno, node.col_offset)] = node
-
     doc_removals: list[tuple[int, int, str]] = []
     n_doc = 0
-
     for key in doc_info.to_remove:
         expr_node = expr_nodes.get(key)
         if expr_node is None:
             continue
         if not hasattr(expr_node, "end_lineno"):
             continue
-
         start = _rowcol_to_offset(offsets, expr_node.lineno, expr_node.col_offset)
         end = _rowcol_to_offset(offsets, expr_node.end_lineno, expr_node.end_col_offset)
-
         while end < len(source) and source[end] in ("\n", "\r"):
             end += 1
-
         replacement = ""
         if key in doc_info.needs_pass:
             indent = " " * expr_node.col_offset
             replacement = f"{indent}pass\n"
-
         doc_removals.append((start, end, replacement))
         n_doc += 1
-
     comment_tokens = _collect_comment_ranges(source)
     comment_removals: list[tuple[int, int, str]] = []
     n_comments = 0
-
     for sr, sc, er, ec, preserve in comment_tokens:
         if preserve:
             continue
         start = _rowcol_to_offset(offsets, sr, sc)
         end = _rowcol_to_offset(offsets, er, ec)
-
         line_start = offsets[sr]
         before_comment = source[line_start:start]
         is_whole_line = before_comment.strip() == ""
-
         if is_whole_line:
             start = line_start
             if end < len(source) and source[end] == "\n":
                 end += 1
-
         comment_removals.append((start, end, ""))
         n_comments += 1
-
     all_removals = sorted(doc_removals + comment_removals, key=lambda x: x[0])
-
     merged: list[tuple[int, int, str]] = []
     last_end = -1
     for start, end, repl in all_removals:
@@ -161,10 +142,8 @@ def process_source(source: str, remove_module_doc: bool) -> tuple[str, int, int]
             continue
         merged.append((start, end, repl))
         last_end = end
-
     if not merged:
         return source, 0, 0
-
     parts: list[str] = []
     cursor = 0
     for start, end, repl in merged:
@@ -172,14 +151,11 @@ def process_source(source: str, remove_module_doc: bool) -> tuple[str, int, int]
         parts.append(repl)
         cursor = end
     parts.append(source[cursor:])
-
     new_source = "".join(parts)
-
     try:
         ast.parse(new_source)
     except SyntaxError as exc:
         raise ValueError(f"Result failed ast.parse validation: {exc}") from exc
-
     return new_source, n_comments, n_doc
 
 
@@ -198,25 +174,21 @@ def process_file(path_str: str, remove_module_doc: bool) -> dict:
     except Exception as exc:
         result["error"] = f"read error: {exc}"
         return result
-
     try:
         new_source, n_comments, n_doc = process_source(source, remove_module_doc)
     except ValueError as exc:
         result["error"] = str(exc)
         return result
-
     total = n_comments + n_doc
     if total == 0:
         result["skipped"] = True
         result["skip_reason"] = "nothing to remove"
         return result
-
     try:
         path.write_text(new_source, encoding="utf-8")
     except Exception as exc:
         result["error"] = f"write error: {exc}"
         return result
-
     result["comments"] = n_comments
     result["docstrings"] = n_doc
     return result
@@ -313,10 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-
     targets = collect_targets(args.targets)
     remove_module_doc: bool = args.remove_module_docstrings
-
     all_files: list[Path] = []
     for target in targets:
         if not target.exists():
@@ -324,7 +294,6 @@ def main() -> int:
             continue
         for f in walk_python_files(target):
             all_files.append(f)
-
     seen: set[Path] = set()
     unique_files: list[Path] = []
     for f in all_files:
@@ -332,21 +301,17 @@ def main() -> int:
         if resolved not in seen:
             seen.add(resolved)
             unique_files.append(f)
-
     if not unique_files:
         print("No Python files found.")
         return 0
-
     print(
         f"{_fmt(BOLD, 'rmc')} — processing "
         f"{_fmt(CYAN, str(len(unique_files)))} file(s)" + (" [removing module docstrings]" if remove_module_doc else "")
     )
-
     total_comments = 0
     total_docstrings = 0
     total_errors = 0
     total_cleaned = 0
-
     with ProcessPoolExecutor(max_workers=args.jobs) as executor:
         futures = {executor.submit(process_file, str(f), remove_module_doc): f for f in unique_files}
         for future in as_completed(futures):
@@ -357,7 +322,6 @@ def main() -> int:
                 print(f"  {_fmt(RED, 'ERROR')} {path}: unexpected: {exc}")
                 total_errors += 1
                 continue
-
             report_result(res)
             if res["error"]:
                 total_errors += 1
@@ -365,7 +329,6 @@ def main() -> int:
                 total_cleaned += 1
                 total_comments += res["comments"]
                 total_docstrings += res["docstrings"]
-
     print(
         f"\n{_fmt(BOLD, 'done')} — "
         f"{total_cleaned} file(s) cleaned, "

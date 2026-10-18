@@ -4,7 +4,6 @@ import hashlib
 import mimetypes
 import re
 from pathlib import Path
-
 import requests
 from bs4 import BeautifulSoup
 

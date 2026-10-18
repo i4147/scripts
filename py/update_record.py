@@ -1,7 +1,6 @@
 import pathlib
 import sys
 from time import perf_counter
-
 from rignore import walk
 
 

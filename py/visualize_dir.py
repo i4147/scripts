@@ -1,5 +1,4 @@
 import os
-
 import arabic_reshaper
 import matplotlib.pyplot as plt
 from bidi.algorithm import get_display

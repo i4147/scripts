@@ -1,638 +1,379 @@
 import argparse
 import ast
-import io
-import multiprocessing as mp
-import os
+import shutil
 import sys
 import tempfile
-import tokenize as az
+import zipfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
-from functools import partial
-
-import libcst as cst
-
-MAX_WORKERS = 8
-CHUNKSIZE = 4
-
-PYTHON_SUFFIXES = (".py", ".pyi")
-
-SKIP_DIRS = frozenset({
-    ".git",
-    ".hg",
-    ".svn",
-    ".tox",
-    ".nox",
-    ".venv",
-    "venv",
-    "env",
-    "__pycache__",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    "node_modules",
-    "build",
-    "dist",
-    ".eggs",
-})
-
-PROTECTED_COMMENT_PREFIXES = (
-    "#!",
-    "#-*-",
-    "# coding",
-    "# fmt",
-    "# type",
-    "# noqa",
-    "# pylint",
-    "# ruff",
-    "# isort",
-    "# mypy",
-    "# pyright",
-    "# pragma",
-)
-
-GREEN = "\033[32m"
-RESET = "\033[0m"
 
 
-def is_docstring_literal(node: cst.CSTNode) -> bool:
-    if isinstance(node, cst.SimpleString):
-        return "b" not in node.prefix.lower()
-    if isinstance(node, cst.ConcatenatedString):
-        return is_docstring_literal(node.left) and is_docstring_literal(node.right)
+def get_files(root_dir):
+    root_path = Path(root_dir)
+    for r, d, files in root_path.walk(top_down=True):
+        for f in files:
+            filepath = Path(r) / f
+            if filepath.is_symlink() or ".git" in filepath.parts:
+                continue
+            yield filepath
+
+
+@dataclass
+class FileResult:
+    path: Path
+    comments_removed: int
+    docstrings_removed: int
+    changed: bool
+    error: str | None = None
+
+
+class DocstringProcessor(ast.NodeTransformer):
+    def __init__(self, preserve_module_docstring: bool = True) -> None:
+        self.docstrings_removed = 0
+        self.preserve_module_docstring = preserve_module_docstring
+        super().__init__()
+
+    def _remove_docstring(self, node) -> bool:
+        if docstring := ast.get_docstring(node):
+            is_module = isinstance(node, ast.Module)
+            if is_module and self.preserve_module_docstring:
+                return False
+            if node.body and isinstance(node.body[0], ast.Expr):
+                node.body.pop(0)
+                self.docstrings_removed += 1
+                if not node.body:
+                    node.body.append(ast.Pass())
+                return True
+        return False
+
+    def visit_FunctionDef(self, node):
+        self._remove_docstring(node)
+        self.generic_visit(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node):
+        self._remove_docstring(node)
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node):
+        self._remove_docstring(node)
+        self.generic_visit(node)
+        return node
+
+    def visit_Module(self, node):
+        self._remove_docstring(node)
+        self.generic_visit(node)
+        return node
+
+
+def extract_shebang_and_encoding(source_code: str) -> tuple[str, str, str]:
+    lines = source_code.splitlines(keepends=True)
+    shebang = ""
+    encoding = ""
+    remaining_lines = []
+    for i, line in enumerate(lines):
+        if i == 0 and line.startswith("#!"):
+            shebang = line
+            continue
+        elif i < 2 and line.startswith(("# -*- coding:", "# coding:")):
+            encoding = line
+            continue
+        remaining_lines.append(line)
+    return ("".join(remaining_lines), shebang, encoding)
+
+
+def restore_shebang_and_encoding(code: str, shebang: str, encoding: str) -> str:
+    result = []
+    if shebang:
+        result.append(shebang)
+    if encoding:
+        result.append(encoding)
+    if result:
+        result.append("")
+    result.append(code)
+    return "\n".join(result)
+
+
+def remove_comments_preserve_format(source_code: str) -> Tuple[str, int]:
+    lines = source_code.splitlines(keepends=True)
+    comments_removed = 0
+    result_lines = []
+    in_string = False
+    string_char = None
+    in_triple_quotes = False
+    triple_quote_char = None
+    for line in lines:
+        new_line = []
+        i = 0
+        line_has_comment = False
+        comment_start = -1
+        while i < len(line):
+            char = line[i]
+            if char in ('"', "'") and (not in_triple_quotes):
+                if i + 2 < len(line) and line[i + 1] == char and (line[i + 2] == char):
+                    if not in_string:
+                        in_triple_quotes = True
+                        triple_quote_char = char
+                        new_line.append(char * 3)
+                        i += 3
+                        continue
+                    elif in_triple_quotes and triple_quote_char == char:
+                        in_triple_quotes = False
+                        triple_quote_char = None
+                        new_line.append(char * 3)
+                        i += 3
+                        continue
+                if not in_string and (not in_triple_quotes):
+                    in_string = True
+                    string_char = char
+                elif in_string and string_char == char and (not in_triple_quotes):
+                    in_string = False
+                    string_char = None
+                new_line.append(char)
+                i += 1
+                continue
+            if char == "#" and (not in_string) and (not in_triple_quotes):
+                remaining = line[i:]
+                if remaining.startswith("# type:"):
+                    new_line.append(remaining)
+                    break
+                line_has_comment = True
+                comment_start = i
+                break
+            new_line.append(char)
+            i += 1
+        if line_has_comment and comment_start >= 0:
+            comments_removed += 1
+            result_line = "".join(new_line)
+            result_lines.append(result_line.rstrip() + "\n")
+        else:
+            result_lines.append("".join(new_line))
+    return ("".join(result_lines), comments_removed)
+
+
+def validate_python_code(code: str) -> Tuple[bool, str | None]:
+    try:
+        ast.parse(code)
+        return (True, None)
+    except SyntaxError as e:
+        return (False, f"Syntax error at line {e.lineno}, column {e.offset}: {e.msg}")
+    except Exception as e:
+        return (False, str(e))
+
+
+def process_docstrings_ast(source_code: str, preserve_module_docstring: bool = True) -> Tuple[str, int]:
+    try:
+        tree = ast.parse(source_code)
+        processor = DocstringProcessor(preserve_module_docstring)
+        modified_tree = processor.visit(tree)
+        ast.fix_missing_locations(modified_tree)
+        modified_code = ast.unparse(modified_tree)
+        return (modified_code, processor.docstrings_removed)
+    except SyntaxError:
+        return (source_code, 0)
+
+
+def is_python_file(path: Path) -> bool:
+    if path.suffix.lower() in (".py", ".pyw", ".pyi"):
+        return True
+    if not path.suffix:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                first_line = f.readline()
+                return first_line.startswith("#!") and "python" in first_line.lower()
+        except (IOError, UnicodeDecodeError):
+            return False
     return False
 
 
-def statement_starts_with_docstring(statement: cst.SimpleStatementLine) -> bool:
-    if not statement.body:
-        return False
-    first = statement.body[0]
-    return isinstance(first, cst.Expr) and is_docstring_literal(first.value)
-
-
-def has_trailing_comment(node: cst.CSTNode) -> bool:
-    trailing = getattr(node, "trailing_whitespace", None)
-    return trailing is not None and getattr(trailing, "comment", None) is not None
-
-
-def remove_docstring_from_indented_block(
-    block: cst.IndentedBlock,
-) -> tuple[cst.IndentedBlock, bool]:
-    if not block.body:
-        return block, False
-
-    first = block.body[0]
-    if not isinstance(first, cst.SimpleStatementLine):
-        return block, False
-    if not statement_starts_with_docstring(first):
-        return block, False
-
-    remaining_in_line = list(first.body[1:])
-    remaining_in_block = list(block.body[1:])
-
-    if remaining_in_line:
-        new_first = first.with_changes(body=remaining_in_line)
-        return block.with_changes(body=[new_first, *remaining_in_block]), True
-
-    if not remaining_in_block or has_trailing_comment(first):
-        new_first = first.with_changes(body=[cst.Pass()])
-        return block.with_changes(body=[new_first, *remaining_in_block]), True
-
-    if first.leading_lines:
-        next_stmt = remaining_in_block[0]
-        next_leading = list(getattr(next_stmt, "leading_lines", ()) or ())
-        merged = [*first.leading_lines, *next_leading]
-        try:
-            remaining_in_block[0] = next_stmt.with_changes(leading_lines=merged)
-        except AttributeError:
-            pass
-
-    return block.with_changes(body=remaining_in_block), True
-
-
-def remove_docstring_from_simple_suite(
-    suite: cst.SimpleStatementSuite,
-) -> tuple[cst.SimpleStatementSuite, bool]:
-    if not suite.body:
-        return suite, False
-
-    first = suite.body[0]
-    if not (isinstance(first, cst.Expr) and is_docstring_literal(first.value)):
-        return suite, False
-
-    remaining = list(suite.body[1:])
-    if not remaining:
-        remaining = [cst.Pass()]
-
-    return suite.with_changes(body=remaining), True
-
-
-def remove_leading_docstring(
-    body: cst.BaseSuite,
-) -> tuple[cst.BaseSuite, bool]:
-    if isinstance(body, cst.IndentedBlock):
-        return remove_docstring_from_indented_block(body)
-    if isinstance(body, cst.SimpleStatementSuite):
-        return remove_docstring_from_simple_suite(body)
-    return body, False
-
-
-class DocstringAndCommentRemover(cst.CSTTransformer):
-    def __init__(
-        self,
-        *,
-        remove_all_comments: bool,
-        remove_docstrings: bool,
-        remove_type_annotations: bool,
-    ) -> None:
-        super().__init__()
-        self.remove_all_comments = remove_all_comments
-        self.remove_docstrings = remove_docstrings
-        self.remove_type_annotations = remove_type_annotations
-        self.comments_removed = 0
-        self.docstrings_removed = 0
-        self.type_annotations_removed = 0
-
-    @staticmethod
-    def _is_protected_comment(comment: str) -> bool:
-        return comment.startswith(PROTECTED_COMMENT_PREFIXES)
-
-    def leave_TrailingWhitespace(
-        self,
-        original_node: cst.TrailingWhitespace,
-        updated_node: cst.TrailingWhitespace,
-    ) -> cst.TrailingWhitespace:
-        del original_node
-        if updated_node.comment is None:
-            return updated_node
-
-        comment_value = updated_node.comment.value
-        if self._is_protected_comment(comment_value):
-            return updated_node
-
-        self.comments_removed += 1
-        return updated_node.with_changes(
-            whitespace=cst.SimpleWhitespace(""),
-            comment=None,
+def process_python_file(path: Path, preserve_module_docstring: bool = True) -> FileResult:
+    temp_file = None
+    try:
+        orig = path.read_text(encoding="utf-8")
+        code_without_header, shebang, encoding = extract_shebang_and_encoding(orig)
+        code_no_comments, comments_removed = remove_comments_preserve_format(code_without_header)
+        code_no_docstrings, docstrings_removed = process_docstrings_ast(code_no_comments, preserve_module_docstring)
+        final_code = restore_shebang_and_encoding(code_no_docstrings, shebang, encoding)
+        changed = comments_removed > 0 or docstrings_removed > 0
+        if changed:
+            is_valid, error_msg = validate_python_code(final_code)
+            if not is_valid:
+                return FileResult(
+                    path=path,
+                    comments_removed=0,
+                    docstrings_removed=0,
+                    changed=False,
+                    error=f"Validation failed: {error_msg}",
+                )
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=path.parent, prefix=".tmp_", delete=False
+            ) as tmp:
+                tmp.write(final_code)
+                temp_file = Path(tmp.name)
+            shutil.move(str(temp_file), str(path))
+        return FileResult(
+            path=path, comments_removed=comments_removed, docstrings_removed=docstrings_removed, changed=changed
         )
-
-    def leave_EmptyLine(
-        self,
-        original_node: cst.EmptyLine,
-        updated_node: cst.EmptyLine,
-    ) -> cst.EmptyLine:
-        del original_node
-        if not self.remove_all_comments:
-            return updated_node
-        if updated_node.comment is None:
-            return updated_node
-
-        comment_value = updated_node.comment.value
-        if self._is_protected_comment(comment_value):
-            return updated_node
-
-        self.comments_removed += 1
-        return updated_node.with_changes(comment=None)
-
-    def leave_FunctionDef(
-        self,
-        original_node: cst.FunctionDef,
-        updated_node: cst.FunctionDef,
-    ) -> cst.FunctionDef:
-        del original_node
-
-        if self.remove_docstrings:
-            new_body, removed = remove_leading_docstring(updated_node.body)
-            if removed:
-                self.docstrings_removed += 1
-                updated_node = updated_node.with_changes(body=new_body)
-
-        if self.remove_type_annotations:
-            updated_node = updated_node.with_changes(
-                returns=None,
-                type_comment=None,
-            )
-            self.type_annotations_removed += 1
-
-        return updated_node
-
-    def leave_ClassDef(
-        self,
-        original_node: cst.ClassDef,
-        updated_node: cst.ClassDef,
-    ) -> cst.ClassDef:
-        del original_node
-        if not self.remove_docstrings:
-            return updated_node
-
-        new_body, removed = remove_leading_docstring(updated_node.body)
-        if removed:
-            self.docstrings_removed += 1
-            return updated_node.with_changes(body=new_body)
-        return updated_node
-
-    def leave_Param(
-        self,
-        original_node: cst.Param,
-        updated_node: cst.Param,
-    ) -> cst.Param:
-        del original_node
-        if not self.remove_type_annotations:
-            return updated_node
-        if updated_node.annotation is None and updated_node.type_comment is None:
-            return updated_node
-
-        self.type_annotations_removed += 1
-        return updated_node.with_changes(
-            annotation=None,
-            type_comment=None,
-        )
-
-    def leave_AnnAssign(
-        self,
-        original_node: cst.AnnAssign,
-        updated_node: cst.AnnAssign,
-    ) -> cst.BaseStatement:
-        del original_node
-        if not self.remove_type_annotations:
-            return updated_node
-
-        self.type_annotations_removed += 1
-        if updated_node.value is None:
-            return cst.Pass()
-
-        return cst.Assign(
-            targets=[cst.AssignTarget(target=updated_node.target)],
-            value=updated_node.value,
-        )
-
-    def leave_Assign(
-        self,
-        original_node: cst.Assign,
-        updated_node: cst.Assign,
-    ) -> cst.Assign:
-        del original_node
-        if not self.remove_type_annotations:
-            return updated_node
-
-        type_comment = getattr(updated_node, "type_comment", None)
-        if type_comment is None:
-            return updated_node
-
-        self.type_annotations_removed += 1
-        return updated_node.with_changes(type_comment=None)
-
-    def leave_For(
-        self,
-        original_node: cst.For,
-        updated_node: cst.For,
-    ) -> cst.For:
-        del original_node
-        if not self.remove_type_annotations:
-            return updated_node
-
-        type_comment = getattr(updated_node, "type_comment", None)
-        if type_comment is None:
-            return updated_node
-
-        self.type_annotations_removed += 1
-        return updated_node.with_changes(type_comment=None)
-
-    def leave_With(
-        self,
-        original_node: cst.With,
-        updated_node: cst.With,
-    ) -> cst.With:
-        del original_node
-        if not self.remove_type_annotations:
-            return updated_node
-
-        type_comment = getattr(updated_node, "type_comment", None)
-        if type_comment is None:
-            return updated_node
-
-        self.type_annotations_removed += 1
-        return updated_node.with_changes(type_comment=None)
+    except Exception as e:
+        if temp_file and temp_file.exists():
+            temp_file.unlink()
+        return FileResult(path=path, comments_removed=0, docstrings_removed=0, changed=False, error=str(e))
 
 
-def collect_string_line_numbers(source: str) -> set[int]:
-    line_numbers: set[int] = set()
+def process_dry_run_placeholder(path: Path, preserve_module_docstring: bool) -> FileResult:
+    return FileResult(path, 0, 0, False, "dry run")
+
+
+def process_wheel_file(
+    whl_path: Path, preserve_module_docstring: bool = True, dry_run: bool = False
+) -> list[FileResult]:
+    results = []
+    temp_dir = None
     try:
-        tokens = az.generate_tokens(io.StringIO(source).readline)
-        for token in tokens:
-            if token.type != az.STRING:
-                continue
-            start_line = token.start[0]
-            end_line = token.end[0]
-            line_numbers.update(range(start_line, end_line + 1))
-    except (IndentationError, az.TokenError):
-        return set()
-    return line_numbers
-
-
-def collapse_blank_lines(source: str) -> str:
-    lines = source.splitlines(keepends=True)
-    string_lines = collect_string_line_numbers(source)
-    result: list[str] = []
-    previous_was_blank = False
-
-    for line_number, line in enumerate(lines, start=1):
-        is_blank = not line.strip()
-        if is_blank and line_number not in string_lines:
-            if previous_was_blank:
-                continue
-            newline = "\n"
-            if line.endswith("\r\n"):
-                newline = "\r\n"
-            elif line.endswith("\r"):
-                newline = "\r"
-            result.append(newline)
-            previous_was_blank = True
-            continue
-        result.append(line)
-        previous_was_blank = False
-
-    return "".join(result)
-
-
-def atomic_replace(path: Path, data: bytes) -> None:
-    try:
-        original_mode = path.stat().st_mode
-    except OSError:
-        original_mode = None
-
-    fd, temp_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=str(path.parent),
-    )
-    temp_path = Path(temp_name)
-
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-        if original_mode is not None:
-            try:
-                os.chmod(temp_path, original_mode)
-            except OSError:
-                pass
-
-        os.replace(temp_path, path)
-    except BaseException:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-        raise
-
-
-def transform_file(
-    path: Path,
-    *,
-    remove_all_comments: bool,
-    remove_docstrings: bool,
-    remove_type_annotations: bool,
-) -> tuple[Path, int, int, int, bool, int, str | None]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return path, 0, 0, 0, False, 0, f"read error: {exc}"
-
-    try:
-        encoding, _ = az.detect_encoding(io.BytesIO(raw).readline)
-        source = raw.decode(encoding)
-    except (SyntaxError, UnicodeDecodeError) as exc:
-        return path, 0, 0, 0, False, 0, f"encoding error: {exc}"
-
-    try:
-        module = cst.parse_module(source)
-    except cst.ParserSyntaxError as exc:
-        return path, 0, 0, 0, False, 0, f"LibCST parse error: {exc}"
-    except Exception as exc:
-        return path, 0, 0, 0, False, 0, f"parse error: {type(exc).__name__}: {exc}"
-
-    transformer = DocstringAndCommentRemover(
-        remove_all_comments=remove_all_comments,
-        remove_docstrings=remove_docstrings,
-        remove_type_annotations=remove_type_annotations,
-    )
-
-    try:
-        new_module = module.visit(transformer)
-    except Exception as exc:
-        return path, 0, 0, 0, False, 0, f"transform error: {type(exc).__name__}: {exc}"
-
-    new_source = new_module.code
-    new_source = collapse_blank_lines(new_source)
-    changed = new_source != source
-
-    if not changed:
-        return (
-            path,
-            transformer.comments_removed,
-            transformer.docstrings_removed,
-            transformer.type_annotations_removed,
-            False,
-            0,
-            None,
-        )
-
-    try:
-        ast.parse(new_source, filename=str(path))
-    except SyntaxError as exc:
-        return (
-            path,
-            transformer.comments_removed,
-            transformer.docstrings_removed,
-            transformer.type_annotations_removed,
-            False,
-            0,
-            f"post-transform validation failed: {exc}",
-        )
-
-    encoded = new_source.encode(encoding)
-    bytes_saved = len(raw) - len(encoded)
-
-    try:
-        atomic_replace(path, encoded)
-    except (OSError, UnicodeEncodeError) as exc:
-        return (
-            path,
-            transformer.comments_removed,
-            transformer.docstrings_removed,
-            transformer.type_annotations_removed,
-            False,
-            0,
-            f"write error: {exc}",
-        )
-
-    return (
-        path,
-        transformer.comments_removed,
-        transformer.docstrings_removed,
-        transformer.type_annotations_removed,
-        True,
-        bytes_saved,
-        None,
-    )
-
-
-def discover_python_files(paths: list[Path]):
-    seen: set[Path] = set()
-
-    def warn(message: str) -> None:
-        print(f"warning: {message}", file=sys.stderr)
-
-    for path in paths:
-        try:
-            if path.is_file():
-                if path.suffix in PYTHON_SUFFIXES:
-                    resolved = path.resolve()
-                    if resolved not in seen:
-                        seen.add(resolved)
-                        yield path
-            elif path.is_dir():
-                for root, dirs, files in path.walk(on_error=warn):
-                    dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-                    for name in files:
-                        if not name.endswith(PYTHON_SUFFIXES):
-                            continue
-                        candidate = root / name
-                        try:
-                            resolved = candidate.resolve()
-                        except OSError:
-                            continue
-                        if resolved in seen:
-                            continue
-                        seen.add(resolved)
-                        yield candidate
+        temp_dir = Path(tempfile.mkdtemp(prefix="whl_processing_"))
+        extract_dir = temp_dir / "extracted"
+        extract_dir.mkdir()
+        with zipfile.ZipFile(whl_path, "r") as whl:
+            whl.extractall(extract_dir)
+        python_files = [f for f in extract_dir.rglob("*") if f.is_file() and is_python_file(f)]
+        for py_file in python_files:
+            if not dry_run:
+                result = process_python_file(py_file, preserve_module_docstring)
             else:
-                print(f"warning: skipping non-existent path: {path}", file=sys.stderr)
-        except OSError as exc:
-            print(f"warning: cannot access {path}: {exc}", file=sys.stderr)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="strip_comments",
-        description=(
-            "Safely remove comments, docstrings, type annotations, and repeated "
-            "blank lines from Python files using LibCST."
-        ),
-    )
-    parser.add_argument(
-        "-a",
-        "--all",
-        action="store_true",
-        help=(
-            "Remove all ordinary comments and function/class docstrings. "
-            "Protected comments and the module docstring are preserved."
-        ),
-    )
-    parser.add_argument(
-        "-c",
-        "--remove-all-comments",
-        action="store_true",
-        help=("Remove standalone comments in addition to inline comments. Protected comments are always preserved."),
-    )
-    parser.add_argument(
-        "-d",
-        "--remove-docstrings",
-        action="store_true",
-        help="Remove function and class docstrings. The module docstring is preserved.",
-    )
-    parser.add_argument(
-        "-t",
-        "--type",
-        dest="remove_type_annotations",
-        action="store_true",
-        help=(
-            "Remove function parameter annotations, return annotations, "
-            "variable annotations, and supported type comments."
-        ),
-    )
-    parser.add_argument(
-        "paths",
-        nargs="*",
-        type=Path,
-        metavar="PATH",
-        help="Python files or directories to process. Defaults to the current directory.",
-    )
-    return parser
-
-
-def run(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    paths = args.paths or [Path.cwd()]
-
-    remove_all_comments = args.all or args.remove_all_comments
-    remove_docstrings = args.all or args.remove_docstrings
-
-    worker = partial(
-        transform_file,
-        remove_all_comments=remove_all_comments,
-        remove_docstrings=remove_docstrings,
-        remove_type_annotations=args.remove_type_annotations,
-    )
-
-    processed = 0
-    changed = 0
-    comments_removed = 0
-    docstrings_removed = 0
-    type_annotations_removed = 0
-    errors = 0
-
-    with mp.Pool(processes=MAX_WORKERS) as pool:
-        results = pool.imap_unordered(
-            worker,
-            discover_python_files(paths),
-            chunksize=CHUNKSIZE,
+                result = FileResult(py_file, 0, 0, False, None)
+            relative_path = py_file.relative_to(extract_dir)
+            result.path = Path(f"{whl_path.name}::{relative_path}")
+            results.append(result)
+        if not dry_run and any((r.changed for r in results)):
+            new_whl_path = whl_path.with_suffix(".tmp.whl")
+            with zipfile.ZipFile(new_whl_path, "w", zipfile.ZIP_DEFLATED) as new_whl:
+                for file_path in extract_dir.rglob("*"):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(extract_dir)
+                        new_whl.write(file_path, arcname)
+            shutil.move(str(new_whl_path), str(whl_path))
+    except zipfile.BadZipFile:
+        results.append(
+            FileResult(
+                path=whl_path,
+                comments_removed=0,
+                docstrings_removed=0,
+                changed=False,
+                error="Invalid or corrupted wheel file",
+            )
         )
+    except Exception as e:
+        results.append(FileResult(path=whl_path, comments_removed=0, docstrings_removed=0, changed=False, error=str(e)))
+    finally:
+        if temp_dir and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    return results
 
-        for (
-            path,
-            comments,
-            docstrings,
-            annotations,
-            was_changed,
-            bytes_saved,
-            error,
-        ) in results:
-            processed += 1
 
-            if error is not None:
-                errors += 1
-                print(f"{path}: {error}", file=sys.stderr)
-                continue
+def format_result(result: FileResult, cwd: Path) -> str:
+    try:
+        display_path = result.path.relative_to(cwd)
+    except ValueError:
+        display_path = result.path
+    if result.error:
+        return f"{display_path} (error: {result.error})"
+    if not result.changed:
+        return f"{display_path} (no change)"
+    parts = []
+    if result.comments_removed > 0:
+        parts.append(f"{result.comments_removed} comment{('s' if result.comments_removed != 1 else '')}")
+    if result.docstrings_removed > 0:
+        parts.append(f"{result.docstrings_removed} docstring{('s' if result.docstrings_removed != 1 else '')}")
+    return f"{display_path} ({', '.join(parts)} removed)"
 
-            if not was_changed:
-                continue
 
-            changed += 1
-            comments_removed += comments
-            docstrings_removed += docstrings
-            type_annotations_removed += annotations
-
-            print(f"{path.name}    {GREEN}{bytes_saved} B{RESET}")
-
-    if processed == 0:
-        print("No Python files found.", file=sys.stderr)
-        return 1
-
-    summary = (
-        f"\nProcessed {processed} file(s): "
-        f"{changed} changed, "
-        f"{comments_removed} comment(s), "
-        f"{docstrings_removed} docstring(s), "
-        f"{type_annotations_removed} type annotation(s) removed, "
-        f"{errors} error(s)."
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Remove comments and docstrings from Python files (preserves formatting)"
     )
-    print(summary, file=sys.stderr if errors else sys.stdout)
-    return 2 if errors else 0
+    parser.add_argument("target", nargs="?", default=".", help="Target file or directory (default: current directory)")
+    parser.add_argument("--workers", type=int, default=4, help="Number of worker processes (default: 4)")
+    parser.add_argument("--remove-module-docstring", action="store_true", help="Also remove module-level docstrings")
+    parser.add_argument("--dry-run", action="store_true", help="Show changes without modifying files")
+    args = parser.parse_args()
+    cwd = Path.cwd()
+    target_path = Path(args.target).resolve()
+    if not target_path.exists():
+        print(f"Error: {target_path} does not exist")
+        sys.exit(1)
+    wheel_files = []
+    regular_files = []
+    for p in get_files(target_path):
+        if p.suffix.lower() == ".whl":
+            wheel_files.append(p)
+        elif p.suffix == ".py":
+            regular_files.append(p)
+    if not wheel_files and (not regular_files):
+        print("No Python files or wheel files found")
+        return
+    print(
+        f"Found: {len(regular_files)} Python file{('s' if len(regular_files) != 1 else '')}, {len(wheel_files)} wheel file{('s' if len(wheel_files) != 1 else '')}"
+    )
+    if args.dry_run:
+        print("DRY RUN - No files will be modified")
+    total_files = 0
+    changed_files = 0
+    total_comments = 0
+    total_docstrings = 0
+    errors = 0
+    preserve_module_docstring = not args.remove_module_docstring
+    if regular_files:
+        func = process_dry_run_placeholder if args.dry_run else process_python_file
+        with ProcessPoolExecutor(max_workers=args.workers) as executor:
+            future_to_file = {executor.submit(func, path, preserve_module_docstring): path for path in regular_files}
+            for future in as_completed(future_to_file):
+                result = future.result()
+                total_files += 1
+                if result.changed:
+                    changed_files += 1
+                total_comments += result.comments_removed
+                docstrings_removed = result.docstrings_removed if result.docstrings_removed is not None else 0
+                total_docstrings += docstrings_removed
+                if result.error and result.error != "dry run":
+                    errors += 1
+                if not args.dry_run:
+                    print(format_result(result, cwd))
+                else:
+                    try:
+                        r_path = result.path.relative_to(cwd)
+                    except ValueError:
+                        r_path = result.path
+                    print(f"{r_path} (would process)")
+    for wheel_path in wheel_files:
+        try:
+            w_path_display = wheel_path.relative_to(cwd)
+        except ValueError:
+            w_path_display = wheel_path
+        print(f"\nProcessing wheel file: {w_path_display}")
+        wheel_results = process_wheel_file(wheel_path, preserve_module_docstring, args.dry_run)
+        if args.dry_run:
+            print(f"  Would process {len(wheel_results)} files inside {w_path_display}")
+        else:
+            for result in wheel_results:
+                total_files += 1
+                if result.changed:
+                    changed_files += 1
+                total_comments += result.comments_removed
+                total_docstrings += result.docstrings_removed
+                if result.error:
+                    errors += 1
+                print(f"  {format_result(result, cwd)}")
+    if not args.dry_run and total_files > 0:
+        print(f"\n{'=' * 50}\nSummary:")
+        print(f"  Total files processed: {total_files}")
+        print(f"  Files changed: {changed_files}")
+        print(f"  Total comments removed: {total_comments}")
+        print(f"  Total docstrings removed: {total_docstrings}")
+        if errors > 0:
+            print(f"  Errors: {errors}")
 
 
 if __name__ == "__main__":
-    mp.freeze_support()
-    raise SystemExit(run())
+    main()

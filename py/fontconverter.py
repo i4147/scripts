@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import contextlib
 import sys
@@ -7,7 +6,6 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-
 from dh import fsz
 from fontTools.ttLib import TTFont, TTLibError
 

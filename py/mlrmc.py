@@ -2,7 +2,6 @@ from tree_sitter import Parser
 from tree_sitter import Node
 import sys
 from pathlib import Path
-
 import tree_sitter_cpp
 import tree_sitter_python
 import tree_sitter_rust
@@ -30,7 +29,6 @@ def get_parser(lang) -> Parser:
 
 
 def _collect_python_docstrings(node: Node, deletions) -> None:
-
     def first_named_child(block):
         for child in block.children:
             if child.is_named:

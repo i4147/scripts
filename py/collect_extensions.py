@@ -1,6 +1,5 @@
 from pathlib import Path
 from sys import exit
-
 from dh import BIN_EXT, TXT_EXT, gext
 
 

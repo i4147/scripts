@@ -16,7 +16,6 @@ ZSTD_THREADS = 4
 MAX_WORKERS = 8
 CHUNK_COMPRESSION_SIZE = 32768
 SKIP_DIRS = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
@@ -42,7 +41,6 @@ def compress_chunked(in_path, out_path, file_size):
                 mm[i * CHUNK_COMPRESSION_SIZE : min((i + 1) * CHUNK_COMPRESSION_SIZE, file_size)]
                 for i in range(chunk_count)
             )
-
             with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 futures = {executor.submit(compress_chunk, bytes(chunk)): i for i, chunk in enumerate(chunks)}
                 results = [None] * chunk_count
@@ -83,7 +81,6 @@ def compress_file(path):
         original_size = path.stat().st_size
         if original_size == 0:
             return (False, 0, 0)
-
         if original_size < CHUNK_SIZE:
             success = compress_in_memory(path, out_path)
         else:
@@ -167,13 +164,11 @@ async def compress_folder_async(folder_path, output_base_name):
 async def process_compress():
     cwd = Path.cwd()
     print(f"\n🔧 Zstandard Compression Settings (Level {ZSTD_LEVEL})")
-
     dirs = [p for p in cwd.iterdir() if p.is_dir() and p.name not in SKIP_DIRS]
     if dirs:
         print(f"\n📁 Compressing {len(dirs)} directories...")
         for d in sorted(dirs):
             await compress_folder_async(d, str(d))
-
     files = [
         p
         for p in cwd.iterdir()
@@ -201,7 +196,6 @@ async def process_compress():
 
 async def process_decompress():
     cwd = Path.cwd()
-
     archives = list(cwd.glob("*.tar.zst"))
     if archives:
         print(f"\n📦 Decompressing {len(archives)} archives...")
@@ -220,7 +214,6 @@ async def process_decompress():
                 print(f"  ✓ Extracted to {extract_dir}/")
             except Exception as e:
                 logger.error(f"  ✗ Failed to decompress {arch.name}: {e}")
-
     zst_files = [p for p in cwd.glob("*.zst") if not p.name.endswith(".tar.zst")]
     if zst_files:
         print(f"\n📄 Decompressing {len(zst_files)} files...")

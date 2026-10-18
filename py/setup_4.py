@@ -1,70 +1,42 @@
 import sys
-from distutils.core import setup
+from setuptools import setup
 
+README = ""
 try:
-    import py2exe
-except ImportError:
+    f = open("README.rst")
+    README = f.read()
+    f.close()
+except:
     pass
-
-try:
-    import numpy
-except ImportError:
-    print("*** Warning: FontTools needs the numpy library for some operations, see:")
-    print("        http://numpy.scipy.org/")
-
-try:
-    import fontTools
-except ImportError:
-    print("*** Warning: RoboFab needs FontTools for some operations, see:")
-    print("        http://sourceforge.net/projects/fonttools/")
-
-if sys.version_info > (2, 3, 0, "alpha", 1):
-    classifiers = {
-        "classifiers": [
-            "Development Status :: 4 - Beta",
-            "Environment :: Console",
-            "Environment :: Other Environment",
-            "Intended Audience :: Developers",
-            "Intended Audience :: End Users/Desktop",
-            "License :: OSI Approved :: BSD License",
-            "Natural Language :: English",
-            "Operating System :: OS Independent",
-            "Programming Language :: Python",
-            "Topic :: Multimedia :: Graphics",
-            "Topic :: Multimedia :: Graphics :: Graphics Conversion",
-        ]
-    }
-else:
-    classifiers = {}
-
-long_description = """\
-RoboFab is a Python library with objects that deal with data usually associated with fonts and type design. RoboFab reads and writes UFO font files and works in any Python 2.3 (and 2.2.1), 2.4. 2.5, 2.6, 2.7. The RoboFab code for FontLab works in in FontLab 4.6, FontLab Studio 5.04, 5.1 and hopefully up.
-"""
-
+REQUIRES = ["chardet"]
+if sys.version_info < (2, 7):
+    REQUIRES.append("argparse")
 setup(
-    name="robofab",
-    version="1.2.1",
-    description="Tools to manipulate font sources",
-    author="Just van Rossum, Tal Leming, Erik van Blokland, others",
-    author_email="info@robofab.com",
-    maintainer="Just van Rossum, Tal Leming, Erik van Blokland",
-    maintainer_email="info@robofab.com",
-    url="http://robofab.com/",
-    license="OpenSource, BSD-style",
-    platforms=["Any"],
-    long_description=long_description,
-    packages=[
-        "robofab",
-        "robofab.interface",
-        "robofab.interface.mac",
-        "robofab.interface.win",
-        "robofab.interface.all",
-        "robofab.misc",
-        "robofab.objects",
-        "robofab.path",
-        "robofab.pens",
-        "robofab.tools",
+    name="pysrt",
+    version="1.1.2",
+    author="Jean Boussier",
+    author_email="jean.boussier@gmail.com",
+    packages=["pysrt"],
+    description="SubRip (.srt) subtitle parser and writer",
+    long_description=README,
+    install_requires=REQUIRES,
+    entry_points={"console_scripts": ["srt = pysrt.commands:main"]},
+    license="GPLv3",
+    platforms=["Independent"],
+    keywords="SubRip srt subtitle",
+    url="https://github.com/byroot/pysrt",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: GNU General Public License (GPL)",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Topic :: Multimedia :: Video",
+        "Topic :: Software Development :: Libraries",
+        "Topic :: Text Processing :: Markup",
     ],
-    package_dir={"": "Lib"},
-    **classifiers,
 )

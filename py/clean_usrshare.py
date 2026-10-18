@@ -1,6 +1,5 @@
 import sys
 from time import perf_counter
-
 import dh
 import rignore
 

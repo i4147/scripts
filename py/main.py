@@ -1,5 +1,4 @@
 import click
-
 from .PDFParserClass import *
 
 obj_parser = PDFparser()

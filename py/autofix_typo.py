@@ -13,7 +13,6 @@ try:
 except ImportError:
     NLTK_AVAILABLE = False
     print("Warning: NLTK not installed. Install with: pip install nltk", file=sys.stderr)
-
 try:
     from Levenshtein import distance as levenshtein_distance
 
@@ -48,7 +47,6 @@ SKIP_PATTERNS = [
     r"^[a-z][a-z0-9_]*$",
     r"^[a-z][A-Za-z0-9]*$",
 ]
-
 EXTENSIONS = {".md", ".py", ".toml", ".json", ".html", ".css", ".js"}
 
 
@@ -58,13 +56,10 @@ class TypoFixer:
         self.preview = preview
         self.changes_made = 0
         self.files_processed = 0
-
         self._load_nltk_words()
         if oxford_dict_path and Path(oxford_dict_path).exists():
             self._load_oxford_dict(oxford_dict_path)
-
         self._add_code_keywords()
-
         self.skip_regex = re.compile("|".join(SKIP_PATTERNS), re.IGNORECASE)
 
     def _load_nltk_words(self) -> None:
@@ -77,7 +72,6 @@ class TypoFixer:
                 except LookupError:
                     print("Downloading NLTK words corpus...", file=sys.stderr)
                     nltk.download("words", quiet=True)
-
                 self.valid_words.update(w.lower() for w in nltk_words.words())
                 print(f"Loaded {len(nltk_words.words())} words from NLTK", file=sys.stderr)
             except Exception as e:
@@ -156,49 +150,37 @@ class TypoFixer:
     def is_valid_word(self, word: str) -> bool:
         if not word or len(word) < 2:
             return True
-
         if self.skip_regex.match(word):
             return True
-
         if word.isupper() and len(word) <= 5:
             return True
-
         return word.lower() in self.valid_words
 
     def suggest_correction(self, word: str) -> str:
         if self.is_valid_word(word):
             return word
-
         original_word = word
         word_lower = word.lower()
-
         candidates = get_close_matches(word_lower, self.valid_words, n=1, cutoff=0.8)
-
         if candidates:
             correction = candidates[0]
-
             if original_word.isupper():
                 return correction.upper()
             elif original_word[0].isupper() and original_word[1:].islower():
                 return correction.capitalize()
             else:
                 return correction
-
         return original_word
 
     def fix_text(self, text: str) -> Tuple[str, int]:
-
         word_pattern = re.compile(r"\b([a-zA-Z]+(?:[-\'][a-zA-Z]+)*)\b")
-
         changes = 0
 
         def replace_word(match):
             nonlocal changes
             word = match.group(1)
-
             if len(word) <= 2:
                 return match.group(0)
-
             corrected = self.suggest_correction(word)
             if corrected != word:
                 changes += 1
@@ -216,35 +198,28 @@ class TypoFixer:
         except (UnicodeDecodeError, IOError) as e:
             print(f"  Skipping {filepath}: {e}", file=sys.stderr)
             return False
-
         if "\0" in original:
             return False
-
         fixed, changes = self.fix_text(original)
-
         if changes > 0 and not self.preview:
             backup = filepath.with_suffix(filepath.suffix + ".bak")
             shutil.copy2(filepath, backup)
-
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(fixed)
             print(f"  Fixed {changes} typo(s) in {filepath}", file=sys.stderr)
         elif changes > 0 and self.preview:
             print(f"  Would fix {changes} typo(s) in {filepath}", file=sys.stderr)
-
         self.changes_made += changes
         return changes > 0
 
     def process_directory(self, root_dir: str) -> None:
         root_path = Path(root_dir)
-
         for ext in EXTENSIONS:
             for filepath in root_path.rglob(f"*{ext}"):
                 if filepath.is_file():
                     self.files_processed += 1
                     print(f"Processing: {filepath}", file=sys.stderr)
                     self.fix_file(filepath)
-
         print(f"\nSummary: Processed {self.files_processed} files", file=sys.stderr)
         if self.preview:
             print(f"Preview mode: Would fix {self.changes_made} typos total", file=sys.stderr)
@@ -258,18 +233,14 @@ def main() -> None:
     parser.add_argument("--oxford-dict", type=str, help="Path to Oxford dictionary file (word\\tdefinition)")
     parser.add_argument("--apply", action="store_true", help="Actually apply fixes (default: preview only)")
     parser.add_argument("--dir", type=str, default=".", help="Directory to process (default: current)")
-
     args = parser.parse_args()
-
     if not NLTK_AVAILABLE and not args.oxford_dict:
         print("Error: Need either NLTK or Oxford dictionary", file=sys.stderr)
         print("Install NLTK: pip install nltk", file=sys.stderr)
         print("Or provide --oxford-dict path", file=sys.stderr)
         sys.exit(1)
-
     fixer = TypoFixer(oxford_dict_path=args.oxford_dict, preview=not args.apply)
     fixer.process_directory(args.dir)
-
     if args.apply and fixer.changes_made == 0:
         print("No typos found to fix!", file=sys.stderr)
 

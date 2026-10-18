@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import io
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
 import libcst as cst
 import libcst.matchers as m
 

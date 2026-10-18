@@ -1,7 +1,6 @@
 import sys
 from ast import parse
 from pathlib import Path
-
 from astunparse import unparse
 from dh import is_binary
 

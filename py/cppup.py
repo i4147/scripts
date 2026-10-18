@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from time import perf_counter
-
 import fastwalk
 
 FILE_EXTENSIONS = {

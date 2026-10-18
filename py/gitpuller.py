@@ -1,17 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that recursively scans the current working directory and all of its subdirectories to discover every Git repository (any folder containing a Git metadata directory), then updates each discovered repository by pulling the latest changes from its remote. The script should not descend into a folder once it has been identified as a repository, and it should report progress clearly as it works.
-
 For each repository found, the script should determine its currently checked-out branch and display it. If a repository has no configured remote, it should be recorded as a failure rather than crashing the run. Otherwise, it should attempt to pull updates and record whether the operation succeeded or failed, capturing any Git-related errors gracefully without stopping the processing of the remaining repositories.
-
 Use human-readable console output with a clear per-repository status line, an emoji-style or otherwise visually distinct header for each repository, and a final summary listing the total number of repositories found, how many were pulled successfully, and which ones failed along with the reason. If no repositories are found, the script should inform the user and exit cleanly.
-
 The script should be robust to permission issues or unreadable directories by skipping them without aborting. Display all repository paths relative to the starting directory for readability. The tool is intended to be run from a terminal with no required command-line arguments, and it should rely on a Git-interacting library available for Python to perform repository operations.
 ---"""
 
 from __future__ import annotations
-
 from pathlib import Path
-
 from git import GitCommandError, Repo
 
 

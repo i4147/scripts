@@ -41,14 +41,11 @@ def is_text_file(file_path):
 
 def find_files_with_chinese(directory="."):
     root = Path(directory)
-
     for file_path in root.rglob("*"):
         if not file_path.is_file():
             continue
-
         if not is_text_file(file_path):
             continue
-
         try:
             for encoding in ["utf-8", "gbk", "gb2312", "big5"]:
                 try:

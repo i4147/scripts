@@ -5,7 +5,6 @@ import time
 from collections import deque
 from multiprocessing import Pool
 from pathlib import Path
-
 from brotlicffi import compress
 from dh import format_size, get_files, get_size
 from termcolor import cprint

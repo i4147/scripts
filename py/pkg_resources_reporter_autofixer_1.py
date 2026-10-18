@@ -1,7 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import argparse
 import re
 import sys
@@ -9,7 +7,6 @@ from dataclasses import dataclass, field
 from multiprocessing import Pool
 from pathlib import Path
 from typing import TYPE_CHECKING
-
 from loguru import logger
 
 if TYPE_CHECKING:

@@ -12,11 +12,9 @@ from langdetect import detect_langs, DetectorFactory
 from binaryornot import is_binary
 
 DetectorFactory.seed = 0
-
 _print_lock = threading.Lock()
 _results_lock = threading.Lock()
 _results: list[dict[str, Any]] = []
-
 _gcld3_detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 
 
@@ -86,7 +84,6 @@ def combine_votes(g3: Optional[str], p2: Optional[str], ld: Optional[str]) -> di
 
     non_en_votes = sum(1 for v in votes.values() if v != "unknown" and not is_en(v))
     known_votes = sum(1 for v in votes.values() if v != "unknown")
-
     if non_en_votes >= 2:
         decision = True
     elif non_en_votes == 1 and known_votes == 1:
@@ -98,21 +95,17 @@ def combine_votes(g3: Optional[str], p2: Optional[str], ld: Optional[str]) -> di
             decision = False
     else:
         decision = False
-
     return {"votes": votes, "non_english": decision}
 
 
 def detect_line(file_path: Path, lineno: int, line: str, max_len: int) -> Optional[dict[str, Any]]:
     if not line.strip():
         return None
-
     text = line if len(line) <= max_len else line[:max_len] + "…"
-
     g3 = detect_gcld3(text)
     p2 = detect_pycld2(text)
     ld = detect_langdetect(text)
     combined = combine_votes(g3, p2, ld)
-
     if combined["non_english"]:
         rec = {
             "file": str(file_path),
@@ -158,7 +151,6 @@ def run_per_line(files: list[Path], workers: int, max_len: int):
             for lineno, raw in enumerate(read_text_lines(f), start=1):
                 if raw.strip():
                     futures.append(ex.submit(detect_line, f, lineno, raw, max_len))
-
         for fut in as_completed(futures):
             try:
                 rec = fut.result()
@@ -185,22 +177,17 @@ def main(argv=None):
         help="Parallelism mode: file or line (default: line)",
     )
     args = parser.parse_args(argv)
-
     input_paths = [Path(p) for p in args.paths] if args.paths else [Path(".")]
     files = list(iter_files(input_paths))
-
     if not files:
         print("No files found.", file=sys.stderr)
         return 1
-
     if args.parallel_mode == "file":
         run_per_file(files, args.workers, args.max_line_length)
     else:
         run_per_line(files, args.workers, args.max_line_length)
-
     with Path(args.out).open("w", encoding="utf-8") as fh:
         json.dump(_results, fh, ensure_ascii=False, indent=2)
-
     print(f"\nSaved {len(_results)} non-English lines to {args.out}")
     return 0
 

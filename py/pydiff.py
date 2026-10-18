@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
 from dh import cprint, read_lines
 
 

@@ -1,6 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as an interactive command-line tool for managing branches in a Git repository. The tool should be run from within a Git repository directory; if it is not, it should print a clear message and exit gracefully.
-
 Core behavior:
 - Detect the current repository and verify that the user is inside a valid Git working copy before doing anything else.
 - Present the user with a set of branch-management operations, such as listing local branches (excluding the currently active branch), switching to another branch, creating new branches, deleting branches, and cleaning up merged or stale branches.
@@ -11,15 +10,12 @@ Core behavior:
 - Display results using color-coded, readable status messages (for example, green for success, yellow for warnings, red for errors), and log significant actions for traceability.
 - Handle errors from Git operations gracefully, reporting the problem in plain language instead of crashing with a raw traceback.
 - Keep the script self-contained in a single file, with a clear entry point, helpful `--help` output, and sensible defaults.
-
 Inputs: the current working directory (must be a Git repository), the user's menu selections and dialog responses, and command-line arguments and options.
-
 Outputs: changes to the repository's branches (created, switched, renamed, or deleted), colorized console feedback for each action, and log entries recording what was done.
 ---"""
 
 import os
 from pathlib import Path
-
 import click
 import colored
 import git
@@ -29,7 +25,6 @@ from sh import git
 
 repo = None
 g = None
-
 try:
     repo = git.Repo(".")
     g = git.cmd.Git()
@@ -64,27 +59,20 @@ class RepoManager:
 
         cmd = ["cherry", "-v", first, second]
         response = git(cmd).strip().split("\n")
-
         commits = []
-
         for commit in response:
             commit = commit.split(" ")
-
             commits.append(" ".join(commit[2:]))
-
         return commits
 
     @staticmethod
     def fetch_synced_remotes():
         refs = repo.refs
-
         remotes = []
-
         for ref in refs:
             if isinstance(ref, git.refs.remote.RemoteReference):
                 if ref.name not in ["origin/HEAD", "origin/master"]:
                     remotes.append(ref)
-
         return remotes
 
     @staticmethod
@@ -108,18 +96,14 @@ class RepoManager:
             text=message,
             values=[(x.name, x.name) for x in items],
         ).run()
-
         selected = []
-
         if not picked:
             return []
-
         for item in items:
             for pick in picked:
                 if item.name == pick:
                     selected.append(item)
                     break
-
         return selected
 
 
@@ -128,7 +112,6 @@ class AuthorManager:
         import json
 
         self.authors = None
-
         if os.path.exists("authors.json"):
             with open("authors.json", "r") as f:
                 self.authors = json.loads(f.read())
@@ -137,23 +120,18 @@ class AuthorManager:
     def ask(self):
         if self.authors:
             authors = []
-
             for index, author in enumerate(self.authors):
                 name = f"{author['name']} <{author['email']}>"
                 authors.append((name, name))
-
             response = radiolist_dialog(
                 title="Reviewer Picker",
                 text="Who reviewed this?",
                 values=authors,
             ).run()
-
             if response != None:
                 return response
-
         name = prompt("Whats the reviewers name?: ")
         email = prompt("Whats the reviewers email?: ")
-
         return f"{name} <{email}>"
 
 
@@ -180,15 +158,12 @@ class Printer:
         path_folder = os.path.dirname(__file__)
         path = Path(path_folder)
         path_autocomplete = os.path.join(path)
-
         print(f"""{colored.fg("green")}AUTOCOMPLETE
 ===============
 ZSH:
 source {path_autocomplete}/merger-zsh-complete.sh
-
 FISH:
 source {path_autocomplete}/merger-fish-complete.sh
-
 BASH:
 source {path_autocomplete}/merger-bash-complete.sh
 """)
@@ -205,7 +180,6 @@ source {path_autocomplete}/merger-bash-complete.sh
     ):
         label_colors = self._generate_label_colors(label_colors)
         value_colors = self._generate_value_colors(value_colors)
-
         print(f"{label_colors}Merger: {value_colors} Successfully merged!")
 
     def branches(
@@ -269,27 +243,18 @@ def help_autocomplete():
     autocompletion=RepoManager.get_list_branches,
 )
 def merge(branch):
-
     if RepoManager.verify_branch():
         authorManager = AuthorManager()
-
         author = authorManager.ask()
-
         if author is None:
             printer.error("Author", "Not chosen")
             exit()
-
         commits = "\n".join(RepoManager.cherry(repo.active_branch, branch))
-
         commit_message = f"""{commits}
-
 Reviewed By: {author}"""
-
         repo.git.merge("--squash", "--no-log", branch)
         repo.index.commit(commit_message)
-
         printer.merged()
-
     else:
         printer.invalid_branch(repo.active_branch.name)
 
@@ -303,31 +268,25 @@ def clean():
 def remote():
     recent_branches = RepoManager.recent_branches(count=999999999)
     remote_branches = RepoManager.fetch_synced_remotes()
-
     if len(remote_branches) == 0:
         button_dialog(title="ERROR", text="NO REMOTE BRANCHES FOUND", buttons=[("OK", True)]).run()
         exit()
-
     selected = RepoManager.choose_repos_from_list(
         "BRANCH REMOTE CLEANER",
         "CHOOSE BRANCHES FROM THE LIST BELOW TO DELETE",
         remote_branches,
     )
-
     if len(selected) == 0:
         print("No branches selected")
         return
-
     question = RepoManager.ask(
         "ARE YOU SURE?",
         f"ARE YOU SURE YOU WISH TO DELETE THESE BRANCHES?: {', '.join([x.name for x in selected])}",
     )
-
     if question:
         for x in selected:
             name = x.name.split("/")[1:]
             repo.git.push("origin", "--delete", name)
-
         button_dialog(title="REMOTES DELETED", buttons=[("OK", True)]).run()
         exit()
     else:
@@ -342,12 +301,10 @@ def tools():
 @tools.command(help="Used to create test branches")
 def create_test_branches(names=["1.0.0", "2.0.0", "3.0.0"]):
     origin = repo.remote()
-
     for x in names:
         branch = repo.create_head(x)
         branch.checkout()
         origin.push(x)
-
     g.checkout("master")
 
 

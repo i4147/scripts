@@ -1,11 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 import ast
 import sys
 from pathlib import Path
-
 from dh import cprint, fsz, get_nobinary, gsz, is_binary, mpf, remove_blank_lines
 
 

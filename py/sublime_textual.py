@@ -72,17 +72,14 @@ class SyntaxHighlighter:
     def highlight_line(cls, line: str, language: str, theme: str = "monokai") -> Text:
         if language not in cls.PATTERNS:
             return Text(line)
-
         text = Text(line)
         patterns = cls.PATTERNS[language]
         theme_colors = SYNTAX_THEMES.get(theme, SYNTAX_THEMES["monokai"])
-
         for pattern_name, pattern in patterns.items():
             color = theme_colors.get(pattern_name, theme_colors["default"])
             for match in re.finditer(pattern, line, re.MULTILINE):
                 start, end = match.span()
                 text.stylize(Style(color=color), start, end)
-
         return text
 
 
@@ -104,7 +101,6 @@ class CommandPaletteScreen(Screen):
     def update_command_list(self, filter_text: str = "") -> None:
         option_list = self.query_one("#command-list", OptionList)
         option_list.clear_options()
-
         for cmd_name in sorted(self.commands.keys()):
             if filter_text.lower() in cmd_name.lower():
                 option_list.add_option(cmd_name)
@@ -131,12 +127,10 @@ class FindReplaceScreen(Screen):
         with Container():
             yield Label("Find:", classes="find-label")
             yield Input(placeholder="Search...", id="find-input")
-
             if self.mode == "replace":
                 yield Label("Replace with:", classes="replace-label")
                 yield Input(placeholder="Replace...", id="replace-input")
                 yield Button("Replace All", variant="primary", id="replace-all")
-
             yield Button("Find Next", variant="primary", id="find-next")
             yield Button("Cancel", variant="default", id="cancel")
 
@@ -147,10 +141,8 @@ class FindReplaceScreen(Screen):
             content = self.text_area.text
             current_pos = self.text_area.cursor_position
             found_pos = content.find(search_term, current_pos + 1)
-
             if found_pos == -1:
                 found_pos = content.find(search_term)
-
             if found_pos != -1:
                 self.text_area.cursor_position = found_pos + len(search_term)
                 self.text_area.select_line(found_pos, found_pos + len(search_term))
@@ -228,16 +220,13 @@ class FileBrowserScreen(Screen):
     def update_file_list(self, filter_text: str = "") -> None:
         option_list = self.query_one("#file-list", OptionList)
         option_list.clear_options()
-
         try:
             items = list(self.current_path.iterdir())
             directories = [item for item in items if item.is_dir()]
             files = [item for item in items if item.is_file()]
-
             for directory in sorted(directories):
                 if not filter_text or filter_text.lower() in directory.name.lower():
                     option_list.add_option(f"📁 {directory.name}/")
-
             for file in sorted(files):
                 if not filter_text or filter_text.lower() in file.name.lower():
                     option_list.add_option(f"📄 {file.name}")
@@ -252,7 +241,6 @@ class FileBrowserScreen(Screen):
     def on_option_selected(self, event: OptionList.OptionSelected) -> None:
         selected = event.option.prompt
         name = selected[2:] if selected.startswith(("📁", "📄")) else selected
-
         if selected.startswith("📁"):
             new_path = self.current_path / name.rstrip("/")
             if new_path.is_dir():
@@ -313,10 +301,8 @@ class MiniMap(Vertical):
         content = self.text_area.text
         lines = content.split("\n")
         total_lines = len(lines)
-
         container = self.query_one("#minimap-content", ScrollableContainer)
         container.remove_children()
-
         step = max(1, total_lines // 50)
         for i in range(0, total_lines, step):
             line = lines[i][:30] if lines[i] else "~"
@@ -328,7 +314,6 @@ class MiniMap(Vertical):
     def on_click(self, event) -> None:
         if hasattr(event, "target") and hasattr(event.target, "line_number"):
             line_num = event.target.line_number
-
             content = self.text_area.text
             lines = content.split("\n")
             pos = 0
@@ -355,7 +340,6 @@ class EditorTab(Container):
     def detect_language(self) -> str:
         if not self.filepath:
             return "python"
-
         ext = os.path.splitext(self.filepath)[1]
         lang_map = {
             ".py": "python",
@@ -373,11 +357,9 @@ class EditorTab(Container):
         lines = len(content.split("\n"))
         chars = len(content)
         modified = "✗" if self.modified else "✓"
-
         status = self.query_one("#status-bar", StatusBar)
         status.file_info = f"{modified} {self.filename} | Ln {lines} | Ch {chars}"
         status.language = self.language
-
         text_area = self.query_one("#editor", TextArea)
         pos = text_area.cursor_position
         content_before = content[:pos]
@@ -491,14 +473,11 @@ class SublimeTextEditor(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-
         with Horizontal():
             self.tab_container = TabbedContent(initial="tab-0")
             yield self.tab_container
-
             if self.show_minimap:
                 yield MiniMap(id="minimap")
-
         yield Footer()
 
     def on_mount(self) -> None:
@@ -542,17 +521,14 @@ class SublimeTextEditor(App):
         if not filepath:
             self.push_screen(FileBrowserScreen(self))
             return
-
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
-
             tab_id = f"tab-{len(self.tabs)}"
             new_tab = EditorTab(filepath, content)
             self.tab_container.add_pane(new_tab, title=os.path.basename(filepath), id=tab_id)
             self.tabs.append(new_tab)
             self.tab_container.active = tab_id
-
             self.notify(f"Opened {filepath}", severity="information")
         except Exception as e:
             self.notify(f"Error opening file: {str(e)}", severity="error")
@@ -560,10 +536,8 @@ class SublimeTextEditor(App):
     def save_file(self) -> None:
         current_tab = self.get_current_tab()
         editor = self.get_current_editor()
-
         if not current_tab or not editor:
             return
-
         if current_tab.filepath:
             try:
                 with open(current_tab.filepath, "w", encoding="utf-8") as f:
@@ -577,7 +551,6 @@ class SublimeTextEditor(App):
             self.save_as()
 
     def save_as(self) -> None:
-
         def save_with_name(filename: str) -> None:
             if filename:
                 current_tab = self.get_current_tab()
@@ -591,7 +564,6 @@ class SublimeTextEditor(App):
                         current_tab.language = current_tab.detect_language()
                         current_tab.modified = False
                         current_tab.update_status()
-
                         self.tab_container.active_pane.tab.title = current_tab.filename
                         self.notify(f"Saved as {filename}", severity="information")
                     except Exception as e:
@@ -607,7 +579,6 @@ class SublimeTextEditor(App):
             if current_tab and current_tab.modified:
                 self.notify("Please save before closing", severity="warning")
                 return
-
             self.tab_container.remove_pane(self.tab_container.active_pane)
             self.tabs.remove(current_tab)
             if not self.tabs:
@@ -696,7 +667,6 @@ class SublimeTextEditor(App):
         if current_tab:
             current_tab.modified = True
             current_tab.update_status()
-
             if self.show_minimap:
                 minimap = self.query("#minimap")
                 if minimap:

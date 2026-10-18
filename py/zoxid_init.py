@@ -47,7 +47,6 @@ class ZoxideSilentException(Exception):
 def __zoxide_errhandler(
     func: typing.Callable[[list[str]], None],
 ) -> typing.Callable[[list[str]], int]:
-
     def wrapper(args: list[str]) -> int:
         try:
             func(args)

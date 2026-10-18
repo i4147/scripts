@@ -4,7 +4,6 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Tuple
-
 from tree_sitter import Language, Parser
 import tree_sitter_bash as ts_bash
 
@@ -20,7 +19,6 @@ def remove_comments_from_content(content: str) -> Tuple[str, int]:
     parser = get_parser()
     tree = parser.parse(bytes(content, "utf-8"))
     root = tree.root_node
-
     comment_nodes = []
     comment_types = {"comment", "shebang"}
 
@@ -31,33 +29,25 @@ def remove_comments_from_content(content: str) -> Tuple[str, int]:
             collect_comments(child)
 
     collect_comments(root)
-
     if not comment_nodes:
         return content, 0
-
     lines = content.splitlines(keepends=True)
     comment_count = 0
     cleaned_lines = []
-
     comment_nodes.sort(key=lambda n: (n.start_point[0], n.start_point[1]))
-
     keep_line = [True] * len(lines)
-
     for node in comment_nodes:
         start_line = node.start_point[0]
         end_line = node.end_point[0]
-
         if start_line == end_line:
             start_col = node.start_point[1]
             end_col = node.end_point[1]
-
             line_start = lines[start_line][:start_col].strip()
             if not line_start or line_start == "#" or line_start.startswith("#"):
                 keep_line[start_line] = False
                 comment_count += 1
             else:
                 line = lines[start_line]
-
                 if line.rstrip().endswith(("#" + node.text.decode("utf-8").lstrip("#"))):
                     before_comment = line[:start_col].rstrip()
                     if line.endswith("\n"):
@@ -73,7 +63,6 @@ def remove_comments_from_content(content: str) -> Tuple[str, int]:
                 if line_idx < len(keep_line):
                     keep_line[line_idx] = False
             comment_count += 1
-
     result_lines = []
     for idx, line in enumerate(lines):
         if keep_line[idx]:
@@ -85,7 +74,6 @@ def remove_comments_from_content(content: str) -> Tuple[str, int]:
                 result_lines.append(line)
             else:
                 pass
-
     if any(
         c.start_point[0] == c.end_point[0]
         and any(c.start_point[1] > 0 for c in comment_nodes if c.start_point[0] == c.end_point[0])
@@ -106,13 +94,11 @@ def remove_comments_from_content(content: str) -> Tuple[str, int]:
             elif keep_line[line_num]:
                 final_lines.append(line)
         result_lines = final_lines
-
     if not result_lines:
         result_lines = []
         for idx, line in enumerate(lines):
             if keep_line[idx] or idx < len(lines):
                 result_lines.append(line)
-
     return "".join(result_lines), comment_count
 
 
@@ -120,10 +106,8 @@ def process_file(file_path: Path) -> Tuple[Path, int, bool]:
     try:
         content = file_path.read_text(encoding="utf-8")
         cleaned_content, comment_count = remove_comments_from_content(content)
-
         if comment_count > 0:
             file_path.write_text(cleaned_content, encoding="utf-8")
-
         return file_path, comment_count, True
     except Exception as e:
         logging.error(f"Error processing {file_path}: {e}")
@@ -131,10 +115,8 @@ def process_file(file_path: Path) -> Tuple[Path, int, bool]:
 
 
 def is_bash_file(path: Path) -> bool:
-
     if path.suffix in {".sh", ".bash", ".zsh", ".ksh"}:
         return True
-
     try:
         with open(path, "r", encoding="utf-8") as f:
             first_line = f.readline().strip()
@@ -142,18 +124,15 @@ def is_bash_file(path: Path) -> bool:
                 return True
     except (UnicodeDecodeError, IOError):
         pass
-
     return False
 
 
 def collect_files(paths: List[Path], recursive: bool = True) -> List[Path]:
     files = []
-
     for path in paths:
         if not path.exists():
             logging.warning(f"Path does not exist: {path}")
             continue
-
         if path.is_file():
             if is_bash_file(path):
                 files.append(path)
@@ -166,7 +145,6 @@ def collect_files(paths: List[Path], recursive: bool = True) -> List[Path]:
                 for file_path in path.glob("*"):
                     if file_path.is_file() and is_bash_file(file_path):
                         files.append(file_path)
-
     return files
 
 
@@ -179,39 +157,29 @@ def main():
     parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers (default: CPU count)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without making changes")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
-
     args = parser.parse_args()
-
     log_level = logging.INFO if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="%(message)s")
-
     if not args.inputs:
         inputs = [Path.cwd()]
     else:
         inputs = args.inputs
-
     files = collect_files(inputs, recursive=not args.no_recursive)
-
     if not files:
         print("No bash files found to process.")
         return 0
-
     print(f"Found {len(files)} bash files to process")
-
     if args.dry_run:
         print("\nFiles that would be processed:")
         for f in files:
             print(f"  {f}")
         return 0
-
     total_comments = 0
     processed = 0
     failed = 0
     results = []
-
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         futures = {executor.submit(process_file, f): f for f in files}
-
         for future in as_completed(futures):
             file_path, comment_count, success = future.result()
             processed += 1
@@ -223,13 +191,11 @@ def main():
                     print(f"  {file_path}: no comments found")
             else:
                 failed += 1
-
     print(f"\n{'=' * 50}")
     print(f"Summary:")
     print(f"  Files processed: {processed}")
     print(f"  Files failed: {failed}")
     print(f"  Total comments removed: {total_comments}")
-
     if failed > 0:
         return 1
     return 0

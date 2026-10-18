@@ -1,7 +1,6 @@
 from PIL.Image import Image
 import pathlib
 from sys import argv
-
 from cv2 import VideoCapture, imwrite
 from PIL import Image
 from pytesseract import image_to_string

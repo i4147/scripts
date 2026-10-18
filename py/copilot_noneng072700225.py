@@ -11,13 +11,11 @@ try:
 except Exception as e:
     print("Missing dependency: gcld3. Install with: pip install gcld3", file=sys.stderr)
     raise
-
 try:
     import pycld2 as cld2
 except Exception as e:
     print("Missing dependency: pycld2. Install with: pip install pycld2", file=sys.stderr)
     raise
-
 try:
     from langdetect import detect_langs, DetectorFactory
 
@@ -25,11 +23,9 @@ try:
 except Exception as e:
     print("Missing dependency: langdetect. Install with: pip install langdetect", file=sys.stderr)
     raise
-
 _print_lock = threading.Lock()
 _results_lock = threading.Lock()
 _results: list[dict[str, Any]] = []
-
 _gcld3_detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 
 
@@ -148,7 +144,6 @@ def process_file(path: Path, max_line_length: int = 2000) -> list[dict[str, Any]
     }
     if path.suffix and path.suffix.lower() not in text_extensions:
         pass
-
     for lineno, raw_line in enumerate(read_text_lines(path), start=1):
         if not raw_line or raw_line.strip() == "":
             continue
@@ -189,18 +184,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--out", "-o", default="noneng.json", help="Output JSON file (default: noneng.json).")
     parser.add_argument("--max-line-length", type=int, default=2000, help="Max chars of a line to consider/display.")
     args = parser.parse_args(argv)
-
     input_paths = gather_input_paths(args.paths)
     files_gen = iter_files(input_paths)
-
     files_to_process = []
     for f in files_gen:
         files_to_process.append(f)
-
     if not files_to_process:
         print("No files found to process.", file=sys.stderr)
         return 1
-
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(process_file, f, args.max_line_length): f for f in files_to_process}
         for fut in as_completed(futures):
@@ -210,7 +201,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             except Exception as e:
                 with _print_lock:
                     print(f"Error processing {fpath}: {e}", file=sys.stderr)
-
     try:
         out_path = Path(args.out)
         with out_path.open("w", encoding="utf-8") as fh:
@@ -219,7 +209,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     except Exception as e:
         print(f"Failed to write output file: {e}", file=sys.stderr)
         return 2
-
     return 0
 
 

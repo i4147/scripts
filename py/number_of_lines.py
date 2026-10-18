@@ -2,7 +2,6 @@ import pathlib
 from multiprocessing import Pool
 from sys import exit
 from time import perf_counter
-
 from rignore import walk
 
 txt_file = pathlib.Path("/sdcard/txt").open(encoding="utf-8")
@@ -19,7 +18,6 @@ def process_file(fp) -> bool:
                 doit = True
     if doit:
         pass
-
         pathlib.Path(fp).unlink()
         print(f"{fp.name} removed")
         return True

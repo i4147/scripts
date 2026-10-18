@@ -1,9 +1,7 @@
 import sys
-
 from dh import is_digit
 
 fn = sys.argv[1]
-
 nl = []
 rest = []
 with open(fn) as f:

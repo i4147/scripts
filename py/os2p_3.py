@@ -1,543 +1,202 @@
-from __future__ import annotations
-
 import ast
-import traceback
-from multiprocessing import Pool
+import sys
 from pathlib import Path
-from typing import Any
-
-from dh import cprint, fsz, gsz
+from typing import List, Tuple, Optional
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import traceback
+from dh import fsz, get_files, gsz
+from termcolor import cprint
 
 
 class PathlibTransformer(ast.NodeTransformer):
-    PATHLIB_MAPPINGS: dict[str, tuple[Any, str]] = {
-        "exists": ("exists", "bool"),
-        "isfile": ("is_file", "bool"),
-        "isdir": ("is_dir", "bool"),
-        "islink": ("is_symlink", "bool"),
-        "isabs": ("is_absolute", "bool"),
-        "is_mount": ("is_mount", "bool"),
-        "abspath": ("resolve", "Path"),
-        "realpath": ("resolve", "Path"),
-        "basename": ("name", "str"),
-        "dirname": ("parent", "Path"),
-        "split": (None, "tuple"),
-        "splitext": (None, "tuple"),
-        "join": (None, "Path"),
-        "normpath": ("resolve", "Path"),
-        "normcase": (None, "str"),
-        "relpath": (None, "Path"),
-        "commonpath": (None, "Path"),
-        "commonprefix": (None, "str"),
-        "getsize": (("stat", "st_size"), "int"),
-        "getmtime": (("stat", "st_mtime"), "float"),
-        "getctime": (("stat", "st_ctime"), "float"),
-        "getatime": (("stat", "st_atime"), "float"),
-        "samefile": ("samefile", "bool"),
-        "sameopenfile": (None, "bool"),
-        "expanduser": ("expanduser", "Path"),
-        "expandvars": ("expandvars", "Path"),
-    }
-
-    OS_MAPPINGS: dict[str, tuple[Any, str]] = {
-        "remove": ("unlink", "None"),
-        "unlink": ("unlink", "None"),
-        "rmdir": ("rmdir", "None"),
-        "rmtree": (None, "None"),
-        "mkdir": ("mkdir", "None"),
-        "makedirs": ("mkdir", "None"),
-        "rename": ("rename", "None"),
-        "replace": ("replace", "None"),
-        "symlink": (None, "None"),
-        "link": (None, "None"),
-        "copy": (None, "None"),
-        "copy2": (None, "None"),
-        "copytree": (None, "None"),
-        "listdir": (None, "list"),
-        "scandir": (None, "iterator"),
-        "walk": (None, "generator"),
-        "chdir": ("chdir", "None"),
-        "getcwd": ("cwd", "Path"),
-        "getcwdb": (None, "bytes"),
-        "chmod": ("chmod", "None"),
-        "chown": ("chown", "None"),
-        "lchown": (None, "None"),
-        "open": (None, "file"),
-        "fdopen": (None, "file"),
-        "getpid": (None, "int"),
-        "getppid": (None, "int"),
-        "environ": (None, "dict"),
-        "getenv": (None, "str"),
-        "putenv": (None, "None"),
-    }
-
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __init__(self, file_path: Path) -> None:
+        self.file_path = file_path
         self.needs_path_import = False
-        self.needs_shutil_import = False
-        self.warnings: list[str] = []
-        self.infos: list[str] = []
-        self.os_var_name: str = "os"
-        self.os_path_var_name: str = "os.path"
-        self.pathlib_imports: set[str] = set()
+        self.warnings: List[str] = []
+        self.infos: List[str] = []
 
     def visit_Import(self, node: ast.Import) -> ast.Import:
         for alias in node.names:
-            if alias.name == "pathlib":
+            if alias.name == "pathlib" or alias.name == "Path":
                 self.needs_path_import = False
-                if alias.asname:
-                    self.pathlib_imports.add(alias.asname)
-            elif alias.name == "shutil":
-                self.needs_shutil_import = False
-            elif alias.name == "os":
-                self.os_var_name = alias.asname or "os"
         return self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         if node.module == "pathlib":
-            self.needs_path_import = False
             for alias in node.names:
-                self.pathlib_imports.add(alias.name)
-        elif node.module == "shutil":
-            self.needs_shutil_import = False
+                if alias.name == "Path":
+                    self.needs_path_import = False
         return self.generic_visit(node)
-
-    def visit_Assign(self, node: ast.Assign) -> ast.AST:
-        if isinstance(node.value, ast.Attribute) and self._is_os_path(node.value):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    self.os_path_var_name = target.id
-                    self.infos.append(f"Found alias: {target.id} = os.path")
-        return self.generic_visit(node)
-
-    def _is_os_path(self, node: ast.AST) -> bool:
-        return (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and (node.value.id == self.os_var_name)
-            and (node.attr == "path")
-        )
-
-    def _is_os_call(self, node: ast.Call, func_name: str) -> bool:
-        return (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and (node.func.value.id == self.os_var_name)
-            and (node.func.attr == func_name)
-        )
-
-    def _is_os_path_call(self, node: ast.Call, func_name: str) -> bool:
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Attribute)
-            and isinstance(node.func.value.value, ast.Name)
-            and (node.func.value.value.id == self.os_var_name)
-            and (node.func.value.attr == "path")
-            and (node.func.attr == func_name)
-        ):
-            return True
-        return bool(
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and (node.func.value.id == self.os_path_var_name)
-            and (node.func.attr == func_name)
-        )
 
     def visit_Call(self, node: ast.Call) -> ast.AST:
-        for func_name, (target, return_type) in self.PATHLIB_MAPPINGS.items():
-            if self._is_os_path_call(node, func_name):
-                return self._transform_path_call(node, func_name, target, return_type)
-        for func_name, (target, return_type) in self.OS_MAPPINGS.items():
-            if self._is_os_call(node, func_name):
-                return self._transform_os_call(node, func_name, target, return_type)
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id == self.os_var_name
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-        ):
-            func_name = node.args[0].value
-            if func_name in self.OS_MAPPINGS:
-                self.warnings.append(f"Dynamic os call 'os.{func_name}' found - manual review required")
-        return self.generic_visit(node)
-
-    def _transform_path_call(self, node: ast.Call, func_name: str, target: Any, return_type: str) -> ast.AST:
-        self.infos.append(f"os.path.{func_name} -> pathlib equivalent")
-        if func_name == "join":
-            return self._transform_join(node)
-        elif func_name == "split":
-            return self._transform_split(node)
-        elif func_name == "splitext":
-            return self._transform_splitext(node)
-        elif func_name == "relpath":
-            return self._transform_relpath(node)
-        elif func_name == "commonpath":
-            return self._transform_commonpath(node)
-        elif func_name == "commonprefix":
-            return self._transform_commonprefix(node)
-        elif func_name == "normcase":
-            return self._transform_normcase(node)
-        elif func_name in ["getsize", "getmtime", "getctime", "getatime"]:
-            return self._transform_stat_call(node, target)
-        elif target == "samefile":
-            return self._transform_samefile(node)
-        elif isinstance(target, str) and (not isinstance(target, tuple)):
-            new_node = ast.Attribute(
-                value=self._ensure_path(node.args[0] if node.args else ast.Constant(value=".")),
-                attr=target,
+        if self._is_os_path_attr(node, "join"):
+            self.infos.append(f"os.path.join -> Path / operator")
+            new_node = self._transform_join(node)
+            return new_node if new_node else self.generic_visit(node)
+        if self._is_os_path_attr(node, "dirname"):
+            self.infos.append(f"os.path.dirname -> Path.parent")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="parent", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_path_attr(node, "basename"):
+            self.infos.append(f"os.path.basename -> Path.name")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="name", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_path_attr(node, "splitext"):
+            self.infos.append(f"os.path.splitext -> Path.stem/.suffix")
+            path_var = self._ensure_path(node.args[0])
+            new_node = ast.Tuple(
+                elts=[
+                    ast.Attribute(value=path_var, attr="stem", ctx=ast.Load()),
+                    ast.Attribute(value=path_var, attr="suffix", ctx=ast.Load()),
+                ],
                 ctx=ast.Load(),
             )
             return ast.copy_location(new_node, node)
-        return self.generic_visit(node)
-
-    def _transform_os_call(self, node: ast.Call, func_name: str, target: Any, return_type: str) -> ast.AST:
-        if func_name == "makedirs":
-            return self._transform_makedirs(node)
-        elif func_name == "mkdir":
-            return self._transform_mkdir(node)
-        elif func_name == "listdir":
-            return self._transform_listdir(node)
-        elif func_name == "scandir":
-            return self._transform_scandir(node)
-        elif func_name == "walk":
-            return self._transform_walk(node)
-        elif func_name == "getcwd":
+        if self._is_os_path_attr(node, "exists"):
+            self.infos.append(f"os.path.exists -> Path.exists()")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="exists", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_path_attr(node, "isfile"):
+            self.infos.append(f"os.path.isfile -> Path.is_file()")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="is_file", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_path_attr(node, "isdir"):
+            self.infos.append(f"os.path.isdir -> Path.is_dir()")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="is_dir", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_path_attr(node, "abspath"):
+            self.infos.append(f"os.path.abspath -> Path.resolve()")
             new_node = ast.Call(
                 func=ast.Attribute(
-                    value=ast.Name(id="Path", ctx=ast.Load()),
-                    attr="cwd",
+                    value=self._ensure_path(node.args[0] if node.args else ast.Constant(value=".")),
+                    attr="resolve",
                     ctx=ast.Load(),
                 ),
                 args=[],
                 keywords=[],
             )
             return ast.copy_location(new_node, node)
-        elif func_name == "chdir":
-            self.warnings.append("os.chdir remains as os.chdir (use context manager with Path.cwd() if possible)")
-            return node
-        elif func_name == "remove" or func_name == "unlink":
+        if self._is_os_func(node, "remove"):
+            self.infos.append(f"os.remove -> Path.unlink()")
             new_node = ast.Call(
                 func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="unlink", ctx=ast.Load()),
                 args=[],
                 keywords=[],
             )
             return ast.copy_location(new_node, node)
-        elif func_name == "rmdir":
+        if self._is_os_func(node, "listdir"):
+            self.warnings.append(f"os.listdir requires manual review - consider Path.iterdir() or Path.glob('*')")
+            return self.generic_visit(node)
+        if self._is_os_func(node, "makedirs"):
+            self.infos.append(f"os.makedirs -> Path.mkdir(parents=True)")
             new_node = ast.Call(
-                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="rmdir", ctx=ast.Load()),
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="mkdir", ctx=ast.Load()),
                 args=[],
-                keywords=[],
+                keywords=[
+                    ast.keyword(arg="parents", value=ast.Constant(value=True)),
+                    ast.keyword(arg="exist_ok", value=ast.Constant(value=True)),
+                ],
             )
             return ast.copy_location(new_node, node)
-        elif func_name == "rename" or func_name == "replace":
+        if self._is_os_func(node, "mkdir"):
+            self.infos.append(f"os.mkdir -> Path.mkdir()")
             new_node = ast.Call(
-                func=ast.Attribute(
-                    value=self._ensure_path(node.args[0]),
-                    attr=func_name,
-                    ctx=ast.Load(),
-                ),
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="mkdir", ctx=ast.Load()),
+                args=[],
+                keywords=[ast.keyword(arg="exist_ok", value=ast.Constant(value=False))],
+            )
+            return ast.copy_location(new_node, node)
+        if self._is_os_func(node, "rename"):
+            self.infos.append(f"os.rename -> Path.rename()")
+            new_node = ast.Call(
+                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="rename", ctx=ast.Load()),
                 args=[self._ensure_path(node.args[1])],
                 keywords=[],
             )
             return ast.copy_location(new_node, node)
-        elif func_name == "chmod":
+        if self._is_os_func(node, "getcwd"):
+            self.infos.append(f"os.getcwd -> Path.cwd()")
             new_node = ast.Call(
-                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="chmod", ctx=ast.Load()),
-                args=node.args[1:],
-                keywords=node.keywords,
-            )
-            return ast.copy_location(new_node, node)
-        elif func_name == "chown":
-            new_node = ast.Call(
-                func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="chown", ctx=ast.Load()),
-                args=node.args[1:],
-                keywords=node.keywords,
-            )
-            return ast.copy_location(new_node, node)
-        elif func_name == "symlink":
-            new_node = ast.Call(
-                func=ast.Attribute(
-                    value=self._ensure_path(node.args[1] if len(node.args) > 1 else node.args[0]),
-                    attr="symlink_to",
-                    ctx=ast.Load(),
-                ),
-                args=[self._ensure_path(node.args[0])],
+                func=ast.Attribute(value=ast.Name(id="Path", ctx=ast.Load()), attr="cwd", ctx=ast.Load()),
+                args=[],
                 keywords=[],
             )
             return ast.copy_location(new_node, node)
-        elif func_name in ["environ", "getenv", "putenv", "getpid", "getppid"]:
-            return node
-        elif func_name in ["rmtree", "copy", "copy2", "copytree"]:
-            self.needs_shutil_import = True
-            self.warnings.append(f"os.{func_name} -> Use shutil.{func_name} (added import)")
-            return node
         return self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        if isinstance(node.value, ast.Name) and node.value.id == "os":
+            if node.attr == "path":
+                return node
+            elif node.attr in ["remove", "rename", "mkdir", "listdir"]:
+                self.warnings.append(f"Direct os.{node.attr} reference found - may need manual refactoring")
+        return self.generic_visit(node)
+
+    def _is_os_path_attr(self, node: ast.Call, attr: str) -> bool:
+        return (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Attribute)
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "os"
+            and node.func.value.attr == "path"
+            and node.func.attr == attr
+        )
+
+    def _is_os_func(self, node: ast.Call, func_name: str) -> bool:
+        return (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "os"
+            and node.func.attr == func_name
+        )
 
     def _ensure_path(self, node: ast.AST) -> ast.AST:
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "Path":
                 return node
-            if (
-                isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and (node.func.value.id in self.pathlib_imports)
-            ):
-                return node
         return ast.Call(func=ast.Name(id="Path", ctx=ast.Load()), args=[node], keywords=[])
 
-    def _transform_join(self, node: ast.Call) -> ast.AST:
+    def _transform_join(self, node: ast.Call) -> Optional[ast.AST]:
         if not node.args:
-            return ast.Name(id="Path", ctx=ast.Load())
+            return None
         result = self._ensure_path(node.args[0])
         for arg in node.args[1:]:
-            result = ast.BinOp(left=result, op=ast.Div(), right=self._ensure_operand(arg))
+            result = ast.BinOp(left=result, op=ast.Div(), right=arg)
             ast.copy_location(result, node)
         return result
 
-    def _ensure_operand(self, node: ast.AST) -> ast.AST:
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return self._ensure_path(node)
-        return node
 
-    def _transform_split(self, node: ast.Call) -> ast.AST:
-        if not node.args:
-            return node
-        path_arg = node.args[0]
-        return ast.Tuple(
-            elts=[
-                ast.Call(
-                    func=ast.Name(id="str", ctx=ast.Load()),
-                    args=[
-                        ast.Attribute(
-                            value=self._ensure_path(path_arg),
-                            attr="parent",
-                            ctx=ast.Load(),
-                        )
-                    ],
-                    keywords=[],
-                ),
-                ast.Attribute(value=self._ensure_path(path_arg), attr="name", ctx=ast.Load()),
-            ],
-            ctx=ast.Load(),
-        )
-
-    def _transform_splitext(self, node: ast.Call) -> ast.AST:
-        if not node.args:
-            return node
-        path_arg = node.args[0]
-        path_obj = self._ensure_path(path_arg)
-        return ast.Tuple(
-            elts=[
-                ast.Attribute(value=path_obj, attr="stem", ctx=ast.Load()),
-                ast.Attribute(value=path_obj, attr="suffix", ctx=ast.Load()),
-            ],
-            ctx=ast.Load(),
-        )
-
-    def _transform_relpath(self, node: ast.Call) -> ast.AST:
-        path_arg = node.args[0]
-        start_arg = node.args[1] if len(node.args) > 1 else ast.Constant(value=".")
-        return ast.Call(
-            func=ast.Attribute(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=self._ensure_path(path_arg),
-                        attr="resolve",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                ),
-                attr="relative_to",
-                ctx=ast.Load(),
-            ),
-            args=[
-                ast.Call(
-                    func=ast.Attribute(
-                        value=self._ensure_path(start_arg),
-                        attr="resolve",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                )
-            ],
-            keywords=[],
-        )
-
-    def _transform_commonpath(self, node: ast.Call) -> ast.AST:
-        self.warnings.append("os.path.commonpath - requires manual implementation with pathlib")
-        return node
-
-    def _transform_commonprefix(self, node: ast.Call) -> ast.AST:
-        self.warnings.append("os.path.commonprefix - consider using os.path.commonpath or manual implementation")
-        return node
-
-    def _transform_normcase(self, node: ast.Call) -> ast.AST:
-        if not node.args:
-            return node
-        self.warnings.append("os.path.normcase - platform-specific, manual review recommended")
-        return node
-
-    def _transform_stat_call(self, node: ast.Call, target: tuple) -> ast.AST:
-        if not node.args:
-            return node
-        stat_attr, stat_field = target
-        return ast.Attribute(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=self._ensure_path(node.args[0]),
-                    attr=stat_attr,
-                    ctx=ast.Load(),
-                ),
-                args=[],
-                keywords=[],
-            ),
-            attr=stat_field,
-            ctx=ast.Load(),
-        )
-
-    def _transform_samefile(self, node: ast.Call) -> ast.AST:
-        if len(node.args) < 2:
-            return node
-        return ast.Call(
-            func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="samefile", ctx=ast.Load()),
-            args=[self._ensure_path(node.args[1])],
-            keywords=[],
-        )
-
-    def _transform_makedirs(self, node: ast.Call) -> ast.AST:
-        if not node.args:
-            return node
-        keywords = [ast.keyword(arg="parents", value=ast.Constant(value=True))]
-        exist_ok_found = False
-        for kw in node.keywords:
-            if kw.arg == "exist_ok":
-                keywords.append(kw)
-                exist_ok_found = True
-            elif kw.arg == "mode":
-                keywords.append(ast.keyword(arg="mode", value=kw.value))
-        if not exist_ok_found:
-            keywords.append(ast.keyword(arg="exist_ok", value=ast.Constant(value=True)))
-        return ast.Call(
-            func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="mkdir", ctx=ast.Load()),
-            args=[],
-            keywords=keywords,
-        )
-
-    def _transform_mkdir(self, node: ast.Call) -> ast.AST:
-        if not node.args:
-            return node
-        keywords = []
-        for kw in node.keywords:
-            if kw.arg == "mode":
-                keywords.append(ast.keyword(arg="mode", value=kw.value))
-        keywords.append(ast.keyword(arg="parents", value=ast.Constant(value=False)))
-        keywords.append(ast.keyword(arg="exist_ok", value=ast.Constant(value=False)))
-        return ast.Call(
-            func=ast.Attribute(value=self._ensure_path(node.args[0]), attr="mkdir", ctx=ast.Load()),
-            args=[],
-            keywords=keywords,
-        )
-
-    def _transform_listdir(self, node: ast.Call) -> ast.AST:
-        path_arg = node.args[0] if node.args else ast.Constant(value=".")
-        return ast.Call(
-            func=ast.Name(id="list", ctx=ast.Load()),
-            args=[
-                ast.Call(
-                    func=ast.Attribute(
-                        value=self._ensure_path(path_arg),
-                        attr="iterdir",
-                        ctx=ast.Load(),
-                    ),
-                    args=[],
-                    keywords=[],
-                )
-            ],
-            keywords=[],
-        )
-
-    def _transform_scandir(self, node: ast.Call) -> ast.AST:
-        path_arg = node.args[0] if node.args else ast.Constant(value=".")
-        self.warnings.append("os.scandir -> Path.iterdir() returns DirEntry-like objects, check attribute access")
-        return ast.Call(
-            func=ast.Attribute(value=self._ensure_path(path_arg), attr="iterdir", ctx=ast.Load()),
-            args=[],
-            keywords=[],
-        )
-
-    def _transform_walk(self, node: ast.Call) -> ast.AST:
-        self.warnings.append("os.walk - manual conversion recommended. Use Path.rglob() with custom logic")
-        if not node.args:
-            return node
-        path_arg = node.args[0]
-        walk_code = f"(\n            (str(root), [d.name for d in root.iterdir() if d.is_dir()], \n             [f.name for f in root.iterdir() if f.is_file()])\n            for root in Path({
-            ast.unparse(path_arg)
-        }).rglob('*') if root.is_dir()\n        )"
-        self.warnings.append("os.walk converted to simplified generator - verify correctness")
-        try:
-            walk_ast = ast.parse(walk_code, mode="eval")
-            return walk_ast.body
-        except:
-            return node
-
-
-def add_required_imports(tree: ast.AST, needs_pathlib: bool, needs_shutil: bool) -> ast.AST:
-    imports_to_add = []
-    if needs_pathlib:
-        has_pathlib = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name == "pathlib":
-                        has_pathlib = True
-                        break
-            elif isinstance(node, ast.ImportFrom) and node.module == "pathlib":
-                has_pathlib = True
-                break
-        if not has_pathlib:
-            imports_to_add.append(ast.ImportFrom(module="pathlib", names=[ast.alias(name="Path")], level=0))
-    if needs_shutil:
-        has_shutil = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name == "shutil":
-                        has_shutil = True
-                        break
-            elif isinstance(node, ast.ImportFrom) and node.module == "shutil":
-                has_shutil = True
-                break
-        if not has_shutil:
-            imports_to_add.append(ast.Import(name=ast.alias(name="shutil")))
-    if imports_to_add:
-        insert_pos = 0
-        for i, node in enumerate(tree.body):
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                insert_pos = i + 1
-            elif not isinstance(node, (ast.Expr, ast.Constant)) or not _is_docstring(node):
-                break
-        for imp in reversed(imports_to_add):
-            tree.body.insert(insert_pos, imp)
-    return tree
-
-
-def _is_docstring(node: ast.AST) -> bool:
-    return isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
-
-
-def process_file(
-    path: Path, dry_run: bool = False, verbose: bool = False
-) -> tuple[str | None, bool, list[str], list[str]]:
+def process_file(file_path: Path) -> Tuple[Optional[str], bool, List[str], List[str]]:
     try:
-        original_content = path.read_text(encoding="utf-8")
+        original_content = file_path.read_text(encoding="utf-8")
         tree = ast.parse(original_content)
-        transformer = PathlibTransformer(path)
+        transformer = PathlibTransformer(file_path)
         new_tree = transformer.visit(tree)
         ast.fix_missing_locations(new_tree)
-        new_tree = add_required_imports(new_tree, transformer.needs_path_import, transformer.needs_shutil_import)
+        if transformer.needs_path_import:
+            path_import = ast.ImportFrom(module="pathlib", names=[ast.alias(name="Path")], level=0)
+            new_tree.body.insert(0, path_import)
+            transformer.infos.append("Added 'from pathlib import Path'")
         new_content = ast.unparse(new_tree)
         ast.parse(new_content)
         for info in transformer.infos:
@@ -545,114 +204,88 @@ def process_file(
         for warning in transformer.warnings:
             cprint(f"  ⚠️ {warning}", "yellow")
         if transformer.infos or transformer.warnings:
-            cprint(
-                f"{('📝' if dry_run else '✓')} Refactored: {path.name}",
-                "green" if not dry_run else "yellow",
-            )
+            cprint(f"✓ Refactored: {file_path}", "green")
         return (new_content, True, transformer.warnings, transformer.infos)
     except SyntaxError as e:
-        cprint(f"✗ Syntax error in {path.name}: {e}", "red")
-        if verbose:
-            traceback.print_exc()
+        cprint(f"✗ Syntax error in {file_path}: {e}", "red")
         return (None, False, [], [])
     except Exception as e:
-        cprint(f"✗ Error processing {path.name}: {e}", "red")
-        if verbose:
+        cprint(f"✗ Error processing {file_path}: {e}", "red")
+        if "--verbose" in sys.argv:
             traceback.print_exc()
         return (None, False, [], [])
 
 
-def get_files(directory: Path) -> list[Path]:
-    return [p for p in directory.rglob("*.py") if p.is_file()]
+def write_backup(file_path: Path) -> Path:
+    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+    backup_path.write_text(file_path.read_text(encoding="utf-8"))
+    return backup_path
 
 
 def main() -> int:
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Refactor Python files from os/path to pathlib",
-        epilog="\nExamples:\n  %(prog)s                    # Process all Python files in current directory\n  %(prog)s script.py          # Process a single file\n  %(prog)s src/               # Process all Python files in src directory\n  %(prog)s --dry-run .        # Preview changes without modifying\n  %(prog)s --verbose file.py  # Show detailed output\n        ",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("paths", nargs="*", help="Files or directories to process")
-    parser.add_argument("--dry-run", "-n", action="store_true", help="Preview changes without writing")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
-    parser.add_argument("--no-backup", action="store_true", help="Skip backup creation")
-    args = parser.parse_args()
-    cwd = Path.cwd()
-    before_size = gsz(cwd)
-    files = []
-    if args.paths:
-        for path_str in args.paths:
+    root_dir = Path.cwd()
+    before_size = gsz(root_dir)
+    args = sys.argv[1:]
+    dry_run = "--dry-run" in args
+    verbose = "--verbose" in args
+    no_backup = "--no-backup" in args
+    paths = [arg for arg in args if not arg.startswith("--")]
+    files: List[Path] = []
+    if paths:
+        for path_str in paths:
             p = Path(path_str)
-            if p.is_file() and p.suffix == ".py":
+            if p.is_file():
                 files.append(p)
             elif p.is_dir():
                 files.extend(get_files(p))
-            elif p.suffix == ".py":
-                files.append(p)
     else:
-        files = get_files(cwd)
+        files = get_files(root_dir)
     python_files = [f for f in files if f.suffix == ".py"]
     if not python_files:
         cprint("No Python files found to process.", "yellow")
         return 0
-    cprint(f"\n📁 Found {len(python_files)} Python files to process", "cyan")
-    if args.dry_run:
-        cprint("🔍 DRY RUN MODE - No files will be modified\n", "yellow")
+    cprint(f"Found {len(python_files)} Python files to process", "cyan")
+    if dry_run:
+        cprint("DRY RUN - No files will be modified", "yellow")
     results = {}
     total_warnings = 0
     total_changes = 0
-    with Pool(processes=8) as pool:
-        async_results = [pool.apply_async(process_file, (f, args.dry_run, args.verbose)) for f in python_files]
-        for async_result, path in zip(async_results, python_files):
+    with ProcessPoolExecutor() as executor:
+        future_to_file = {executor.submit(process_file, f): f for f in python_files}
+        for future in as_completed(future_to_file):
+            file_path = future_to_file[future]
             try:
-                new_content, success, warnings, infos = async_result.get()
-                results[path] = (new_content, success, warnings, infos)
+                new_content, success, warnings, infos = future.result()
+                results[file_path] = (new_content, success, warnings, infos)
                 total_warnings += len(warnings)
                 total_changes += len(infos)
             except Exception as e:
-                cprint(f"✗ Failed to process {path.name}: {e}", "red")
-                if args.verbose:
-                    traceback.print_exc()
-                results[path] = (None, False, [], [])
+                cprint(f"✗ Failed to process {file_path}: {e}", "red")
+                results[file_path] = (None, False, [], [])
     modified_count = 0
-    for path, (new_content, success, warnings, infos) in results.items():
+    for file_path, (new_content, success, warnings, infos) in results.items():
         if success and new_content and (infos or warnings):
-            if not args.dry_run:
-                if not args.no_backup:
-                    backup_path = path.with_suffix(path.suffix + ".bak")
-                    backup_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-                    cprint(
-                        f"  📦 Backup created: {backup_path.name}",
-                        "white",
-                        attrs=["dark"],
-                    )
-                path.write_text(new_content, encoding="utf-8")
+            if not dry_run:
+                if not no_backup:
+                    backup_path = write_backup(file_path)
+                    cprint(f"  📦 Backup created: {backup_path}", "white", attrs=["dark"])
+                file_path.write_text(new_content, encoding="utf-8")
                 modified_count += 1
             else:
-                cprint(f"  🔍 Would modify: {path.name}", "yellow")
-    after_size = gsz(cwd)
+                cprint(f"  🔍 Would modify: {file_path}", "yellow")
+    after_size = gsz(root_dir)
     size_diff = before_size - after_size
-    cprint("\n" + "=" * 40, "cyan")
-    cprint("📊 REFACTORING SUMMARY", "cyan", attrs=["bold"])
+    cprint("\n" + "=" * 50, "cyan")
+    cprint("REFACTORING SUMMARY", "cyan", attrs=["bold"])
     cprint(f"  Files processed: {len(python_files)}", "white")
-    cprint(
-        f"  Files modified: {modified_count}",
-        "green" if modified_count > 0 else "white",
-    )
+    cprint(f"  Files modified: {modified_count}", "green" if modified_count > 0 else "white")
     cprint(f"  Total changes: {total_changes}", "green" if total_changes > 0 else "white")
-    cprint(
-        f"  Total warnings: {total_warnings}",
-        "yellow" if total_warnings > 0 else "white",
-    )
+    cprint(f"  Total warnings: {total_warnings}", "yellow" if total_warnings > 0 else "white")
     cprint(f"  Space change: {fsz(size_diff)}", "cyan")
-    if args.dry_run and modified_count > 0:
+    if dry_run:
         cprint("\n⚠️  This was a dry run. Run without --dry-run to apply changes.", "yellow")
-    elif not args.dry_run and modified_count > 0:
-        cprint(f"\n✅ Successfully refactored {modified_count} file(s)", "green")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

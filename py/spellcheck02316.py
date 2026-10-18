@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import argparse
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
 from dh import TXT_EXT
 from spellchecker import SpellChecker
 

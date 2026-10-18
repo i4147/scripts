@@ -10,6 +10,7 @@ import sys
 import time
 from typing import Optional
 import warnings
+
 WORKERS = 8
 LOGURU_LOGFORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} {level} {file.name}:{line} {message}"
 MERGED_FILE_HEADER_RE = re.compile(r"^#\s*File:\s*(.+?)\s*$", re.MULTILINE)
@@ -27,14 +28,21 @@ FG_MAGENTA = "\033[35m"
 FG_CYAN = "\033[36m"
 FG_WHITE = "\033[37m"
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
 def visible_len(s: str) -> int:
     return len(_ANSI_RE.sub("", s))
+
+
 def _fg256(n: int) -> str:
     return f"\033[38;5;{n}m"
+
+
 class Style:
     def __init__(self) -> None:
         self.enabled = self._should_enable()
         self.unicode = self._supports_unicode()
+
     @staticmethod
     def _should_enable() -> bool:
         if os.environ.get("NO_COLOR"):
@@ -42,28 +50,38 @@ class Style:
         if os.environ.get("FORCE_COLOR"):
             return True
         return sys.stdout.isatty()
+
     @staticmethod
     def _supports_unicode() -> bool:
         enc = (sys.stdout.encoding or "").lower()
         return "utf" in enc
+
     def c(self, text: object, *codes: str) -> str:
         if not self.enabled or not codes:
             return str(text)
         return "".join(codes) + str(text) + RESET
+
     def bold(self, t: object) -> str:
         return self.c(t, BOLD)
+
     def dim(self, t: object) -> str:
         return self.c(t, DIM)
+
     def red(self, t: object) -> str:
         return self.c(t, BOLD, FG_RED)
+
     def green(self, t: object) -> str:
         return self.c(t, BOLD, FG_GREEN)
+
     def yellow(self, t: object) -> str:
         return self.c(t, BOLD, FG_YELLOW)
+
     def cyan(self, t: object) -> str:
         return self.c(t, BOLD, FG_CYAN)
+
     def magenta(self, t: object) -> str:
         return self.c(t, BOLD, FG_MAGENTA)
+
     def rainbow(self, text: object, i: int, total: int) -> str:
         if not self.enabled:
             return str(text)
@@ -73,6 +91,7 @@ class Style:
             t = i / max(1, total - 1)
             n = 21 + int(t * 30)
         return f"{_fg256(n)}{BOLD}{text}{RESET}"
+
     def colorize_path(self, path_str: str) -> str:
         if not self.enabled:
             return path_str
@@ -80,6 +99,8 @@ class Style:
             dir_part, _, name = path_str.rpartition("/")
             return self.c(dir_part + "/", DIM, FG_YELLOW) + self.c(name, BOLD, FG_CYAN)
         return self.c(path_str, BOLD, FG_CYAN)
+
+
 def box(
     title: str,
     body_lines: list[str],
@@ -105,6 +126,8 @@ def box(
         out.append(style.c(v, accent) + " " + line + pad + " " + style.c(v, accent))
     out.append(style.c(bottom, accent))
     return "\n".join(out)
+
+
 def banner(
     source_label: str,
     output: Path,
@@ -119,6 +142,8 @@ def banner(
         f"{style.dim('workers')} {arrow} {style.bold(WORKERS)}",
     ]
     return box("refactor", lines, style, accent=FG_MAGENTA)
+
+
 def success_box(output: Path, in_bytes: int, out_bytes: int, elapsed: float, style: Style) -> str:
     if style.unicode:
         check = "✓"
@@ -142,6 +167,8 @@ def success_box(output: Path, in_bytes: int, out_bytes: int, elapsed: float, sty
         f"{style.dim('file')} {style.colorize_path(str(output))}",
     ]
     return box("result", lines, style, accent=FG_GREEN)
+
+
 def warning_box(items: list[tuple[str, int, str]], style: Style, verbose: bool) -> str:
     if style.unicode:
         mark = "⚠"
@@ -160,9 +187,12 @@ def warning_box(items: list[tuple[str, int, str]], style: Style, verbose: bool) 
     if not verbose and len(items) > len(shown):
         lines.append(style.dim(f"  ... and {len(items) - len(shown)} more (use -v)"))
     return box("warnings", lines, style, accent=FG_YELLOW)
+
+
 @dataclass
 class ParseReport:
     items: list[tuple[str, int, str]] = field(default_factory=list)
+
     def extend_from(self, caught: list[warnings.WarningMessage]) -> None:
         for w in caught:
             if isinstance(
@@ -170,10 +200,14 @@ class ParseReport:
                 (SyntaxWarning, DeprecationWarning, PendingDeprecationWarning),
             ):
                 self.items.append((str(w.filename or "<unknown>"), int(w.lineno or 0), str(w.message)))
+
     def __bool__(self) -> bool:
         return bool(self.items)
+
     def __len__(self) -> int:
         return len(self.items)
+
+
 @contextlib.contextmanager
 def _collect_parse_warnings(report: ParseReport):
     with warnings.catch_warnings(record=True) as caught:
@@ -182,11 +216,15 @@ def _collect_parse_warnings(report: ParseReport):
             yield
         finally:
             report.extend_from(caught)
+
+
 def get_terminal_width(default: int = 80) -> int:
     try:
         return shutil.get_terminal_size((default, 24)).columns
     except Exception:
         return default
+
+
 def format_numbered_list(
     items: list[str],
     style: Style,
@@ -219,6 +257,8 @@ def format_numbered_list(
             display = display[:keep] + "..."
         lines.append(f"{' ' * indent}{num_colored}{style.dim('.')}{' ' * gap}{style.colorize_path(display)}")
     return "\n".join(lines)
+
+
 def collect_python_files(root: Path) -> list[Path]:
     if root.is_file():
         if root.suffix != ".py":
@@ -234,6 +274,8 @@ def collect_python_files(root: Path) -> list[Path]:
         msg = f"No .py files found under {root}"
         raise SystemExit(msg)
     return sorted(files)
+
+
 def parse_file(path: Path, report: ParseReport) -> ast.Module:
     src = path.read_text(encoding="utf-8")
     try:
@@ -242,6 +284,8 @@ def parse_file(path: Path, report: ParseReport) -> ast.Module:
     except SyntaxError as exc:
         msg = f"Syntax error in {path}: {exc}"
         raise SystemExit(msg)
+
+
 def parse_merged_file(path: Path, report: ParseReport) -> list[tuple[str, ast.Module]]:
     text = path.read_text(encoding="utf-8")
     matches = list(MERGED_FILE_HEADER_RE.finditer(text))
@@ -274,10 +318,16 @@ def parse_merged_file(path: Path, report: ParseReport) -> list[tuple[str, ast.Mo
             raise SystemExit(msg)
         modules.append((header_path, tree))
     return modules
+
+
 def is_relative_import(node: ast.AST) -> bool:
     return isinstance(node, ast.ImportFrom) and bool(node.level)
+
+
 def is_future_import(node: ast.AST) -> bool:
     return isinstance(node, ast.ImportFrom) and node.module == "__future__"
+
+
 def is_six_import(node: ast.AST) -> bool:
     if isinstance(node, ast.Import):
         return any(a.name == "six" or a.name.startswith("six.") for a in node.names)
@@ -285,6 +335,8 @@ def is_six_import(node: ast.AST) -> bool:
         m = node.module or ""
         return m == "six" or m.startswith("six.")
     return False
+
+
 def is_logging_import(node: ast.AST) -> bool:
     if isinstance(node, ast.Import):
         return any(a.name == "logging" for a in node.names)
@@ -292,6 +344,8 @@ def is_logging_import(node: ast.AST) -> bool:
         m = node.module or ""
         return m == "logging" or m.startswith("logging.")
     return False
+
+
 def _is_named_assign(node: ast.AST, name: str) -> bool:
     return (
         isinstance(node, ast.Assign)
@@ -299,8 +353,12 @@ def _is_named_assign(node: ast.AST, name: str) -> bool:
         and isinstance(node.targets[0], ast.Name)
         and node.targets[0].id == name
     )
+
+
 def _make_assign(name: str, value: ast.expr) -> ast.Assign:
     return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+
+
 def _module_has_import_from_src(module: ast.Module, src_fragment: str) -> bool:
     target = src_fragment.strip()
     for node in module.body:
@@ -311,6 +369,8 @@ def _module_has_import_from_src(module: ast.Module, src_fragment: str) -> bool:
             except Exception:
                 continue
     return False
+
+
 def merge_modules(modules: list[tuple[str, ast.Module]]) -> list[ast.stmt]:
     merged: list[ast.stmt] = []
     seen_imports: set[str] = set()
@@ -337,6 +397,8 @@ def merge_modules(modules: list[tuple[str, ast.Module]]) -> list[ast.stmt]:
                 seen_imports.add(key)
             merged.append(node)
     return merged
+
+
 SIX_ATTR_MAP: dict[str, str] = {
     "text_type": "str",
     "binary_type": "bytes",
@@ -360,6 +422,8 @@ SIX_MOVES_MAP: dict[str, str] = {
     "six.moves.input": "builtins",
     "six.moves": "builtins",
 }
+
+
 class SixImportRewriter(ast.NodeTransformer):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> Optional[ast.AST]:
         self.generic_visit(node)
@@ -373,6 +437,7 @@ class SixImportRewriter(ast.NodeTransformer):
         if m == "six":
             return None
         return node
+
     def visit_Import(self, node: ast.Import) -> Optional[ast.AST]:
         self.generic_visit(node)
         kept = [a for a in node.names if a.name != "six"]
@@ -380,6 +445,8 @@ class SixImportRewriter(ast.NodeTransformer):
             return None
         node.names = kept
         return node
+
+
 class SixTransformer(ast.NodeTransformer):
     def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
         self.generic_visit(node)
@@ -391,6 +458,7 @@ class SixTransformer(ast.NodeTransformer):
             if node.attr in SIX_ATTR_MAP:
                 return ast.Name(id=SIX_ATTR_MAP[node.attr], ctx=node.ctx)
         return node
+
     def visit_Call(self, node: ast.Call) -> ast.AST:
         self.generic_visit(node)
         func = node.func
@@ -409,6 +477,8 @@ class SixTransformer(ast.NodeTransformer):
         if method == "string_types" and not node.args:
             return ast.Name(id="str", ctx=ast.Load())
         return node
+
+
 OSPATH_PROPERTY_MAP: dict[str, str] = {
     "exists": "exists",
     "isdir": "is_dir",
@@ -428,12 +498,17 @@ OSPATH_METHOD_MAP: dict[str, str] = {
 }
 OSPATH_MAKEDIRS = "makedirs"
 OSPATH_GETSIZE = "getsize"
+
+
 def _wrap_path(arg: ast.expr) -> ast.Call:
     return ast.Call(func=ast.Name(id="Path", ctx=ast.Load()), args=[arg], keywords=[])
+
+
 class OsPathTransformer(ast.NodeTransformer):
     def __init__(self, bare_path: bool = False) -> None:
         super().__init__()
         self.bare_path = bare_path
+
     def _is_ospath(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
             if node.value.id == "os" and node.attr == "path":
@@ -441,6 +516,7 @@ class OsPathTransformer(ast.NodeTransformer):
             if self.bare_path and node.value.id == "path":
                 return True
         return False
+
     def visit_Call(self, node: ast.Call) -> ast.AST:
         self.generic_visit(node)
         func = node.func
@@ -487,6 +563,7 @@ class OsPathTransformer(ast.NodeTransformer):
             )
             return ast.Attribute(value=stat_call, attr="st_size", ctx=ast.Load())
         return node
+
     def visit_Subscript(self, node: ast.Subscript) -> ast.AST:
         self.generic_visit(node)
         slice_ = node.slice
@@ -504,11 +581,16 @@ class OsPathTransformer(ast.NodeTransformer):
             attr="suffix",
             ctx=ast.Load(),
         )
+
+
 _EXECUTOR_NAMES = {"ProcessPoolExecutor", "ThreadPoolExecutor"}
+
+
 class _ExecutorMethodRenamer(ast.NodeTransformer):
     def __init__(self, var: str) -> None:
         super().__init__()
         self.var = var
+
     def visit_Call(self, node: ast.Call) -> ast.AST:
         self.generic_visit(node)
         f = node.func
@@ -521,12 +603,16 @@ class _ExecutorMethodRenamer(ast.NodeTransformer):
             f.attr = "imap_unordered"
             f.value = ast.Name(id="_pool", ctx=ast.Load())
         return node
+
+
 def _is_executor_ref(node: ast.expr) -> bool:
     if isinstance(node, ast.Name):
         return node.id in _EXECUTOR_NAMES
     if isinstance(node, ast.Attribute):
         return node.attr in _EXECUTOR_NAMES
     return False
+
+
 class ExecutorTransformer(ast.NodeTransformer):
     def visit_With(self, node: ast.With) -> ast.AST:
         self.generic_visit(node)
@@ -575,6 +661,8 @@ class ExecutorTransformer(ast.NodeTransformer):
         ]
         try_node = ast.Try(body=new_body, handlers=[], orelse=[], finalbody=cleanup)
         return [pool_assign, try_node]
+
+
 class LoggingTransformer(ast.NodeTransformer):
     def visit_Assign(self, node: ast.Assign) -> Optional[ast.AST]:
         self.generic_visit(node)
@@ -588,11 +676,13 @@ class LoggingTransformer(ast.NodeTransformer):
         ):
             return None
         return node
+
     def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
         self.generic_visit(node)
         if isinstance(node.value, ast.Name) and node.value.id == "logging" and node.attr.isupper():
             return ast.Constant(value=node.attr)
         return node
+
     def visit_Expr(self, node: ast.Expr) -> ast.AST:
         self.generic_visit(node)
         call = node.value
@@ -665,7 +755,11 @@ class LoggingTransformer(ast.NodeTransformer):
                 )
             )
         return node
+
+
 _DEF_NODES = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
 def strip_docstrings(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if isinstance(node, _DEF_NODES):
@@ -679,12 +773,16 @@ def strip_docstrings(tree: ast.AST) -> None:
                 and isinstance(first.value.value, str)
             ):
                 node.body = body[1:] or [ast.Pass()]
+
+
 _STANDARD_HEADER = [
     "import sys",
     "import multiprocessing as mp",
     "from pathlib import Path",
     "from loguru import logger",
 ]
+
+
 def inject_standard_imports(module: ast.Module) -> ast.Module:
     prefix: list[ast.stmt] = []
     for line in _STANDARD_HEADER:
@@ -692,6 +790,8 @@ def inject_standard_imports(module: ast.Module) -> ast.Module:
             prefix.extend(ast.parse(line).body)
     module.body = prefix + module.body
     return module
+
+
 def _module_imports_path_bare(module: ast.Module) -> bool:
     for node in module.body:
         if isinstance(node, ast.ImportFrom) and node.module == "os":
@@ -699,6 +799,8 @@ def _module_imports_path_bare(module: ast.Module) -> bool:
                 if a.name == "path":
                     return True
     return False
+
+
 def _sum_input_bytes(modules: list[tuple[str, ast.Module]]) -> int:
     total = 0
     for name, _tree in modules:
@@ -709,6 +811,8 @@ def _sum_input_bytes(modules: list[tuple[str, ast.Module]]) -> int:
         except OSError:
             pass
     return total
+
+
 def refactor(
     modules: list[tuple[str, ast.Module]],
     output: Path,
@@ -759,6 +863,8 @@ def refactor(
         print(success_box(output, in_bytes, out_bytes, elapsed, style))
         print()
         print(style.dim("note: PEP 484 annotations were preserved but not inferred; add missing ones by hand."))
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Consolidate a multi-file Python package into one module.")
     parser.add_argument(
@@ -849,107 +955,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         parse_report=parse_report,
     )
     return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
-
-- remove all report related code, log to file using loguru
-- use current foldername for outfilename instead of _single.py (if exists dont overwrite,rename properly
-- use code from following codd to sort result code
-return full type-annotated code in one markdown block, no docstrings & no comments
-
-helper code for soring: (its obfuscated,stdlib imports removed)
-import ast
-from pathlib import Path
-import sys
-def C(d):
- try:
-  E = d.read_text(encoding='utf-8')
- except Exception as g:
-  print(f'Error reading {d}: {g}')
-  return
- j = E.split('\n')
- s = ''
- r = ''
- t = 0
- if j and j[0].startswith('#!'):
-  s = j[0]
-  t = 1
- k = '\n'.join(j[t:])
- try:
-  b = ast.parse(k)
- except SyntaxError as g:
-  print(f'Error parsing Python code in {d}: {g}')
-  return
- if (b.body and isinstance(b.body[0], ast.Expr) and isinstance(b.body[0].value, ast.Constant)) and isinstance(b.body[0].value.value, str):
-  x = b.body[0]
-  r = ast.get_source_segment(k, x) or ''
-  b.body.pop(0)
- p = None
- v = []
- for a in b.body:
-  if isinstance(a, ast.If) and isinstance(a.test, ast.Compare) and (isinstance(a.test.left, ast.Name) and a.test.left.id == '__name__' and (len(a.test.ops) == 1) and isinstance(a.test.ops[0], ast.Eq) and (len(a.test.comparators) == 1) and isinstance(a.test.comparators[0], ast.Constant) and (a.test.comparators[0].value == '__main__')):
-   p = a
-   continue
-  v.append(a)
- u = []
- m = []
- l = []
- o = []
- q = []
- for a in v:
-  if isinstance(a, (ast.Import, ast.ImportFrom)):
-   u.append(a)
-  elif isinstance(a, ast.Assign):
-   z = all((isinstance(w, ast.Name) and w.id.isupper() for w in a.targets))
-   if z:
-    m.append(a)
-   else:
-    q.append(a)
-  elif isinstance(a, ast.ClassDef):
-   l.append(a)
-  elif isinstance(a, ast.FunctionDef):
-   o.append(a)
-  else:
-   q.append(a)
- m.sort(key=lambda c: c.targets[0].id if c.targets else '')
- l.sort(key=lambda c: c.name)
- o.sort(key=lambda c: c.name)
- i = []
- if s:
-  i.append(s)
- if r:
-  i.append(r)
- for B in [u, q, m, l, o]:
-  for a in B:
-   h = ast.get_source_segment(k, a)
-   if h:
-    i.append(h)
-   else:
-    print(f'Warning: Could not preserve source for {a}')
- if p:
-  h = ast.get_source_segment(k, p)
-  if h:
-   i.append(h)
- D = '\n'.join(i)
- try:
-  with d.open('w', encoding='utf-8') as y:
-   y.write(D)
-  print(f'Successfully sorted and saved: {d}')
- except Exception as g:
-  print(f'Error writing to {d}: {g}')
-
-
-resolve similar funcnanmes from subdirs before sorting
-after sorting:
-remove local imports: example:
-from . import sth
-from .. import sth
-from .cli import main ...
-then dedup imports and write to file in 4 sections
-1.imports
-2.constants
-3.classes
-4.functions
-
-order should not be necessarily alphabetic
-functions order dont affect code but check class's inheritance to distinguish order

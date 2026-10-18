@@ -1,6 +1,5 @@
 from sys import exit
 from time import perf_counter
-
 from dh import get_installed_pkgs
 
 

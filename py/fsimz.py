@@ -1,6 +1,5 @@
 from pathlib import Path
 from pprint import pprint
-
 import stringzilla as sz
 from dh import is_binary
 from fastwalk import walk_files

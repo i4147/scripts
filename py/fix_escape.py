@@ -2,7 +2,6 @@ import argparse
 import tokenize
 import warnings
 from pathlib import Path
-
 from fastwalk import walk_files
 
 

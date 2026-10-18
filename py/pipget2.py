@@ -3,7 +3,6 @@ import sys
 import time
 from io import BytesIO
 from pathlib import Path
-
 import pycurl
 from bs4 import BeautifulSoup
 
@@ -12,7 +11,6 @@ TIMEOUT = 30
 DOWNLOAD_DIR = Path.cwd()
 MAX_RETRIES = 3
 RETRY_DELAY = 2
-
 ARCH_TAGS = [
     "win32",
     "win_amd64",
@@ -61,7 +59,6 @@ ARCH_TAGS = [
     "32",
     "64",
 ]
-
 WHEEL_PLATFORM_RE = re.compile(
     r"-(cp\d+|pp\d+|py\d+)"
     r"(-(cp\d+|pp\d+|py\d+))?"
@@ -77,10 +74,8 @@ def is_windows_url(url: str) -> bool:
 
 def has_arch_tag(url: str) -> bool:
     lower = url.lower()
-
     if WHEEL_PLATFORM_RE.search(lower):
         return True
-
     for tag in [
         "manylinux",
         "musllinux",
@@ -117,39 +112,31 @@ def select_best_url(links: list, pkg_name: str) -> tuple[str, str, str] | None:
     sdist_candidates = []
     pure_wheel_candidates = []
     arch_skipped = []
-
     for link in links:
         href = link.get("href", "").strip()
         if not href:
             continue
         url = href.split("#")[0]
         filename = link.get_text().strip() or url.split("/")[-1]
-
         if is_windows_url(url):
             print(f"  [SKIP-WIN] {filename}")
             continue
-
         if has_arch_tag(url):
             arch_skipped.append((url, filename))
             continue
-
         if is_sdist(url):
             sdist_candidates.append((url, filename))
         elif is_pure_wheel(url):
             pure_wheel_candidates.append((url, filename))
-
     if sdist_candidates:
         url, filename = sdist_candidates[-1]
         return (url, filename, "download")
-
     if pure_wheel_candidates:
         url, filename = pure_wheel_candidates[-1]
         return (url, filename, "download")
-
     if arch_skipped:
         url, filename = arch_skipped[-1]
         return (url, filename, "skip")
-
     return None
 
 
@@ -301,14 +288,11 @@ def process_package(pkg_name: str) -> tuple[bool, bool]:
     if not download_info:
         print(f"No valid download links found for {pkg_name}")
         return (False, False)
-
     url, filename, status = download_info
-
     if status == "skip":
         print(f"  [ARCH-TAG] Skipping download (arch-specific): {filename}")
         print(f"  Download URL: {url}")
         return (True, True)
-
     print(f"Selected file: {filename}")
     print(f"Download URL: {url}")
     ok = download_file_with_retry(url, filename)

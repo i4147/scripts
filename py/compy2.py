@@ -18,7 +18,6 @@ PROTECTED_NAMES = set(dir(builtins)) | {
 def get_stdlib_modules():
     if hasattr(sys, "stdlib_module_names"):
         return set(sys.stdlib_module_names)
-
     import sysconfig
 
     stdlib_path = Path(sysconfig.get_paths()["stdlib"])
@@ -66,7 +65,6 @@ class StripDocstringsAndTypes(ast.NodeTransformer):
         return node
 
     def visit_AnnAssign(self, node):
-
         if node.value is None:
             return None
         new_node = ast.Assign(targets=[node.target], value=node.value)
@@ -200,39 +198,29 @@ def compress_files(file_paths):
     name_gen = generate_short_names()
     parsed_trees = []
     removed_imports = []
-
     for filepath in file_paths:
         path = Path(filepath)
         if not path.exists():
             print(f"Warning: File '{filepath}' not found. Skipping.", file=sys.stderr)
             continue
-
         code = path.read_text(encoding="utf-8")
         tree = ast.parse(code, filename=filepath)
-
         tree = StripDocstringsAndTypes().visit(tree)
         ast.fix_missing_locations(tree)
-
         NameCollector(name_map, name_gen).visit(tree)
-
         stripper = StdlibImportStripper()
         tree = stripper.visit(tree)
         ast.fix_missing_locations(tree)
         removed_imports.extend(stripper.removed)
-
         parsed_trees.append((filepath, tree))
-
     output_parts = []
     for filepath, tree in parsed_trees:
         tree = NameRenamer(name_map).visit(tree)
         ast.fix_missing_locations(tree)
-
         minified = ast.unparse(tree)
         cleaned_lines = [ln for ln in minified.splitlines() if ln.strip()]
         output_parts.append(f"# --- File: {filepath} ---\n" + "\n".join(cleaned_lines))
-
     compressed_content = "\n\n".join(output_parts)
-
     if removed_imports:
         uniq = sorted(set(removed_imports))
         notice = (
@@ -241,7 +229,6 @@ def compress_files(file_paths):
             + "\n".join(f"#   {imp}" for imp in uniq)
         )
         compressed_content += notice
-
     Path("compressed.txt").write_text(compressed_content, encoding="utf-8")
     cprint(f"Compressed {len(parsed_trees)} file(s); removed {len(set(removed_imports))} stdlib import(s).")
 

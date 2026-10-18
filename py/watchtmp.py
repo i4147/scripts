@@ -1,6 +1,5 @@
 import shutil
 import time
-
 import watchdog.events
 import watchdog.observers
 

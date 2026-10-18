@@ -1,468 +1,636 @@
-#!/data/data/com.termux/files/usr/bin/python
-"""Write a Python script that automates publishing a local project folder to a new GitHub repository. The tool should accept a path to a local directory and a desired repository name (with optional flags for visibility, description, branch name, and an initial commit message), then carry out the full workflow: initialize a local git repository if one doesn't already exist, stage and commit the existing files with a sensible default commit message, create the remote repository on GitHub through its REST API using a personal access token, add that remote as origin, and push the branch to it.
-
-The tool should load credentials from a user-level environment file in the home directory, with a clear fallback to an environment variable, and it should fail with a helpful message if no token is available. It should validate inputs before doing any work, such as confirming the target directory exists and that the repository name follows GitHub's naming rules, and it should detect and handle common conflicts gracefully, for example when a repository with the same name already exists or when the local folder already has a remote configured.
-
-Network-facing operations should be resilient: requests to the GitHub API should retry transient failures and rate-limit responses with backoff, and calls should respect reasonable timeouts. Local git commands should also be time-limited so the tool never hangs indefinitely. Errors from any step should be reported clearly to the user with a non-zero exit status, and the tool should avoid leaving the repository in a confusing half-configured state where practical.
-
-Logging should be configurable through an environment variable, defaulting to informational messages that tell the user each major step as it happens (validating, initializing, committing, creating the remote, pushing), with more detail available at debug level. Sensitive values such as the access token must never be printed or written to logs.
-
-The script should be runnable from the command line with clear help text describing every option, and it should print a concise summary at the end showing the new repository's URL on success. Keep the design modular and readable so it can be easily extended, for example to support organization-owned repositories or additional hosting providers.
----"""
-
-from __future__ import annotations
-
 import argparse
 import os
-import re
-import shutil
 import subprocess
 import sys
-from pathlib import Path
-from typing import Optional
-
-import requests
-from loguru import logger
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-ENV_FILE = Path.home() / ".env"
-GITHUB_API_BASE = "https://api.github.com"
-GIT_LOCAL_TIMEOUT = 30
-GIT_NETWORK_TIMEOUT = 600
-HTTP_TIMEOUT = 15
-DEFAULT_BRANCH = "main"
-DEFAULT_COMMIT_MSG = "Initial commit"
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="<level>{level: <8}</level> | <level>{message}</level>",
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-)
+from typing import Tuple, Optional
+from abc import ABC, abstractmethod
 
 
-def _build_session() -> requests.Session:
-    session = requests.Session()
-    retries = Retry(
-        total=3,
-        backoff_factor=0.5,
-        status_forcelist=(500, 502, 503, 504, 429),
-        allowed_methods=frozenset(["GET", "POST"]),
-        raise_on_status=False,
-    )
-    session.mount("https://", HTTPAdapter(max_retries=retries))
-    return session
+class GitBackend(ABC):
+    @abstractmethod
+    def run_command(self, cmd, check=True):
+        pass
+
+    @abstractmethod
+    def is_git_repo(self) -> bool:
+        pass
+
+    @abstractmethod
+    def get_dir_name(self) -> str:
+        pass
+
+    @abstractmethod
+    def init_repo(self):
+        pass
+
+    @abstractmethod
+    def get_remote_url(self) -> Optional[str]:
+        pass
+
+    @abstractmethod
+    def create_remote_repo(self, repo_name: str):
+        pass
+
+    @abstractmethod
+    def fetch_origin(self) -> bool:
+        pass
+
+    @abstractmethod
+    def add_all_files(self):
+        pass
+
+    @abstractmethod
+    def has_changes(self) -> bool:
+        pass
+
+    @abstractmethod
+    def commit(self, message: str):
+        pass
+
+    @abstractmethod
+    def get_current_branch(self) -> str:
+        pass
+
+    @abstractmethod
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        pass
+
+    @abstractmethod
+    def pull_rebase(self, branch: str):
+        pass
 
 
-SESSION = _build_session()
+class SubprocessBackend(GitBackend):
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
 
+    def is_git_repo(self) -> bool:
+        result = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        return result.returncode == 0
 
-def _gh_headers(token: str) -> dict:
-    return {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "gh-create-repo/1.0",
-    }
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
 
+    def init_repo(self):
+        self.run_command(["git", "init"])
 
-def load_github_token() -> str:
-    env_token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if env_token:
-        logger.info("Using GITHUB_TOKEN from environment")
-        return env_token
-    if not ENV_FILE.exists():
-        msg = f"~/.env not found at {ENV_FILE}. Create it with GITHUB_TOKEN=<token>, or export GITHUB_TOKEN."
-        raise FileNotFoundError(msg)
-    try:
-        content = ENV_FILE.read_text(encoding="utf-8")
-    except OSError as e:
-        msg = f"Could not read {ENV_FILE}: {e}"
-        raise RuntimeError(msg) from e
-    for raw in content.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].lstrip()
-        if line.startswith("GITHUB_TOKEN="):
-            token = line.split("=", 1)[1].strip().strip("\"'")
-            if not token:
-                msg = "GITHUB_TOKEN is empty in ~/.env"
-                raise ValueError(msg)
-            logger.info("Loaded GITHUB_TOKEN from ~/.env")
-            return token
-    msg = "GITHUB_TOKEN not found in ~/.env"
-    raise ValueError(msg)
+    def get_remote_url(self) -> Optional[str]:
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
 
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
 
-_CURRENT_USER_CACHE: Optional[str] = None
+    def fetch_origin(self) -> bool:
+        result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
+        return result.returncode == 0
 
+    def add_all_files(self):
+        self.run_command(["git", "add", "-A"])
 
-def get_current_user_login(token: str) -> str:
-    global _CURRENT_USER_CACHE
-    if _CURRENT_USER_CACHE:
-        return _CURRENT_USER_CACHE
-    try:
-        r = SESSION.get(
-            f"{GITHUB_API_BASE}/user",
-            headers=_gh_headers(token),
-            timeout=HTTP_TIMEOUT,
-        )
-    except requests.RequestException as e:
-        msg = f"Could not reach GitHub API: {e}"
-        raise RuntimeError(msg) from e
-    if r.status_code == 401:
-        msg = "GitHub token is invalid or expired (401)."
-        raise ValueError(msg)
-    if r.status_code != 200:
-        msg = f"GitHub API error {r.status_code}: {r.text[:200]}"
-        raise requests.RequestException(msg)
-    login = r.json().get("login")
-    if not login:
-        msg = "Could not determine GitHub login from /user"
-        raise ValueError(msg)
-    logger.info(f"Authenticated as GitHub user: {login}")
-    _CURRENT_USER_CACHE = login
-    return login
+    def has_changes(self) -> bool:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        return bool(status.stdout.strip())
 
+    def commit(self, message: str):
+        self.run_command(["git", "commit", "-m", message])
 
-def create_github_repo(
-    repo_name: str,
-    token: str,
-    user_login: str,
-    private: bool = False,
-    description: Optional[str] = None,
-) -> str:
-    payload: dict = {"name": repo_name, "private": private}
-    if description:
-        payload["description"] = description
-    r = SESSION.post(
-        f"{GITHUB_API_BASE}/user/repos",
-        headers=_gh_headers(token),
-        json=payload,
-        timeout=HTTP_TIMEOUT,
-    )
-    if r.status_code == 201:
-        data = r.json()
-        logger.info(f"✓ Created GitHub repo: {data['full_name']}")
-        return data.get("ssh_url") or data["clone_url"]
-    if r.status_code == 422:
-        logger.warning(f"Repo '{user_login}/{repo_name}' already exists on GitHub — reusing it.")
-        return f"git@github.com:{user_login}/{repo_name}.git"
-    if r.status_code == 401:
-        msg = "Invalid GitHub token (401 Unauthorized)."
-        raise ValueError(msg)
-    if r.status_code == 403:
-        msg = f"GitHub API forbidden (rate limit or insufficient scopes): {r.text[:200]}"
-        raise ValueError(msg)
-    msg = f"GitHub API error {r.status_code}: {r.text[:200]}"
-    raise requests.RequestException(msg)
+    def get_current_branch(self) -> str:
+        branch_result = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        return branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
 
-
-def run_git_command(
-    cmd: list,
-    cwd: Optional[Path] = None,
-    check: bool = True,
-    timeout: Optional[int] = None,
-) -> tuple[str, int]:
-    timeout = timeout or GIT_LOCAL_TIMEOUT
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=cwd or Path.cwd(),
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        push_result = subprocess.run(
+            ["git", "push", "--set-upstream", "origin", branch],
             capture_output=True,
             text=True,
-            timeout=timeout,
         )
-    except FileNotFoundError as e:
-        msg = f"Command not found: {cmd[0]} (is git installed and on PATH?)"
-        raise RuntimeError(msg) from e
-    except subprocess.TimeoutExpired as e:
-        msg = f"Command timed out after {timeout}s: {' '.join(cmd)}"
-        raise RuntimeError(msg) from e
-    stdout = (result.stdout or "").strip()
-    stderr = (result.stderr or "").strip()
-    if check and result.returncode != 0:
-        detail = stderr or stdout or "(no output)"
-        msg = f"Command failed ({result.returncode}): {' '.join(cmd)}\n{detail}"
-        raise RuntimeError(msg)
-    return stdout, result.returncode
+        if push_result.returncode == 0:
+            return True, None
+        return False, push_result.stderr
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
 
 
-def is_git_repo(cwd: Path) -> bool:
-    return (cwd / ".git").exists()
+class GitpythonBackend(GitBackend):
+    def __init__(self):
+        try:
+            import git
 
+            self.git = git
+        except ImportError:
+            raise ImportError("GitPython not installed")
+        self.repo = None
 
-def get_remote_url(cwd: Path, remote: str = "origin") -> Optional[str]:
-    url, rc = run_git_command(["git", "config", "--get", f"remote.{remote}.url"], cwd, check=False)
-    return url if rc == 0 and url else None
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
 
+    def is_git_repo(self) -> bool:
+        try:
+            self.repo = self.git.Repo(".")
+            return True
+        except self.git.InvalidGitRepositoryError:
+            return False
 
-_GH_SSH_RE = re.compile(r"^git@github\.com:([^/]+)/(.+?)(?:\.git)?/?$")
-_GH_HTTPS_RE = re.compile(r"^https?://(?:[^@/]+@)?github\.com/([^/]+)/(.+?)(?:\.git)?/?$")
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
 
+    def init_repo(self):
+        self.repo = self.git.Repo.init(".")
 
-def parse_github_url(url: str) -> tuple[str, str]:
-    for rx in (_GH_SSH_RE, _GH_HTTPS_RE):
-        m = rx.match(url)
-        if m:
-            return m.group(1), m.group(2)
-    msg = f"Not a GitHub remote URL: {url}"
-    raise ValueError(msg)
+    def get_remote_url(self) -> Optional[str]:
+        try:
+            return self.repo.remote("origin").url
+        except (ValueError, AttributeError):
+            return None
 
-
-def validate_repo_name(name: str) -> None:
-    if not name:
-        msg = "Repository name is empty"
-        raise ValueError(msg)
-    if len(name) > 100:
-        msg = f"Repository name too long ({len(name)} > 100)"
-        raise ValueError(msg)
-    if name in (".", ".."):
-        msg = "Repository name cannot be '.' or '..'"
-        raise ValueError(msg)
-    if name.startswith("."):
-        msg = "Repository name cannot start with '.'"
-        raise ValueError(msg)
-    if name.endswith(".git"):
-        msg = "Repository name cannot end with '.git'"
-        raise ValueError(msg)
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
-        msg = f"Invalid repo name '{name}': use only letters, digits, '.', '-', '_'"
-        raise ValueError(msg)
-
-
-def copy_gitignore(cwd: Path) -> None:
-    source = Path.home() / ".gitignore"
-    target = cwd / ".gitignore"
-    if not source.exists():
-        logger.warning("~/.gitignore not found, skipping copy")
-        return
-    if target.exists():
-        logger.info(".gitignore already exists locally, preserving")
-        return
-    try:
-        shutil.copy2(source, target)
-        logger.info(f"✓ Copied .gitignore from ~ → {cwd}")
-    except OSError as e:
-        msg = f"Failed to copy .gitignore: {e}"
-        raise RuntimeError(msg) from e
-
-
-def _warn_if_missing_identity(cwd: Path) -> None:
-    _, rc_name = run_git_command(["git", "config", "user.name"], cwd, check=False)
-    _, rc_mail = run_git_command(["git", "config", "user.email"], cwd, check=False)
-    if rc_name != 0 or rc_mail != 0:
-        logger.warning(
-            "git user.name/user.email not configured — commit may fail.\n"
-            "Fix with:\n"
-            "  git config --global user.name  'Your Name'\n"
-            "  git config --global user.email 'you@example.com'"
-        )
-
-
-def initialize_git_repo(cwd: Path, remote_url: str) -> None:
-    if not is_git_repo(cwd):
-        logger.info("Initializing git repository...")
-        _, rc = run_git_command(["git", "init", "-b", DEFAULT_BRANCH], cwd, check=False)
-        if rc != 0:
-            run_git_command(["git", "init"], cwd)
-            run_git_command(
-                ["git", "symbolic-ref", "HEAD", f"refs/heads/{DEFAULT_BRANCH}"],
-                cwd,
-            )
-    _warn_if_missing_identity(cwd)
-    existing = get_remote_url(cwd)
-    if existing == remote_url:
-        logger.info(f"Remote already set to {remote_url}")
-    elif existing:
-        logger.info(f"Updating remote: {existing} → {remote_url}")
-        run_git_command(["git", "remote", "set-url", "origin", remote_url], cwd)
-    else:
-        run_git_command(["git", "remote", "add", "origin", remote_url], cwd)
-    logger.info(f"✓ Remote configured: {remote_url}")
-
-
-def commit_and_push(cwd: Path, commit_message: str = DEFAULT_COMMIT_MSG) -> None:
-    _, has_head = run_git_command(["git", "rev-parse", "--verify", "HEAD"], cwd, check=False)
-    if has_head != 0:
-        run_git_command(
-            ["git", "symbolic-ref", "HEAD", f"refs/heads/{DEFAULT_BRANCH}"],
-            cwd,
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+        remote_url = self.run_command(
+            ["gh", "repo", "view", "--json", "url", "-q", ".url"],
             check=False,
+        ).stdout.strip()
+        if not self.get_remote_url():
+            self.repo.create_remote("origin", remote_url)
+
+    def fetch_origin(self) -> bool:
+        try:
+            self.repo.remotes.origin.fetch()
+            return True
+        except Exception:
+            return False
+
+    def add_all_files(self):
+        self.repo.index.add(["."])
+
+    def has_changes(self) -> bool:
+        return bool(self.repo.index.diff("HEAD")) or bool(self.repo.untracked_files)
+
+    def commit(self, message: str):
+        self.repo.index.commit(message)
+
+    def get_current_branch(self) -> str:
+        try:
+            return self.repo.active_branch.name
+        except TypeError:
+            return "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        try:
+            self.repo.remotes.origin.push(branch)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+class LibGit2Backend(GitBackend):
+    def __init__(self):
+        try:
+            import pygit2
+
+            self.pygit2 = pygit2
+        except ImportError:
+            raise ImportError("pygit2 not installed")
+        self.repo = None
+
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
+
+    def is_git_repo(self) -> bool:
+        try:
+            self.repo = self.pygit2.Repository(".")
+            return True
+        except KeyError:
+            return False
+
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
+
+    def init_repo(self):
+        self.repo = self.pygit2.init_repository(".")
+
+    def get_remote_url(self) -> Optional[str]:
+        try:
+            return self.repo.remotes["origin"].url
+        except KeyError:
+            return None
+
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+
+    def fetch_origin(self) -> bool:
+        try:
+            self.repo.remotes["origin"].fetch()
+            return True
+        except Exception:
+            return False
+
+    def add_all_files(self):
+        self.repo.index.add_all()
+        self.repo.index.write()
+
+    def has_changes(self) -> bool:
+        self.repo.index.read()
+        return bool(self.repo.status_file_flags())
+
+    def commit(self, message: str):
+        self.repo.index.write()
+        tree = self.repo.index.write_tree()
+        author = self.pygit2.Signature("User", "user@example.com")
+        self.repo.create_commit("HEAD", author, author, message, tree, [self.repo.head.target])
+
+    def get_current_branch(self) -> str:
+        try:
+            return self.repo.active_branch.shorthand
+        except Exception:
+            return "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        try:
+            self.repo.remotes["origin"].push([f"refs/heads/{branch}:refs/heads/{branch}"])
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+class DulwichBackend(GitBackend):
+    def __init__(self):
+        try:
+            import dulwich.repo
+
+            self.dulwich = dulwich
+        except ImportError:
+            raise ImportError("dulwich not installed")
+        self.repo = None
+
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
+
+    def is_git_repo(self) -> bool:
+        try:
+            self.repo = self.dulwich.repo.Repo(".")
+            return True
+        except self.dulwich.repo.NotGitRepository:
+            return False
+
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
+
+    def init_repo(self):
+        self.repo = self.dulwich.repo.Repo.init(".")
+
+    def get_remote_url(self) -> Optional[str]:
+        try:
+            config = self.repo.get_config()
+            return config.get((b"remote", b"origin"), b"url").decode()
+        except Exception:
+            return None
+
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+
+    def fetch_origin(self) -> bool:
+        try:
+            self.repo.fetch("origin")
+            return True
+        except Exception:
+            return False
+
+    def add_all_files(self):
+        self.run_command(["git", "add", "-A"])
+
+    def has_changes(self) -> bool:
+        self.run_command(["git", "status", "--porcelain"], check=False)
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        return bool(status.stdout.strip())
+
+    def commit(self, message: str):
+        self.run_command(["git", "commit", "-m", message])
+
+    def get_current_branch(self) -> str:
+        branch_result = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        return branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        push_result = subprocess.run(
+            ["git", "push", "--set-upstream", "origin", branch],
+            capture_output=True,
+            text=True,
         )
-    logger.info("Staging files...")
-    run_git_command(["git", "add", "-A"], cwd)
-    status, _ = run_git_command(["git", "status", "--porcelain"], cwd)
-    _, has_head = run_git_command(["git", "rev-parse", "--verify", "HEAD"], cwd, check=False)
-    if not status and has_head != 0:
-        msg = "Nothing to commit and no prior commit exists (empty repository)."
-        raise RuntimeError(msg)
-    if status:
-        logger.info("Creating commit...")
-        run_git_command(["git", "commit", "-m", commit_message], cwd)
-    else:
-        logger.info("No changes to commit (working tree clean)")
-    current, _ = run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd)
-    if current != DEFAULT_BRANCH:
-        logger.info(f"Renaming branch '{current}' → '{DEFAULT_BRANCH}'")
-        run_git_command(["git", "branch", "-M", DEFAULT_BRANCH], cwd)
-    logger.info("Pushing to origin...")
+        if push_result.returncode == 0:
+            return True, None
+        return False, push_result.stderr
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+class PyGithubBackend(GitBackend):
+    def __init__(self):
+        try:
+            from github import Github
+
+            self.Github = Github
+        except ImportError:
+            raise ImportError("PyGithub not installed")
+        self.repo = None
+
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
+
+    def is_git_repo(self) -> bool:
+        result = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
+
+    def init_repo(self):
+        self.run_command(["git", "init"])
+
+    def get_remote_url(self) -> Optional[str]:
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+
+    def fetch_origin(self) -> bool:
+        result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def add_all_files(self):
+        self.run_command(["git", "add", "-A"])
+
+    def has_changes(self) -> bool:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        return bool(status.stdout.strip())
+
+    def commit(self, message: str):
+        self.run_command(["git", "commit", "-m", message])
+
+    def get_current_branch(self) -> str:
+        branch_result = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        return branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        push_result = subprocess.run(
+            ["git", "push", "--set-upstream", "origin", branch],
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode == 0:
+            return True, None
+        return False, push_result.stderr
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+class TyperBackend(GitBackend):
+    def __init__(self):
+        try:
+            import typer
+
+            self.typer = typer
+        except ImportError:
+            raise ImportError("typer not installed")
+
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
+
+    def is_git_repo(self) -> bool:
+        result = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
+
+    def init_repo(self):
+        self.run_command(["git", "init"])
+
+    def get_remote_url(self) -> Optional[str]:
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+
+    def fetch_origin(self) -> bool:
+        result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def add_all_files(self):
+        self.run_command(["git", "add", "-A"])
+
+    def has_changes(self) -> bool:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        return bool(status.stdout.strip())
+
+    def commit(self, message: str):
+        self.run_command(["git", "commit", "-m", message])
+
+    def get_current_branch(self) -> str:
+        branch_result = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        return branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        push_result = subprocess.run(
+            ["git", "push", "--set-upstream", "origin", branch],
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode == 0:
+            return True, None
+        return False, push_result.stderr
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+class GhBackend(GitBackend):
+    def __init__(self):
+        try:
+            import subprocess as sp
+
+            self.sp = sp
+        except ImportError:
+            raise ImportError("gh cli not installed")
+
+    def run_command(self, cmd, check=True):
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if check and result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            sys.exit(1)
+        return result
+
+    def is_git_repo(self) -> bool:
+        result = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def get_dir_name(self) -> str:
+        return os.path.basename(os.getcwd())
+
+    def init_repo(self):
+        self.run_command(["git", "init"])
+
+    def get_remote_url(self) -> Optional[str]:
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    def create_remote_repo(self, repo_name: str):
+        self.run_command(["gh", "repo", "create", repo_name, "--public", "--source=."])
+
+    def fetch_origin(self) -> bool:
+        result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    def add_all_files(self):
+        self.run_command(["git", "add", "-A"])
+
+    def has_changes(self) -> bool:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        return bool(status.stdout.strip())
+
+    def commit(self, message: str):
+        self.run_command(["git", "commit", "-m", message])
+
+    def get_current_branch(self) -> str:
+        branch_result = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        return branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+
+    def push_upstream(self, branch: str) -> Tuple[bool, Optional[str]]:
+        push_result = subprocess.run(
+            ["git", "push", "--set-upstream", "origin", branch],
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode == 0:
+            return True, None
+        return False, push_result.stderr
+
+    def pull_rebase(self, branch: str):
+        self.run_command(["git", "pull", "origin", branch, "--rebase"])
+
+
+def get_backend(backend_name: str) -> GitBackend:
+    backends = {
+        "subprocess": SubprocessBackend,
+        "gitpython": GitpythonBackend,
+        "pygithub": PyGithubBackend,
+        "typer": TyperBackend,
+        "libgit2": LibGit2Backend,
+        "dulwich": DulwichBackend,
+        "gh": GhBackend,
+    }
+    if backend_name not in backends:
+        print(f"Unknown backend: {backend_name}. Available: {', '.join(backends.keys())}")
+        sys.exit(1)
     try:
-        run_git_command(
-            ["git", "push", "-u", "origin", DEFAULT_BRANCH],
-            cwd,
-            timeout=GIT_NETWORK_TIMEOUT,
-        )
-    except RuntimeError as e:
-        logger.error(f"Push failed: {e}")
-        logger.info("Troubleshoot: ensure your SSH key is registered on GitHub, or run 'gh auth login'.")
-        raise
-    logger.info(f"✓ Pushed to origin/{DEFAULT_BRANCH}")
+        return backends[backend_name]()
+    except ImportError as e:
+        print(f"Backend {backend_name} not available: {e}")
+        print(f"Falling back to subprocess backend")
+        return SubprocessBackend()
 
 
-def _sanity_check_environment(cwd: Path) -> Optional[int]:
-    if shutil.which("git") is None:
-        logger.error("`git` not found on PATH. Install git and retry.")
-        return 1
-    if cwd == Path.home():
-        logger.error("Refusing to run in home directory. cd into your project first.")
-        return 1
-    if cwd == Path(cwd.anchor):
-        logger.error("Refusing to run at filesystem root.")
-        return 1
-    if not os.access(cwd, os.W_OK):
-        logger.error(f"No write permission in {cwd}")
-        return 1
-    return None
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Create and push a new GitHub repo from current folder contents.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s                          # repo name = current folder name
-  %(prog)s -n my-project            # repo name = my-project
-  %(prog)s -n my-project --private  # create private repo
-  %(prog)s -y                       # non-interactive (assume yes)
-""",
-    )
+def main():
+    parser = argparse.ArgumentParser(description="Git repository initialization and GitHub push")
     parser.add_argument(
-        "-n",
-        "--name",
-        default=None,
-        help="Repository name (default: current directory name)",
-    )
-    parser.add_argument(
-        "-p",
-        "--private",
-        action="store_true",
-        help="Create as private repo (default: public)",
-    )
-    parser.add_argument(
-        "-d",
-        "--description",
-        default=None,
-        help="Repository description",
-    )
-    parser.add_argument(
-        "-m",
-        "--message",
-        default=DEFAULT_COMMIT_MSG,
-        help=f"Initial commit message (default: '{DEFAULT_COMMIT_MSG}')",
-    )
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Assume yes to prompts (non-interactive).",
-    )
-    parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        help="Skip confirmation prompts (same as --yes).",
-    )
-    parser.add_argument(
-        "--no-gitignore",
-        action="store_true",
-        help="Do not copy ~/.gitignore.",
+        "-b",
+        "--backend",
+        choices=[
+            "subprocess",
+            "gitpython",
+            "pygithub",
+            "typer",
+            "libgit2",
+            "dulwich",
+            "gh",
+        ],
+        default="subprocess",
+        help="Backend to use for git operations (default: subprocess)",
     )
     args = parser.parse_args()
-    non_interactive = args.yes or args.force or not sys.stdin.isatty()
-    cwd = Path.cwd().resolve()
-    rc = _sanity_check_environment(cwd)
-    if rc is not None:
-        return rc
-    try:
-        token = load_github_token()
-        current_user = get_current_user_login(token)
-        repo_name = args.name or cwd.name
-        validate_repo_name(repo_name)
-        logger.info(f"Target repo name: {repo_name}")
-        if not args.no_gitignore:
-            copy_gitignore(cwd)
-        remote_url: Optional[str] = None
-        if is_git_repo(cwd):
-            logger.info("Existing git repo detected")
-            remote_url = get_remote_url(cwd)
-            if remote_url:
-                logger.info(f"Remote URL: {remote_url}")
-                try:
-                    owner, _ = parse_github_url(remote_url)
-                except ValueError:
-                    logger.warning(f"Remote is not a GitHub URL; leaving it alone: {remote_url}")
-                    owner = None
-                if owner and owner.lower() == current_user.lower():
-                    logger.info("✓ You own this remote — proceeding")
-                elif owner:
-                    logger.warning(f"Remote belongs to '{owner}', not you ('{current_user}')")
-                    if non_interactive:
-                        logger.info("Non-interactive mode: keeping existing remote.")
-                    else:
-                        resp = input("Remove remote and create a new repo in your account? [y/N]: ").strip().lower()
-                        if resp != "y":
-                            logger.info("Aborted")
-                            return 1
-                        run_git_command(["git", "remote", "remove", "origin"], cwd)
-                        remote_url = None
-            else:
-                logger.info("Git repo exists but no remote configured")
-        if not remote_url:
-            logger.info(f"Creating GitHub repo: {current_user}/{repo_name}")
-            remote_url = create_github_repo(
-                repo_name,
-                token,
-                current_user,
-                private=args.private,
-                description=args.description,
-            )
-            initialize_git_repo(cwd, remote_url)
-        commit_and_push(cwd, args.message)
-        try:
-            owner, repo = parse_github_url(remote_url)
-        except ValueError:
-            owner, repo = current_user, repo_name
-        logger.info(f"✅ Success! https://github.com/{owner}/{repo}")
-        return 0
-    except KeyboardInterrupt:
-        logger.warning("Interrupted by user")
-        return 130
-    except (FileNotFoundError, ValueError) as e:
-        logger.error(f"Configuration error: {e}")
-        return 1
-    except requests.RequestException as e:
-        logger.error(f"Network/GitHub API error: {e}")
-        return 1
-    except RuntimeError as e:
-        logger.error(str(e))
-        return 1
-    except Exception as e:
-        logger.error(f"Unexpected error: {type(e).__name__}: {e}")
-        return 1
+    backend = get_backend(args.backend)
+    repo_name = backend.get_dir_name()
+    print(f"Repository name: {repo_name}")
+    if not backend.is_git_repo():
+        print("Initializing git repository...")
+        backend.init_repo()
+    else:
+        print("Git repository already initialized.")
+    remote_url = backend.get_remote_url()
+    if remote_url is None:
+        print(f"Creating GitHub repository '{repo_name}'...")
+        backend.create_remote_repo(repo_name)
+    else:
+        print("Remote 'origin' already exists. Checking if repo exists on GitHub...")
+        if backend.fetch_origin():
+            print("GitHub repository exists. Will push changes.")
+        else:
+            print("Remote exists but seems inaccessible. You might need to authenticate.")
+            print(f"Remote URL: {remote_url}")
+    print("Adding all files...")
+    backend.add_all_files()
+    if backend.has_changes():
+        print("Committing changes...")
+        backend.commit("initial")
+    else:
+        print("No changes to commit.")
+    print("Pushing to GitHub...")
+    current_branch = backend.get_current_branch()
+    success, error = backend.push_upstream(current_branch)
+    if not success:
+        if error and "remote contains work that you do not have" in error:
+            print("Remote has changes. Pulling first...")
+            backend.pull_rebase(current_branch)
+            print("Pushing again...")
+            backend.push_upstream(current_branch)
+        else:
+            print(f"Push failed: {error}")
+            sys.exit(1)
+    print(f"\n✅ Success! Repository '{repo_name}' is now on GitHub.")
+    print(f"View it at: https://github.com/{repo_name}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

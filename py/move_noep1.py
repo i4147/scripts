@@ -9,14 +9,12 @@ PYTHON_VERSION = "3.13"
 PREFIX_SITE_PACKAGES = Path(PREFIX) / f"lib/python{PYTHON_VERSION}/site-packages"
 USER_SITE_PACKAGES = Path.home() / f".local/lib/python{PYTHON_VERSION}/site-packages"
 PKG_LIST = PREFIX_SITE_PACKAGES / "noep-pure.txt"
-
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RED = "\033[91m"
 BLUE = "\033[94m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
-
 PKG_MAP = {
     "absl": "absl_py",
     "dotenv": "python_dotenv",
@@ -51,10 +49,8 @@ PKG_MAP = {
 
 
 def get_package_name(import_name):
-
     if import_name in PKG_MAP:
         return PKG_MAP[import_name]
-
     variants = [
         import_name,
         import_name.replace("_", "-"),
@@ -63,15 +59,12 @@ def get_package_name(import_name):
         import_name.upper(),
         import_name.title(),
     ]
-
     for variant in set(variants):
         if (PREFIX_SITE_PACKAGES / variant).exists():
             return variant
-
         dist_info_pattern = f"{variant}-*.dist-info"
         if any(PREFIX_SITE_PACKAGES.glob(dist_info_pattern)):
             return variant
-
     return import_name
 
 
@@ -79,19 +72,15 @@ def move_package(import_name):
     pkg_name = get_package_name(import_name)
     src = PREFIX_SITE_PACKAGES / pkg_name
     dest = USER_SITE_PACKAGES / pkg_name
-
     if not src.exists():
         dist_info_pattern = f"{pkg_name}-*.dist-info"
         if any(PREFIX_SITE_PACKAGES.glob(dist_info_pattern)):
             return ("dist_info_only", import_name, pkg_name, None)
         return ("not_found", import_name, pkg_name, None)
-
     if dest.exists():
         return ("exists", import_name, pkg_name, None)
-
     try:
         shutil.move(str(src), str(dest))
-
         moved_info = []
         dist_info_pattern = f"{pkg_name}-*.dist-info"
         for info_dir in PREFIX_SITE_PACKAGES.glob(dist_info_pattern):
@@ -99,28 +88,22 @@ def move_package(import_name):
             if not dest_info.exists():
                 shutil.move(str(info_dir), str(dest_info))
                 moved_info.append(info_dir.name)
-
         return ("success", import_name, pkg_name, moved_info)
-
     except Exception as e:
         return ("error", import_name, pkg_name, str(e))
 
 
 def main():
-
     if not PKG_LIST.exists():
         print(f"{RED}Error: Package list not found at {PKG_LIST}{RESET}")
         return 1
-
     USER_SITE_PACKAGES.mkdir(parents=True, exist_ok=True)
-
     try:
         with open(PKG_LIST) as f:
             packages = [line.strip() for line in f if line.strip()]
     except Exception as e:
         print(f"{RED}Error reading package list: {e}{RESET}")
         return 1
-
     total_pkgs = len(packages)
     print(f"{YELLOW}Termux Python Package Mover (Parallel with List Update){RESET}")
     print(f"Source: {PREFIX_SITE_PACKAGES}")
@@ -128,27 +111,21 @@ def main():
     print(f"Package list: {PKG_LIST}")
     print(f"{BLUE}Total packages to process: {total_pkgs}{RESET}")
     print()
-
     cpu_count_available = cpu_count()
     num_processes = max(1, (cpu_count_available * 3) // 4)
     print(f"{BLUE}Using {num_processes} parallel processes{RESET}")
     print()
-
     start_time = datetime.now()
-
     with Pool(processes=num_processes) as pool:
         results = pool.map(move_package, packages)
-
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
-
     successful = []
     exists = []
     not_found = []
     errors = []
     mismatches = []
     dist_info_only = []
-
     print()
     for status, import_name, pkg_name, extra in results:
         if status == "success":
@@ -156,15 +133,12 @@ def main():
             if extra:
                 print(f"   📁 Moved dist-info: {', '.join(extra)}")
             successful.append(import_name)
-
         elif status == "exists":
             print(f"{YELLOW}⏭️  {import_name} -> {pkg_name}: Already exists in destination{RESET}")
             exists.append(import_name)
-
         elif status == "dist_info_only":
             print(f"{CYAN}📦 {import_name} -> {pkg_name}: Only dist-info found (package may already be moved){RESET}")
             dist_info_only.append(import_name)
-
         elif status == "not_found":
             if import_name != pkg_name:
                 print(f"{CYAN}🔍 {import_name}: Package might be named '{pkg_name}' (mapped){RESET}")
@@ -172,11 +146,9 @@ def main():
             else:
                 print(f"{RED}⚠️  {import_name}: Not found in source{RESET}")
                 not_found.append(import_name)
-
         elif status == "error":
             print(f"{RED}❌ {import_name} -> {pkg_name}: Failed - {extra}{RESET}")
             errors.append(import_name)
-
     keep_packages = []
     for pkg in packages:
         if pkg not in successful and pkg not in dist_info_only:
@@ -186,7 +158,6 @@ def main():
                 keep_packages.append(pkg)
             else:
                 keep_packages.append(pkg)
-
     if keep_packages:
         with open(PKG_LIST, "w") as f:
             f.write("\n".join(keep_packages))
@@ -196,7 +167,6 @@ def main():
     else:
         if PKG_LIST.exists():
             PKG_LIST.unlink()
-
     print()
     print(f"{YELLOW}Summary:{RESET}")
     print(f"  Total packages: {total_pkgs}")
@@ -208,7 +178,6 @@ def main():
     print(f"  Name mismatches (kept in list): {CYAN}{len(mismatches)}{RESET}")
     print(f"  Remaining in list: {len(keep_packages)}")
     print(f"  Time taken: {duration:.2f}s")
-
     if mismatches:
         print()
         print(f"{CYAN}Name mismatches detected (manual attention needed):{RESET}")
@@ -216,7 +185,6 @@ def main():
             print(f"  {imp} -> {pkg}")
         print()
         print(f"{YELLOW}You can add these mappings to the PKG_MAP dictionary in the script{RESET}")
-
     return 0
 
 

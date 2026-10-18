@@ -1,6 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
 from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -64,9 +63,13 @@ class AddedFilesCommit:
     renamed: list[dict[str, str]]
 
 
-def run(cmd: Sequence[str], cwd: Path | None = None, check: bool = True, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: Sequence[str], cwd: Path | None = None, check: bool = True, timeout: int = 60
+) -> subprocess.CompletedProcess[str]:
     try:
-        cp = subprocess.run(list(cmd), cwd=str(cwd) if cwd else None, capture_output=True, text=True, check=False, timeout=timeout)
+        cp = subprocess.run(
+            list(cmd), cwd=str(cwd) if cwd else None, capture_output=True, text=True, check=False, timeout=timeout
+        )
     except FileNotFoundError as exc:
         raise RuntimeError(f"command not found: {cmd[0]}") from exc
     except subprocess.TimeoutExpired as exc:
@@ -160,7 +163,9 @@ def github_request(token: str, method: str, url: str, payload: dict[str, Any] | 
         raise RuntimeError(f"GitHub API {exc.code}: {parsed.get('message', body)}") from exc
 
 
-def create_github_repo(token: str, name: str, private: bool, description: str | None, auto_init: bool) -> dict[str, Any]:
+def create_github_repo(
+    token: str, name: str, private: bool, description: str | None, auto_init: bool
+) -> dict[str, Any]:
     payload: dict[str, Any] = {"name": name, "private": private, "auto_init": auto_init}
     if description:
         payload["description"] = description
@@ -254,7 +259,13 @@ def cmd_diff_report(args: argparse.Namespace) -> int:
     if len(hashes) < 2:
         raise RuntimeError("Repository needs at least 2 commits to diff.")
     new, old = hashes[0], hashes[1]
-    report = DiffReport(str(repo), commit_info(repo, old), commit_info(repo, new), diff_files(repo, old, new), git(["diff", old, new], repo))
+    report = DiffReport(
+        str(repo),
+        commit_info(repo, old),
+        commit_info(repo, new),
+        diff_files(repo, old, new),
+        git(["diff", old, new], repo),
+    )
     out = Path(args.output)
     out.write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
     print(f"Wrote diff report: {out}")
@@ -631,34 +642,28 @@ def cmd_newrepo(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="git-helper")
     sub = parser.add_subparsers(dest="command", required=True)
-
     p = sub.add_parser("diff-report")
     p.add_argument("repo", nargs="?", default=".")
     p.add_argument("output", nargs="?", default="diff_report.json")
     p.set_defaults(func=cmd_diff_report)
-
     p = sub.add_parser("merge-squash")
     p.add_argument("branch")
     p.add_argument("--repo", default=".")
     p.add_argument("--reviewer")
     p.set_defaults(func=cmd_merge_squash)
-
     p = sub.add_parser("scan-changes")
     p.add_argument("path", nargs="?", default=".")
     p.add_argument("--jobs", type=int)
     p.set_defaults(func=cmd_scan_changes)
-
     p = sub.add_parser("pull-all")
     p.add_argument("path", nargs="?", default=".")
     p.add_argument("--jobs", type=int)
     p.set_defaults(func=cmd_pull_all)
-
     p = sub.add_parser("pull-new")
     p.add_argument("path", nargs="?", default=".")
     p.add_argument("--env-file")
     p.add_argument("--jobs", type=int)
     p.set_defaults(func=cmd_pull_new)
-
     p = sub.add_parser("create-repo")
     p.add_argument("--name")
     p.add_argument("--source", default=".")
@@ -675,7 +680,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--git-email")
     p.add_argument("--rename-branch", action="store_true")
     p.set_defaults(func=cmd_create_repo)
-
     p = sub.add_parser("squash")
     p.add_argument("n", type=int)
     p.add_argument("--repo", default=".")
@@ -683,41 +687,33 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--meta-file", default="saved_patch.meta.json")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_squash)
-
     p = sub.add_parser("fix")
     p.add_argument("repo", nargs="?", default=".")
     p.set_defaults(func=cmd_fix)
-
     p = sub.add_parser("gitignore-add")
     p.add_argument("line")
     p.add_argument("paths", nargs="*")
     p.set_defaults(func=cmd_gitignore_add)
-
     p = sub.add_parser("keep-main")
     p.add_argument("repo", nargs="?", default=".")
     p.set_defaults(func=cmd_keep_main)
-
     p = sub.add_parser("restore")
     p.add_argument("path", nargs="?", default=".")
     p.add_argument("--jobs", type=int)
     p.set_defaults(func=cmd_restore)
-
     p = sub.add_parser("added-files")
     p.add_argument("repo", nargs="?", default=".")
     p.add_argument("output", nargs="?", default="added_files.json")
     p.add_argument("--branch", default="HEAD")
     p.add_argument("--max-count", type=int)
     p.set_defaults(func=cmd_added_files)
-
     p = sub.add_parser("report")
     p.add_argument("repo", nargs="?", default=".")
     p.add_argument("output", nargs="?", default="added_files.json")
     p.set_defaults(func=cmd_report)
-
     p = sub.add_parser("auto-commit-push")
     p.add_argument("repo", nargs="?", default=".")
     p.set_defaults(func=cmd_auto_commit_push)
-
     p = sub.add_parser("newrepo")
     p.add_argument("--name")
     p.add_argument("--private", action="store_true")
@@ -726,7 +722,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--branch", default="main")
     p.add_argument("--env-file")
     p.set_defaults(func=cmd_newrepo)
-
     return parser
 
 

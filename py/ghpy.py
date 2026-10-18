@@ -1,9 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env python
-
 from __future__ import annotations
 import os
 from pathlib import Path
-
 from dotenv import load_dotenv
 import requests
 

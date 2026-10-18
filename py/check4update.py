@@ -1,5 +1,4 @@
 import re
-
 import requests
 from dh import cprint, get_installed_packages
 from loguru import logger

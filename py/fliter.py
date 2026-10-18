@@ -1,7 +1,6 @@
 import os
 import sys
 
-
 if sys.version_info < (3, 11):
     import tomli as tomllib
 else:
@@ -12,52 +11,39 @@ def parse_flit_project():
     if not os.path.exists("pyproject.toml"):
         print("Error: No pyproject.toml found in this directory.")
         sys.exit(1)
-
     with open("pyproject.toml", "rb") as f:
         config = tomllib.load(f)
-
     backend = config.get("build-system", {}).get("build-backend", "")
     if "flit_core" not in backend:
         print(f"Warning: This project uses '{backend}', not flit_core. Proceeding anyway...")
-
     project = config.get("project", {})
     if not project:
         print("Error: No [project] table found in pyproject.toml.")
         sys.exit(1)
-
     name = project.get("name")
     if not name:
         print("Error: Project name is missing from pyproject.toml.")
         sys.exit(1)
-
     import_name = config.get("tool", {}).get("flit", {}).get("module", {}).get("name", name)
-
     authors_list = project.get("authors", []) or project.get("maintainers", [])
     author_name = ", ".join([a["name"] for a in authors_list if "name" in a])
     author_email = ", ".join([a["email"] for a in authors_list if "email" in a])
-
     dynamic_fields = project.get("dynamic", [])
-
     readme = project.get("readme", "")
     if isinstance(readme, dict):
         readme_path = readme.get("file", "")
     else:
         readme_path = readme
-
     license_val = project.get("license", "")
     license_str = license_val.get("text", "") if isinstance(license_val, dict) else license_val
-
     install_requires = project.get("dependencies", [])
     extras_require = project.get("optional-dependencies", {})
-
     setup_code = f"""import os
 import sys
 from setuptools import setup, find_packages
-
 # --- Dynamic Extraction For Flit Conventions ---
 version = "0.1.0"
 description = ""
-
 def extract_flit_metadata():
     global version, description
     import ast
@@ -70,7 +56,6 @@ def extract_flit_metadata():
         
     if not target_file:
         return
-
     with open(target_file, "r", encoding="utf-8") as f:
         content = f.read()
         
@@ -83,7 +68,6 @@ def extract_flit_metadata():
                 description = doc.split("\\n")[0].strip()
         except Exception:
             pass
-
     # Read __version__ directly from the source code
     if "version" in {repr(dynamic_fields)}:
         try:
@@ -93,9 +77,7 @@ def extract_flit_metadata():
                     break
         except Exception:
             pass
-
 extract_flit_metadata()
-
 # --- Execution Setup ---
 setup(
     name={repr(name)},
@@ -115,10 +97,8 @@ setup(
     zip_safe=False,
 )
 """
-
     with open("setup.py", "w", encoding="utf-8") as out:
         out.write(setup_code)
-
     print(f"Successfully generated a universal legacy setup.py for project: '{name}'")
 
 

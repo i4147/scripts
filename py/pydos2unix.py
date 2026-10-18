@@ -4,7 +4,6 @@ import fnmatch
 import logging
 import mmap
 from pathlib import Path
-
 from tqdm import tqdm
 
 

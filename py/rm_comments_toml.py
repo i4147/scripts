@@ -64,7 +64,6 @@ def process_file(path: str | Path) -> None:
     path = Path(path)
     code = path.read_text(encoding="utf-8")
     result = strip_comments(code)
-
     if result.comments:
         path.write_text(result.text, encoding="utf-8")
         print(f"{path.name} : {result.comments}\n\n{result.removed}")
@@ -77,7 +76,6 @@ def main() -> None:
     cwd = Path.cwd()
     args = sys.argv[1:]
     files = []
-
     if args:
         for arg in args:
             p = Path(arg)
@@ -87,7 +85,6 @@ def main() -> None:
                 files.extend(get_files(p))
     else:
         files = get_files(cwd)
-
     mpf3(process_file, files)
 
 

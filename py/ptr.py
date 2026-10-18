@@ -5,7 +5,6 @@ import os as _os
 import shlex as _shlex
 import sys as _sys
 import warnings as _warnings
-
 import pkg_resources
 import setuptools.command.test as orig
 from setuptools import Distribution

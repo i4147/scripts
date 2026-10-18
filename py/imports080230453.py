@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import importlib.metadata
@@ -74,7 +73,6 @@ try:
     HAS_JOBLIB = True
 except ImportError:
     HAS_JOBLIB = False
-
 SKIP_DIRS = {
     ".git",
     "__pycache__",

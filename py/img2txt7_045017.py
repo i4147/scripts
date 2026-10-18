@@ -2,7 +2,6 @@ import sys
 from collections import deque
 from multiprocessing import get_context
 from pathlib import Path
-
 from PIL import Image
 from pytesseract import image_to_string
 

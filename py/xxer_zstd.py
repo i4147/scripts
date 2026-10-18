@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import gzip
 import lzma
@@ -11,7 +10,6 @@ import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-
 import brotlicffi as brotli
 import py7zr
 from backports import zstd
@@ -214,12 +212,10 @@ def compress_one(path_str: str, mode: str, is_dir: bool) -> Result:
     tar_path = None
     original_size = get_size(src)
     result = Result(ok=False, src=str(src), original_size=original_size)
-
     try:
         if is_dir:
             tar_path = src.parent / f"{src.name}.tar"
             tar_directory(src, tar_path)
-
             dst = output_name_for_dir(src, mode)
             atomic_write(
                 tar_path,
@@ -233,14 +229,12 @@ def compress_one(path_str: str, mode: str, is_dir: bool) -> Result:
                     "zip": compress_tar_with_zip,
                 }[mode],
             )
-
             tar_path.unlink(missing_ok=True)
             shutil.rmtree(str(src))
             result.dst = str(dst)
             result.new_size = get_size(dst)
             result.ok = True
             return result
-
         dst = output_name_for_file(src, mode)
         atomic_write(
             src,
@@ -254,13 +248,11 @@ def compress_one(path_str: str, mode: str, is_dir: bool) -> Result:
                 "zip": compress_file_zip,
             }[mode],
         )
-
         src.unlink()
         result.dst = str(dst)
         result.new_size = get_size(dst)
         result.ok = True
         return result
-
     except Exception as e:
         logger.exception(f"Failed to compress {src}")
         result.error = str(e)
@@ -275,11 +267,9 @@ def decompress_one(path_str: str) -> Result:
     temp_file_to_remove: Path | None = None
     original_size = get_size(src)
     result = Result(ok=False, src=str(src), original_size=original_size)
-
     try:
         name = src.name.lower()
         dst_dir = src.parent
-
         if name.endswith(".tar.xz"):
             extracted_path = dst_dir / src.name[:-7]
             with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
@@ -289,13 +279,11 @@ def decompress_one(path_str: str) -> Result:
             with tarfile.open(temp_file_to_remove, "r:") as tf:
                 tf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar"):
             extracted_path = dst_dir / src.name[:-4]
             with tarfile.open(src, "r:") as tf:
                 tf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar.gz"):
             extracted_path = dst_dir / src.name[:-6]
             with tempfile.NamedTemporaryFile(delete=False, dir=dst_dir, suffix=".tar") as tmp_tar:
@@ -305,7 +293,6 @@ def decompress_one(path_str: str) -> Result:
             with tarfile.open(temp_file_to_remove, "r:") as tf:
                 tf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar.br"):
             if brotli is None:
                 msg = "brotlicffi is not installed"
@@ -318,7 +305,6 @@ def decompress_one(path_str: str) -> Result:
             with tarfile.open(temp_file_to_remove, "r:") as tf:
                 tf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar.zst"):
             if zstd is None:
                 msg = "zstandard is not installed"
@@ -332,7 +318,6 @@ def decompress_one(path_str: str) -> Result:
             with tarfile.open(temp_file_to_remove, "r:") as tf:
                 tf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar.7z"):
             if py7zr is None:
                 msg = "py7zr is not installed"
@@ -341,25 +326,21 @@ def decompress_one(path_str: str) -> Result:
             with py7zr.SevenZipFile(src, "r") as zf:
                 zf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".tar.zip"):
             extracted_path = dst_dir / src.name[:-8]
             with zipfile.ZipFile(src, "r") as zf:
                 zf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".xz"):
             extracted_path = src.with_suffix("")
             with lzma.open(src, "rb") as fin, extracted_path.open("wb") as fout:
                 shutil.copyfileobj(fin, fout)
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".gz"):
             extracted_path = src.with_suffix("")
             with gzip.open(src, "rb") as fin, extracted_path.open("wb") as fout:
                 shutil.copyfileobj(fin, fout)
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".br"):
             if brotli is None:
                 msg = "brotlicffi is not installed"
@@ -368,7 +349,6 @@ def decompress_one(path_str: str) -> Result:
             out_bytes = brotli.decompress(src.read_bytes())
             extracted_path.write_bytes(out_bytes)
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".zst"):
             extracted_name = src.stem
             extracted_path = dst_dir / extracted_name
@@ -382,7 +362,6 @@ def decompress_one(path_str: str) -> Result:
                 else:
                     print("error decompressing zstd file")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".7z"):
             if py7zr is None:
                 msg = "py7zr is not installed"
@@ -392,17 +371,14 @@ def decompress_one(path_str: str) -> Result:
             with py7zr.SevenZipFile(src, "r") as zf:
                 zf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         elif name.endswith(".zip"):
             extracted_path = src.with_suffix("")
             with zipfile.ZipFile(src, "r") as zf:
                 zf.extractall(path=dst_dir, filter="data")
             extracted_path_str = str(extracted_path)
-
         else:
             msg = f"Unsupported archive type: {src}"
             raise ValueError(msg)
-
         src.unlink()
         if temp_file_to_remove and temp_file_to_remove.exists():
             temp_file_to_remove.unlink()
@@ -412,9 +388,7 @@ def decompress_one(path_str: str) -> Result:
             result.ok = True
         else:
             result.ok = True
-
         return result
-
     except Exception as e:
         logger.exception(f"Failed to decompress {src}")
         result.error = str(e)
@@ -449,26 +423,21 @@ def main() -> None:
     parser.add_argument("-b", "--brotli", action="store_true", help="Use brotlicffi")
     parser.add_argument("--zip", action="store_true", help="Use zipfile")
     args = parser.parse_args()
-
     if not args.compress and not args.decompress:
         args.compress = True
         args.xz = True
-
     overall_original_size = 0
     overall_new_size = 0
     processed_count = 0
     error_count = 0
-
     if args.decompress:
         targets = []
         for p in Path().iterdir():
             if p.is_file() and has_compressed_suffix(p):
                 targets.append(str(p))
-
         if not targets:
             print("No compressed files found to decompress.")
             return
-
         print(f"Found {len(targets)} compressed files. Starting decompression...")
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(decompress_one, t) for t in targets]
@@ -484,7 +453,6 @@ def main() -> None:
                 else:
                     error_count += 1
                     print(f"Failed to decompress: {res.src} - Error: {res.error}")
-
     else:
         mode = "xz"
         if args.use_7z:
@@ -499,18 +467,14 @@ def main() -> None:
             mode = "zip"
         elif args.xz:
             mode = "xz"
-
         base = Path.cwd()
         items_to_process = collect_top_level_items(base)
-
         if not items_to_process:
             print("No files or directories to compress.")
             return
-
         print(f"Found {len(items_to_process)} items to compress using mode '{mode}'. Starting compression...")
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(compress_one, str(path), mode, is_dir) for path, is_dir in items_to_process]
-
             for fut in as_completed(futures):
                 res = fut.result()
                 processed_count += 1
@@ -523,19 +487,15 @@ def main() -> None:
                 else:
                     error_count += 1
                     print(f"Failed to compress: {res.src} - Error: {res.error}")
-
     print("\n--- Operation Summary ---")
     if processed_count == 0:
         print("No items were processed.")
         return
-
     if error_count > 0:
         print(f"Completed with {error_count} error(s).")
-
     if overall_original_size > 0:
         reduction = overall_original_size - overall_new_size
         percent_reduction = (reduction / overall_original_size) * 100 if overall_original_size > 0 else 0
-
         print(f"Total original size: {format_size(overall_original_size)}")
         print(f"Total new size:      {format_size(overall_new_size)}")
         print(f"Total size reduction: {format_size(abs(reduction))} ({percent_reduction:.2f}%)")

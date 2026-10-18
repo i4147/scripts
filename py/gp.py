@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import sys
 from datetime import datetime
 from pathlib import Path
-
 from git import GitCommandError, InvalidGitRepositoryError, Repo
 
 

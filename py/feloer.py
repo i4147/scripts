@@ -96,10 +96,8 @@ def strip_module_docstring(body: str) -> str:
         quote = DOC_TH1
     elif s.startswith(DOC_TH2):
         quote = DOC_TH2
-
     if not quote:
         return body
-
     end_idx = s.find(quote, len(quote))
     if end_idx != -1:
         return s[end_idx + len(quote) :].lstrip("\r\n")
@@ -130,7 +128,6 @@ async def ask_felo(code: str) -> str:
         proc.kill()
         await proc.wait()
         raise subprocess.TimeoutExpired(cmd, FELO_TIMEOUT)
-
     if proc.returncode != 0:
         msg = f"felo exited {proc.returncode}: {stderr.decode('utf-8', errors='replace').strip()[:300]}"
         raise RuntimeError(msg)
@@ -152,13 +149,11 @@ async def annotate(path: str, dry_run: bool, force: bool, sem: asyncio.Semaphore
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
         header, body = split_header(content)
-
         if has_module_docstring(body):
             if not force:
                 print(f"[skip] {path}: module docstring already present")
                 return
             body = strip_module_docstring(body)
-
         print(f"[ask ] {path}")
         try:
             raw = await ask_felo(content)

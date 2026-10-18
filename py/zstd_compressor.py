@@ -114,7 +114,6 @@ def main():
     args = parser.parse_args()
     mode = "decompress" if args.decompress else "compress"
     current_dir = Path(".")
-
     logger.remove()
     logger.add(lambda msg: print(msg, end=""), level="INFO")
     if mode == "compress":

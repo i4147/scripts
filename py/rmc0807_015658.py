@@ -337,7 +337,6 @@ def main() -> None:
     target_path = Path(args.target).resolve()
     wheel_files = []
     regular_files = []
-
     for p in files:
         if p.suffix.lower() == ".whl":
             wheel_files.append(p)

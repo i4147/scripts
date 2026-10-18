@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from tqdm import tqdm
 
 

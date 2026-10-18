@@ -1,13 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as a command-line tool for analyzing a Git repository's commit history and exporting per-commit file-change summaries. The tool should accept a repository path, a target branch or revision, and optional filters such as a date range (since/until), author name or email matching, a maximum commit count, and an option to follow only first-parent history. For each commit in the selected range, it should identify which files were added, modified, deleted, and (where supported) renamed, and report totals such as the number of files touched and lines inserted and deleted. The tool should be able to read the repository through multiple backends with graceful fallback, so that features like rename detection and line statistics are used when the chosen backend supports them and are cleanly omitted otherwise.
-
 Output should be written as CSV with a fixed set of columns covering commit identity (full and short hashes), author and committer names and emails, authored and committed timestamps in ISO 8601 format, the commit message, parent hashes, and the per-commit file-change metrics. The tool should also support an optional JSON output format with equivalent data. Results should be streamed or written in a deterministic, chronological order, and the output destination should default to standard output but be configurable to a file.
-
 Configuration should be loadable from a TOML file, with command-line arguments overriding file values and sensible defaults applied otherwise. The tool should validate inputs, provide clear usage errors, and use distinct, documented exit codes for success, no matching commits, usage errors, and invalid or inaccessible repositories. Logging should be configurable via verbosity flags, with diagnostic messages going to standard error so they do not corrupt data output. Include helpful `--help` text describing all options and their behavior.
 ---"""
 
 from __future__ import annotations
-
 import argparse
 import csv
 import fnmatch
@@ -23,19 +20,16 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 LOG = logging.getLogger("gitaddedfiles")
-
 EXIT_OK = 0
 EXIT_NO_COMMITS = 1
 EXIT_USAGE = 2
 EXIT_REPO = 3
-
 BACKEND_CAPS: dict[str, dict[str, bool]] = {
     "dulwich": {"rename": False, "stats": False},
     "pygit2": {"rename": True, "stats": True},
     "gitpython": {"rename": True, "stats": True},
     "gitcli": {"rename": True, "stats": True},
 }
-
 CSV_FIELDS = [
     "sha",
     "short",
@@ -167,7 +161,6 @@ def _iter_dulwich(opts: Options) -> Iterator[CommitRecord]:
                 head_sha = repo.refs[f"refs/heads/{ref}".encode()]
             except KeyError:
                 head_sha = ref.encode()
-
         blob_cache: dict[bytes, dict[str, bytes]] = {}
 
         def tree_blobs(tree_sha: bytes) -> dict[str, bytes]:
@@ -195,13 +188,11 @@ def _iter_dulwich(opts: Options) -> Iterator[CommitRecord]:
             cn, ce = _parse_actor(commit.committer)
             parents = [p.decode() for p in commit.parents]
             parents_used = parents[:1] if (opts.first_parent and parents) else parents
-
             current = tree_blobs(commit.tree)
             parent_map: dict[str, bytes] = {}
             for p in parents_used:
                 pc = repo[p.encode()]
                 parent_map.update(tree_blobs(pc.tree))
-
             added, modified, deleted = [], [], []
             for path, sh in current.items():
                 if not _path_ok(path, opts):
@@ -215,7 +206,6 @@ def _iter_dulwich(opts: Options) -> Iterator[CommitRecord]:
                     continue
                 if path not in current:
                     deleted.append(path)
-
             return CommitRecord(
                 sha=sha,
                 short=sha[:8],
@@ -264,7 +254,6 @@ def _iter_pygit2(opts: Options) -> Iterator[CommitRecord]:
     import pygit2
 
     repo = pygit2.Repository(opts.repo_path)
-
     try:
         ref = repo.revparse_single(opts.branch)
     except (KeyError, ValueError):
@@ -276,18 +265,15 @@ def _iter_pygit2(opts: Options) -> Iterator[CommitRecord]:
     def _build(commit) -> CommitRecord:
         parents = list(commit.parents)
         parents_used = parents[:1] if (opts.first_parent and parents) else parents
-
         if parents_used:
             diff = repo.diff(parents_used[0], commit, context_lines=0)
         else:
             diff = commit.tree.diff_to_tree(context_lines=0)
-
         if opts.rename:
             try:
                 diff.find_similar()
             except Exception:
                 pass
-
         added, modified, deleted, renamed = [], [], [], []
         for patch in diff:
             d = patch.delta
@@ -306,7 +292,6 @@ def _iter_pygit2(opts: Options) -> Iterator[CommitRecord]:
             elif st in (pygit2.GIT_DELTA_MODIFIED, pygit2.GIT_DELTA_COPIED):
                 if _path_ok(new_path, opts):
                     modified.append(new_path)
-
         try:
             s = diff.stats
             stats = {
@@ -316,7 +301,6 @@ def _iter_pygit2(opts: Options) -> Iterator[CommitRecord]:
             }
         except Exception:
             stats = {}
-
         return CommitRecord(
             sha=str(commit.id),
             short=str(commit.id)[:8],
@@ -370,22 +354,18 @@ def _iter_gitpython(opts: Options) -> Iterator[CommitRecord]:
     kwargs: dict[str, Any] = {}
     if opts.first_parent:
         kwargs["first_parent"] = True
-
     try:
         commits = repo.iter_commits(opts.branch, **kwargs)
     except Exception:
         commits = iter(())
-
     emitted = 0
     for commit in commits:
         parents = list(commit.parents)
         parents_used = parents[:1] if (opts.first_parent and parents) else parents
-
         if parents_used:
             diffs = commit.diff(parents_used[0], create_patch=False, R=opts.rename)
         else:
             diffs = commit.diff(NULL_TREE, create_patch=False, R=opts.rename)
-
         added, modified, deleted, renamed = [], [], [], []
         for d in diffs:
             ct = d.change_type
@@ -403,7 +383,6 @@ def _iter_gitpython(opts: Options) -> Iterator[CommitRecord]:
             elif ct in ("M", "C", "T"):
                 if _path_ok(b, opts):
                     modified.append(b)
-
         try:
             total = commit.stats.total
             stats = {
@@ -413,7 +392,6 @@ def _iter_gitpython(opts: Options) -> Iterator[CommitRecord]:
             }
         except Exception:
             stats = {}
-
         rec = CommitRecord(
             sha=commit.hexsha,
             short=commit.hexsha[:8],
@@ -431,7 +409,6 @@ def _iter_gitpython(opts: Options) -> Iterator[CommitRecord]:
             renamed=renamed,
             stats=stats,
         )
-
         if _passes_filters(rec, opts):
             yield _apply_mode(rec, opts.mode)
             emitted += 1
@@ -459,12 +436,10 @@ def _iter_gitcli(opts: Options) -> Iterator[CommitRecord]:
     if opts.author:
         args.append(f"--author={opts.author}")
     args.append(opts.branch)
-
     try:
         out = subprocess.run(args, capture_output=True, text=True, check=True).stdout
     except subprocess.CalledProcessError:
         return
-
     emitted = 0
     for chunk in out.split("\x1e")[1:]:
         nl = chunk.find("\n")
@@ -475,7 +450,6 @@ def _iter_gitcli(opts: Options) -> Iterator[CommitRecord]:
             continue
         sha, short, an, ae, cn, ce, ai, ci, msg, parents_str = header[:10]
         parents = parents_str.split() if parents_str.strip() else []
-
         tokens = chunk[nl + 1 :].split("\0")
         added, modified, deleted, renamed = [], [], [], []
         i = 0
@@ -511,7 +485,6 @@ def _iter_gitcli(opts: Options) -> Iterator[CommitRecord]:
                 elif code in ("M", "T"):
                     if _path_ok(path, opts):
                         modified.append(path)
-
         rec = CommitRecord(
             sha=sha,
             short=short,
@@ -529,7 +502,6 @@ def _iter_gitcli(opts: Options) -> Iterator[CommitRecord]:
             renamed=renamed,
             stats={},
         )
-
         if _passes_filters(rec, opts):
             yield _apply_mode(rec, opts.mode)
             emitted += 1
@@ -758,12 +730,9 @@ def _resolve(cli_val: Any, key: str, env_key: str, config: dict[str, Any], defau
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
     level = logging.ERROR if args.quiet else (logging.DEBUG if args.verbose else logging.INFO)
     logging.basicConfig(level=level, format="%(levelname)s %(message)s")
-
     config = _load_config_file(Path(args.config) if args.config else None)
-
     repo_path = _resolve(args.repo_path, "repo_path", "GAF_REPO_PATH", config, ".")
     output_path = _resolve(args.output_path, "output_path", "GAF_OUTPUT_PATH", config, None)
     backend = _resolve(args.backend, "backend", "GAF_BACKEND", config, "dulwich")
@@ -778,25 +747,21 @@ def main(argv: list[str] | None = None) -> int:
     exclude = _resolve(args.exclude, "exclude", "GAF_EXCLUDE", config, None)
     mode = _resolve(args.mode, "mode", "GAF_MODE", config, "changed")
     rename = _resolve(args.rename, "rename", "GAF_RENAME", config, False)
-
     if max_count is not None:
         try:
             max_count = int(max_count)
         except (TypeError, ValueError):
             LOG.error("invalid max_count: %r", max_count)
             return EXIT_USAGE
-
     if backend not in BACKENDS:
         LOG.error("unknown backend: %s (choose from %s)", backend, ", ".join(BACKENDS))
         return EXIT_USAGE
     if fmt not in WRITERS:
         LOG.error("unknown format: %s (choose from %s)", fmt, ", ".join(WRITERS))
         return EXIT_USAGE
-
     if rename and not BACKEND_CAPS[backend]["rename"]:
         LOG.warning("backend %s does not support rename detection; ignoring --rename", backend)
         rename = False
-
     opts = Options(
         repo_path=str(repo_path),
         branch=branch,
@@ -810,7 +775,6 @@ def main(argv: list[str] | None = None) -> int:
         mode=mode,
         rename=bool(rename),
     )
-
     try:
         records = BACKENDS[backend](opts)
     except ImportError as e:
@@ -821,12 +785,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.verbose:
             LOG.exception("traceback")
         return EXIT_REPO
-
     if args.dry_run:
         n = sum(1 for _ in records)
         LOG.info("dry run: would write %d commits (backend=%s, format=%s)", n, backend, fmt)
         return EXIT_OK if n else EXIT_NO_COMMITS
-
     try:
         if output_path in (None, "-"):
             n = WRITERS[fmt](records, sys.stdout)
@@ -838,7 +800,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.verbose:
             LOG.exception("traceback")
         return EXIT_REPO
-
     LOG.info("wrote %d commits (backend=%s, format=%s)", n, backend, fmt)
     return EXIT_OK if n else EXIT_NO_COMMITS
 

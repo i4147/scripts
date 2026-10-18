@@ -20,7 +20,6 @@ def analyze_files():
     target_dirs = [cwd]
     definitions = defaultdict(list)
     source_map = {}
-
     for target_dir in target_dirs:
         for root, dirs, files in os.walk(target_dir):
             if ".git" in dirs:
@@ -50,7 +49,6 @@ def analyze_files():
                                             source_map[key] = source
                     except Exception:
                         continue
-
     repeated = []
     for key, paths in definitions.items():
         if len(set(paths)) > 5:
@@ -61,13 +59,11 @@ def analyze_files():
                 "count": len(set(paths)),
                 "files": list(set(paths)),
             })
-
     return repeated
 
 
 if __name__ == "__main__":
     repeated = analyze_files()
     repeated.sort(key=lambda x: x["count"], reverse=True)
-
     with open("repeated.json", "w") as f:
         json.dump(repeated, f, indent=2, ensure_ascii=False)

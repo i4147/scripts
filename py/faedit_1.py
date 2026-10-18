@@ -22,32 +22,26 @@ class FaEditUrwid:
         self.filename = filename
         self.file_content = ""
         self.backend_name = backend_name
-
         if os.path.exists(self.filename):
             try:
                 with open(self.filename, "r", encoding="utf-8") as f:
                     self.file_content = f.read()
             except Exception as e:
                 print(f"Error reading {self.filename}: {e}")
-
         # 1. Setup widgets
         editor_title = urwid.Text(("header", " Input (Logical Text) "))
         preview_title = urwid.Text(("preview_header", " Live Preview (faprint - Reshaped RTL) "))
-
         # Editor Setup (Multiline Edit wrapped in a scroll box)
         self.editor = urwid.Edit(multiline=True, edit_text=self.file_content)
         editor_filler = urwid.ListBox(urwid.SimpleListWalker([self.editor]))
         editor_box = urwid.LineBox(editor_filler)
-
         # Preview Setup
         initial_formatted = format_persian(self.file_content) if self.file_content else ""
         self.preview = urwid.Text(initial_formatted)
         preview_filler = urwid.ListBox(urwid.SimpleListWalker([self.preview]))
         preview_box = urwid.LineBox(preview_filler)
-
         # Connect text change event
         urwid.connect_signal(self.editor, "change", self.on_text_change)
-
         # 2. Build Layout (Vertical Stack without footer)
         self.layout = urwid.Pile([
             ("flow", editor_title),
@@ -77,12 +71,10 @@ class FaEditUrwid:
             screen = urwid.curses_display.Screen()
         else:
             screen = urwid.raw_display.Screen()
-
         palette = [
             ("header", "white", "dark blue", "bold"),
             ("preview_header", "white", "dark red", "bold"),
         ]
-
         self.loop = urwid.MainLoop(self.layout, palette, screen=screen, unhandled_input=self.handle_input)
         self.loop.run()
 
@@ -97,9 +89,7 @@ def main():
         default="urwid",
         help="Select the interface rendering backend (default: urwid)",
     )
-
     args = parser.parse_args()
-
     app = FaEditUrwid(args.filename, args.backend)
     app.run()
 

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import sys
@@ -10,7 +9,6 @@ from typing import Any
 def format_json(data: Any, indent: int = 2, compact: bool = False) -> str:
     if compact:
         return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-
     return json.dumps(
         data,
         ensure_ascii=False,
@@ -22,17 +20,14 @@ def format_json(data: Any, indent: int = 2, compact: bool = False) -> str:
 def format_dictionary_of_lists(data: dict[str, list[str]], indent: int = 2) -> str:
     if not data:
         return "{}"
-
     lines = ["{"]
     items = list(data.items())
-
     for i, (key, value) in enumerate(items):
         comma = "," if i < len(items) - 1 else ""
         indent_str = " " * indent
         lines.append(
             f"{indent_str}{json.dumps(key, ensure_ascii=False)}: {json.dumps(value, ensure_ascii=False)}{comma}"
         )
-
     lines.append("}")
     return "\n".join(lines)
 
@@ -45,10 +40,8 @@ def process_file(file_path: Path, indent: int = 2, compact: bool = False) -> str
         raise ValueError(f"Invalid JSON in {file_path}: {error}") from error
     except OSError as error:
         raise OSError(f"Cannot read {file_path}: {error}") from error
-
     if isinstance(data, dict) and all(isinstance(value, list) for value in data.values()):
         return format_dictionary_of_lists(data, indent)
-
     return format_json(data, indent, compact)
 
 
@@ -76,9 +69,7 @@ def main() -> int:
         type=Path,
         help="Write output to file instead of stdout",
     )
-
     args = parser.parse_args()
-
     results = []
     for file_path in args.files:
         try:
@@ -87,14 +78,11 @@ def main() -> int:
         except (ValueError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
             return 1
-
     output_text = "\n".join(results)
-
     if args.output:
         args.output.write_text(output_text, encoding="utf-8")
     else:
         print(output_text)
-
     return 0
 
 

@@ -9,7 +9,6 @@ IMPORT_RE = re.compile(
     r"""^(?P<indent>\s*)(?P<stmt>(?:import\s+pkg_resources|from\s+pkg_resources\s+import\s+(?P<names>[^\n#]+)))\s*(?P<comment>#.*)?$""",
     re.VERBOSE,
 )
-
 USAGE_PATTERNS: list[tuple[re.Pattern, str, bool, bool]] = [
     (
         re.compile(r"pkg_resources\.get_distribution\(\s*([^)]+?)\s*\)\.version"),
@@ -60,7 +59,6 @@ USAGE_PATTERNS: list[tuple[re.Pattern, str, bool, bool]] = [
         False,
     ),
 ]
-
 GENERIC_USAGE_RE = re.compile(r"pkg_resources\.([A-Za-z_][A-Za-z0-9_]*)")
 
 
@@ -105,12 +103,9 @@ def scan_file(path: Path) -> FileReport:
             )
         )
         return report
-
     lines = text.splitlines()
-
     for i, line in enumerate(lines, start=1):
         stripped = line.rstrip("\n")
-
         m_import = IMPORT_RE.match(stripped)
         if m_import:
             report.has_pkg_resources_import = True
@@ -126,9 +121,7 @@ def scan_file(path: Path) -> FileReport:
                 )
             )
             continue
-
         known_matches: list[tuple[int, int]] = []
-
         for pat, _repl, needs_meta, needs_res in USAGE_PATTERNS:
             for m in pat.finditer(stripped):
                 report.findings.append(
@@ -145,7 +138,6 @@ def scan_file(path: Path) -> FileReport:
                 known_matches.append((m.start(), m.end()))
                 report.needs_metadata = report.needs_metadata or needs_meta
                 report.needs_resources = report.needs_resources or needs_res
-
         for m in GENERIC_USAGE_RE.finditer(stripped):
             is_duplicate = any(m.start() >= start and m.end() <= end for start, end in known_matches)
             if not is_duplicate:
@@ -160,7 +152,6 @@ def scan_file(path: Path) -> FileReport:
                         autofixable=False,
                     )
                 )
-
     return report
 
 
@@ -169,13 +160,10 @@ def autofix_file(path: Path) -> tuple[bool, list[str]]:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return False, [f"cannot read {path}"]
-
     original = text
     notes: list[str] = []
-
     needs_metadata = False
     needs_resources = False
-
     for pat, repl, needs_meta, needs_res in USAGE_PATTERNS:
         new_text, n = pat.subn(repl, text)
         if n:
@@ -183,18 +171,15 @@ def autofix_file(path: Path) -> tuple[bool, list[str]]:
             needs_metadata = needs_metadata or needs_meta
             needs_resources = needs_resources or needs_res
             text = new_text
-
     lines = text.splitlines(keepends=True)
     new_lines: list[str] = []
     removed_import = False
     skipped_alias = False
-
     for line in lines:
         m = IMPORT_RE.match(line.rstrip("\n"))
         if not m:
             new_lines.append(line)
             continue
-
         stmt = m.group("stmt")
         if re.search(r"\bas\s+\w+\b", stmt) or (
             stmt.startswith("from") and m.group("names") and re.search(r"\bas\s+\w+\b", m.group("names"))
@@ -202,12 +187,9 @@ def autofix_file(path: Path) -> tuple[bool, list[str]]:
             skipped_alias = True
             new_lines.append(line)
             continue
-
         removed_import = True
         notes.append(f"removed import: {stmt.strip()}")
-
     text = "".join(new_lines)
-
     if removed_import or needs_metadata or needs_resources:
         insertion_lines: list[str] = []
         if needs_metadata:
@@ -217,18 +199,14 @@ def autofix_file(path: Path) -> tuple[bool, list[str]]:
         if insertion_lines:
             text = "".join(insertion_lines) + text
             notes.append("added importlib.metadata / importlib.resources imports")
-
     if skipped_alias:
         notes.append("WARNING: aliased pkg_resources import left untouched; manual review required")
-
     if text == original:
         return False, notes
-
     try:
         path.write_text(text, encoding="utf-8")
     except OSError as exc:
         return False, [f"cannot write {path}: {exc}"]
-
     return True, notes
 
 
@@ -264,35 +242,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress per-file output.")
     args = parser.parse_args(argv)
-
     if sys.version_info < (3, 12):
         print(
             f"warning: running on Python {sys.version.split()[0]}; pkg_resources is deprecated in Python 3.12+.",
             file=sys.stderr,
         )
-
     root = Path.cwd()
     files = list(iter_python_files(root))
     if not files:
         print("no .py files found")
         return 0
-
     max_workers = max(1, min(args.max_workers, cpu_count()))
     total_findings = 0
     files_with_findings = 0
     autofixed_files = 0
-
     reports: list[FileReport] = []
-
     with Pool(processes=max_workers) as pool:
         results = pool.map(process_file, [(p, "scan") for p in files])
-
         for path, rep in results:
             if isinstance(rep, FileReport):
                 reports.append(rep)
-
     reports.sort(key=lambda r: r.path)
-
     for rep in reports:
         if not rep.has_findings:
             continue
@@ -305,19 +275,15 @@ def main(argv: list[str] | None = None) -> int:
             if not args.quiet:
                 print(f"  {f.lineno}:{f.col}  [{tag}] ({f.kind})  {f.pattern!r}")
                 print(f"      | {f.line.strip()}")
-
     print()
     print(f"scanned files      : {len(files)}")
     print(f"files with findings: {files_with_findings}")
     print(f"total findings     : {total_findings}")
-
     if args.autofix:
         print("\n--autofix enabled--")
         files_to_fix = [r.path for r in reports if r.has_findings]
-
         with Pool(processes=max_workers) as pool:
             results = pool.map(process_file, [(p, "fix") for p in files_to_fix])
-
             for path, result in results:
                 if result is None:
                     continue
@@ -332,9 +298,7 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  no-op: {path}")
                         for n in notes:
                             print(f"      - {n}")
-
         print(f"files autofixed    : {autofixed_files}")
-
     if total_findings > 0 and not args.autofix:
         return 1
     return 0

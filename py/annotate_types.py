@@ -3,13 +3,11 @@ def archive_existing_file(file_path: Path) -> None:
         return
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     archive_path = ARCHIVE_DIR / file_path.name
-
     counter = 1
     while archive_path.exists():
         archive_name = f"{file_path.stem}_{counter}{file_path.suffix}"
         archive_path = ARCHIVE_DIR / archive_name
         counter += 1
-
     try:
         shutil.move(str(file_path), str(archive_path))
         print(f"📦 Archived to: {archive_path}")

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from os import path
 import sys
 from pathlib import Path
@@ -24,12 +23,10 @@ def process_file(path) -> None:
 def main() -> None:
     cwd = Path.cwd()
     args = sys.argv[1:]
-
     files = [Path(p) for p in args] if args else get_files(cwd, ext=[".py"])
     if len(files) == 1:
         process_file(files[0])
         sys.exit(0)
-
     mpf3(process_file, files)
     stubless = []
     for f in files:

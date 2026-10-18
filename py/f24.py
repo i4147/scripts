@@ -3,7 +3,6 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from tqdm import tqdm
 
 SECONDS_24H = 24 * 60 * 60

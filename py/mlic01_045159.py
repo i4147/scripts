@@ -116,9 +116,7 @@ def find_repeated_strings(
                     all_strings[norm_str].append((file_path, positions))
             except Exception as e:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
-
     repeated = {k: v for k, v in all_strings.items() if len(v) > 1}
-
     if half:
         total_files = len(files)
         half_threshold = total_files / 2
@@ -127,7 +125,6 @@ def find_repeated_strings(
             print(f"Filtered to strings appearing in at least 50% of files ({int(half_threshold)} files)")
         else:
             print("No strings found that appear in at least 50% of files")
-
     return repeated
 
 
@@ -234,17 +231,13 @@ def main():
             return original_find_files(directory, extensions)
 
         find_files = find_files_with_ext
-
     if args.half:
         print("Filtering: Only strings appearing in at least 50% of files will be shown")
-
     repeated = find_repeated_strings(
         directory, min_lines=args.min_lines, min_chars=args.min_chars, max_workers=args.workers, half=args.half
     )
-
     output_file = Path.cwd() / "lic.txt"
     save_strings_to_file(repeated, output_file)
-
     if not repeated:
         print("No repeated multiline strings found.")
         return

@@ -1,6 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that acts as a batch repository downloader and archiver. The tool reads a plain-text list of repository identifiers from a file (one per line, ignoring blank lines), validates each entry, and then fetches each repository's source as a compressed archive from a code hosting service, using a configurable branch or default branch. It should support downloading multiple repositories concurrently with a user-configurable number of workers, and it should either extract each archive into a target directory or keep it as a zip file, selectable via command-line options.
-
 Key behaviors:
 - Accept command-line arguments for the input list file, output directory, concurrency level, branch name, and an option to skip or overwrite repositories that already exist locally.
 - Validate that the input file exists and contains at least one repository entry; exit with a clear error message otherwise.
@@ -11,13 +10,10 @@ Key behaviors:
 - Optionally run post-download hooks such as initializing a git-free snapshot or computing checksums, if the design benefits from it.
 - Use structured logging to a console and optionally to a log file, with verbosity controlled by a flag.
 - Exit with a non-zero status code if any repository failed, and zero otherwise.
-
 Design the solution for reliability, clear user feedback, and easy extension, choosing the libraries, structure, and internal implementation freely.
 ---"""
 
-
 from __future__ import annotations
-
 import argparse
 import io
 import os
@@ -30,7 +26,6 @@ from multiprocessing import Pool
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 from urllib.parse import urlparse
-
 import requests
 from loguru import logger
 

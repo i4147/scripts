@@ -13,7 +13,6 @@ try:
     HAS_JOBLIB = True
 except ImportError:
     HAS_JOBLIB = False
-
 from dh import STDLIB, get_files, get_installed_pkgs
 
 
@@ -54,18 +53,15 @@ def _process_file(file_path: Path) -> tuple:
         error = f"UnicodeDecodeError: {e}"
     except Exception as e:
         error = f"Error: {e}"
-
     return (file_path, imports, error is None, error)
 
 
 def find_imports(start_path: Path):
     files = get_files(start_path, ext=[".py"])
-
     files_by_dir = defaultdict(list)
     for f in files:
         try:
             rel_path = f.relative_to(start_path)
-
             if len(rel_path.parts) > 1:
                 subdir = rel_path.parts[0]
             else:
@@ -73,22 +69,16 @@ def find_imports(start_path: Path):
         except ValueError:
             subdir = str(f.parent)
         files_by_dir[subdir].append(f)
-
     show_progress = len(files_by_dir) > 50
-
     all_imports = set()
-
     if show_progress:
         print(f"\nProcessing {len(files_by_dir)} directories with {len(files)} total files...")
         print("=" * 60)
-
     dir_count = 0
     for subdir, dir_files in sorted(files_by_dir.items()):
         dir_count += 1
-
         if show_progress:
             start_time = time.time()
-
         if HAS_JOBLIB:
             results = Parallel(n_jobs=-1)(delayed(_process_file)(f) for f in dir_files)
             for file_path, imports, success, error in results:
@@ -99,22 +89,17 @@ def find_imports(start_path: Path):
                 file_path, imports, success, error = _process_file(f)
                 if success:
                     all_imports.update(imports)
-
         if show_progress:
             elapsed = time.time() - start_time
             print(f"[{dir_count}/{len(files_by_dir)}] {subdir:<30} ({len(dir_files):>4} files, {elapsed:.2f}s)")
-
     if show_progress:
         print("=" * 60)
         print(f"Total processing time: {sum(time.time() - start_time for _ in [1]) if not show_progress else ''}")
         print()
-
     std_libs = STDLIB
-
     local_modules = {p.stem for p in start_path.glob("*.py")}
     local_packages = get_local_packages(start_path)
     local_names = local_modules | local_packages
-
     result = sorted([
         imp
         for imp in all_imports
@@ -146,14 +131,11 @@ def main() -> None:
     cwd = Path.cwd()
     sys.argv[1:]
     output_file = cwd / "requirements.txt"
-
     print(f"Scanning directory: {cwd}")
     modules = find_imports(cwd)
-
     if not modules:
         print("No third-party imports found.")
         return
-
     results = []
     print(f"\n{'Module':<20} | {'Version':<15}")
     print("-" * 40)
@@ -165,7 +147,6 @@ def main() -> None:
         print(line)
         if "Not Installed" in ver:
             results.append(f"{mod}=={ver}")
-
     if results:
         Path(output_file).write_text("\n".join(results), encoding="utf-8")
         cleaned = []
@@ -196,7 +177,6 @@ def main() -> None:
         if output_file.exists():
             output_file.unlink()
         print("\n✅ No uninstalled packages found")
-
     overall_elapsed = time.time() - overall_start
     if overall_elapsed > 1.0:
         print(f"\n⏱️  Total time: {overall_elapsed:.2f}s")

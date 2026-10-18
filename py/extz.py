@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 from collections import Counter
 from pathlib import Path
@@ -9,7 +8,6 @@ def walk_files(directory: Path):
     for entry in directory.iterdir():
         if entry.is_symlink():
             continue
-
         if entry.name == ".git":
             continue
         if entry.is_file():
@@ -42,33 +40,26 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> None:
     args = parse_args(argv)
     current_dir = Path.cwd()
-
     extension_counter: Counter[str] = Counter()
     extension_sizes: Counter[str] = Counter()
-
     for path in walk_files(current_dir):
         ext = path.suffix if path.suffix else ".no_ext"
         extension_counter[ext] += 1
-
         if args.size:
             try:
                 extension_sizes[ext] += path.stat().st_size
             except OSError:
                 pass
-
     if not extension_counter:
         print("No files found.")
         return
-
     max_ext_len = max(len(ext) for ext in extension_counter)
     max_count_len = max(len(str(count)) for count in extension_counter.values())
-
     formatted_sizes: dict[str, str] = {}
     max_size_len = 0
     if args.size:
         formatted_sizes = {ext: human_size(extension_sizes.get(ext, 0)) for ext in extension_counter}
         max_size_len = max(len(s) for s in formatted_sizes.values())
-
     print("extensions found:")
     for ext, count in sorted(extension_counter.items()):
         line = f" {ext:<{max_ext_len}}  {count:>{max_count_len}}"

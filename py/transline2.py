@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import logging
 import re
 import shutil
@@ -8,7 +7,6 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Final
-
 from deep_translator import GoogleTranslator
 from dh import get_files
 

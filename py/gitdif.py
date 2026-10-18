@@ -1,21 +1,17 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that scans a given directory tree for Git repositories and reports the working-tree status of each one, running the checks concurrently to keep the scan fast.
-
 The script should accept a root directory (defaulting to the current directory) and locate every immediate subdirectory or nested folder that is a Git repository. For each repository, it should determine whether there are uncommitted or untracked changes. Repositories with no changes should be reported as clean, while repositories with changes should be reported with a concise summary of the modified, added, deleted, or untracked files, showing a limited number of example entries followed by an indication of how many more exist. Folders that are not Git repositories should be flagged as such, and any Git command that fails or times out should produce a clear error message for that repository without stopping the overall scan.
-
 Key behaviors:
 - Process multiple repositories in parallel using a sensible number of worker processes based on the machine's available CPU cores.
 - Enforce a short timeout on each Git status check so that a hanging repository cannot block the whole run.
 - Produce a readable, organized report to standard output that lists each repository path along with its status, grouping or ordering results so that repositories needing attention are easy to spot.
 - Exit with a non-zero status code if any repository has uncommitted changes or encountered errors, and zero otherwise, so the script can be used in automation.
 - Handle invalid or missing root paths gracefully with a helpful message.
-
 Inputs: an optional root directory path supplied on the command line.
 Outputs: a human-readable status report printed to the console and an appropriate process exit code.
 ---"""
 
 from __future__ import annotations
-
 import subprocess
 import sys
 from multiprocessing import Pool, cpu_count

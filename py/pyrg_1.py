@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import fnmatch
 import operator
@@ -8,7 +6,7 @@ import sys
 from collections.abc import Generator
 from multiprocessing import Pool
 from pathlib import Path
-
+from typing import TextIO
 from dh import is_binary
 from loguru import logger
 from fastwalk import walk_files
@@ -34,43 +32,67 @@ ANSI_CYAN = "\x1b[5;96m"
 TEXT_CHARS = bytes(range(32, 127)) + b"\n\r\t\x08"
 
 
+def normalize_extension(value: str) -> str:
+    v = value.strip().lower().rstrip(".")
+    if not v:
+        return ""
+    if not v.startswith("."):
+        v = "." + v
+    return v
+
+
+def parse_extension_args(raw_exts: list[str] | None) -> set[str]:
+    result: set[str] = set()
+    if not raw_exts:
+        return result
+    for raw in raw_exts:
+        for piece in raw.split(","):
+            ext = normalize_extension(piece)
+            if ext:
+                result.add(ext)
+    return result
+
+
 def get_files(
     paths: list[str],
     include_globs: list[str],
     exclude_globs: list[str],
     search_hidden: bool,
     max_size: int,
+    extensions: set[str] | None = None,
 ) -> Generator[Path, None, None]:
+    exts = extensions or set()
+
+    def _passes_filters(p: Path) -> bool:
+        if exts and p.suffix.lower() not in exts:
+            return False
+        if not search_hidden and p.name.startswith("."):
+            return False
+        if max_size:
+            try:
+                if p.stat().st_size > max_size:
+                    return False
+            except OSError:
+                return False
+        if include_globs and not matches_any_glob(p, include_globs):
+            return False
+        if exclude_globs and matches_any_glob(p, exclude_globs):
+            return False
+        return True
+
     for p_str in paths:
         path = Path(p_str)
         if path.is_file() and not path.is_symlink():
-            if not search_hidden and path.name.startswith("."):
-                continue
-            if max_size and path.stat().st_size > max_size:
-                continue
-            if include_globs and not matches_any_glob(path, include_globs):
-                continue
-            if exclude_globs and matches_any_glob(path, exclude_globs):
-                continue
-            yield path
+            if _passes_filters(path):
+                yield path
             continue
         if not path.is_dir() or path.is_symlink():
             continue
         for filepath in walk_files(path):
-            if not search_hidden and filepath.name.startswith("."):
-                continue
             if filepath.is_symlink():
                 continue
-            try:
-                if max_size and filepath.stat().st_size > max_size:
-                    continue
-            except OSError:
-                continue
-            if include_globs and not matches_any_glob(filepath, include_globs):
-                continue
-            if exclude_globs and matches_any_glob(filepath, exclude_globs):
-                continue
-            yield filepath
+            if _passes_filters(filepath):
+                yield filepath
 
 
 def colorize_line(line: str, spans: list[tuple[int, int]]) -> str:
@@ -88,14 +110,18 @@ def matches_any_glob(path: Path, patterns: list[str]) -> bool:
 
 
 def search_file_text_mode(
-    path: Path, cwd: Path, regex: re.Pattern | None, fixed: str, ignore_case: bool
+    path: Path,
+    cwd: Path,
+    regex: re.Pattern | None,
+    fixed: str,
+    ignore_case: bool,
 ) -> tuple[str, list[tuple[int, str, list[tuple[int, int]]]]]:
-    matches = []
+    matches: list[tuple[int, str, list[tuple[int, int]]]] = []
     try:
         with path.open(encoding="utf-8", errors="replace") as fh:
             for lineno, raw_line in enumerate(fh, start=1):
                 line = raw_line.rstrip("\n\r")
-                spans = []
+                spans: list[tuple[int, int]] = []
                 if regex:
                     spans = [(m.start(), m.end()) for m in regex.finditer(line)]
                 else:
@@ -135,11 +161,32 @@ def worker(args_tuple):
     )
 
 
+def open_output_sink(output_path: str | None) -> tuple[TextIO, bool]:
+    if not output_path:
+        return sys.stdout, False
+    fh = open(output_path, "w", encoding="utf-8", newline="")
+    return fh, True
+
+
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="ripgrep-like recursive search in Python")
-    p.add_argument("pattern", nargs="?", help="Regex pattern (positional) or use -e")
-    p.add_argument("-e", "--regexp", dest="pattern_e", help="Pattern (alternative to positional)")
-    p.add_argument("-i", "--ignore-case", action="store_true", help="Case-insensitive search")
+    p.add_argument(
+        "pattern",
+        nargs="?",
+        help="Regex pattern (positional) or use -r/--regexp",
+    )
+    p.add_argument(
+        "-r",
+        "--regexp",
+        dest="pattern_e",
+        help="Pattern (alternative to the positional argument)",
+    )
+    p.add_argument(
+        "-i",
+        "--ignore-case",
+        action="store_true",
+        help="Case-insensitive search",
+    )
     p.add_argument(
         "-F",
         "--fixed-strings",
@@ -159,7 +206,12 @@ def build_argparser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only print filenames that match",
     )
-    p.add_argument("-c", "--count", action="store_true", help="Print count of matches per file")
+    p.add_argument(
+        "-c",
+        "--count",
+        action="store_true",
+        help="Print count of matches per file",
+    )
     p.add_argument(
         "-w",
         "--workers",
@@ -167,16 +219,59 @@ def build_argparser() -> argparse.ArgumentParser:
         default=DEFAULT_WORKERS,
         help="Number of worker processes",
     )
-    p.add_argument("--hidden", action="store_true", help="Search hidden files and directories")
-    p.add_argument("-g", "--glob", action="append", help="Include glob; can be repeated")
-    p.add_argument("-x", "--exclude", action="append", help="Exclude glob; can be repeated")
-    p.add_argument("-C", "--no-color", action="store_true", help="Disable colorized output")
+    p.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Search hidden files and directories",
+    )
+    p.add_argument(
+        "-g",
+        "--glob",
+        action="append",
+        help="Include glob; can be repeated",
+    )
+    p.add_argument(
+        "-x",
+        "--exclude",
+        action="append",
+        help="Exclude glob; can be repeated",
+    )
+    p.add_argument(
+        "-C",
+        "--no-color",
+        action="store_true",
+        help="Disable colorized output",
+    )
     p.add_argument(
         "-m",
         "--max-filesize",
         type=int,
-        default=10000000,
+        default=10_000_000,
         help="Skip files larger than size (bytes)",
+    )
+    p.add_argument(
+        "-e",
+        "--extension",
+        dest="extensions",
+        action="append",
+        metavar="EXT",
+        help=(
+            "Only search files with the given extension(s). Accepts values "
+            "with or without a leading dot, and comma-separated lists. "
+            "Can be repeated. E.g. '-e py' or '-e py,pyi,pyx'."
+        ),
+    )
+    p.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        metavar="FILE",
+        default=None,
+        help=(
+            "Write matches to FILE instead of stdout. When set, ANSI color "
+            "is disabled automatically unless stdout is a TTY and no file "
+            "is given."
+        ),
     )
     p.add_argument(
         "paths",
@@ -193,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     pattern = args.pattern_e or args.pattern
     if not pattern:
         print(
-            "No pattern provided. Use positional PATTERN or -e PATTERN.",
+            "No pattern provided. Use positional PATTERN or -r/--regexp PATTERN.",
             file=sys.stderr,
         )
         return 2
@@ -207,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         except re.error as ex:
             print(f"Invalid regex: {ex}", file=sys.stderr)
             return 2
+    extensions = parse_extension_args(args.extensions)
     candidates = list(
         get_files(
             paths=args.paths,
@@ -214,10 +310,12 @@ def main(argv: list[str] | None = None) -> int:
             exclude_globs=args.exclude or [],
             search_hidden=args.hidden,
             max_size=args.max_filesize,
+            extensions=extensions,
         )
     )
-    color = not args.no_color and sys.stdout.isatty()
-    any_match = False
+    to_file = bool(args.output)
+    color = (not args.no_color) and (not to_file) and sys.stdout.isatty()
+    out_fh, should_close = open_output_sink(args.output)
     worker_args = [
         (
             path,
@@ -228,30 +326,42 @@ def main(argv: list[str] | None = None) -> int:
         )
         for path in candidates
     ]
-    with Pool(processes=args.workers) as pool:
-        async_results = [pool.apply_async(worker, (arg,)) for arg in worker_args]
-        try:
-            for async_result in async_results:
-                path_str, matches = async_result.get()
-                if not matches:
-                    continue
-                any_match = True
-                if args.files_with_matches:
-                    print(path_str)
-                elif args.count:
-                    print(f"{path_str}:{len(matches)}")
-                else:
-                    for lineno, line, spans in matches:
-                        out_line = colorize_line(line, spans) if color else line
-                        if args.line_number:
-                            print(f"{ANSI_CYAN}{path_str}{ANSI_RESET}:{lineno}:{out_line}")
-                        else:
-                            print(f"{ANSI_CYAN}{path_str}{ANSI_RESET}:{out_line}")
-        except KeyboardInterrupt:
-            print("\nSearch cancelled.", file=sys.stderr)
-            pool.terminate()
-            pool.join()
-            return 130
+    any_match = False
+    try:
+        with Pool(processes=args.workers) as pool:
+            async_results = [pool.apply_async(worker, (arg,)) for arg in worker_args]
+            try:
+                for async_result in async_results:
+                    path_str, matches = async_result.get()
+                    if not matches:
+                        continue
+                    any_match = True
+                    if args.files_with_matches:
+                        print(path_str, file=out_fh)
+                    elif args.count:
+                        print(f"{path_str}:{len(matches)}", file=out_fh)
+                    else:
+                        for lineno, line, spans in matches:
+                            out_line = colorize_line(line, spans) if color else line
+                            if args.line_number:
+                                print(
+                                    f"{ANSI_CYAN}{path_str}{ANSI_RESET}:{lineno}:{out_line}",
+                                    file=out_fh,
+                                )
+                            else:
+                                print(
+                                    f"{ANSI_CYAN}{path_str}{ANSI_RESET}:{out_line}",
+                                    file=out_fh,
+                                )
+            except KeyboardInterrupt:
+                print("\nSearch cancelled.", file=sys.stderr)
+                pool.terminate()
+                pool.join()
+                return 130
+    finally:
+        if should_close:
+            out_fh.close()
+            print(f"Results written to: {args.output}", file=sys.stderr)
     return 0 if any_match else 1
 
 

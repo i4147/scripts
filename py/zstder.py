@@ -10,16 +10,11 @@ from dh import fsz
 from loguru import logger
 
 SKIP_DIRS = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})
-
 LARGE_FILE_THRESHOLD = 5 * 1024 * 1024
-
 LEVEL_DEFAULT = 21
 LEVEL_LARGE = 21
-
 ZSTD_EXT = ".zst"
-
 DEFAULT_THREADS = 4
-
 WORKERS = 8
 
 

@@ -499,14 +499,10 @@ def create_english_style_art(word):
             " ",
         ],
     }
-
     if not word:
         return []
-
     chars = list(word)
-
     num_rows = 4
-
     art_lines = []
     for row in range(num_rows):
         line = ""
@@ -518,7 +514,6 @@ def create_english_style_art(word):
             else:
                 line += "   "
         art_lines.append(line)
-
     return art_lines
 
 
@@ -548,12 +543,9 @@ def main():
     print("  - Type 'bordered' to toggle bordered style")
     print("  - Type 'clear' to clear screen")
     print()
-
     bordered = False
-
     while True:
         text = input("Enter text: ").strip()
-
         if text.lower() in ["quit", "exit", "q"]:
             print("Goodbye!")
             break
@@ -566,16 +558,13 @@ def main():
 
             os.system("cls" if os.name == "nt" else "clear")
             continue
-
         if not text:
             print("Please enter some text.")
             continue
-
         if bordered:
             art = create_banner_art(text, "bordered")
         else:
             art = create_english_style_art(text)
-
         print("\n" + "=" * 50)
         for line in art:
             print(f'    "{line}",')

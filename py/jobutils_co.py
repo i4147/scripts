@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import logging
 import multiprocessing as mp
 import time
@@ -17,13 +16,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
-
 logger = logging.getLogger(__name__)
-
 MAX_WORKERS: int = 8
 DEFAULT_CHUNKSIZE: int | None = 4
 DEFAULT_EXECUTOR_CHUNKSIZE: int = 1
-
 ExecutorType = type[ProcessPoolExecutor] | type[ThreadPoolExecutor]
 
 
@@ -86,28 +82,21 @@ class _PoolDispatcher:
     def dispatch(self) -> list[Any]:
         if self.method is PoolMethod.MAP:
             return self.pool.map(self.func, self.items, chunksize=self.chunksize)
-
         if self.method is PoolMethod.MAP_ASYNC:
             return self.pool.map_async(self.func, self.items, chunksize=self.chunksize).get()
-
         if self.method in (PoolMethod.STARMAP, PoolMethod.STARMAP_ASYNC):
             args = self._normalize_starmap_args()
             if self.method is PoolMethod.STARMAP:
                 return self.pool.starmap(self.func, args, chunksize=self.chunksize)
             return self.pool.starmap_async(self.func, args, chunksize=self.chunksize).get()
-
         if self.method is PoolMethod.IMAP:
             return list(self.pool.imap(self.func, self.items, chunksize=self.chunksize))
-
         if self.method is PoolMethod.IMAP_UNORDERED:
             return list(self.pool.imap_unordered(self.func, self.items, chunksize=self.chunksize))
-
         if self.method is PoolMethod.APPLY:
             return self._apply_sequential()
-
         if self.method is PoolMethod.APPLY_ASYNC:
             return self._apply_async_sequential()
-
         msg = f"unhandled mp.pool method: {self.method}"
         raise AssertionError(msg)
 
@@ -137,10 +126,8 @@ def _run_mp_pool(
     items_list = list(items)
     if not items_list:
         return []
-
     ctx = mp.get_context(context)
     pool_kwargs = _build_pool_kwargs(workers, initializer, initargs, maxtasksperchild)
-
     with ctx.Pool(**pool_kwargs) as pool:
         dispatcher = _PoolDispatcher(pool, method, func, items_list, chunksize)
         return dispatcher.dispatch()
@@ -223,7 +210,6 @@ class _ExecutorFutureManager:
         while self.pending:
             wait_time = self._calculate_wait_time()
             done, _ = wait(self.pending.keys(), return_when=FIRST_COMPLETED, timeout=wait_time)
-
             self._handle_completed(done)
             self._handle_timeouts()
             self._fill_queue(executor)
@@ -281,32 +267,26 @@ def _run_executor(
 ) -> list[Any]:
     is_process = executor_cls is ProcessPoolExecutor
     kwargs: dict[str, Any] = {"max_workers": workers}
-
     if initializer is not None:
         kwargs["initializer"] = initializer
         kwargs["initargs"] = tuple(initargs)
-
     if maxtasksperchild is not None:
         if not is_process:
             msg = "maxtasksperchild is only supported by ProcessPoolExecutor"
             raise ValueError(msg)
         kwargs["max_tasks_per_child"] = maxtasksperchild
-
     should_use_simple_path = (
         not unpack and timeout is None and on_progress is None and not return_exceptions and max_pending is None
     )
-
     if should_use_simple_path:
         with executor_cls(**kwargs) as ex:
             if is_process:
                 cs = chunksize if chunksize is not None else DEFAULT_EXECUTOR_CHUNKSIZE
                 return list(ex.map(func, items, chunksize=cs))
             return list(ex.map(func, items))
-
     items_list = list(items)
     if not items_list:
         return []
-
     manager = _ExecutorFutureManager(
         executor_cls,
         func,
@@ -320,12 +300,10 @@ def _run_executor(
         on_progress,
     )
     results = manager.execute()
-
     if not return_exceptions:
         for r in results:
             if isinstance(r, BaseException):
                 raise r
-
     return results
 
 
@@ -340,15 +318,12 @@ def _run_joblib(
     except ImportError as exc:
         msg = "the 'joblib' backend requires joblib — `pip install joblib`"
         raise ImportError(msg) from exc
-
     n_jobs = -1 if workers is None else workers
     items_list = list(items)
-
     if unpack:
         return Parallel(n_jobs=n_jobs)(
             delayed(func)(*(item if isinstance(item, tuple) else (item,))) for item in items_list
         )
-
     return Parallel(n_jobs=n_jobs)(delayed(func)(item) for item in items_list)
 
 
@@ -374,12 +349,9 @@ def mpf(
     if not callable(func):
         msg = "`func` must be callable"
         raise TypeError(msg)
-
     pool_method = PoolMethod.parse(method)
-
     if func_args or func_kwargs:
         func = partial(func, *func_args, **(func_kwargs or {}))
-
     if pool_method.is_mp_pool:
         return _handle_mp_pool_method(
             pool_method,
@@ -393,10 +365,8 @@ def mpf(
             context,
             timeout,
         )
-
     if pool_method is PoolMethod.JOBLIB:
         return _handle_joblib_method(func, items, workers, unpack, initializer, timeout, maxtasksperchild)
-
     if pool_method is PoolMethod.PROCESS_POOL:
         return _run_executor(
             ProcessPoolExecutor,
@@ -413,7 +383,6 @@ def mpf(
             max_pending=max_pending,
             on_progress=on_progress,
         )
-
     if pool_method is PoolMethod.THREAD_POOL:
         if maxtasksperchild is not None:
             msg = "ThreadPoolExecutor does not support maxtasksperchild"
@@ -433,7 +402,6 @@ def mpf(
             max_pending=max_pending,
             on_progress=on_progress,
         )
-
     msg = f"unhandled method: {pool_method}"
     raise AssertionError(msg)
 

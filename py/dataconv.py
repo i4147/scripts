@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import csv
 import io
@@ -12,13 +11,10 @@ import sys
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
 from loguru import logger
 
 Tables = Dict[str, List[Dict[str, Any]]]
-
 MMAP_THRESHOLD = 1024 * 1024
-
 EXT_TO_FMT = {
     ".csv": "csv",
     ".tsv": "csv",
@@ -129,7 +125,6 @@ def load_json(path: Path) -> Tables:
     if isinstance(data, dict):
         if data and all(isinstance(v, list) and all(isinstance(x, dict) for x in v) for v in data.values()):
             return {str(k): list(v) for k, v in data.items()}
-
         return {path.stem: [data]}
     return {path.stem: [{"value": data}]}
 
@@ -335,10 +330,8 @@ def load_sql(path: Path) -> Tables:
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"^\s*--.*$", "", text, flags=re.M)
     text = re.sub(r"^\s*#.*$", "", text, flags=re.M)
-
     tables: Tables = {}
     declared_cols: Dict[str, List[str]] = {}
-
     for name, body in _iter_create_tables(text):
         cols: List[str] = []
         for part in _split_top_level(body):
@@ -351,19 +344,16 @@ def load_sql(path: Path) -> Tables:
             cols.append(head)
         declared_cols[name] = cols
         tables.setdefault(name, [])
-
     for name, col_list, raw_values in _iter_inserts(text):
         if col_list:
             cols = [c.strip().strip('`"[]') for c in col_list.split(",")]
         else:
             cols = list(declared_cols.get(name, []))
-
         for values in _parse_value_tuples(raw_values):
             if not cols:
                 cols = [f"c{i}" for i in range(len(values))]
                 declared_cols[name] = cols
             tables.setdefault(name, []).append(dict(zip(cols, values)))
-
     return tables
 
 
@@ -463,12 +453,10 @@ def convert_job(job: Tuple[str, str, Optional[str]]) -> Tuple[str, bool, List[st
             raise ValueError(f"unsupported input extension {src.suffix!r}")
         if src_fmt == target_fmt:
             return src_str, True, [], f"skipped: already {target_fmt}"
-
         logger.info(f"{src} [{src_fmt}] -> {target_fmt}")
         tables = LOADERS[src_fmt](src)
         if not tables:
             raise ValueError("no tables / rows found in input")
-
         out_path = _output_path(src, target_fmt, Path(out_dir_str) if out_dir_str else None)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         written = WRITERS[target_fmt](tables, out_path)
@@ -488,7 +476,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     group.add_argument("--json", action="store_true", help="write JSON output")
     group.add_argument("--db", action="store_true", help="write SQLite output")
     group.add_argument("--sql", action="store_true", help="write SQL dump output")
-
     parser.add_argument("inputs", nargs="+", type=Path, help="input file(s)")
     parser.add_argument(
         "-o", "--output-dir", type=Path, default=None, help="directory for outputs (default: next to input)"
@@ -502,10 +489,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[List[str]] = None) -> int:
     logger.remove()
     logger.add(sys.stderr, format="<level>{level: <8}</level> | {message}")
-
     args = parse_args(argv)
     target_fmt = "csv" if args.csv else "json" if args.json else "db" if args.db else "sql"
-
     sources: List[Path] = []
     for p in args.inputs:
         if not p.exists():
@@ -515,13 +500,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             logger.error(f"not a file: {p}")
             continue
         sources.append(p)
-
     if not sources:
         logger.error("no usable inputs")
         return 2
-
     jobs = [(str(p), target_fmt, str(args.output_dir) if args.output_dir else None) for p in sources]
-
     if len(jobs) > 1 and args.jobs > 1:
         workers = min(args.jobs, len(jobs))
         logger.info(f"converting {len(jobs)} files with {workers} workers")
@@ -529,7 +511,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             results = pool.map(convert_job, jobs, chunksize=1)
     else:
         results = [convert_job(j) for j in jobs]
-
     failures = 0
     for src, ok, outputs, msg in results:
         if ok:
@@ -540,7 +521,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             failures += 1
             logger.error(f"{src}: {msg}")
-
     logger.info(f"done: {len(results) - failures} ok, {failures} failed")
     return 1 if failures else 0
 

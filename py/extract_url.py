@@ -1,6 +1,5 @@
 import os
 import pathlib
-
 import regex
 
 url_pattern = regex.compile(r'https?://[^\s"\']+')

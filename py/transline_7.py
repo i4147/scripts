@@ -1,7 +1,9 @@
 from pathlib import Path
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from deep_translator import GoogleTranslator
 from dh import get_files
+import sys
 
 
 def translate_line(line: str) -> str:
@@ -45,52 +47,68 @@ def read_text_maybe(path: Path) -> tuple[str, str]:
         return (f.read().decode("utf-8", errors="replace"), "utf-8")
 
 
+def translate_chinese_lines(lines: list[str], line_indices: list[int]) -> dict[int, str]:
+    translations = {}
+
+    def translate_single(idx_line):
+        idx, line = idx_line
+        return idx, translate_line(line)
+
+    with ThreadPoolExecutor(max_workers=min(len(line_indices), 12)) as executor:
+        futures = {executor.submit(translate_single, (idx, lines[idx])): idx for idx in line_indices}
+        for future in as_completed(futures):
+            time.sleep(0.5)
+            idx, translated = future.result()
+            translations[idx] = translated
+    return translations
+
+
 def process_file_inplace(path: Path) -> None:
     try:
         text, enc = read_text_maybe(path)
         lines = text.splitlines(keepends=True)
-        changed = False
-        out_lines = []
-        for line in lines:
+        chinese_lines = []
+        for i, line in enumerate(lines):
             content = line.rstrip("\r\n")
             if has_chinese_chars(content):
-                translated = translate_line(content)
-                out_lines.append(translated + line[len(content) :])
-                changed = True
+                chinese_lines.append(i)
+        if not chinese_lines:
+            print(f"No Chinese chars: {path}")
+            return
+        print(f"Processing {len(chinese_lines)} Chinese lines in {path}")
+        translations = translate_chinese_lines(lines, chinese_lines)
+        out_lines = []
+        for i, line in enumerate(lines):
+            if i in translations:
+                content = line.rstrip("\r\n")
+                out_lines.append(translations[i] + line[len(content) :])
             else:
                 out_lines.append(line)
-        if changed:
-            tmp_path = path.with_suffix(path.suffix + ".tmp_translate")
-            with open(tmp_path, "w", encoding=enc, errors="replace", newline="") as f:
-                f.writelines(out_lines)
-            Path(tmp_path).rename(path)
-            print(f"Updated: {path}")
-        else:
-            print(f"No Chinese chars: {path}")
+        tmp_path = path.with_suffix(path.suffix + ".tmp_translate")
+        with open(tmp_path, "w", encoding=enc, errors="replace", newline="") as f:
+            f.writelines(out_lines)
+        Path(tmp_path).rename(path)
+        print(f"Updated: {path}")
     except Exception as e:
         print(f"Error processing {path}: {e}")
 
 
-def process_file_batch(files: list[Path], max_workers: int = 12) -> None:
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        futures = {executor.submit(process_file_inplace, file): file for file in files}
-        for future in as_completed(futures):
-            file = futures[future]
-            try:
-                future.result()
-            except Exception as e:
-                print(f"Failed to process {file}: {e}")
+def process_files_sequentially(files: list[Path]) -> None:
+    for file in files:
+        print(f"\n{'=' * 50}")
+        print(f"Processing file: {file}")
+        print(f"{'=' * 50}")
+        process_file_inplace(file)
 
 
 def main():
     root = Path.cwd()
     args = sys.argv[1:]
-
-    files = [Path(p) for p in args] if args else get_files(cwd)
+    files = [Path(p) for p in args] if args else get_files(root)
     if len(files) == 1:
         process_file_inplace(files[0])
         sys.exit(0)
-    process_file_batch(files, max_workers=4)
+    process_files_sequentially(files)
 
 
 if __name__ == "__main__":

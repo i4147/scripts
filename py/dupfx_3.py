@@ -1,69 +1,60 @@
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+import cffi
+from dh import get_files
 
-from dh import cprint, fsz, gsz
-from xxhash import xxh64_hexdigest
-
-
-def should_skip(path: Path) -> bool:
-    path = Path(path)
-    return bool(
-        path.is_symlink()
-        or not path.stat().st_size
-        or any((pat in path.parts for pat in (".git", "__pycache__", ".mypy_cache", ".ruff_cache")))
-    )
+ffi = cffi.FFI()
+ffi.cdef("""
+    char* hash_file_c(const char* path_cstr);
+    void free_hash_string(char* str);
+""")
+lib_name = "/data/data/com.termux/files/usr/lib/python3.12/site-packages/libhasher.so"
+hasher_lib = ffi.dlopen(lib_name)
 
 
-def get_hash_file(path):
-    if not path.exists() or not path.stat().st_size:
-        return ("", path)
-    with path.open("rb") as f:
-        return (xxh64_hexdigest(f.read()), path)
-
-
-def find_duplicates() -> None:
-    cwd = Path.cwd()
-    files_by_hash = defaultdict(list)
-    duplicate_count = 0
-    ptp = [path for path in cwd.rglob("*") if path.is_file() and (not should_skip(path))]
-    files_by_size = {}
-    for p in ptp:
-        try:
-            size = p.stat().st_size
-            files_by_size.setdefault(size, []).append(p)
-        except OSError as e:
-            print(f"Error getting size for {p}: {e}")
-            continue
-    paths_to_hash = []
-    for size, paths in files_by_size.items():
-        if len(paths) > 1:
-            paths_to_hash.extend(paths)
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_path = {executor.submit(get_hash_file, path): path for path in paths_to_hash}
-        for future in as_completed(future_to_path):
-            hash_result, path = future.result()
-            if hash_result is not None:
-                files_by_hash.setdefault(hash_result, []).append(path)
-    total = 0
-    for hash, paths in files_by_hash.items():
-        if len(paths) > 1:
-            duplicate_count += len(paths) - 1
-            print(f"hash {hash} :")
-            for file_path in paths:
-                relative_path = file_path.relative_to(cwd)
-                cprint(f" - {relative_path}", "cyan")
-                total += gsz(file_path)
-
-    for hash, paths in files_by_hash.items():
-        if len(paths) > 1:
-            for file_path in paths[1:]:
-                relative_path = file_path.relative_to(cwd)
-                cprint(f" - {relative_path} removed", "yellow")
-                file_path.unlink()
-
-    cprint(f"total : {fsz(total)}")
+def calculate_file_hash(filepath: str):
+    if not Path(filepath).exists():
+        print(f"Error: File not found at {filepath}")
+        return None
+    c_filepath = ffi.new("char[]", filepath.encode("utf-8"))
+    c_hash_ptr = hasher_lib.hash_file_c(c_filepath)
+    if c_hash_ptr == ffi.NULL:
+        print(f"Error: C function returned NULL for file: {filepath}")
+        return None
+    try:
+        return ffi.string(c_hash_ptr).decode("utf-8")
+    finally:
+        hasher_lib.free_hash_string(c_hash_ptr)
 
 
 if __name__ == "__main__":
-    find_duplicates()
+    cwd = Path.cwd()
+    files = get_files(cwd)
+    f_by_h = {}
+    size_groups = defaultdict(list)
+    removed = 0
+    for f in files:
+        if f.is_file() and not f.is_symlink():
+            try:
+                size = f.stat().st_size
+                size_groups[size].append(f)
+            except OSError as e:
+                print(f"Error accessing {f}: {e}")
+    files_to_hash = []
+    for size, files in size_groups.items():
+        if len(files) > 1:
+            files_to_hash.extend(files)
+    for filepath in files_to_hash:
+        h = calculate_file_hash(str(filepath))
+        f_by_h.setdefault(h, []).append(filepath)
+    for _h, paths in f_by_h.items():
+        if len(paths) > 1:
+            print(f"dups with hash :{_h}\n")
+            for path in paths[1:]:
+                print(f"{path} removed")
+                path.unlink()
+                removed += 1
+    if removed:
+        print(f"{removed} files removed.")
+    else:
+        print("no dups found")

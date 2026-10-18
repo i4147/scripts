@@ -3,7 +3,6 @@ import os
 import re
 import sys
 from pathlib import Path
-
 from dh import DOC_TH1, DOC_TH2, get_pyfiles
 from loguru import logger
 
@@ -435,19 +434,14 @@ def strip_comments(src: str, lang: str) -> Result:
         return strip_comments_c_like(src, treat_hash_as_line_comment=False, support_backtick=True)
     if lang == "python":
         return strip_comments_python(src)
-
     if lang in {"html", "xml"}:
         return strip_comments_html(src)
-
     if lang == "ruby":
         return strip_comments_ruby(src)
-
     if lang == "bash":
         return strip_comments_c_like(src, treat_hash_as_line_comment=True, support_backtick=False)
-
     if lang == "yaml":
         return strip_comments_hash_and_semicolon(src, allow_semicolon=False)
-
     if lang in {"toml", "ini"}:
         return strip_comments_hash_and_semicolon(src, allow_semicolon=True)
     return strip_comments_c_like(src, treat_hash_as_line_comment=False, support_backtick=False)

@@ -1,7 +1,6 @@
 import os
 import string
 from pathlib import Path
-
 import rignore
 from fontTools.ttLib import TTFont
 

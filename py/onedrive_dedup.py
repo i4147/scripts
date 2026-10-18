@@ -39,23 +39,18 @@ def delete_file(file_id):
 def dedup_onedrive():
     files = list_files()
     seen_hashes = {}
-
     for f in files:
         file_id = f["id"]
         name = f["name"]
-
         print(f"Processing {name}...")
-
         try:
             content = download_file(file_id)
             file_hash = get_file_hash(content)
-
             if file_hash in seen_hashes:
                 print(f"Duplicate found: {name} matches {seen_hashes[file_hash]}")
                 delete_file(file_id)
             else:
                 seen_hashes[file_hash] = name
-
         except Exception as e:
             print(f"Error processing {name}: {e}")
 

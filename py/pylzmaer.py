@@ -142,7 +142,6 @@ def compress_chunked(in_path, out_path, file_size):
                 except Exception as e:
                     logger.error(f"Chunk {i} compression failed: {e}")
                     return False
-
         with out_path.open("wb") as fout:
             fout.write(chunk_count.to_bytes(4, "big"))
             for compressed_path in compressed_paths:
@@ -318,7 +317,6 @@ async def process_decompress():
             if out_path.exists():
                 logger.warning("  Output already exists, skipping...")
                 continue
-
             decompressed = False
             try:
                 with path.open("rb") as fin:

@@ -1,218 +1,124 @@
-import argparse
 import ast
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from pathlib import Path
-
-import tree_sitter_python as tsp
-from tree_sitter import Language, Parser
-
-PY_EXTS = {".py"}
-_PARSER: Parser | None = None
+import os
+import argparse
+from multiprocessing import Pool, cpu_count
+from typing import List, Tuple
 
 
-def get_parser() -> Parser:
-    global _PARSER
-    if _PARSER is None:
-        lang = Language(tsp.language())
-        _PARSER = Parser(lang)
-    return _PARSER
+def get_offset_map(source: str) -> List[int]:
+    offsets = [0]
+    for line in source.splitlines(keepends=True):
+        offsets.append(offsets[-1] + len(line))
+    return offsets
 
 
-def get_first_named_child(node):
-    for child in node.children:
-        if child.is_named:
-            return child
-    return None
+def offset_from_pos(lineno: int, col_offset: int, line_offsets: List[int]) -> int:
+    return line_offsets[lineno - 1] + col_offset
 
 
-def is_docstring_node(node) -> bool:
-    if node.type != "expression_statement":
-        return False
-    first = get_first_named_child(node)
-    return first is not None and first.type in ("string", "concatenated_string")
-
-
-def get_first_statement(parent):
-    for child in parent.children:
-        if child.is_named and child.type != "comment":
-            return child
-    return None
-
-
-def should_keep_comment(comment_bytes: bytes) -> bool:
-    stripped = comment_bytes.lstrip()
-    if not stripped.startswith(b"#"):
-        return False
-    rest = stripped[1:].lstrip()
-    if rest.lower().startswith((b"type:", b"fmt:")):
-        return True
-    return bool(b"coding" in stripped.lower() and b":" in stripped)
-
-
-def get_block_indent(block_node, content: bytes) -> bytes:
-    for child in block_node.children:
-        if child.is_named and child.type != "comment":
-            line_start = content.rfind(b"\n", 0, child.start_byte) + 1
-            indent = content[line_start : child.start_byte]
-            if indent and indent.strip() == b"":
-                return indent
-            break
-    for child in block_node.children:
-        if child.is_named and child.type == "comment":
-            line_start = content.rfind(b"\n", 0, child.start_byte) + 1
-            indent = content[line_start : child.start_byte]
-            if indent and indent.strip() == b"":
-                return indent
-    parent = block_node.parent
-    parent_start = parent.start_byte
-    line_start = content.rfind(b"\n", 0, parent_start) + 1
-    parent_indent = content[line_start:parent_start]
-    if parent_indent.strip() == b"":
-        return parent_indent + b"    "
-    return b"    "
-
-
-def collect_actions(root, content: bytes):
-    actions = {}
-    blocks = []
-    stack = [root]
-    while stack:
-        node = stack.pop()
-        if node.type == "comment":
-            if node.start_byte == 0 and content.startswith(b"#!"):
-                pass
-            elif should_keep_comment(content[node.start_byte : node.end_byte]):
-                pass
-            else:
-                actions[id(node)] = (node.start_byte, node.end_byte, b"")
-        elif node.type == "expression_statement" and is_docstring_node(node):
-            parent = node.parent
-            if parent:
-                first_stmt = get_first_statement(parent)
-                if first_stmt and first_stmt.id == node.id:
-                    if parent.type == "module":
-                        end = node.end_byte
-                        if end < len(content) and content[end : end + 1] == b"\n":
-                            end += 1
-                        actions[id(node)] = (node.start_byte, end, b"")
-                    elif parent.type == "block":
-                        grandparent = parent.parent
-                        if grandparent and grandparent.type in (
-                            "function_definition",
-                            "class_definition",
-                        ):
-                            actions[id(node)] = (node.start_byte, node.end_byte, b"")
-        if node.type == "block":
-            blocks.append(node)
-        for child in reversed(node.children):
-            stack.append(child)
-    for block in blocks:
-        named_children = [c for c in block.children if c.is_named]
-        if named_children and all(id(c) in actions for c in named_children):
-            first = named_children[0]
-            s, e, _ = actions[id(first)]
-            last_end = e
-            for c in named_children[1:]:
-                _, ce, _ = actions[id(c)]
-                last_end = max(last_end, ce)
-            line_start = content.rfind(b"\n", 0, s) + 1
-            indent = get_block_indent(block, content)
-            actions[id(first)] = (line_start, last_end, indent + b"pass")
-            for c in named_children[1:]:
-                del actions[id(c)]
-    return actions
-
-
-def strip_comments(content: bytes) -> tuple[bytes, int]:
-    parser = get_parser()
-    tree = parser.parse(content)
-    actions = collect_actions(tree.root_node, content)
-    if not actions:
-        return content, 0
-    sorted_actions = sorted(actions.values(), key=lambda x: x[0])
-    out = bytearray()
-    last = 0
-    for start, end, repl in sorted_actions:
-        out.extend(content[last:start])
-        out.extend(repl)
-        last = end
-    out.extend(content[last:])
-    new_content = bytes(out)
-    try:
-        ast.parse(new_content)
-    except SyntaxError as e:
-        raise ValueError(f"Generated invalid Python: {e}") from e
-    return new_content, len(sorted_actions)
-
-
-def process_file(path: Path, base: Path) -> tuple[str, int, str]:
-    try:
-        content = path.read_bytes()
-        new_content, count = strip_comments(content)
-        if new_content != content:
-            path.write_bytes(new_content)
-        try:
-            rel = str(path.relative_to(base))
-        except ValueError:
-            rel = str(path)
-        return rel, count, ""
-    except Exception as exc:
-        return str(path), 0, str(exc)
-
-
-def iter_py_files(paths: list[Path]):
-    seen: set[Path] = set()
-    for p in paths:
-        if p.is_file() and p.suffix.lower() in PY_EXTS:
-            rp = p.resolve()
-            if rp not in seen:
-                seen.add(rp)
-                yield p
-        elif p.is_dir():
-            for f in sorted(p.rglob("*.py")):
-                rp = f.resolve()
-                if rp not in seen:
-                    seen.add(rp)
-                    yield f
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Remove comments and docstrings from Python files in place.")
-    ap.add_argument(
-        "paths",
-        nargs="*",
-        type=Path,
-        help="Files or directories. Defaults to current directory recursively.",
-    )
-    args = ap.parse_args()
-    inputs = list(args.paths) if args.paths else [Path(".")]
-    files = list(iter_py_files(inputs))
-    if not files:
-        print("No Python files to process.", file=sys.stderr)
-        return 1
-    base = Path.cwd()
-    total_removed = 0
-    files_changed = 0
-    errors = 0
-    with ProcessPoolExecutor(max_workers=8) as ex:
-        futs = {ex.submit(process_file, p, base): p for p in files}
-        for fut in as_completed(futs):
-            rel, count, err = fut.result()
-            if err:
-                errors += 1
-                print(f"{rel}: ERROR: {err}", file=sys.stderr)
+def gather_docstring_ranges(tree: ast.AST) -> List[Tuple[int, int]]:
+    ranges = []
+    module_doc = None
+    if (
+        isinstance(tree, ast.Module)
+        and tree.body
+        and isinstance(tree.body[0], ast.Expr)
+        and isinstance(tree.body[0].value, ast.Constant)
+        and isinstance(tree.body[0].value.value, str)
+    ):
+        module_doc = tree.body[0]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if not node.body:
                 continue
-            total_removed += count
-            if count > 0:
-                files_changed += 1
-                print(f"{rel}: {count} comment(s)/docstring(s) removed")
-    print(
-        f"\nSummary: {files_changed}/{len(files)} file(s) changed, "
-        f"{total_removed} comment(s)/docstring(s) removed, {errors} error(s)."
+            first = node.body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                if first is module_doc:
+                    continue
+                ranges.append((first.lineno, first.col_offset, first.end_lineno, first.end_col_offset))
+    return ranges
+
+
+def remove_ranges_from_source(source: str, ranges: List[Tuple[int, int, int, int]]) -> str:
+    if not ranges:
+        return source
+    line_offsets = get_offset_map(source)
+    abs_ranges = []
+    for sl, sc, el, ec in ranges:
+        start = offset_from_pos(sl, sc, line_offsets)
+        end = offset_from_pos(el, ec, line_offsets)
+        abs_ranges.append((start, end))
+    abs_ranges.sort(key=lambda r: r[0], reverse=True)
+    for start, end in abs_ranges:
+        source = source[:start] + source[end:]
+    return source
+
+
+def process_file(filepath: str) -> str:
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            source = f.read()
+        tree = ast.parse(source, filename=filepath)
+        ranges = gather_docstring_ranges(tree)
+        if not ranges:
+            return f"{filepath}: no docstrings to remove"
+        new_source = remove_ranges_from_source(source, ranges)
+        if new_source != source:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(new_source)
+            return f"{filepath}: removed {len(ranges)} docstring(s)"
+        else:
+            return f"{filepath}: no changes"
+    except SyntaxError as e:
+        return f"{filepath}: syntax error - {e}"
+    except Exception as e:
+        return f"{filepath}: error - {e}"
+
+
+def find_py_files(root: str) -> List[str]:
+    py_files = []
+    for dirpath, _, filenames in os.walk(root):
+        for fname in filenames:
+            if fname.endswith(".py"):
+                py_files.append(os.path.join(dirpath, fname))
+    return py_files
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Remove docstrings from Python files (preserving module docstring).")
+    parser.add_argument(
+        "path", nargs="?", default=None, help="A Python file or a directory. Defaults to current directory."
     )
-    return 1 if errors else 0
+    parser.add_argument(
+        "--workers", type=int, default=None, help="Number of parallel workers (default: number of CPUs)."
+    )
+    args = parser.parse_args()
+    if args.path is None:
+        target = os.getcwd()
+    else:
+        target = os.path.abspath(args.path)
+    if os.path.isfile(target):
+        py_files = [target]
+    elif os.path.isdir(target):
+        py_files = find_py_files(target)
+    else:
+        print(f"Error: '{target}' is not a valid file or directory.", file=sys.stderr)
+        sys.exit(1)
+    if not py_files:
+        print("No Python files found.")
+        return
+    workers = args.workers or cpu_count()
+    print(f"Processing {len(py_files)} file(s) with {workers} worker(s)...")
+    with Pool(processes=workers) as pool:
+        results = pool.map(process_file, py_files)
+    for msg in results:
+        print(msg)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

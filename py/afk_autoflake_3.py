@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import multiprocessing as mp
 import subprocess
@@ -28,10 +27,9 @@ def check_or_fix_imports(path, autofix=False):
             if autofix:
                 print(f"Successfully removed unused imports from `{path}`.")
             else:
-                output = (result.stdout or "") + (result.stderr or "")
-                for line in output.splitlines():
-                    if line.strip():
-                        print(f"{path}: {line}")
+                print(f"Unused imports found in `{path}`. Run with -a to fix.")
+        else:
+            print(f"An error occurred: {result.stderr}")
     except FileNotFoundError:
         print("Error: `autoflake` is not installed. Run `pip install autoflake`.")
 
@@ -50,7 +48,6 @@ if __name__ == "__main__":
         help="Automatically remove unused imports",
     )
     args = parser.parse_args()
-
     if args.file:
         check_or_fix_imports(args.file, args.autofix)
     else:

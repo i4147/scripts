@@ -2,7 +2,6 @@ import glob
 from functools import partial
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
-
 import pngquant
 
 QUALITY_RANGE_STR = "60-70"

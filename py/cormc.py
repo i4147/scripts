@@ -4,7 +4,6 @@ import os
 import sys
 from multiprocessing import cpu_count
 from pathlib import Path
-
 from loguru import logger
 
 try:

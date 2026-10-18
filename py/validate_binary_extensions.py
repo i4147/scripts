@@ -58,7 +58,6 @@ def find_files_with_extensions(root_dir: Path, extensions: set) -> list[Path]:
 Memory-efficient filesystem traversal with progress reporting.
 Optimized for large-scale Linux filesystem scans.
 """
-
 import os
 from pathlib import Path
 from typing import Iterator

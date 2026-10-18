@@ -15,7 +15,6 @@ def load_code_block():
     except (OSError, UnicodeDecodeError) as e:
         logger.error(f"Failed to read {LIC_PATH}: {e}")
         raise
-
     return [line.rstrip() for line in content.strip("\n").splitlines()]
 
 
@@ -64,26 +63,22 @@ def process_file(path):
     if match is None:
         return
     start, end = match
-
     if start > 0 and lines[start - 1].strip() == "":
         start -= 1
     if end < len(lines) and lines[end].strip() == "":
         end += 1
     del lines[start:end]
     new_content = "".join(lines)
-
     try:
         tree = ast.parse(new_content)
     except SyntaxError as e:
         logger.warning(f"Skipping write for {path} (would break syntax): {e}")
         return
-
     if already_imports_cprint(tree):
         if new_content != content:
             path.write_text(new_content, encoding="utf-8")
             print(f"Removed block: {path} (cprint already imported)")
         return
-
     body_lines = new_content.splitlines(keepends=True)
     last_end = last_import_end_line(tree)
     if last_end > 0:

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import contextlib
 import functools
 from collections import defaultdict
@@ -11,7 +10,6 @@ from os import scandir as os_scandir
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, overload
-
 from .const import BIN_EXT, EMULATED, IMGEXT, SDCARD, SKIP_DIRS, THRESHOLD, TXT_EXT
 from .isbinary import is_binary
 
@@ -20,8 +18,6 @@ from .isbinary import is_binary
 def get_file_age(path: str | Path, str_mode: bool = False) -> float: ...
 @overload
 def get_file_age(path: str | Path, str_mode: bool = True) -> str: ...
-
-
 def read_lines(path: str | Path, ke: bool = True) -> list[str]:
     path = Path(path)
     if path.stat().st_size > THRESHOLD:
@@ -127,7 +123,6 @@ def get_installed_packages() -> dict[str, str]:
     for distribution in metadata.distributions():
         name = distribution.metadata.get("Name")
         version = distribution.metadata.get("Version")
-
         if name and version:
             packages[_normalize_name(name)] = version
     return dict(sorted(packages.items(), key=itemgetter(0)))

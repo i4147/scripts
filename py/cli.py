@@ -5,7 +5,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from random import choice
 from urllib.parse import urlparse
-
 import requests
 from termcolor import cprint
 

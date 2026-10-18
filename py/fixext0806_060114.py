@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import os
 import subprocess
@@ -495,7 +494,6 @@ MIME_TO_EXT: dict[str, list[str]] = {
     "application/x-lzip-compressed-tar": [".tar.lz"],
     "application/x-lzma-compressed-tar": [".tar.lzma"],
 }
-
 SHEBANG_MAP: dict[str, str] = {
     "python": ".py",
     "python2": ".py",
@@ -808,7 +806,6 @@ SHEBANG_MAP: dict[str, str] = {
     "snow99": ".snow",
     "snow100": ".snow",
 }
-
 SKIP_DIRS: frozenset[str] = frozenset({".git", "__pycache__"})
 SKIP_EXTS: frozenset[str] = frozenset({".css", ".js"})
 

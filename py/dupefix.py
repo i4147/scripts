@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import pathlib
 import shutil
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import xxhash
 
 

@@ -6,7 +6,6 @@ import pathlib
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import ssdeep
 
 try:

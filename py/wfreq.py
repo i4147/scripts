@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import multiprocessing as mp
 import os
 import re
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator, Set
-
 from spellchecker import SpellChecker
 
 WORD_RE = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)*", re.UNICODE)
@@ -110,25 +108,21 @@ def save_words(words: Iterable[str], output_path: Path) -> None:
 def main() -> int:
     root_dir = Path.cwd()
     output_path = root_dir / _OUTPUT_NAME
-
     try:
         all_words = collect_words(root_dir, output_path)
     except Exception as exc:
         print(f"error while collecting words: {exc}", file=sys.stderr)
         return 1
-
     try:
         unknown_words = filter_unknown_words(all_words)
     except Exception as exc:
         print(f"error while filtering words: {exc}", file=sys.stderr)
         return 1
-
     try:
         save_words(unknown_words, output_path)
     except OSError as exc:
         print(f"error while writing output: {exc}", file=sys.stderr)
         return 1
-
     print(f"Total unique words found: {len(all_words)}")
     print(f"Words not in pyspellchecker dictionary: {len(unknown_words)}")
     print(f"Saved to: {output_path}")

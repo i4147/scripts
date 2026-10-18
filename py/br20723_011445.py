@@ -1,15 +1,12 @@
 from __future__ import annotations
-
 import argparse
 import sys
 import tarfile
 from contextlib import contextmanager, suppress
 from pathlib import Path
-
 from brotlicffi import Compressor, Decompressor
 
 SKIP_DIRS = frozenset({"lazy", ".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"})
-
 CHUNK_SIZE = 524288
 LARGE_FILE_THRESHOLD = 2 * 1024 * 1024
 

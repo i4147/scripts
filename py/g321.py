@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import os
 import shlex
@@ -218,7 +217,6 @@ class PyGithubBackend(SubprocessBackend):
             import github
         except ImportError as exc:
             raise RuntimeError("PyGithub not installed") from exc
-
         print(
             "warning: PyGithub is remote-API-only; local operations will use subprocess.",
             file=sys.stderr,
@@ -236,10 +234,8 @@ _BACKEND_REGISTRY: dict[str, type[SubprocessBackend]] = {
 
 def build_backend(name: str) -> SubprocessBackend:
     norm = name.lower()
-
     if norm == "subprocess":
         return SubprocessBackend()
-
     if norm == "typer":
         print(
             "warning: 'typer' is a CLI framework, not a git backend; using subprocess.",
@@ -252,7 +248,6 @@ def build_backend(name: str) -> SubprocessBackend:
             file=sys.stderr,
         )
         norm = "dulwich"
-
     cls = _BACKEND_REGISTRY.get(norm)
     if cls is None:
         print(
@@ -260,7 +255,6 @@ def build_backend(name: str) -> SubprocessBackend:
             file=sys.stderr,
         )
         return SubprocessBackend()
-
     try:
         return cls()
     except Exception as exc:
@@ -285,11 +279,9 @@ def squash_commits(
             file=sys.stderr,
         )
         return False
-
     if not backend.is_repo():
         print("Error: not inside a git repository", file=sys.stderr)
         return False
-
     total = backend.count_commits()
     if count > total:
         print(
@@ -297,7 +289,6 @@ def squash_commits(
             file=sys.stderr,
         )
         return False
-
     if require_multi_day:
         dates = backend.commit_dates(count)
         if len(dates) >= 2 and len(set(dates)) == 1:
@@ -306,7 +297,6 @@ def squash_commits(
                 file=sys.stderr,
             )
             return False
-
     todo: list[str] = []
     for i in range(count):
         h = backend.rev_parse(f"HEAD~{count - 1 - i}")
@@ -314,13 +304,11 @@ def squash_commits(
         action = "pick" if i == 0 else "squash"
         todo.append(f"{action} {h} {subject}")
     todo_content = "\n".join(todo) + "\n"
-
     ok, err = backend.rebase_interactive(count, todo_content)
     if not ok:
         print(f"Rebase failed: {err}", file=sys.stderr)
         backend.abort_rebase()
         return False
-
     if commit_date is None:
         formatted = datetime.now(timezone.utc).strftime("%a,%d%b%Y%H:%M:%S%z")
     else:
@@ -328,15 +316,12 @@ def squash_commits(
             formatted = datetime.fromisoformat(commit_date.replace("Z", "+00:00")).strftime("%a,%d%b%Y%H:%M:%S%z")
         except ValueError:
             formatted = commit_date
-
     ok, err = backend.amend_date(formatted)
     if not ok:
         print(f"Failed to amend commit date: {err}", file=sys.stderr)
         return False
-
     print(f"Successfully squashed {count} commits into one.")
     print(f"Commit date set to: {formatted}")
-
     if push:
         print("Pushing with --force-with-lease ...")
         ok, err = backend.push_force_with_lease()
@@ -344,7 +329,6 @@ def squash_commits(
             print(f"Push failed: {err}", file=sys.stderr)
             return False
         print("Push successful.")
-
     return True
 
 
@@ -408,15 +392,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Squash even when all N commits fall on the same day.",
     )
     args = parser.parse_args(argv)
-
     backend = build_backend(args.backend)
     if backend.name != args.backend and args.backend not in ("dulwitch",):
         pass
-
     count = args.count_pos if args.count_pos is not None else args.count
     if args.date and args.date.lower() == "today":
         args.date = None
-
     ok = squash_commits(
         backend,
         count,

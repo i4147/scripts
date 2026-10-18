@@ -1,7 +1,6 @@
 import mmap
 import sys
 from pathlib import Path
-
 import brotlicffi
 from multiprocessing import Pool
 from collections import deque
@@ -38,9 +37,7 @@ def process_file(path) -> None:
         return
     before = gsz(path)
     br_path = path.with_name(path.name + ".br")
-
     parallel_compress(path, br_path)
-
     path.unlink()
     after = gsz(outfile)
     rss(path, before, after)

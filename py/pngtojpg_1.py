@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from pathlib import Path
-
 from PIL import Image
 
 for png_path in Path(".").rglob("*.png"):

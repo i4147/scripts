@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -18,12 +17,10 @@ try:
 except ImportError:
     sys.stderr.write("Missing dependency: pip install deep-translator\n")
     raise
-
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
 DEFAULT_CACHE = "translations.sqlite"
 TRANSLATE_CHUNK = 20
 DEFAULT_SAVE_INTERVAL = 10.0
-
 _shutdown = False
 _cache: "TranslationCache | None" = None
 
@@ -113,15 +110,12 @@ def _translate_texts(texts: list[str], src: str, tgt: str) -> list[str]:
 def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[int, str]]:
     src, tgt, items = task
     assert _cache is not None, "worker cache not initialised"
-
     results: list[tuple[int, str]] = []
     pending: list[tuple[int, str]] = []
-
     for idx, text in items:
         if not text.strip():
             results.append((idx, text))
             continue
-
         if src == "ru" and not _has_cyrillic(text):
             results.append((idx, text))
             continue
@@ -130,7 +124,6 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
             results.append((idx, cached))
         else:
             pending.append((idx, text))
-
     for i in range(0, len(pending), TRANSLATE_CHUNK):
         batch = pending[i : i + TRANSLATE_CHUNK]
         texts = [t for _, t in batch]
@@ -139,7 +132,6 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
         except Exception as exc:
             sys.stderr.write(f"[translate] batch failed ({exc}); keeping originals\n")
             translated = texts
-
         pairs: list[tuple[str, str]] = []
         for (idx, original), tr in zip(batch, translated):
             results.append((idx, tr))
@@ -148,7 +140,6 @@ def _translate_task(task: tuple[str, str, list[tuple[int, str]]]) -> list[tuple[
             _cache.put_many(src, tgt, pairs)
         except sqlite3.Error as exc:
             sys.stderr.write(f"[translate] cache write failed: {exc}\n")
-
     return results
 
 
@@ -163,11 +154,9 @@ def _save_progress(
     complete: bool = False,
 ) -> None:
     out_lines = [translations.get(i, lines[i]) for i in range(len(lines))]
-
     tmp_out = output_path + ".tmp"
     Path(tmp_out).write_text("\n".join(out_lines) + "\n", encoding="utf-8")
     os.replace(tmp_out, output_path)
-
     meta = {
         "input": str(input_path),
         "output": output_path,
@@ -187,22 +176,17 @@ def cmd_translate(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
     if not input_path.is_file():
         sys.exit(f"Input file not found: {input_path}")
-
     lines = input_path.read_text(encoding="utf-8").splitlines()
     if not lines:
         sys.exit("Input file is empty")
-
     output_path = args.output or str(input_path) + ".translated.txt"
     meta_path = output_path + ".meta.json"
-
     indexed = list(enumerate(lines))
     batch_size = max(1, args.batch_size)
     batches = [indexed[i : i + batch_size] for i in range(0, len(indexed), batch_size)]
     tasks = [(args.source, args.target, b) for b in batches]
-
     translations: dict[int, str] = {}
     last_save = time.time()
-
     _save_progress(
         output_path,
         meta_path,
@@ -212,7 +196,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
         args.target,
         input_path,
     )
-
     print(
         f"[translate] {len(lines)} lines / {len(batches)} batches, "
         f"{args.workers} workers, src={args.source} tgt={args.target}",
@@ -220,7 +203,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
     )
     print(f"[translate] cache  : {args.cache}", file=sys.stderr)
     print(f"[translate] output : {output_path}", file=sys.stderr)
-
     result_queue: Queue = Queue()
 
     def _on_ok(res):
@@ -234,11 +216,9 @@ def cmd_translate(args: argparse.Namespace) -> None:
         initializer=_worker_init,
         initargs=(args.cache,),
     )
-
     try:
         for t in tasks:
             pool.apply_async(_translate_task, (t,), callback=_on_ok, error_callback=_on_err)
-
         pending = len(tasks)
         while pending > 0:
             if _shutdown:
@@ -248,12 +228,10 @@ def cmd_translate(args: argparse.Namespace) -> None:
             except Empty:
                 continue
             pending -= 1
-
             if status == "ok":
                 translations.update(dict(payload))
             else:
                 sys.stderr.write(f"[translate] task failed: {payload}\n")
-
             now = time.time()
             if now - last_save >= args.save_interval:
                 _save_progress(
@@ -269,13 +247,11 @@ def cmd_translate(args: argparse.Namespace) -> None:
                 pct = 100.0 * done / len(lines)
                 print(f"[translate] progress: {done}/{len(lines)} ({pct:.1f}%)", file=sys.stderr)
                 last_save = now
-
     except KeyboardInterrupt:
         _shutdown = True
     finally:
         pool.terminate()
         pool.join()
-
         complete = (not _shutdown) and len(translations) == len(lines)
         _save_progress(
             output_path,
@@ -287,7 +263,6 @@ def cmd_translate(args: argparse.Namespace) -> None:
             input_path,
             complete=complete,
         )
-
     done = len(translations)
     tag = "complete" if complete else "interrupted"
     print(f"[translate] {tag}: wrote {output_path} ({done}/{len(lines)} lines)", file=sys.stderr)
@@ -305,11 +280,9 @@ def cmd_cache_stats(args: argparse.Namespace) -> None:
         rows = cache.stats()
     finally:
         cache.close()
-
     if not rows:
         print(f"Cache is empty: {path}")
         return
-
     print(f"Cache: {path}")
     total = 0
     for src, tgt, count in rows:
@@ -340,23 +313,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-
     signal.signal(signal.SIGINT, _handle_signal)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _handle_signal)
-
     if args.cache_stats:
         cmd_cache_stats(args)
         return
-
     if not args.input:
         parser.error("--input/-i is required unless --cache-stats is used")
-
     if args.workers < 1:
         parser.error("--workers must be >= 1")
     if args.batch_size < 1:
         parser.error("--batch-size must be >= 1")
-
     cmd_translate(args)
 
 

@@ -29,7 +29,6 @@ def main():
     gitignore_content = gitignore_path.read_bytes()
     git_ignore = Path.cwd() / ".gitignore"
     git_ignore.write_bytes(gitignore_content)
-
     print(f"Repository name: {repo_name}")
     if not is_git_repo():
         print("Initializing git repository...")

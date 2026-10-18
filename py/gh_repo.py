@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import os
 import shutil
@@ -57,7 +56,6 @@ def create_github_repo_via_api(
     except ImportError:
         print("Error: 'requests' is required. Install it with: pip install requests")
         return None
-
     url = "https://api.github.com/user/repos"
     headers = {
         "Authorization": f"token {token}",
@@ -70,15 +68,12 @@ def create_github_repo_via_api(
         "auto_init": auto_init,
     }
     resp = requests.post(url, headers=headers, json=payload)
-
     if resp.status_code == 201:
         return resp.json()
-
     if resp.status_code == 422:
         print(f"Repository '{name}' may already exist on GitHub.")
         if username:
             return {"ssh_url": f"git@github.com:{username}/{name}.git"}
-
     try:
         message = resp.json().get("message", "Unknown error")
     except Exception:
@@ -108,7 +103,6 @@ def cmd_api(args: argparse.Namespace) -> int:
         print("Error: GITHUB_TOKEN not found in ~/.env")
         print("Please add: GITHUB_TOKEN=your_github_token_here")
         return 1
-
     data = create_github_repo_via_api(
         token=token,
         name=args.repo_name,
@@ -118,7 +112,6 @@ def cmd_api(args: argparse.Namespace) -> int:
     )
     if data is None:
         return 1
-
     print("✅ Repository created successfully!")
     print(f"📁 Name: {data['name']}")
     print(f"🔗 URL: {data['html_url']}")
@@ -132,25 +125,20 @@ def cmd_api_push(args: argparse.Namespace) -> int:
     except ImportError:
         print("Error: 'GitPython' is required. Install it with: pip install GitPython")
         return 1
-
     try:
         from dotenv import load_dotenv
     except ImportError:
         load_dotenv = None
-
     env_file = Path(args.env_file).expanduser()
     if load_dotenv is not None:
         load_dotenv(env_file)
-
     token = os.environ.get("GITHUB_TOKEN") or get_github_token(env_file)
     if not token:
         print("Error: GITHUB_TOKEN not found in environment variables.")
         return 1
-
     cwd = Path.cwd()
     repo_name = args.name or cwd.name
     branch = args.branch
-
     try:
         repo = Repo(cwd)
         print("Existing git repository found.")
@@ -158,14 +146,12 @@ def cmd_api_push(args: argparse.Namespace) -> int:
         print("No git repository found. Creating new one...")
         repo = Repo.init(cwd)
         print("Git repository initialized.")
-
     if repo.is_dirty(untracked_files=True):
         repo.index.add(["*"])
         repo.index.commit(args.commit_message)
         print("Changes committed.")
     else:
         print("No changes to commit.")
-
     try:
         remote = repo.remote("origin")
         print(f"Remote 'origin' already exists: {remote.url}")
@@ -183,14 +169,12 @@ def cmd_api_push(args: argparse.Namespace) -> int:
         ssh_url = data.get("ssh_url") or f"git@github.com:{args.github_username}/{repo_name}.git"
         remote = repo.create_remote("origin", ssh_url)
         print(f"Remote 'origin' created: {ssh_url}")
-
     try:
         remote.push(refspec=f"{branch}:{branch}")
         print(f"Successfully pushed to {remote.url}")
     except Exception as exc:
         print(f"Push failed: {exc}")
         remote.push(refspec=f"{branch}:{branch}", set_upstream=True)
-
     print(f"✅ Repository '{repo_name}' is now on GitHub!")
     return 0
 
@@ -201,32 +185,26 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
     except ImportError:
         print("Error: 'GitPython' is required. Install it with: pip install GitPython")
         return 1
-
     try:
         from github import Github
         from github.Auth import Token
     except ImportError:
         print("Error: 'PyGithub' is required. Install it with: pip install PyGithub")
         return 1
-
     try:
         from dotenv import load_dotenv
     except ImportError:
         load_dotenv = None
-
     env_file = Path(args.env_file).expanduser()
     if load_dotenv is not None:
         load_dotenv(env_file)
-
     token = os.environ.get("GITHUB_TOKEN") or get_github_token(env_file)
     if not token:
         print("Set GITHUB_TOKEN in the environment.")
         return 1
-
     cwd = Path.cwd()
     repo_name = args.name or cwd.name
     username = args.github_username
-
     global_gitignore = Path(args.global_gitignore).expanduser()
     local_gitignore = cwd / ".gitignore"
     if global_gitignore.exists() and not local_gitignore.exists():
@@ -236,14 +214,12 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
         print(".gitignore already exists in current directory.")
     else:
         print(f"No global .gitignore found at {global_gitignore}")
-
     try:
         repo = Repo(cwd)
         print("Git repository already initialized.")
     except (InvalidGitRepositoryError, NoSuchPathError):
         print("Initializing git repository...")
         repo = Repo.init(cwd)
-
     g = Github(auth=Token(token))
     try:
         user = g.get_user(username) if username else g.get_user()
@@ -254,11 +230,9 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
             exists = False
     finally:
         g.close()
-
     if "origin" in [r.name for r in repo.remotes]:
         print("Remote 'origin' already exists.")
         return 0
-
     if exists:
         print(f"GitHub repo '{repo_name}' already exists on your account.")
         ssh_url = f"git@github.com:{username}/{repo_name}.git"
@@ -275,14 +249,12 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
         ssh_url = f"git@github.com:{username}/{repo_name}.git"
         repo.create_remote("origin", ssh_url)
         print(f"Added remote origin: {ssh_url}")
-
     repo.git.add(all=True)
     if repo.is_dirty(untracked_files=True):
         print("Committing changes...")
         repo.index.commit(args.commit_message)
     else:
         print("No changes to commit.")
-
     branch = repo.active_branch.name if not repo.head.is_detached else args.branch
     remote = repo.remote("origin")
     print(f"Pushing branch '{branch}'...")
@@ -297,7 +269,6 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
             remote.push(refspec=f"{branch}:{branch}")
         else:
             raise
-
     print(f"\n✅ Success! Repository '{repo_name}' is on GitHub or updated there.")
     print(f"View it at: https://github.com/{repo_name}")
     return 0
@@ -306,17 +277,14 @@ def cmd_gh_create(args: argparse.Namespace) -> int:
 def cmd_gh_cli(args: argparse.Namespace) -> int:
     cwd = Path.cwd()
     repo_name = args.name or cwd.name
-
     probe = run_subprocess(["git", "rev-parse", "--git-dir"])
     is_git = probe.returncode == 0
-
     print(f"Repository name: {repo_name}")
     if not is_git:
         print("Initializing git repository...")
         run_subprocess(["git", "init"], check=True)
     else:
         print("Git repository already initialized.")
-
     origin = run_subprocess(["git", "remote", "get-url", "origin"])
     if origin.returncode != 0:
         print(f"Creating GitHub repository '{repo_name}'...")
@@ -333,7 +301,6 @@ def cmd_gh_cli(args: argparse.Namespace) -> int:
         else:
             print("Remote exists but seems inaccessible. You might need to authenticate.")
             print(f"Remote URL: {origin.stdout.strip()}")
-
     print("Adding all files...")
     run_subprocess(["git", "add", "-A"], check=True)
     status = run_subprocess(["git", "status", "--porcelain"])
@@ -342,7 +309,6 @@ def cmd_gh_cli(args: argparse.Namespace) -> int:
         run_subprocess(["git", "commit", "-m", args.commit_message], check=True)
     else:
         print("No changes to commit.")
-
     print("Pushing to GitHub...")
     branch_probe = run_subprocess(["git", "branch", "--show-current"])
     current_branch = branch_probe.stdout.strip() if branch_probe.returncode == 0 else args.branch
@@ -356,7 +322,6 @@ def cmd_gh_cli(args: argparse.Namespace) -> int:
         else:
             print(f"Push failed: {push.stderr}")
             return 1
-
     print(f"\n✅ Success! Repository '{repo_name}' is now on GitHub.")
     print(f"View it at: https://github.com/{repo_name}")
     return 0
@@ -563,7 +528,6 @@ class GitHubRepoManager:
         print(f"GitHub User: {self.github_username}")
         print(f"Email: {self.git_email}")
         print("-" * 40)
-
         if not self._check_gh_cli_installed():
             print("\n❌ Error: GitHub CLI (gh) is not installed.")
             print("Please install it from: https://cli.github.com")
@@ -573,30 +537,23 @@ class GitHubRepoManager:
             print("Please run: gh auth login")
             return 1
         print("\n✓ GitHub CLI is installed and authenticated\n")
-
         if self._repo_exists_locally():
             keep = self.handle_existing_repo()
             if not keep:
                 self._run(["git", "remote", "remove", "origin"])
         else:
             self._init_local_repo()
-
         self._ensure_content()
         self._stage_all_changes()
-
         if not self._commit_changes(commit_message):
             print("\n⚠️  Could not commit changes.")
             return 1
-
         self._rename_branch_to_main()
-
         if not self._create_github_repo():
             print("\n❌ Failed to create repository on GitHub")
             return 1
-
         self._add_remote()
         self._push_to_github()
-
         print("\n" + "=" * 40)
         print("✅ Success! Repository created and pushed to GitHub")
         print(f"Repository URL: https://github.com/{self.github_username}/{self.repo_name}")
@@ -631,7 +588,6 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=__doc__,
     )
     sub = parser.add_subparsers(dest="command", required=True)
-
     # api  (mkghrepo.py)
     p = sub.add_parser("api", help="Create a repo via GitHub REST API (mkghrepo.py).")
     p.add_argument("repo_name", help="Name of the new repository.")
@@ -648,7 +604,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Path to env file with GITHUB_TOKEN. Default: {DEFAULT_ENV_FILE}",
     )
     p.set_defaults(func=cmd_api)
-
     # api-push  (new_repo.py)
     p = sub.add_parser(
         "api-push",
@@ -676,7 +631,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Path to env file with GITHUB_TOKEN. Default: {DEFAULT_ENV_FILE}",
     )
     p.set_defaults(func=cmd_api_push)
-
     # gh-create  (new_repo2.py)
     p = sub.add_parser(
         "gh-create",
@@ -704,7 +658,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Path to env file with GITHUB_TOKEN. Default: {DEFAULT_ENV_FILE}",
     )
     p.set_defaults(func=cmd_gh_create)
-
     # gh-cli  (newrepo.py)
     p = sub.add_parser(
         "gh-cli",
@@ -722,7 +675,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Commit message. Default: '{DEFAULT_GH_CLI_COMMIT_MESSAGE}'.",
     )
     p.set_defaults(func=cmd_gh_cli)
-
     # gh-managed  (pynewrepo.py)
     p = sub.add_parser(
         "gh-managed",
@@ -755,7 +707,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Main branch name. Default: {DEFAULT_BRANCH}.",
     )
     p.set_defaults(func=cmd_gh_managed)
-
     return parser
 
 

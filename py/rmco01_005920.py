@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import ast
 import io
 import sys
@@ -49,21 +48,17 @@ def extract_prefix_comments_and_shebang(source: str) -> Tuple[str, str]:
     lines = source.splitlines(keepends=True)
     prefix_lines: List[str] = []
     i = 0
-
     for i, line in enumerate(lines):
         stripped = line.strip()
-
         if i == 0 and line.startswith("#!"):
             prefix_lines.append(line)
             continue
-
         if stripped == "":
             if prefix_lines:
                 prefix_lines.append(line)
             else:
                 continue
             continue
-
         if stripped.startswith("#"):
             low = stripped.lower()
             if (
@@ -76,11 +71,8 @@ def extract_prefix_comments_and_shebang(source: str) -> Tuple[str, str]:
             ):
                 prefix_lines.append(line)
                 continue
-
             continue
-
         break
-
     prefix = "".join(prefix_lines)
     remainder = "".join(lines[i:]) if i < len(lines) else ""
     return prefix, remainder
@@ -111,12 +103,9 @@ def collect_preserved_inline_comments(source: str) -> Dict[int, List[str]]:
 def reattach_inline_comments(new_source: str, preserved_comments: Dict[int, List[str]]) -> str:
     if not preserved_comments:
         return new_source
-
     new_lines = new_source.splitlines()
-
     max_line = len(new_lines)
     used_comments = set()
-
     for orig_line_no in sorted(preserved_comments):
         for comment in preserved_comments[orig_line_no]:
             target_line_idx = orig_line_no - 1
@@ -125,7 +114,6 @@ def reattach_inline_comments(new_source: str, preserved_comments: Dict[int, List
                 if comment in line:
                     used_comments.add((orig_line_no, comment))
                     continue
-
                 if line.rstrip() == "":
                     new_lines[target_line_idx] = comment
                 else:
@@ -133,15 +121,12 @@ def reattach_inline_comments(new_source: str, preserved_comments: Dict[int, List
                 used_comments.add((orig_line_no, comment))
             else:
                 continue
-
     for orig_line_no in sorted(preserved_comments):
         for comment in preserved_comments[orig_line_no]:
             if (orig_line_no, comment) in used_comments:
                 continue
-
             new_lines.append(comment)
             used_comments.add((orig_line_no, comment))
-
     return "\n".join(new_lines) + ("\n" if not new_source.endswith("\n") else "")
 
 
@@ -152,57 +137,43 @@ def process_file(path: Path) -> Tuple[str, bool, Optional[str]]:
             encoding = f.encoding
     except Exception as exc:
         return str(path), False, f"read-error: {exc}"
-
     if not original.strip():
         return str(path), False, None
-
     preserved_inline_comments = collect_preserved_inline_comments(original)
-
     prefix, _ = extract_prefix_comments_and_shebang(original)
-
     try:
         tree = ast.parse(original)
     except SyntaxError as exc:
         return str(path), False, f"syntax-error-original: {exc}"
-
     stripper = DocstringStripper()
     new_tree = stripper.visit(tree)
     ast.fix_missing_locations(new_tree)
-
     try:
         new_source_body = astor.to_source(new_tree)
     except Exception as exc:
         return str(path), False, f"unparse-failed: {exc}"
-
     if not new_source_body.endswith("\n"):
         new_source_body = new_source_body + "\n"
-
     if prefix:
         if not prefix.endswith("\n"):
             prefix = prefix + "\n"
         new_source = prefix + new_source_body
     else:
         new_source = new_source_body
-
     new_source = reattach_inline_comments(new_source, preserved_inline_comments)
-
     if not new_source.endswith("\n"):
         new_source = new_source + "\n"
-
     try:
         ast.parse(new_source)
     except SyntaxError as exc:
         return str(path), False, f"syntax-error-transformed: {exc}"
-
     if new_source == original:
         return str(path), False, None
-
     try:
         with open(path, "w", encoding=encoding, newline="\n") as f:
             f.write(new_source)
     except Exception as exc:
         return str(path), False, f"write-error: {exc}"
-
     return str(path), True, None
 
 
@@ -231,10 +202,8 @@ def main() -> int:
     if not files:
         print("No .py files found.")
         return 0
-
     changed: List[str] = []
     errors: List[Tuple[str, str]] = []
-
     workers = max(1, min(32, multiprocessing.cpu_count()))
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(process_file, p): p for p in files}
@@ -249,20 +218,17 @@ def main() -> int:
                     errors.append((path_str, err))
                 elif did_change:
                     changed.append(path_str)
-
     if changed:
         print("Files changed:")
         for p in sorted(changed):
             print(f"  {p}")
     else:
         print("No files were changed.")
-
     if errors:
         print("\nFiles with errors (left unchanged):")
         for p, e in errors:
             print(f"  {p}: {e}")
         return 2
-
     return 0
 
 

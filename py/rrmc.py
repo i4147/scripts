@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import io
 import tokenize
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-
 from loguru import logger
 
 SKIP_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache"}

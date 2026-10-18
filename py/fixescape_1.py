@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import ast
 import concurrent.futures
@@ -20,12 +19,10 @@ try:
     from loguru import logger as _loguru_logger
 except ImportError:
     _loguru_logger = None
-
 try:
     from tqdm import tqdm as _tqdm
 except ImportError:
     _tqdm = None
-
 DEFAULT_SKIP_DIRS: Final[set[str]] = {
     ".venv",
     "venv",
@@ -40,7 +37,6 @@ DEFAULT_SKIP_DIRS: Final[set[str]] = {
     ".tox",
     ".pytest_cache",
 }
-
 DEFAULT_RE_FUNCTIONS: Final[set[str]] = {
     "compile",
     "search",
@@ -52,20 +48,16 @@ DEFAULT_RE_FUNCTIONS: Final[set[str]] = {
     "sub",
     "subn",
 }
-
 INVALID_BACKSLASH_RE = re.compile(r'(?<!\\)\\(?![\\\'"abfnrtvNuUx0-7\n])')
-
 REGEX_PATTERN_RE = re.compile(
     r"re\.(?:compile|search|match|findall|fullmatch|finditer)\s*"
     r"\(\s*([rR]?[\"'])(.*?)(?<!\\)\1",
     re.DOTALL,
 )
-
 STRING_LITERAL_RE = re.compile(
     r"^([rubfRUBF]*)(\"\"\"|\'\'\'|\"|\')(.*)(\2)$",
     re.DOTALL,
 )
-
 TOKEN_IGNORE_TYPES: Final[set[int]] = {
     tokenize.NL,
     tokenize.COMMENT,
@@ -119,29 +111,22 @@ def iter_py_files(
 ) -> list[Path]:
     if not paths:
         paths = [Path.cwd()]
-
     skip_dirs = skip_dirs if skip_dirs is not None else DEFAULT_SKIP_DIRS
     self_path = Path(__file__).resolve() if exclude_self else None
     found: set[Path] = set()
-
     for raw_path in paths:
         path = Path(raw_path).resolve()
         if not path.exists():
             continue
-
         if path.is_file():
             if path.suffix == ".py" and (self_path is None or path != self_path):
                 found.add(path)
             continue
-
         if not path.is_dir():
             continue
-
         for root, dirs, files in os.walk(path, followlinks=include_symlinks):
             root_path = Path(root)
-
             dirs[:] = [d for d in dirs if d not in skip_dirs and (include_symlinks or not (root_path / d).is_symlink())]
-
             for name in files:
                 if not name.endswith(".py"):
                     continue
@@ -151,7 +136,6 @@ def iter_py_files(
                 if self_path is not None and file_path.resolve() == self_path:
                     continue
                 found.add(file_path.resolve())
-
     return sorted(found)
 
 
@@ -174,22 +158,18 @@ def convert_string_literal(literal: str, mode: str) -> str:
     parsed = parse_string_literal(literal)
     if parsed is None:
         return literal
-
     prefix, quote, body = parsed
     if "r" in prefix.lower():
         return literal
     if "\\" not in body:
         return literal
-
     if mode == "add-r":
         new_prefix = add_raw_prefix(prefix)
         return f"{new_prefix}{quote}{body}{quote}"
-
     if mode == "unescape-double-backslashes":
         new_body = body.replace("\\\\", "\\")
         new_prefix = add_raw_prefix(prefix)
         return f"{new_prefix}{quote}{new_body}{quote}"
-
     return literal
 
 
@@ -200,7 +180,6 @@ def literal_has_invalid_escape(literal: str) -> bool:
             compile(f"x = {literal}", "<string>", "exec")
         except SyntaxError:
             return False
-
         for warning in caught:
             if issubclass(warning.category, SyntaxWarning) and "invalid escape sequence" in str(warning.message):
                 return True
@@ -211,7 +190,6 @@ def apply_modifications(source: str, modifications: Iterable[Modification]) -> s
     mods = list(modifications)
     if not mods:
         return source
-
     lines = source.splitlines(keepends=True)
     line_starts = [0]
     for line in lines:
@@ -230,14 +208,12 @@ def apply_modifications(source: str, modifications: Iterable[Modification]) -> s
         start = absolute_offset(mod.start)
         end = absolute_offset(mod.end)
         result = result[:start] + mod.modified + result[end:]
-
     return result
 
 
 def check_invalid_escapes_bytes(data: bytes, filename: str) -> tuple[bool, list[str]]:
     messages: list[str] = []
     has_issues = False
-
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", SyntaxWarning)
         try:
@@ -251,7 +227,6 @@ def check_invalid_escapes_bytes(data: bytes, filename: str) -> tuple[bool, list[
                 has_issues = True
                 line = getattr(warning, "lineno", "Unknown")
                 messages.append(f"Line {line}: SyntaxWarning: {warning.message}")
-
     return has_issues, messages
 
 
@@ -262,19 +237,16 @@ def tokenize_fix_invalid_escapes(path: Path) -> bool:
             encoding = handle.encoding
     except Exception:
         return False
-
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
     except tokenize.TokenError:
         return False
-
     mods: list[Modification] = []
     for tok in tokens:
         if tok.type != tokenize.STRING:
             continue
         if not literal_has_invalid_escape(tok.string):
             continue
-
         new_literal = convert_string_literal(tok.string, "add-r")
         if new_literal != tok.string:
             mods.append(
@@ -285,16 +257,13 @@ def tokenize_fix_invalid_escapes(path: Path) -> bool:
                     modified=new_literal,
                 )
             )
-
     if not mods:
         return False
-
     new_source = apply_modifications(source, mods)
     try:
         ast.parse(new_source)
     except SyntaxError:
         return False
-
     path.write_text(new_source, encoding=encoding)
     return True
 
@@ -304,19 +273,15 @@ def double_escape_file(path: Path, *, auto_fix: bool) -> tuple[int, bool]:
         text = path.read_text(encoding="utf-8")
     except Exception:
         return 0, False
-
     matches = list(INVALID_BACKSLASH_RE.finditer(text))
     count = len(matches)
-
     if count == 0 or not auto_fix:
         return count, False
-
     new_text = INVALID_BACKSLASH_RE.sub(r"\\\\", text)
     try:
         path.write_text(new_text, encoding="utf-8")
     except Exception:
         return count, False
-
     return count, True
 
 
@@ -327,20 +292,16 @@ def process_escapes_file(
     strategy: str,
 ) -> FileResult:
     result = FileResult(path=path)
-
     try:
         data = path.read_bytes()
     except Exception as exc:
         result.messages.append(f"Could not read file: {exc}")
         return result
-
     has_issues, messages = check_invalid_escapes_bytes(data, str(path))
     result.has_issues = has_issues
     result.messages = messages
-
     if not has_issues or not auto_fix:
         return result
-
     if strategy == "r-prefix":
         result.fixed = tokenize_fix_invalid_escapes(path)
     elif strategy == "double-backslash":
@@ -350,28 +311,22 @@ def process_escapes_file(
             result.messages.append(f"Double-escaped {count} invalid backslash(es)")
     else:
         result.messages.append(f"Unknown strategy: {strategy}")
-
     return result
 
 
 def process_backslashes_file(path: Path, *, auto_fix: bool) -> FileResult:
     result = FileResult(path=path)
-
     try:
         text = path.read_text(encoding="utf-8")
     except Exception as exc:
         result.messages.append(f"Error reading file: {exc}")
         return result
-
     matches = list(INVALID_BACKSLASH_RE.finditer(text))
     result.changes = len(matches)
-
     if result.changes == 0:
         return result
-
     result.has_issues = True
     result.messages.append(f"{result.changes} invalid escape sequence(s)")
-
     if auto_fix:
         new_text = INVALID_BACKSLASH_RE.sub(r"\\\\", text)
         try:
@@ -380,7 +335,6 @@ def process_backslashes_file(path: Path, *, auto_fix: bool) -> FileResult:
             result.status = "fixed"
         except Exception as exc:
             result.messages.append(f"Failed to write: {exc}")
-
     return result
 
 
@@ -391,23 +345,19 @@ def find_tokenize_regex_modifications(
     functions: set[str],
 ) -> list[Modification]:
     modifications: list[Modification] = []
-
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
     except tokenize.TokenError:
         return modifications
-
     for i, tok in enumerate(tokens):
         if tok.type != tokenize.NAME or tok.string != "re":
             continue
         if i + 4 >= len(tokens):
             continue
-
         dot = tokens[i + 1]
         func = tokens[i + 2]
         paren = tokens[i + 3]
         string_tok = tokens[i + 4]
-
         if (
             dot.type == tokenize.OP
             and dot.string == "."
@@ -427,7 +377,6 @@ def find_tokenize_regex_modifications(
                         modified=new_literal,
                     )
                 )
-
     return modifications
 
 
@@ -437,12 +386,10 @@ def find_ast_regex_modifications(
     functions: set[str],
 ) -> list[Modification]:
     modifications: list[Modification] = []
-
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return modifications
-
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -454,19 +401,15 @@ def find_ast_regex_modifications(
             and node.args
         ):
             continue
-
         arg = node.args[0]
         if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
             continue
-
         literal = ast.get_source_segment(source, arg)
         if literal is None:
             continue
-
         new_literal = convert_string_literal(literal, "add-r")
         if new_literal == literal:
             continue
-
         modifications.append(
             Modification(
                 start=(arg.lineno, arg.col_offset),
@@ -475,7 +418,6 @@ def find_ast_regex_modifications(
                 modified=new_literal,
             )
         )
-
     return modifications
 
 
@@ -488,14 +430,12 @@ def ast_unicode_escape_regex(
         tree = ast.parse(source)
     except SyntaxError:
         return source, 0
-
     changes = 0
 
     class Transformer(ast.NodeTransformer):
         def visit_Call(self, node: ast.Call) -> ast.Call:
             nonlocal changes
             self.generic_visit(node)
-
             if not (
                 isinstance(node.func, ast.Attribute)
                 and isinstance(node.func.value, ast.Name)
@@ -504,21 +444,17 @@ def ast_unicode_escape_regex(
                 and node.args
             ):
                 return node
-
             arg = node.args[0]
             if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
                 return node
-
             old = arg.value
             new = old.encode("unicode_escape").decode("ascii")
             new = new.replace("\\\\n", "\\n")
             new = new.replace("\\\\t", "\\t")
             new = new.replace("\\\\r", "\\r")
-
             if new != old:
                 arg.value = new
                 changes += 1
-
             return node
 
     transformer = Transformer()
@@ -538,18 +474,15 @@ def process_regex_file(
     functions: set[str],
 ) -> FileResult:
     result = FileResult(path=path)
-
     try:
         source = path.read_text(encoding="utf-8")
     except Exception as exc:
         result.status = "error"
         result.message = f"Failed to read: {exc}"
         return result
-
     if "re." not in source:
         result.message = "No re calls found"
         return result
-
     if method == "tokenize":
         mods = find_tokenize_regex_modifications(
             source,
@@ -561,7 +494,6 @@ def process_regex_file(
             return result
         new_source = apply_modifications(source, mods)
         changes = len(mods)
-
     elif method == "ast":
         if convert == "unicode-escape":
             new_source, changes = ast_unicode_escape_regex(
@@ -578,25 +510,20 @@ def process_regex_file(
                 return result
             new_source = apply_modifications(source, mods)
             changes = len(mods)
-
     else:
         result.status = "error"
         result.message = f"Unknown method: {method}"
         return result
-
     if changes == 0:
         result.message = "No changes needed"
         return result
-
     try:
         ast.parse(new_source)
     except SyntaxError as exc:
         result.status = "error"
         result.message = f"Validation failed - syntax error after conversion: {exc}"
         return result
-
     result.changes = changes
-
     if dry_run:
         diff = unified_diff(
             source.splitlines(keepends=True),
@@ -608,7 +535,6 @@ def process_regex_file(
         result.message = f"Would modify {changes} string(s)"
         result.diff = "".join(diff)
         return result
-
     if backup:
         backup_path = path.with_suffix(path.suffix + backup_suffix)
         try:
@@ -617,14 +543,12 @@ def process_regex_file(
             result.status = "error"
             result.message = f"Failed to create backup: {exc}"
             return result
-
     try:
         path.write_text(new_source, encoding="utf-8")
     except Exception as exc:
         result.status = "error"
         result.message = f"Failed to write: {exc}"
         return result
-
     result.status = "modified"
     result.message = f"Modified {changes} string(s)"
     return result
@@ -635,16 +559,13 @@ def extract_regex_from_file(path: Path, output_dir: Path) -> tuple[Path, int]:
         text = path.read_text(encoding="utf-8")
     except Exception:
         return path, 0
-
     patterns = REGEX_PATTERN_RE.findall(text)
     if not patterns:
         return path, 0
-
     try:
         relative = path.relative_to(Path.cwd())
     except ValueError:
         relative = path
-
     out_name = str(relative).replace(os.sep, "_") + ".txt"
     out_path = output_dir / out_name
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -669,16 +590,13 @@ def cmd_escapes(args: argparse.Namespace) -> int:
         include_symlinks=args.include_symlinks,
         skip_dirs=skip_dirs,
     )
-
     if not files:
         print("No Python files found.")
         return 0
-
     if not args.quiet:
         print(f"Scanning {len(files)} Python files...")
         if args.auto_fix:
             print(f"Auto-fix enabled (strategy: {args.strategy})")
-
     results: list[FileResult] = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {
@@ -692,10 +610,8 @@ def cmd_escapes(args: argparse.Namespace) -> int:
         }
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
-
     issue_count = 0
     fixed_count = 0
-
     for result in sorted(results, key=lambda r: str(r.path)):
         if not result.has_issues:
             continue
@@ -708,14 +624,12 @@ def cmd_escapes(args: argparse.Namespace) -> int:
             print()
         if result.fixed:
             fixed_count += 1
-
     if not args.quiet:
         print("-" * 40)
         print("Scan Complete.")
         print(f"Files with issues: {issue_count}")
         if args.auto_fix:
             print(f"Files successfully fixed: {fixed_count}")
-
     return 0
 
 
@@ -726,24 +640,19 @@ def cmd_backslashes(args: argparse.Namespace) -> int:
         include_symlinks=args.include_symlinks,
         skip_dirs=skip_dirs,
     )
-
     if not files:
         print("No Python files found.")
         return 0
-
     if not args.quiet:
         print(f"Scanning {len(files)} Python files...")
-
     results: list[FileResult] = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(process_backslashes_file, path, auto_fix=args.auto_fix): path for path in files}
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
-
     issue_files = 0
     total_issues = 0
     fixed_files = 0
-
     for result in sorted(results, key=lambda r: str(r.path)):
         if result.changes == 0:
             continue
@@ -754,7 +663,6 @@ def cmd_backslashes(args: argparse.Namespace) -> int:
             print(f"[{status}] {result.path}: {result.changes} invalid escape sequence(s)")
         if result.fixed:
             fixed_files += 1
-
     if not args.quiet:
         print("\n--- Summary ---")
         print(f"Files scanned: {len(files)}")
@@ -762,7 +670,6 @@ def cmd_backslashes(args: argparse.Namespace) -> int:
         print(f"Total issues: {total_issues}")
         if args.auto_fix:
             print(f"Files fixed: {fixed_files}")
-
     return 1 if issue_files and not args.auto_fix else 0
 
 
@@ -770,7 +677,6 @@ def cmd_regex(args: argparse.Namespace) -> int:
     if args.method == "tokenize" and args.convert == "unicode-escape":
         print("Error: --convert unicode-escape requires --method ast.", file=sys.stderr)
         return 2
-
     skip_dirs = _parse_skip_dirs(args.skip_dirs)
     functions = _parse_functions(args.functions)
     files = iter_py_files(
@@ -778,11 +684,9 @@ def cmd_regex(args: argparse.Namespace) -> int:
         include_symlinks=args.include_symlinks,
         skip_dirs=skip_dirs,
     )
-
     if not files:
         print("No Python files found.")
         return 0
-
     if not args.quiet:
         print(f"Found {len(files)} Python files")
         print(f"Method: {args.method}, convert: {args.convert}")
@@ -791,7 +695,6 @@ def cmd_regex(args: argparse.Namespace) -> int:
             print("DRY RUN - no files will be modified")
         if args.backup:
             print(f"Backup suffix: {args.backup_suffix}")
-
     results: list[FileResult] = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {
@@ -809,10 +712,8 @@ def cmd_regex(args: argparse.Namespace) -> int:
         }
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
-
     modified = 0
     errors = 0
-
     for result in sorted(results, key=lambda r: str(r.path)):
         if result.status == "error":
             errors += 1
@@ -829,14 +730,12 @@ def cmd_regex(args: argparse.Namespace) -> int:
                     print(result.diff)
         elif args.verbose and result.status == "unchanged":
             print(f"UNCHANGED {result.path}: {result.message}")
-
     if not args.quiet:
         print("-" * 40)
         print("Summary:")
         print(f"  Total files: {len(files)}")
         print(f"  Modified/would modify: {modified}")
         print(f"  Errors: {errors}")
-
     return 1 if errors else 0
 
 
@@ -847,24 +746,18 @@ def cmd_extract(args: argparse.Namespace) -> int:
         include_symlinks=args.include_symlinks,
         skip_dirs=skip_dirs,
     )
-
     if not files:
         print("No Python files found.")
         return 0
-
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-
     if not args.quiet:
         print(f"Extracting regex patterns from {len(files)} files into {output_dir}")
-
     progress = None
     if _tqdm is not None and not args.quiet:
         progress = _tqdm(total=len(files), desc="Progress", unit="file")
-
     processed = 0
     total_patterns = 0
-
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_workers) as pool:
         futures = {pool.submit(extract_regex_from_file, path, output_dir): path for path in files}
         for future in concurrent.futures.as_completed(futures):
@@ -875,14 +768,11 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 progress.update(1)
             if count and not args.quiet:
                 print(f"Processed {path} with {count} regex patterns.")
-
     if progress is not None:
         progress.close()
-
     if not args.quiet:
         print(f"Scanning complete. Processed {processed} files.")
         print(f"Total regex patterns extracted: {total_patterns}")
-
     return 0
 
 
@@ -891,9 +781,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="pyescape_tool.py",
         description="Find/fix invalid Python escape sequences and regex literals.",
     )
-
     subparsers = parser.add_subparsers(dest="command", required=True)
-
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "paths",
@@ -929,7 +817,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show detailed output.",
     )
-
     p_esc = subparsers.add_parser(
         "escapes",
         parents=[common],
@@ -948,7 +835,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fix strategy (default: r-prefix).",
     )
     p_esc.set_defaults(func=cmd_escapes)
-
     p_back = subparsers.add_parser(
         "backslashes",
         parents=[common],
@@ -961,7 +847,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply fixes automatically.",
     )
     p_back.set_defaults(func=cmd_backslashes)
-
     p_re = subparsers.add_parser(
         "regex",
         parents=[common],
@@ -1001,7 +886,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated re.* function names to process.",
     )
     p_re.set_defaults(func=cmd_regex)
-
     p_ext = subparsers.add_parser(
         "extract",
         parents=[common],
@@ -1020,7 +904,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Thread workers for extraction (default: 8).",
     )
     p_ext.set_defaults(func=cmd_extract)
-
     return parser
 
 

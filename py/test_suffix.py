@@ -2,7 +2,6 @@ import sys
 from collections import deque
 from multiprocessing import Pool
 from pathlib import Path
-
 from dh import get_files
 
 MAX_QUEUE = 16

@@ -16,8 +16,6 @@ except ImportError:
 
 
 class FaEdit(App):
-    """Simple Persian Text Editor for Termux using Textual & faprint."""
-
     CSS = """
     Screen {
         layout: vertical;
@@ -43,7 +41,6 @@ class FaEdit(App):
         overflow-y: scroll;
     }
     """
-
     BINDINGS = [
         Binding("ctrl+s", "save_and_exit", "Save & Exit", show=True),
         Binding("ctrl+q", "quit_without_saving", "Quit Without Saving", show=True),
@@ -53,7 +50,6 @@ class FaEdit(App):
         super().__init__()
         self.filename = filename
         self.file_content = ""
-
         if os.path.exists(self.filename):
             try:
                 with open(self.filename, "r", encoding="utf-8") as f:
@@ -66,21 +62,17 @@ class FaEdit(App):
         yield Static(" Input (Logical Text) ", id="editor-title")
         yield TextArea(self.file_content, id="editor")
         yield Static(" Live Preview (faprint - Reshaped RTL) ", id="preview-title")
-
         initial_formatted = format_persian(self.file_content) if self.file_content else ""
         with Vertical(id="preview-container"):
             yield Static(initial_formatted, id="preview")
-
         yield Footer()
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        """Update live faprint preview when text changes."""
         raw_text = event.text_area.text
         formatted_text = format_persian(raw_text) if raw_text else ""
         self.query_one("#preview", Static).update(formatted_text)
 
     def action_save_and_exit(self) -> None:
-        """Save the standard text to file and exit."""
         text_to_save = self.query_one("#editor", TextArea).text
         try:
             with open(self.filename, "w", encoding="utf-8") as f:
@@ -91,7 +83,6 @@ class FaEdit(App):
         self.exit()
 
     def action_quit_without_saving(self) -> None:
-        """Exit without saving changes."""
         self.exit()
 
 
@@ -99,7 +90,6 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python faedit.py <filename>")
         sys.exit(1)
-
     filename = sys.argv[1]
     app = FaEdit(filename)
     app.run()

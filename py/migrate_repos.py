@@ -28,25 +28,21 @@ def migrate_repository(repo_path):
     repo_name = repo_path.name
     new_repo_path = f"{NEW_OWNER}/{repo_name}"
     print(f"\nMigrating: {repo_name}")
-
     result = run_command(["git", "rev-parse", "--is-bare-repository"], cwd=repo_path)
     if result.stdout.strip() != "false":
         print(f"Skipping {repo_name}: repository is bare.")
         return
     run_command(["git", "rev-parse", "--show-toplevel"], cwd=repo_path)
-
     status = run_command(["git", "status", "--porcelain"], cwd=repo_path)
     if status.stdout.strip():
         print(f"Uncommitted changes found in {repo_name}; committing...")
         run_command(["git", "add", "-A"], cwd=repo_path)
         run_command(["git", "commit", "-m", COMMIT_MESSAGE], cwd=repo_path)
-
     print(f"Creating remote repository {new_repo_path}...")
     run_command(
         ["gh", "repo", "create", new_repo_path, "--public", "--confirm"],
         cwd=repo_path,
     )
-
     remote_url = f"git@github.com:{new_repo_path}.git"
     print(f"Setting origin to {remote_url}...")
     remotes = run_command(["git", "remote"], cwd=repo_path).stdout.splitlines()
@@ -54,7 +50,6 @@ def migrate_repository(repo_path):
         run_command(["git", "remote", "set-url", "origin", remote_url], cwd=repo_path)
     else:
         run_command(["git", "remote", "add", "origin", remote_url], cwd=repo_path)
-
     print("Pushing all branches and tags...")
     run_command(["git", "push", "-u", "origin", "--all"], cwd=repo_path)
     run_command(["git", "push", "origin", "--tags"], cwd=repo_path)
@@ -70,18 +65,14 @@ def migrate():
         if entry.name in SKIP_DIRS:
             print(f"Skipping excluded directory: {entry.name}")
             continue
-
         repo_path = Path(entry.path)
-
         if not (repo_path / ".git").is_dir():
             continue
-
         try:
             migrate_repository(repo_path)
         except RuntimeError as exc:
             failures.append((entry.name, str(exc)))
             print(f"Migration failed for {entry.name}: {exc}", file=sys.stderr)
-
     if failures:
         print(f"\nFinished with {len(failures)} migration failure(s):", file=sys.stderr)
         for repo_name, error in failures:

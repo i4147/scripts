@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import hashlib
 import multiprocessing as mp
@@ -72,11 +71,9 @@ def find_duplicates(
     follow_symlinks: bool,
     log,
 ) -> list[list[Path]]:
-
     by_size: dict[int, list[Path]] = defaultdict(list)
     seen_inodes: set[tuple[int, int]] = set()
     n_files = 0
-
     for p in walk_files(roots, follow_symlinks):
         try:
             st = p.stat()
@@ -90,13 +87,10 @@ def find_duplicates(
             continue
         seen_inodes.add(key)
         by_size[st.st_size].append(p)
-
     log(f"Scanned {n_files} file(s).")
-
     size_groups = {s: ps for s, ps in by_size.items() if len(ps) > 1}
     if not size_groups:
         return []
-
     size_of: dict[str, int] = {}
     partial_tasks: list[tuple[str, int | None]] = []
     for size, paths in size_groups.items():
@@ -104,9 +98,7 @@ def find_duplicates(
             sp = str(p)
             size_of[sp] = size
             partial_tasks.append((sp, PARTIAL_SIZE))
-
     log(f"{len(partial_tasks)} candidate(s) share a size; partial-hashing...")
-
     partial_groups: dict[tuple[int, str], list[Path]] = defaultdict(list)
     with mp.Pool(processes=workers) as pool:
         for path, digest, _read, err in pool.imap_unordered(_hash_worker, partial_tasks, chunksize=32):
@@ -114,17 +106,13 @@ def find_duplicates(
                 log(f"WARN: {path}: {err}")
                 continue
             partial_groups[(size_of[path], digest)].append(Path(path))
-
     full_tasks: list[tuple[str, int | None]] = []
     for paths in partial_groups.values():
         if len(paths) > 1:
             full_tasks.extend((str(p), None) for p in paths)
-
     if not full_tasks:
         return []
-
     log(f"{len(full_tasks)} candidate(s) share a partial hash; full-hashing...")
-
     full_groups: dict[tuple[int, str], list[Path]] = defaultdict(list)
     with mp.Pool(processes=workers) as pool:
         for path, digest, size, err in pool.imap_unordered(_hash_worker, full_tasks, chunksize=1):
@@ -132,7 +120,6 @@ def find_duplicates(
                 log(f"WARN: {path}: {err}")
                 continue
             full_groups[(size, digest)].append(Path(path))
-
     return [paths for paths in full_groups.values() if len(paths) > 1]
 
 
@@ -152,7 +139,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--follow-symlinks", action="store_true", help="Follow symlinks when walking directories")
     ap.add_argument("-q", "--quiet", action="store_true", help="Suppress progress messages")
     args = ap.parse_args(argv)
-
     for p in args.paths:
         if not p.exists():
             print(f"error: path does not exist: {p}", file=sys.stderr)
@@ -163,7 +149,6 @@ def main(argv: list[str] | None = None) -> int:
             print(msg, file=sys.stderr)
 
     log(f"Scanning {len(args.paths)} root(s) with {args.workers} worker(s)...")
-
     groups = find_duplicates(
         roots=list(args.paths),
         workers=max(1, args.workers),
@@ -171,11 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         follow_symlinks=args.follow_symlinks,
         log=log,
     )
-
     if not groups:
         print("No duplicates found.")
         return 0
-
     prepared: list[tuple[list[Path], int]] = []
     total_redundant = 0
     total_bytes = 0
@@ -188,13 +171,11 @@ def main(argv: list[str] | None = None) -> int:
         prepared.append((paths, sz))
         total_redundant += len(paths) - 1
         total_bytes += sz * (len(paths) - 1)
-
     mode = "APPLY" if args.apply else "DRY-RUN"
     print(
         f"=== {mode}: {len(prepared)} group(s), {total_redundant} redundant "
         f"file(s), {human_size(total_bytes)} reclaimable ===\n"
     )
-
     removed = 0
     reclaimed = 0
     for i, (paths, sz) in enumerate(prepared, 1):
@@ -212,7 +193,6 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(f"  REMOVE   {p}")
         print()
-
     if args.apply:
         print(f"Removed {removed} file(s), reclaimed {human_size(reclaimed)}.")
     else:

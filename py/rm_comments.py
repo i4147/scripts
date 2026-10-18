@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed

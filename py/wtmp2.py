@@ -3,7 +3,6 @@ import pathlib
 import shutil
 import sys
 import time
-
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 

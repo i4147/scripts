@@ -5,7 +5,6 @@ import pathlib
 import subprocess
 import sys
 from distutils.command.build import build
-
 import setuptools
 from pkg_resources import parse_version
 from setuptools import find_packages, setup

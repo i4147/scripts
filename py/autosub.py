@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 import wave
-
 import requests
 from autosub.constants import GOOGLE_SPEECH_API_KEY, GOOGLE_SPEECH_API_URL, LANGUAGE_CODES
 from autosub.formatters import FORMATTERS

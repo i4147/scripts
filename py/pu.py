@@ -2,8 +2,9 @@ import subprocess
 import sys
 from pathlib import Path
 from rapidfuzz import fuzz
-
 from pip._internal.cli.main import main as pip_main
+
+
 def uninstall(packages):
     args = ["uninstall", *packages]
     return pip_main(args)

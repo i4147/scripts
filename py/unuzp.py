@@ -1,5 +1,4 @@
 import os
-
 from dh import run_command
 from termcolor import cprint
 

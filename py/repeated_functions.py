@@ -411,7 +411,6 @@ def is_within_directory(directory, target):
 def safe_extract_stream(tar, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-
     for member in tar:
         if member is None:
             continue
@@ -1714,15 +1713,12 @@ def create_chunks(lines: list[str]) -> list[list[str]]:
     chunks = []
     current_chunk = []
     current_size = 0
-
     for line in lines:
         line_size = len(line) + 1
-
         if current_size + line_size > MAX_CHUNK_SIZE and current_chunk:
             chunks.append(current_chunk)
             current_chunk = []
             current_size = 0
-
         if line_size > MAX_CHUNK_SIZE:
             if current_chunk:
                 chunks.append(current_chunk)
@@ -1732,10 +1728,8 @@ def create_chunks(lines: list[str]) -> list[list[str]]:
         else:
             current_chunk.append(line)
             current_size += line_size
-
     if current_chunk:
         chunks.append(current_chunk)
-
     return chunks
 
 
@@ -1811,10 +1805,8 @@ def remove_blank_lines(text: str | Path) -> str:
     content = text
     if isinstance(text, Path):
         content = text.read_text(encoding="utf-8")
-
     if not isinstance(text, (str, Path)):
         return str(text)
-
     if isinstance(text, str) and Path(text).exists():
         content = Path(text).read_text(encoding="utf-8")
     lines = content.splitlines(keepends=True)
@@ -1886,14 +1878,11 @@ def read_repos(file_path: Path) -> list[str]:
     if not file_path.exists():
         print(f"Error: {file_path} does not exist")
         sys.exit(1)
-
     with open(file_path) as f:
         repos = [line.strip() for line in f if line.strip()]
-
     if not repos:
         print(f"Error: No repositories found in {file_path}")
         sys.exit(1)
-
     return repos
 
 
@@ -1904,13 +1893,9 @@ def is_likely_text_file(file_path):
 def find_text_files(root_dir=".", extensions=TEXT_EXTENSIONS):
     root_path = Path(root_dir)
     text_files = []
-
     for ext in extensions:
         text_files.extend(root_path.rglob(f"*{ext}"))
-
     text_files = list(set(text_files))
-
     text_files = [f for f in text_files if is_likely_text_file(f)]
     text_files.sort()
-
     return text_files

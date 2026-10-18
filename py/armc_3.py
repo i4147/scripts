@@ -3,53 +3,39 @@ import re
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Tuple
 from dh import get_pyfiles
-
-MAX_WORKERS: Final[int] = 4
-PRESERVE_PATTERNS: Final[tuple[str, ...]] = (
-    r"^#!",
-    r"#\s*type:",
-    r"#\s*fmt:",
-    r"#\s*pragma:",
-    r"#\s*noqa",
-    r"#\s*pylint:",
-    r"#\s*flake8:",
-    r"#\s*mypy:",
-)
-
-
-@dataclass(slots=True)
-class FileProcessingResult:
-    file_path: Path
-    was_modified: bool
-    removed_count: int
-    elapsed_ms: float
-    syntax_valid: bool
 
 
 class CommentRemover:
-    __slots__ = ("preserve_regex",)
-
     def __init__(self) -> None:
-        self.preserve_regex = re.compile("|".join(PRESERVE_PATTERNS))
+        self.preserve_patterns = [
+            r"^#!",
+            r"#\s*type:",
+            r"#\s*fmt:",
+            r"#\s*pragma:",
+            r"#\s*noqa",
+            r"#\s*pylint:",
+            r"#\s*flake8:",
+            r"#\s*mypy:",
+        ]
+        self.preserve_regex = re.compile("|".join(self.preserve_patterns))
 
-    def remove_comments(self, content: str) -> tuple[str, int]:
+    def remove_comments(self, content: str) -> Tuple[str, int]:
         lines = content.splitlines(keepends=True)
-        modified_lines: list[str] = []
+        modified_lines = []
         removed_count = 0
         in_string = False
-        string_char: str | None = None
+        string_char = None
+        escape_next = False
         for line in lines:
-            new_line_chars: list[str] = []
+            new_line_chars = []
             i = 0
+            comment_start = -1
             in_comment = False
-            escape_next = False
             while i < len(line):
                 char = line[i]
-
                 if escape_next:
                     if not in_comment:
                         new_line_chars.append(char)
@@ -62,26 +48,32 @@ class CommentRemover:
                         new_line_chars.append(char)
                     i += 1
                     continue
-
                 if not in_comment and char in ('"', "'"):
                     if not in_string:
                         in_string = True
                         string_char = char
+                        new_line_chars.append(char)
                     elif string_char == char:
                         in_string = False
                         string_char = None
-                    new_line_chars.append(char)
+                        new_line_chars.append(char)
+                    else:
+                        new_line_chars.append(char)
                     i += 1
                     continue
-
                 if not in_string and char == "#" and not in_comment:
                     remaining_line = line[i:]
-                    if self.preserve_regex.search(remaining_line):
+                    is_preserved = False
+                    for pattern in self.preserve_patterns:
+                        if re.search(pattern, remaining_line):
+                            is_preserved = True
+                            break
+                    if is_preserved:
                         new_line_chars.extend(line[i:])
                         break
                     else:
                         in_comment = True
-
+                        comment_start = i
                         while new_line_chars and new_line_chars[-1] in (" ", "\t"):
                             new_line_chars.pop()
                         i += 1
@@ -89,18 +81,24 @@ class CommentRemover:
                 if not in_comment:
                     new_line_chars.append(char)
                 i += 1
-
-            result_line = "".join(new_line_chars)
-
-            if line.endswith("\n") and not result_line.endswith("\n"):
-                result_line += "\n"
-            modified_lines.append(result_line)
-            if in_comment:
-                removed_count += 1
+            if not in_comment and comment_start == -1:
+                modified_lines.append("".join(new_line_chars))
+            else:
+                if new_line_chars and new_line_chars[-1] == "\n":
+                    modified_lines.append("".join(new_line_chars))
+                else:
+                    result_line = "".join(new_line_chars)
+                    if line.endswith("\n") and not result_line.endswith("\n"):
+                        result_line += "\n"
+                    modified_lines.append(result_line)
+                if in_comment:
+                    removed_count += 1
+            if in_string and string_char:
+                pass
         return "".join(modified_lines), removed_count
 
 
-def validate_python_syntax(content: str) -> tuple[bool, str]:
+def validate_python_syntax(content: str) -> Tuple[bool, str]:
     try:
         ast.parse(content)
         return True, ""
@@ -110,7 +108,7 @@ def validate_python_syntax(content: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def process_file(file_path: Path) -> FileProcessingResult:
+def process_file(file_path: Path) -> Tuple[Path, bool, int, float, bool]:
     start_time = time.perf_counter()
     try:
         original_content = file_path.read_text(encoding="utf-8")
@@ -123,28 +121,31 @@ def process_file(file_path: Path) -> FileProcessingResult:
             if is_valid:
                 file_path.write_text(modified_content, encoding="utf-8")
                 was_modified = True
+                syntax_valid = True
             else:
                 syntax_valid = False
-                print(
-                    f"  ⚠ Warning: {file_path} would have syntax error, skipping write: {error_msg}",
-                    file=sys.stderr,
-                )
+                was_modified = False
+                print(f"  ⚠ Warning: {file_path} would have syntax error, skipping write: {error_msg}", file=sys.stderr)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        return FileProcessingResult(file_path, was_modified, removed_count, elapsed_ms, syntax_valid)
+        return file_path, was_modified, removed_count, elapsed_ms, syntax_valid
     except Exception as e:
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         print(f"Error processing {file_path}: {e}", file=sys.stderr)
-        return FileProcessingResult(file_path, False, 0, elapsed_ms, False)
+        return file_path, False, 0, elapsed_ms, False
 
 
-def format_report(result: FileProcessingResult) -> str:
-    if not result.syntax_valid:
-        return f"{result.file_path} {result.elapsed_ms:.0f}ms (SKIPPED - syntax error)"
-    if result.was_modified:
-        count = result.removed_count
-        plural = "s" if count != 1 else ""
-        return f"{result.file_path} {result.elapsed_ms:.0f}ms ({count} comment{plural} removed)"
-    return f"{result.file_path} {result.elapsed_ms:.0f}ms (no change)"
+def find_python_files(directory: Path) -> list:
+    return list(directory.rglob("*.py"))
+
+
+def format_report(file_path: Path, was_modified: bool, count: int, elapsed_ms: float, syntax_valid: bool) -> str:
+    if not syntax_valid:
+        return f"{file_path} {elapsed_ms:.0f}ms (SKIPPED - syntax error)"
+    elif was_modified:
+        status = f"{count} comment{'s' if count != 1 else ''} removed"
+        return f"{file_path} {elapsed_ms:.0f}ms ({status})"
+    else:
+        return f"{file_path} {elapsed_ms:.0f}ms (no change)"
 
 
 def main() -> None:
@@ -154,30 +155,31 @@ def main() -> None:
         print("No Python files found.")
         return
     print(f"Found {len(python_files)} Python file(s) to process\n")
+    results = []
     total_start = time.perf_counter()
-    results: list[FileProcessingResult] = []
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with ProcessPoolExecutor(max_workers=4) as executor:
         future_to_file = {executor.submit(process_file, file_path): file_path for file_path in python_files}
         for future in as_completed(future_to_file):
-            file_path = future_to_file[future]
             try:
                 result = future.result()
                 results.append(result)
             except Exception as e:
+                file_path = future_to_file[future]
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
-                results.append(FileProcessingResult(file_path, False, 0, 0, False))
     total_elapsed = (time.perf_counter() - total_start) * 1000
-    total_modified = 0
+    results.sort(key=lambda x: str(x[0]))
     total_removed = 0
+    total_modified = 0
     total_skipped = 0
-    for result in results:
-        print(format_report(result))
-        if result.was_modified:
-            total_removed += result.removed_count
+    for file_path, was_modified, count, elapsed_ms, syntax_valid in results:
+        print(format_report(file_path, was_modified, count, elapsed_ms, syntax_valid))
+        if was_modified:
+            total_removed += count
             total_modified += 1
-        elif not result.syntax_valid and result.removed_count > 0:
+        elif not syntax_valid and count > 0:
             total_skipped += 1
-    print(f"\nSummary: {total_modified} file(s) modified, {total_removed} comment(s) removed")
+    print("-" * 80)
+    print(f"Summary: {total_modified} file(s) modified, {total_removed} comment(s) removed")
     if total_skipped > 0:
         print(f"  ⚠ {total_skipped} file(s) skipped due to syntax errors")
     print(f"Total time: {total_elapsed:.0f}ms")

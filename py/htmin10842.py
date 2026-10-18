@@ -46,7 +46,6 @@ def find_html_files(paths: list[Path]) -> list[Path]:
             for ext in html_extensions:
                 html_files.extend(path.rglob(f"*{ext}"))
                 html_files.extend(path.rglob(f"*{ext.upper()}"))
-
     seen = set()
     unique_files = []
     for file in html_files:
@@ -59,9 +58,7 @@ def find_html_files(paths: list[Path]) -> list[Path]:
 def minify_single_file(file_path: Path) -> MinifyResult:
     try:
         original_size = file_path.stat().st_size
-
         temp_path = file_path.with_suffix(file_path.suffix + ".tmp")
-
         cmd = [
             "html-minifier-terser",
             str(file_path),
@@ -87,7 +84,6 @@ def minify_single_file(file_path: Path) -> MinifyResult:
                 success=False,
                 error=result.stderr or "Unknown error",
             )
-
         if not temp_path.exists():
             return MinifyResult(
                 path=file_path,
@@ -96,9 +92,7 @@ def minify_single_file(file_path: Path) -> MinifyResult:
                 success=False,
                 error="Minified output not created",
             )
-
         minified_size = temp_path.stat().st_size
-
         temp_path.replace(file_path)
         return MinifyResult(path=file_path, original_size=original_size, minified_size=minified_size, success=True)
     except subprocess.TimeoutExpired:
@@ -186,22 +180,18 @@ Examples:
     )
     parser.add_argument("--no-parallel", action="store_true", help="Disable parallel processing")
     args = parser.parse_args()
-
     if not check_html_minifier():
         print("Error: html-minifier-terser is not installed or not in PATH")
         print("Install it with: npm install -g html-minifier-terser")
         sys.exit(1)
-
     if args.paths:
         paths = [Path(p) for p in args.paths]
     else:
         paths = [Path.cwd()]
-
     for path in paths:
         if not path.exists():
             print(f"Error: Path '{path}' does not exist")
             sys.exit(1)
-
     print("Finding HTML files...")
     html_files = find_html_files(paths)
     if not html_files:
@@ -209,9 +199,7 @@ Examples:
         return
     print(f"Found {len(html_files)} HTML file(s)")
     print(f"Using {args.workers} worker(s) for parallel processing\n")
-
     base_path = Path.cwd()
-
     results = []
     if args.no_parallel or len(html_files) == 1:
         for file in html_files:
@@ -241,7 +229,6 @@ Examples:
                     print(f"  ✓ {rel_path} | -{format_size(savings)} | {percent:.1f}%")
                 else:
                     print(f"  ✗ {file} | Error: {result.error}")
-
     print_results(results, base_path)
 
 

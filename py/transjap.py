@@ -1,7 +1,6 @@
 import re
 import sys
 from pathlib import Path
-
 from deep_translator import GoogleTranslator
 
 non_english_pattern = re.compile(r"[^\x00-\x7F]")

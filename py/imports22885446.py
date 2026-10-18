@@ -21,7 +21,6 @@ class PythonImportExtractor:
     @staticmethod
     def _get_stdlib_modules() -> Set[str]:
         stdlib = set(sys.builtin_module_names)
-
         stdlib.update({
             "abc",
             "aifc",
@@ -240,7 +239,6 @@ class PythonImportExtractor:
             "tomllib",
             "zoneinfo",
         })
-
         return stdlib
 
     @staticmethod
@@ -249,7 +247,6 @@ class PythonImportExtractor:
             if not os.path.exists(pip_file):
                 logger.warning(f"pip packages file not found: {pip_file}")
                 return set()
-
             packages = set()
             with open(pip_file, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
@@ -291,7 +288,6 @@ class PythonImportExtractor:
             logger.debug(f"Syntax error in {filename}: {e}")
         except Exception as e:
             logger.debug(f"Error parsing {filename}: {e}")
-
         return imports
 
     def _identify_local_modules(self, directory: str = ".") -> None:
@@ -301,7 +297,6 @@ class PythonImportExtractor:
                 for d in dirs
                 if d not in {".git", "__pycache__", ".venv", "venv", "env", ".egg-info", "dist", "build"}
             ]
-
             for file in files:
                 if file.endswith((".py", ".pyw")) or (os.path.isfile(os.path.join(root, file)) and "." not in file):
                     module_name = file.replace(".py", "").replace(".pyw", "")
@@ -330,7 +325,6 @@ class PythonImportExtractor:
                             logger.debug(f"Error reading {info.filename} from {zippath}: {e}")
         except Exception as e:
             logger.debug(f"Error processing zip {zippath}: {e}")
-
         return imports
 
     def extract_from_tar(self, tarpath: str) -> Set[str]:
@@ -347,7 +341,6 @@ class PythonImportExtractor:
                             logger.debug(f"Error reading {member.name} from {tarpath}: {e}")
         except Exception as e:
             logger.debug(f"Error processing tar {tarpath}: {e}")
-
         return imports
 
     def extract_from_whl(self, whlpath: str) -> Set[str]:
@@ -360,40 +353,31 @@ class PythonImportExtractor:
             return self.extract_from_tar(filepath)
         elif filepath.endswith((".py", ".pyw")) or (os.path.isfile(filepath) and "." not in os.path.basename(filepath)):
             return self.extract_from_file(filepath)
-
         return set()
 
     def filter_packages(self, imports: Set[str]) -> Set[str]:
         pip_packages = set()
-
         for imp in imports:
             imp_lower = imp.lower()
-
             if imp in self.stdlib_modules or imp_lower in self.stdlib_modules:
                 continue
-
             if imp in self.local_modules or imp_lower in self.local_modules:
                 continue
-
             if imp_lower in self.pip_packages or imp.replace("_", "-") in self.pip_packages:
                 pip_packages.add(imp_lower)
-
         return pip_packages
 
 
 def find_python_files(directory: str = ".") -> List[str]:
     python_files = []
-
     for root, dirs, files in os.walk(directory):
         dirs[:] = [
             d for d in dirs if d not in {".git", "__pycache__", ".venv", "venv", "env", ".egg-info", "dist", "build"}
         ]
-
         for file in files:
             filepath = os.path.join(root, file)
             if os.path.islink(filepath):
                 continue
-
             if file.endswith((".py", ".pyw")):
                 python_files.append(filepath)
             elif "." not in file:
@@ -406,7 +390,6 @@ def find_python_files(directory: str = ".") -> List[str]:
                     pass
             elif file.endswith((".zip", ".whl", ".tar.gz", ".tar.xz", ".tar.zst")):
                 python_files.append(filepath)
-
     return python_files
 
 
@@ -435,48 +418,33 @@ def main():
         "--workers", type=int, default=cpu_count(), help=f"Number of worker processes (default: {cpu_count()})"
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-
     args = parser.parse_args()
-
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-
     logger.info(f"Scanning directory: {args.directory}")
-
     extractor = PythonImportExtractor(args.pip_file)
-
     logger.info("Identifying local modules...")
     extractor._identify_local_modules(args.directory)
     logger.info(f"Found {len(extractor.local_modules)} local modules")
-
     logger.info("Finding Python files...")
     python_files = find_python_files(args.directory)
     logger.info(f"Found {len(python_files)} Python files/archives")
-
     if not python_files:
         logger.warning("No Python files found")
         return
-
     logger.info(f"Processing files with {args.workers} workers...")
     all_packages = defaultdict(set)
-
     with Pool(args.workers) as pool:
         results = pool.map(process_single_file, [(f, extractor) for f in python_files])
-
     for filepath, packages in results:
         for package in packages:
             all_packages[package].add(filepath)
-
     sorted_packages = sorted(all_packages.keys())
-
     logger.info(f"Found {len(sorted_packages)} unique packages")
-
     with open(args.output, "w") as f:
         for package in sorted_packages:
             f.write(f"{package}\n")
-
     logger.info(f"Requirements written to {args.output}")
-
     if args.verbose:
         logger.info("\nPackages found:")
         for package in sorted_packages:

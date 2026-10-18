@@ -29,14 +29,11 @@ def is_executable(filepath):
 
 
 def determine_target_mode(filepath):
-
     if is_executable(filepath):
         return None
-
     parent_dir = os.path.basename(os.path.dirname(filepath))
     if has_shebang(filepath) or parent_dir == "bin":
         return 0o755
-
     return 0o644
 
 
@@ -61,34 +58,26 @@ def collect_files(root_path="."):
     files_to_skip = []
     files_make_executable = []
     all_files = 0
-
     print("Scanning files...")
     for dirpath, dirnames, filenames in os.walk(root_path):
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
-
             if os.path.islink(filepath):
                 continue
-
             all_files += 1
             target_mode = determine_target_mode(filepath)
-
             if target_mode is None:
                 files_to_skip.append(filepath)
                 continue
-
             if needs_chmod(filepath, target_mode):
                 files_to_change.append((filepath, target_mode))
                 if target_mode == 0o755:
                     files_make_executable.append(filepath)
-
     return files_to_change, files_to_skip, files_make_executable, all_files
 
 
 def process_files(root_path=".", num_workers=None):
-
     files_to_change, files_to_skip, files_make_executable, total_files = collect_files(root_path)
-
     print(f"\n{'=' * 60}")
     print(f"Scan Results:")
     print(f"  Total files found: {total_files}")
@@ -97,22 +86,17 @@ def process_files(root_path=".", num_workers=None):
     print(f"  Will set to 0644: {len(files_to_change) - len(files_make_executable)}")
     print(f"  Total changes needed: {len(files_to_change)}")
     print(f"{'=' * 60}")
-
     if not files_to_change:
         print("\nAll files already have correct permissions!")
         return
-
     if num_workers is None:
         num_workers = min(cpu_count(), len(files_to_change))
-
     print(f"\nUsing {num_workers} workers\n")
-
     success_count = 0
     failed_count = 0
     failures = []
     made_executable = 0
     made_standard = 0
-
     with Pool(processes=num_workers) as pool:
         results = list(
             tqdm(
@@ -123,7 +107,6 @@ def process_files(root_path=".", num_workers=None):
                 ncols=100,
             )
         )
-
     for success, filepath, error, mode in results:
         if success:
             success_count += 1
@@ -134,7 +117,6 @@ def process_files(root_path=".", num_workers=None):
         else:
             failed_count += 1
             failures.append((filepath, error))
-
     print(f"\n{'=' * 60}")
     print(f"Results:")
     print(f"  ✓ Made executable (0755): {made_executable}")
@@ -158,7 +140,6 @@ def show_examples(files_to_change, files_to_skip, files_make_executable, num_exa
             print(f"  644 -> 755  {f}")
         if len(files_make_executable) > num_examples:
             print(f"  ... and {len(files_make_executable) - num_examples} more")
-
     standard_files = [f for f, m in files_to_change if m == 0o644]
     if standard_files:
         print(f"\nExamples of files to set to 0644:")
@@ -167,7 +148,6 @@ def show_examples(files_to_change, files_to_skip, files_make_executable, num_exa
             print(f"  {current} -> 644  {f}")
         if len(standard_files) > num_examples:
             print(f"  ... and {len(standard_files) - num_examples} more")
-
     if files_to_skip:
         print(f"\nExamples of files skipped (already executable):")
         for f in files_to_skip[:num_examples]:
@@ -185,7 +165,6 @@ Rules:
   - Files that are already executable: no changes
   - Files with shebang (#!) or in 'bin' directory: set to 0755
   - All other files: set to 0644
-
 Examples:
   %(prog)s                    # Process current directory
   %(prog)s /path/to/project   # Process specific path
@@ -202,13 +181,10 @@ Examples:
         "--dry-run", action="store_true", help="Show what would be done without actually changing permissions"
     )
     parser.add_argument("--show-examples", action="store_true", help="Show example files that would be changed")
-
     args = parser.parse_args()
-
     if args.dry_run:
         print("DRY RUN - No changes will be made\n")
         files_to_change, files_to_skip, files_make_executable, total_files = collect_files(args.path)
-
         print(f"\n{'=' * 60}")
         print(f"Analysis Results:")
         print(f"  Total files: {total_files}")
@@ -217,7 +193,6 @@ Examples:
         print(f"  Set to 0644: {len(files_to_change) - len(files_make_executable)}")
         print(f"  Total changes: {len(files_to_change)}")
         print(f"{'=' * 60}")
-
         if args.show_examples:
             show_examples(files_to_change, files_to_skip, files_make_executable)
     else:

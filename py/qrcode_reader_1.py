@@ -1,10 +1,13 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Write a Python script that reads an image file from a path supplied on the command line and detects every QR code contained in that image. The script should report how many QR codes were found and, for each one, display its decoded text content, its barcode/code type, and its bounding position within the image (left, top, width, height). If no QR code is present, it should clearly inform the user. If the file does not exist, it should print a clear error message and exit with a non-zero status. Any other processing error should be reported to the user in a readable way without crashing. The script should also return or collect the decoded text of all detected codes so it can be reused by other code. Decoded content should be treated as UTF-8 text. Keep the output human-readable and suitable for a terminal.
 ---"""
+
 from __future__ import annotations
 import sys
 from PIL import Image
 from pyzbar.pyzbar import decode
+
+
 def read_qr_code(image_path):
     try:
         img = Image.open(image_path)
@@ -30,6 +33,8 @@ def read_qr_code(image_path):
     except Exception as e:
         print(f"Error processing image: {e}")
         sys.exit(1)
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python qr_reader.py <image_path>")
@@ -41,6 +46,7 @@ def main():
     if results:
         for k in results:
             print(f" - {k}\n")
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

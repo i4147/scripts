@@ -2,7 +2,6 @@ import json
 from operator import itemgetter
 from pathlib import Path
 from sys import exit
-
 from dh import get_size
 
 

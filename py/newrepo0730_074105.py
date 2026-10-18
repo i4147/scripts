@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import os
 import shutil
 import sys
 from pathlib import Path
-
 from dotenv import load_dotenv
 from git import InvalidGitRepositoryError, NoSuchPathError, Repo
 from github import Github
@@ -21,7 +19,6 @@ def get_dir_name() -> str:
 def copy_gitignore() -> None:
     src = Path.home() / ".gitignore"
     dst = REPO_ROOT / ".gitignore"
-
     if src.exists() and not dst.exists():
         shutil.copy2(src, dst)
         print(f"Copied {src} -> {dst}")
@@ -71,13 +68,11 @@ def get_or_create_github_repo(repo_name: str):
     g = github_client()
     me = g.get_user()
     owner_hint, name = get_remote_owner_and_name(repo_name)
-
     if owner_hint:
         try:
             remote_repo = g.get_repo(repo_name)
         except Exception as e:
             raise SystemExit(f"Could not access remote repo '{repo_name}': {e}")
-
         if remote_repo.owner.login != me.login:
             print(f"Remote repo is owned by '{remote_repo.owner.login}', not '{me.login}'. Forking...")
             fork = me.create_fork(remote_repo)
@@ -85,10 +80,8 @@ def get_or_create_github_repo(repo_name: str):
             print(f"Created fork: {fork_full_name}")
             g.close()
             return fork_full_name, True
-
         g.close()
         return remote_repo.full_name, False
-
     try:
         remote_repo = me.get_repo(name)
         g.close()
@@ -102,7 +95,6 @@ def ensure_origin(repo: Repo, repo_name: str) -> None:
     existing = next((r for r in repo.remotes if r.name == "origin"), None)
     g = github_client()
     me = g.get_user()
-
     if "/" in repo_name:
         remote_repo = g.get_repo(repo_name)
         if remote_repo.owner.login != me.login:
@@ -124,9 +116,7 @@ def ensure_origin(repo: Repo, repo_name: str) -> None:
                 print(f"Error: {result.stderr}")
                 sys.exit(1)
             target_full_name = f"{me.login}/{repo_name}"
-
     g.close()
-
     origin_url = f"git@github.com:{target_full_name}.git"
     if existing:
         if existing.url != origin_url:
@@ -168,13 +158,11 @@ def push_changes(repo: Repo) -> None:
 def main() -> None:
     repo_name = get_dir_name()
     print(f"Repository name: {repo_name}")
-
     copy_gitignore()
     repo = ensure_local_repo()
     ensure_origin(repo, repo_name)
     commit_if_needed(repo)
     push_changes(repo)
-
     print(f"\n✅ Success! Repository '{repo_name}' is now on GitHub or updated there.")
     print(f"View it at: https://github.com/{repo_name}")
 

@@ -7,11 +7,9 @@ encodings = {
     "UTF-32BE": ("utf_32_be", codecs.BOM_UTF32_BE),
     "UTF-32LE": ("utf_32_le", codecs.BOM_UTF32_LE),
 }
-
 with open("text_UTF-8.txt", "rb") as source:
     data = source.read()
     text = data.decode("utf-8")
-
     for name, (encoding, bom) in encodings.items():
         with open("text_{}-BOM.txt".format(name), "wb") as target:
             target.write(bom)

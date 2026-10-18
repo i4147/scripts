@@ -5,7 +5,6 @@ import tarfile
 import zipfile
 from pathlib import Path
 from typing import Any
-
 from dh import get_files, mpf3, runcmd
 
 HERE = "-t" in sys.argv

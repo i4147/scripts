@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -8,7 +7,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import Manager, cpu_count
 from pathlib import Path
 from urllib.parse import urljoin
-
 import requests
 from bs4 import BeautifulSoup
 

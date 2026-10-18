@@ -1,7 +1,6 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-
 import click
 from stringzilla import File, Sha256
 

@@ -2,7 +2,6 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 import requests
-
 from .constants import PYPI_INDEX, DEFAULT_TIMEOUT, MAX_WORKERS
 
 
@@ -25,22 +24,18 @@ class Downloader:
             resp.raise_for_status()
         except requests.RequestException as e:
             raise PackageNotFound(f"Package '{package}' not found: {e}")
-
         data = resp.json()
         if version and version not in data["releases"]:
             raise PackageNotFound(f"Version {version} not found for {package}")
-
         return data
 
     def get_releases(self, package: str, version: Optional[str] = None) -> list[dict]:
         info = self.get_package_info(package, version)
-
         if version:
             releases = info["releases"].get(version, [])
         else:
             latest = info["info"]["version"]
             releases = info["releases"].get(latest, [])
-
         return releases
 
     def _download_file(self, url: str, filename: str) -> tuple[str, bool]:
@@ -57,24 +52,18 @@ class Downloader:
         self, package: str, version: Optional[str] = None, prefer_wheels: bool = True, parallel: bool = True
     ) -> list[str]:
         releases = self.get_releases(package, version)
-
         if not releases:
             raise PackageNotFound(f"No distributions found for {package}")
-
         filtered = self._filter_releases(releases, prefer_wheels)
-
         if not filtered:
             filtered = releases
-
         if parallel and len(filtered) > 1:
             return self._parallel_download(filtered)
-
         return self._serial_download(filtered)
 
     def _filter_releases(self, releases: list[dict], prefer_wheels: bool) -> list[dict]:
         if not prefer_wheels:
             return releases
-
         wheels = [r for r in releases if r["filename"].endswith(".whl")]
         return wheels if wheels else []
 

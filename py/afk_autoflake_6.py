@@ -1,12 +1,39 @@
-from __future__ import annotations
-
 import argparse
+import difflib
 import multiprocessing as mp
 import subprocess
 from pathlib import Path
 
 
-def check_or_fix_imports(path, autofix=False):
+def _make_diff(path):
+    original = Path(path).read_text()
+    result = subprocess.run(
+        [
+            "autoflake",
+            "--remove-all-unused-imports",
+            "--ignore-init-module-imports",
+            "-",
+        ],
+        input=original,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    fixed = result.stdout
+    if fixed == original:
+        return None
+    return "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            fixed.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+        )
+    )
+
+
+def check_or_fix_imports(path, autofix=False, show_diff=False):
     if not Path(path).exists():
         print(f"Error: The file `{path}` does not exist.")
         return
@@ -23,14 +50,19 @@ def check_or_fix_imports(path, autofix=False):
     try:
         result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode == 0:
-            print(f"[{path}] No unused imports found.")
+            return
         elif result.returncode == 1:
             if autofix:
-                print(f"[{path}] Successfully removed unused imports.")
+                print(f"Successfully removed unused imports from `{path}`.")
+            elif show_diff:
+                diff = _make_diff(path)
+                if diff:
+                    print(diff, end="" if diff.endswith("\n") else "\n")
             else:
-                print(f"[{path}] Unused imports found. Run with -a to fix.")
-        else:
-            print(f"[{path}] An error occurred: {result.stderr}")
+                output = (result.stdout or "") + (result.stderr or "")
+                for line in output.splitlines():
+                    if line.strip():
+                        print(f"{path}: {line}")
     except FileNotFoundError:
         print("Error: `autoflake` is not installed. Run `pip install autoflake`.")
 
@@ -48,16 +80,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Automatically remove unused imports",
     )
+    parser.add_argument(
+        "-d",
+        "--diff",
+        action="store_true",
+        help="Show unified diff of the affected lines",
+    )
     args = parser.parse_args()
-
     if args.file:
-        check_or_fix_imports(args.file, args.autofix)
+        check_or_fix_imports(args.file, args.autofix, args.diff)
     else:
         files = sorted(str(p) for p in Path.cwd().glob("*.py"))
-        if not files:
-            print("No .py files found in the current directory.")
-        else:
+        if files:
             with mp.Pool(processes=8) as pool:
-                results = [pool.apply_async(check_or_fix_imports, (f, args.autofix)) for f in files]
+                results = [pool.apply_async(check_or_fix_imports, (f, args.autofix, args.diff)) for f in files]
                 for r in results:
                     r.wait()

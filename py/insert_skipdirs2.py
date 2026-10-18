@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import ast
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path

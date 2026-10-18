@@ -1,32 +1,28 @@
-from __future__ import annotations
-
 import argparse
 import ast
-import io
-import os
+import multiprocessing
 import re
 import sys
 import tarfile
+import tempfile
 import zipfile
 from dataclasses import dataclass, field
-from multiprocessing import Pool
 from pathlib import Path
-from typing import Iterator
 
-try:
-    import zstandard as zstd
-
-    HAS_ZSTD = True
-except ImportError:
-    HAS_ZSTD = False
+RESET = "\x1b[0m"
+BOLD = "\x1b[1m"
+YELLOW = "\x1b[33m"
+RED = "\x1b[31m"
+CYAN = "\x1b[36m"
+GREEN = "\x1b[32m"
 
 
 @dataclass
 class UnusedImport:
     lineno: int
     col_offset: int
-    original_stmt: str
-    unused_names: list[str]
+    statement: str
+    names: list[str]
 
 
 @dataclass
@@ -36,694 +32,522 @@ class FileReport:
     error: str | None = None
 
 
-_USE_COLOR = True
+def _dotted(name: str, asname: str | None) -> tuple[str, str]:
+    bound = asname if asname else name.split(".")[0]
+    full = asname if asname else name
+    return bound, full
 
 
-def _c(code: str, text: str) -> str:
-    if not _USE_COLOR:
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def bold(t: str) -> str:
-    return _c("1", t)
-
-
-def cyan(t: str) -> str:
-    return _c("36", t)
-
-
-def yellow(t: str) -> str:
-    return _c("33", t)
-
-
-def red(t: str) -> str:
-    return _c("31", t)
-
-
-def green(t: str) -> str:
-    return _c("32", t)
-
-
-def dim(t: str) -> str:
-    return _c("2", t)
-
-
-def _is_under_type_checking(node: ast.AST, type_checking_blocks: set[int]) -> bool:
-    return getattr(node, "lineno", -1) in type_checking_blocks
-
-
-def _collect_type_checking_line_ranges(tree: ast.Module) -> set[int]:
-    lines: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.If):
-            continue
-        test = node.test
-        is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-            isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-        )
-        if is_tc:
-            for child in ast.walk(node):
-                if hasattr(child, "lineno"):
-                    lines.add(child.lineno)
-    return lines
-
-
-def _collect_all_entries(tree: ast.Module) -> set[str]:
+def _collect_names(node: ast.AST) -> set[str]:
     names: set[str] = set()
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "__all__":
-                if isinstance(node.value, (ast.List, ast.Tuple)):
-                    for elt in node.value.elts:
-                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                            names.add(elt.value)
-    return names
-
-
-def _collect_used_names(tree: ast.Module) -> set[str]:
-    used: set[str] = set()
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            used.add(node.id)
-
-        elif isinstance(node, ast.Attribute):
-            root = node
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            names.add(child.id)
+        elif isinstance(child, ast.Attribute):
+            root = child
             while isinstance(root, ast.Attribute):
                 root = root.value
             if isinstance(root, ast.Name):
-                used.add(root.id)
-
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            for tok in re.findall(r"\b([A-Za-z_]\w*)\b", node.value):
-                used.add(tok)
-
-    return used
+                names.add(root.id)
+    return names
 
 
-def _import_aliases(node: ast.Import | ast.ImportFrom) -> list[tuple[str, str]]:
-    pairs: list[tuple[str, str]] = []
-    for alias in node.names:
-        original = alias.name
-        local = alias.asname if alias.asname else alias.name.split(".")[0](0)
-        pairs.append((original, local))
-    return pairs
+def _collect_string_uses(tree: ast.AST) -> set[str]:
+    tokens: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            for tok in re.split(r"[,.;:\s\[\](){}\"\'<>]+", node.value):
+                tok = tok.strip()
+                if tok and tok.isidentifier():
+                    tokens.add(tok)
+    return tokens
 
 
-def analyze_source(
-    source: str,
-    path: str,
-    *,
-    is_init: bool = False,
-    ignore_init: bool = False,
-) -> FileReport:
-    report = FileReport(path=path)
+def _collect_all_names(tree: ast.AST) -> set[str]:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__all__":
+                    if isinstance(node.value, (ast.List, ast.Tuple)):
+                        names = set()
+                        for elt in node.value.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                names.add(elt.value)
+                        return names
+    return set()
 
+
+def _is_under_type_checking(
+    node: ast.Import | ast.ImportFrom,
+    tree: ast.Module,
+) -> bool:
+    parent: dict[int, ast.AST] = {}
+    for parent_node in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent_node):
+            parent[id(child)] = parent_node
+    current = parent.get(id(node))
+    while current is not None:
+        if isinstance(current, ast.If):
+            test = current.test
+            if (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+            ):
+                return True
+        current = parent.get(id(current))
+    return False
+
+
+def _is_module_used_in_docstring(
+    tree: ast.Module,
+    module_name: str,
+) -> bool:
+    docstring = ast.get_docstring(tree)
+    return bool(docstring and module_name in docstring)
+
+
+def _get_re_export_names(tree: ast.AST) -> set[str]:
+    re_exports = set()
+    __all__names = _collect_all_names(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                if name in __all__names:
+                    re_exports.add(name)
+    return re_exports
+
+
+def analyse_source(source: str, display_path: str) -> FileReport:
+    report = FileReport(path=display_path)
     try:
-        tree = ast.parse(source, filename=path)
+        tree = ast.parse(source, filename=display_path)
     except SyntaxError as exc:
         report.error = f"SyntaxError: {exc}"
         return report
-
-    if is_init and ignore_init:
-        return report
-
-    tc_lines = _collect_type_checking_line_ranges(tree)
-    all_entries = _collect_all_entries(tree)
-    used_names = _collect_used_names(tree)
-
-    module_doc = ""
-    if (
-        tree.body
-        and isinstance(tree.body[0](0), ast.Expr)
-        and isinstance(tree.body[0](0).value, ast.Constant)
-        and isinstance(tree.body[0](0).value.value, str)
-    ):
-        module_doc = tree.body[0](0).value.value
-
-    source_lines = source.splitlines()
-
+    lines = source.splitlines()
+    used_names: set[str] = set()
+    import_nodes: list[ast.Import | ast.ImportFrom] = []
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.Import, ast.ImportFrom)):
-            continue
-
-        if node.lineno in tc_lines:
-            continue
-
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            import_nodes.append(node)
+        else:
+            used_names |= _collect_names(node)
+    used_names |= _collect_string_uses(tree)
+    re_exports = _get_re_export_names(tree)
+    used_names |= re_exports
+    is_init = display_path.endswith("__init__.py")
+    for node in import_nodes:
         if isinstance(node, ast.ImportFrom) and node.module == "__future__":
             continue
-
-        if any(alias.name == "*" for alias in node.names):
+        if _is_under_type_checking(node, tree):
             continue
-
-        if is_init and isinstance(node, ast.ImportFrom) and (node.level or 0) > 0:
+        if isinstance(node, ast.ImportFrom) and node.module and _is_module_used_in_docstring(tree, node.module):
             continue
-
-        aliases = _import_aliases(node)
-        unused_here: list[str] = []
-
-        for _original, local in aliases:
-            if local in all_entries:
+        unused_names: list[str] = []
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound, full = _dotted(alias.name, alias.asname)
+                if bound not in used_names and (not is_init or bound not in re_exports):
+                    unused_names.append(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if is_init and node.level and node.level > 0:
                 continue
-
-            if local in used_names:
-                continue
-
-            if local in module_doc:
-                continue
-
-            unused_here.append(local)
-
-        if not unused_here:
-            continue
-
-        start = node.lineno - 1
-        end = node.end_lineno
-        original_stmt = "\n".join(source_lines[start:end])
-
-        report.unused.append(
-            UnusedImport(
-                lineno=node.lineno,
-                col_offset=node.col_offset,
-                original_stmt=original_stmt,
-                unused_names=unused_here,
+            for alias in node.names:
+                if alias.name == "*":
+                    break
+                bound, _full = _dotted(alias.name, alias.asname)
+                if bound not in used_names and (not is_init or bound not in re_exports):
+                    unused_names.append(alias.asname or alias.name)
+        if unused_names:
+            raw_line = lines[node.lineno - 1] if node.lineno <= len(lines) else ""
+            report.unused.append(
+                UnusedImport(
+                    lineno=node.lineno,
+                    col_offset=node.col_offset,
+                    statement=raw_line.strip(),
+                    names=unused_names,
+                )
             )
-        )
-
     return report
 
 
-def _remove_names_from_import_line(line: str, names_to_remove: set[str]) -> str | None:
-    m = re.match(r"^(\s*import\s+)(.+)$", line)
-    if m:
-        prefix, rest = m.group(1), m.group(2)
-        kept = [seg.strip() for seg in rest.split(",") if _alias_local_name(seg.strip()) not in names_to_remove]
+def _remove_names_from_import(line: str, names_to_remove: set[str]) -> str | None:
+    stripped = line.strip()
+    if stripped.startswith("import ") and not stripped.startswith("from "):
+        parts = stripped[len("import ") :].split(",")
+        kept = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if " as " in part:
+                part.split(" as ")[0].strip()
+                alias = part.split(" as ")[1].strip()
+                check_name = alias
+            else:
+                check_name = part.split(".")[0]
+            if check_name not in names_to_remove:
+                kept.append(part)
         if not kept:
             return None
-        return prefix + ", ".join(kept)
-
-    m = re.match(r"^(\s*from\s+[\w.]+\s+import\s+)(.+)$", line)
-    if m:
-        prefix, rest = m.group(1), m.group(2)
-        rest_clean = re.sub(r"\s*#.*$", "", rest).rstrip(" \\")
-        kept = [
-            seg.strip()
-            for seg in rest_clean.split(",")
-            if seg.strip() and _alias_local_name(seg.strip()) not in names_to_remove
-        ]
+        indent = line[: len(line) - len(line.lstrip())]
+        return indent + "import " + ", ".join(kept) + "\n"
+    if stripped.startswith("from ") and " import " in stripped:
+        prefix, import_part = stripped.split(" import ", 1)
+        if import_part.strip().startswith("("):
+            paren_content = import_part.strip()[1:]
+            paren_content = paren_content.removesuffix(")")
+            parts = paren_content.split(",")
+            is_parenthesized = True
+        else:
+            parts = import_part.split(",")
+            is_parenthesized = False
+        kept = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if " as " in part:
+                alias = part.split(" as ")[1].strip()
+                check_name = alias
+            else:
+                check_name = part.strip()
+            if check_name not in names_to_remove:
+                kept.append(part)
         if not kept:
             return None
-        return prefix + ", ".join(kept)
-
+        indent = line[: len(line) - len(line.lstrip())]
+        if is_parenthesized:
+            return indent + prefix + " import (" + ", ".join(kept) + ")\n"
+        else:
+            return indent + prefix + " import " + ", ".join(kept) + "\n"
     return line
 
 
-def _alias_local_name(segment: str) -> str:
-    m = re.match(r"^\s*[\w.]+\s+as\s+(\w+)\s*$", segment)
-    if m:
-        return m.group(1)
-    return segment.strip().split(".")[0].strip()
-
-
-def _fix_multiline_import(block: str, names_to_remove: set[str]) -> str | None:
-    header_m = re.match(
-        r"^(\s*from\s+[\w.]+\s+import\s*$)(.*?)($.*)",
-        block,
-        re.DOTALL,
-    )
-    if not header_m:
+def fix_source(source: str, report: FileReport) -> str | None:
+    if not report.unused:
         return None
-
-    prefix = header_m.group(1)
-    body = header_m.group(2)
-    suffix = header_m.group(3)
-
-    kept_segments: list[str] = []
-    for seg in re.split(r",\s*", body):
-        seg_clean = re.sub(r"#.*", "", seg).strip()
-        if not seg_clean:
-            continue
-        local = _alias_local_name(seg_clean)
-        if local not in names_to_remove:
-            kept_segments.append(seg_clean)
-
-    if not kept_segments:
-        return None
-
-    if len(kept_segments) == 1 and "\n" not in block:
-        return f"{prefix[:-1]}{kept_segments[0]}{suffix[1:]}"
-    inner = ",\n    ".join(kept_segments)
-    return f"{prefix}\n    {inner},\n{suffix}"
-
-
-def apply_fix(source: str, unused_imports: list[UnusedImport]) -> str:
-    removal_map: dict[int, set[str]] = {}
-    span_map: dict[int, int] = {}
-
-    for ui in unused_imports:
-        ln = ui.lineno
-        removal_map.setdefault(ln, set()).update(ui.unused_names)
-        span_map[ln] = ln + ui.original_stmt.count("\n")
-
     lines = source.splitlines(keepends=True)
-    result: list[str] = []
-    skip_until = -1
-
-    i = 0
-    while i < len(lines):
-        lineno = i + 1
-
-        if lineno <= skip_until:
-            i += 1
-            continue
-
-        if lineno not in removal_map:
-            result.append(lines[i])
-            i += 1
-            continue
-
-        names_to_remove = removal_map[lineno]
-        end_lineno = span_map[lineno]
-        block = "".join(lines[i:end_lineno])
-
-        if "(" in block and "\n" in block:
-            fixed = _fix_multiline_import(block, names_to_remove)
-        else:
-            single = block.strip("\n")
-            fixed_line = _remove_names_from_import_line(single, names_to_remove)
-            if fixed_line is None:
-                fixed = None
-            else:
-                ending = "\n" if block.endswith("\n") else ""
-                fixed = fixed_line + ending
-
-        if fixed is not None:
-            result.append(fixed)
-
-        skip_until = end_lineno
-        i += 1
-
-    return "".join(result)
-
-
-def _iter_whl_sources(archive_path: Path) -> Iterator[tuple[str, str]]:
-    try:
-        with zipfile.ZipFile(archive_path) as zf:
-            for name in zf.namelist():
-                if not name.endswith(".py"):
-                    continue
-                virtual = f"{archive_path.name}::{name}"
-                try:
-                    raw = zf.read(name)
-                    source = raw.decode("utf-8", errors="replace")
-                    yield virtual, source
-                except Exception as exc:
-                    yield virtual, f"__ERROR__:{exc}"
-    except zipfile.BadZipFile as exc:
-        yield f"{archive_path.name}::?", f"__ERROR__:Bad zip: {exc}"
-
-
-def _iter_tarzst_sources(archive_path: Path) -> Iterator[tuple[str, str]]:
-    arc_name = archive_path.name
-
-    def _read_tar(tf: tarfile.TarFile) -> Iterator[tuple[str, str]]:
-        for member in tf.getmembers():
-            if not member.name.endswith(".py"):
+    removals: dict[int, set[str]] = {}
+    for ui in report.unused:
+        removals.setdefault(ui.lineno, set()).update(ui.names)
+    new_lines: list[str] = []
+    for idx, line in enumerate(lines, start=1):
+        if idx in removals:
+            replacement = _remove_names_from_import(line, removals[idx])
+            if replacement is None:
                 continue
-            virtual = f"{arc_name}::{member.name}"
-            try:
-                f = tf.extractfile(member)
-                if f is None:
-                    continue
-                source = f.read().decode("utf-8", errors="replace")
-                yield virtual, source
-            except Exception as exc:
-                yield virtual, f"__ERROR__:{exc}"
-
-    try:
-        if HAS_ZSTD:
-            dctx = zstd.ZstdDecompressor()
-            with open(archive_path, "rb") as fh:
-                stream = dctx.stream_reader(fh)
-                with tarfile.open(fileobj=io.BytesIO(stream.read())) as tf:
-                    yield from _read_tar(tf)
+            new_lines.append(replacement)
         else:
-            with tarfile.open(archive_path) as tf:
-                yield from _read_tar(tf)
-    except Exception as exc:
-        yield f"{arc_name}::?", f"__ERROR__:Archive error: {exc}"
+            new_lines.append(line)
+    return "".join(new_lines)
 
 
-_WORKER_IGNORE_INIT: bool = False
-
-
-def _worker_init(ignore_init: bool) -> None:
-    global _WORKER_IGNORE_INIT
-    _WORKER_IGNORE_INIT = ignore_init
-
-
-def _task_analyze_file(path_str: str) -> FileReport:
-    p = Path(path_str)
+def _process_file(args: tuple) -> FileReport:
+    path_str, display_path = args
     try:
-        source = p.read_text(encoding="utf-8", errors="replace")
+        source = Path(path_str).read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
-        return FileReport(path=path_str, error=f"OSError: {exc}")
-
-    is_init = p.name == "__init__.py"
-    return analyze_source(source, path_str, is_init=is_init, ignore_init=_WORKER_IGNORE_INIT)
+        return FileReport(path=display_path, error=str(exc))
+    return analyse_source(source, display_path)
 
 
-def _task_analyze_source_str(args: tuple[str, str]) -> FileReport:
-    virtual_path, source = args
-    if source.startswith("__ERROR__:"):
-        return FileReport(path=virtual_path, error=source[len("__ERROR__:") :])
-    is_init = virtual_path.endswith("/__init__.py") or virtual_path.endswith("\\__init__.py")
-    return analyze_source(
-        source,
-        virtual_path,
-        is_init=is_init,
-        ignore_init=_WORKER_IGNORE_INIT,
+def _process_source_tuple(args: tuple) -> FileReport:
+    source, display_path = args
+    return analyse_source(source, display_path)
+
+
+def _extract_py_from_whl(archive: Path) -> list[tuple[str, str]]:
+    results = []
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            for name in zf.namelist():
+                if name.endswith(".py"):
+                    try:
+                        source = zf.read(name).decode("utf-8", errors="replace")
+                        results.append((source, f"{archive}::{name}"))
+                    except Exception:
+                        pass
+    except zipfile.BadZipFile as exc:
+        results.append(("", f"{archive}::ERROR:{exc}"))
+    return results
+
+
+def _extract_py_from_tar_zst(
+    archive: Path,
+) -> list[tuple[str, str]]:
+    results: list[tuple[str, str]] = []
+    try:
+        import zstandard
+    except ImportError:
+        results.append((
+            "",
+            f"{archive}::ERROR: install zstandard to read .tar.zst archives",
+        ))
+        return results
+    try:
+        with archive.open("rb") as fh:
+            dctx = zstandard.ZstdDecompressor()
+            with tempfile.TemporaryFile() as tmp:
+                dctx.copy_stream(fh, tmp)
+                tmp.seek(0)
+                with tarfile.open(fileobj=tmp, mode="r:") as tf:
+                    for member in tf.getmembers():
+                        if not member.name.endswith(".py") or not member.isfile():
+                            continue
+                        try:
+                            extracted = tf.extractfile(member)
+                            if extracted is None:
+                                continue
+                            source = extracted.read().decode(
+                                "utf-8",
+                                errors="replace",
+                            )
+                            results.append((source, f"{archive}::{member.name}"))
+                        except Exception:
+                            pass
+    except Exception as exc:
+        results.append((
+            "",
+            f"{archive}::ERROR:{exc}",
+        ))
+    return results
+
+
+def _coloured(text: str, code: str, use_colour: bool) -> str:
+    return f"{code}{text}{RESET}" if use_colour else text
+
+
+def print_report(reports: list[FileReport], verbose: bool, use_colour: bool) -> int:
+    total = 0
+    files_with_issues: list[FileReport] = [r for r in reports if r.unused or r.error]
+    if not files_with_issues:
+        print(_coloured("✓ No unused imports found.", GREEN, use_colour))
+        return 0
+    for report in files_with_issues:
+        if report.error:
+            print(_coloured(f"ERROR  {report.path}: {report.error}", RED, use_colour))
+            continue
+        first = True
+        for ui in report.unused:
+            total += 1
+            label = _coloured(report.path, BOLD, use_colour) if first else " " * len(report.path)
+            lineno_str = _coloured(f"line {ui.lineno:>4}", CYAN, use_colour)
+            stmt_str = _coloured(ui.statement, YELLOW, use_colour)
+            names_note = ""
+            if len(ui.names) < len(ui.statement.split(",")):
+                names_note = "  [unused: " + _coloured(", ".join(ui.names), RED, use_colour) + "]"
+            print(f"{label}  -->  {lineno_str}  {stmt_str}{names_note}")
+            first = False
+    print()
+    print(
+        _coloured(
+            f"Found {total} unused import(s) across {len(files_with_issues)} file(s).",
+            BOLD,
+            use_colour,
+        )
     )
-
-
-def _should_exclude(path: Path, exclude_patterns: list[re.Pattern[str]]) -> bool:
-    path_str = str(path)
-    return any(pat.search(path_str) for pat in exclude_patterns)
+    return total
 
 
 def collect_tasks(
-    paths: list[Path],
-    exclude_patterns: list[re.Pattern[str]],
-) -> tuple[list[str], list[tuple[str, str]]]:
-    file_tasks: list[str] = []
+    paths: list[Path], exclude_patterns: list[str] | None = None
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    file_tasks: list[tuple[str, str]] = []
     source_tasks: list[tuple[str, str]] = []
-
-    def _add_py(p: Path) -> None:
-        if not _should_exclude(p, exclude_patterns):
-            file_tasks.append(str(p))
-
-    def _add_archive(p: Path) -> None:
-        if _should_exclude(p, exclude_patterns):
-            return
-        if p.suffix == ".whl":
-            source_tasks.extend(_iter_whl_sources(p))
-        elif p.name.endswith(".tar.zst"):
-            source_tasks.extend(_iter_tarzst_sources(p))
-
-    for p in paths:
-        if not p.exists():
-            print(
-                red(f"warning: path does not exist: {p}"),
-                file=sys.stderr,
-            )
-            continue
-
-        if p.is_file():
-            if p.suffix == ".py":
-                _add_py(p)
-            elif p.suffix in (".whl",) or p.name.endswith(".tar.zst"):
-                _add_archive(p)
-            else:
-                print(
-                    yellow(f"warning: skipping unrecognised file: {p}"),
-                    file=sys.stderr,
-                )
-        elif p.is_dir():
-            for child in sorted(p.rglob("*")):
-                if _should_exclude(child, exclude_patterns):
+    if exclude_patterns is None:
+        exclude_patterns = []
+    exclude_re = re.compile(r"|".join(exclude_patterns)) if exclude_patterns else None
+    for path in paths:
+        if path.is_file():
+            if exclude_re and exclude_re.search(str(path)):
+                continue
+            suffix = path.suffix.lower()
+            name = path.name.lower()
+            if suffix == ".py":
+                file_tasks.append((str(path), str(path)))
+            elif suffix == ".whl":
+                source_tasks.extend(_extract_py_from_whl(path))
+            elif name.endswith(".tar.zst"):
+                source_tasks.extend(_extract_py_from_tar_zst(path))
+        elif path.is_dir():
+            for p in path.rglob("*"):
+                if p.name == "__init__.py":
                     continue
-                if child.is_file():
-                    if child.suffix == ".py":
-                        file_tasks.append(str(child))
-                    elif child.suffix == ".whl" or child.name.endswith(".tar.zst"):
-                        _add_archive(child)
-
+                if not p.is_file():
+                    continue
+                if exclude_re and exclude_re.search(str(p)):
+                    continue
+                suffix = p.suffix.lower()
+                name = p.name.lower()
+                if suffix == ".py":
+                    file_tasks.append((str(p), str(p)))
+                elif suffix == ".whl":
+                    source_tasks.extend(_extract_py_from_whl(p))
+                elif name.endswith(".tar.zst"):
+                    source_tasks.extend(_extract_py_from_tar_zst(p))
+        else:
+            print(f"Warning: '{path}' does not exist, skipping.", file=sys.stderr)
     return file_tasks, source_tasks
-
-
-def _relative_path(path_str: str) -> str:
-    if "::" in path_str:
-        return path_str
-    try:
-        return str(Path(path_str).relative_to(Path.cwd()))
-    except ValueError:
-        return path_str
-
-
-def print_report(
-    report: FileReport,
-    *,
-    verbose: bool = False,
-    autofix: bool = False,
-    dry_run: bool = False,
-) -> int:
-    display = _relative_path(report.path)
-
-    if report.error:
-        print(f"  {red('error')} {bold(display)}: {red(report.error)}")
-        return 0
-
-    if not report.unused:
-        if verbose:
-            print(f"  {green('✓')} {dim(display)}")
-        return 0
-
-    for ui in report.unused:
-        lineno_str = cyan(f"line {ui.lineno:>4}")
-        stmt_display = yellow(ui.original_stmt.splitlines()[0])
-        print(f"  {bold(display)}  -->  {lineno_str}  {stmt_display}")
-        if verbose or True:
-            names_str = red(", ".join(ui.unused_names))
-            print(f"{'':>50}  [unused: {names_str}]")
-
-    return len(report.unused)
-
-
-def print_fix_result(
-    path_str: str,
-    *,
-    fixed: bool,
-    dry_run: bool,
-    error: str | None = None,
-) -> None:
-    display = _relative_path(path_str)
-    if error:
-        print(f"  {red('SKIP autofix')} {bold(display)} — result failed to parse: {error}")
-    elif dry_run:
-        print(f"  {cyan('would fix')} {bold(display)}")
-    else:
-        print(f"  {green('fixed')} {bold(display)}")
 
 
 def run(
     paths: list[Path],
-    *,
-    autofix: bool = False,
-    dry_run: bool = False,
-    verbose: bool = False,
-    workers: int = 8,
-    exclude_patterns: list[re.Pattern[str]] | None = None,
-    ignore_init: bool = False,
+    workers: int,
+    autofix: bool,
+    dry_run: bool,
+    verbose: bool = True,
+    exclude: list[str] | None = None,
 ) -> int:
-    if exclude_patterns is None:
-        exclude_patterns = []
-
-    print(bold(f"\nScanning {len(paths)} path(s) with {workers} worker(s) …\n"))
-
-    file_tasks, source_tasks = collect_tasks(paths, exclude_patterns)
-
-    total_py = len(file_tasks)
-    total_arc = len(source_tasks)
-    print(f"  {cyan(str(total_py))} .py file(s), {cyan(str(total_arc))} archive member(s) queued.\n")
-
-    if total_py + total_arc == 0:
-        print(yellow("No files to analyse."))
-        return 0
-
+    use_colour = sys.stdout.isatty()
+    file_tasks, source_tasks = collect_tasks(paths, exclude)
+    print(f"  {len(file_tasks)} .py file(s), {len(source_tasks)} archive member(s) queued.\n")
     reports: list[FileReport] = []
-
-    with Pool(
-        processes=workers,
-        initializer=_worker_init,
-        initargs=(ignore_init,),
-    ) as pool:
-        file_results = pool.imap_unordered(_task_analyze_file, file_tasks)
-        arc_results = pool.imap_unordered(_task_analyze_source_str, source_tasks)
-
-        for i, rep in enumerate(file_results, 1):
-            reports.append(rep)
-            if verbose:
-                print(
-                    dim(f"  [{i}/{total_py}] analysed {_relative_path(rep.path)}"),
-                    end="\r",
-                )
-
-        if verbose and total_py:
-            print()
-
-        for rep in arc_results:
-            reports.append(rep)
-
+    with multiprocessing.Pool(processes=workers) as pool:
+        if file_tasks:
+            results = pool.imap_unordered(_process_file, file_tasks)
+            for i, report in enumerate(results, 1):
+                reports.append(report)
+                if i % 10 == 0 or i == len(file_tasks):
+                    print(f"  Processed {i}/{len(file_tasks)} files...", end="\r")
+            if file_tasks:
+                print(f"  Processed {len(file_tasks)}/{len(file_tasks)} files.    ")
+        if source_tasks:
+            reports.extend(pool.map(_process_source_tuple, source_tasks))
     reports.sort(key=lambda r: r.path)
-
-    total_unused = 0
-    files_with_issues: set[str] = set()
-    files_fixed = 0
-
-    for report in reports:
-        count = print_report(report, verbose=verbose, autofix=autofix, dry_run=dry_run)
-        total_unused += count
-
-        if count > 0:
-            files_with_issues.add(report.path)
-
-        if (autofix or dry_run) and count > 0 and not report.error:
-            if "::" in report.path:
-                if verbose:
-                    print(dim(f"  [skip fix — archive member: {report.path}]"))
+    total = print_report(reports, verbose=verbose, use_colour=use_colour)
+    if autofix and total > 0:
+        fixed_count = 0
+        for report in reports:
+            if not report.unused or report.error:
                 continue
-
+            if "::" in report.path:
+                print(f"  skip autofix for archive member: {report.path}")
+                continue
             p = Path(report.path)
             try:
-                original_source = p.read_text(encoding="utf-8", errors="replace")
+                source = p.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                print_fix_result(report.path, fixed=False, dry_run=dry_run, error=str(exc))
+                print(f"  cannot read {p}: {exc}", file=sys.stderr)
                 continue
-
-            new_source = apply_fix(original_source, report.unused)
-
+            new_source = fix_source(source, report)
+            if new_source is None:
+                continue
             try:
-                ast.parse(new_source, filename=report.path)
+                ast.parse(new_source, filename=str(p))
             except SyntaxError as exc:
-                print_fix_result(report.path, fixed=False, dry_run=dry_run, error=str(exc))
+                print(
+                    f"  {_coloured('SKIP', RED, use_colour)} autofix on {p} — result failed to parse: {exc}",
+                    file=sys.stderr,
+                )
                 continue
-
             if dry_run:
-                print_fix_result(report.path, fixed=True, dry_run=True)
-            else:
-                orig_stat = p.stat()
-                p.write_text(new_source, encoding="utf-8")
-                os.chmod(p, orig_stat.st_mode)
-                print_fix_result(report.path, fixed=True, dry_run=False)
-                files_fixed += 1
-
-    print()
-    if total_unused == 0:
-        print(green("✓ No unused imports found."))
-    else:
-        print(
-            bold(f"Found {red(str(total_unused))} unused import(s) across {red(str(len(files_with_issues)))} file(s).")
-        )
-        if autofix and not dry_run:
-            print(green(f"Fixed {files_fixed} file(s)."))
-
-    return 0 if total_unused == 0 else 1
+                print(f"  {_coloured('[dry-run]', CYAN, use_colour)} would fix {p}")
+                fixed_count += 1
+                continue
+            p.write_text(new_source, encoding="utf-8")
+            fixed_count += 1
+            print(f"  {_coloured('fixed', GREEN, use_colour)} {p})")
+        action = "would fix" if dry_run else "fixed"
+        print(f"\n{action.capitalize()} {fixed_count} file(s).")
+    elif dry_run and total == 0:
+        print("Nothing to fix.")
+    return 1 if total > 0 else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="unused_imports",
-        description=__doc__,
+        description="Report (and optionally remove) unused imports in Python files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent(
-            """\
-            Examples:
-              %(prog)s src/
-              %(prog)s src/ --autofix
-              %(prog)s src/ --dry-run
-              %(prog)s mypackage.whl
-              %(prog)s . --exclude tests --workers 4 --verbose
-              %(prog)s file.py --autofix --no-color
-            """
-        ),
+        epilog="""
+Examples:
+  %(prog)s
+  %(prog)s src/
+  %(prog)s file1.py file2.py
+  %(prog)s src/ tests/
+  %(prog)s file.py src/
+  %(prog)s -a
+  %(prog)s -a --dry-run
+  %(prog)s -v --workers 4
+  %(prog)s --exclude "test_.*"
+  %(prog)s --exclude "venv" --exclude ".git"
+""",
     )
     parser.add_argument(
         "paths",
         nargs="*",
         default=["."],
-        metavar="PATH",
-        help="Files or directories to scan (default: current directory).",
+        help="Files and/or directories to scan (default: current directory)",
     )
-
     parser.add_argument(
         "-a",
         "--autofix",
         action="store_true",
-        help="Remove unused imports in-place.",
+        help="Remove unused imports in-place",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview changes without writing files (implies --autofix mode).",
+        help="Show what would be changed without writing files",
     )
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Detailed output with per-name breakdown and progress.",
+        help="Print extra progress and per-name details",
     )
     parser.add_argument(
         "--workers",
         type=int,
         default=8,
         metavar="N",
-        help="Number of parallel worker processes (default: 8).",
+        help="Number of parallel worker processes (default: 8)",
     )
     parser.add_argument(
         "--exclude",
         action="append",
-        default=[],
         metavar="PATTERN",
-        help="Regex pattern to exclude files/dirs (repeatable).",
+        help="Exclude files/directories matching regex pattern (can be used multiple times)",
     )
     parser.add_argument(
         "--ignore-init",
+        default=True,
         action="store_true",
-        help="Treat all imports in __init__.py as used.",
+        help="Ignore __init__.py files (treat imports as used)",
     )
-    parser.add_argument(
-        "--no-color",
-        action="store_true",
-        help="Disable ANSI color codes in output.",
-    )
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    import textwrap
-
+def main() -> None:
     parser = build_parser()
-    args = parser.parse_args(argv)
-
-    global _USE_COLOR
-    if args.no_color or not sys.stdout.isatty():
-        _USE_COLOR = False
-
-    exclude_patterns: list[re.Pattern[str]] = []
-    for pat in args.exclude:
-        try:
-            exclude_patterns.append(re.compile(pat))
-        except re.error as exc:
-            print(red(f"error: invalid --exclude pattern {pat!r}: {exc}"), file=sys.stderr)
-            return 2
-
-    paths = [Path(p) for p in args.paths]
-
-    return run(
-        paths,
-        autofix=args.autofix,
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-        workers=args.workers,
-        exclude_patterns=exclude_patterns,
-        ignore_init=args.ignore_init,
+    args = parser.parse_args()
+    paths = [Path(p).resolve() for p in args.paths]
+    valid_paths: list = []
+    for p in paths:
+        if p.exists():
+            valid_paths.append(p)
+        else:
+            print(f"Warning: '{p}' does not exist, skipping.", file=sys.stderr)
+    if not valid_paths:
+        parser.error("No valid files or directories to scan.")
+    if args.dry_run and not args.autofix:
+        args.autofix = True
+    if args.no_color:
+        global RESET, BOLD, YELLOW, RED, CYAN, GREEN
+        RESET = BOLD = YELLOW = RED = CYAN = GREEN = ""
+    sys.exit(
+        run(
+            paths=valid_paths,
+            workers=6,
+            autofix=args.autofix,
+            dry_run=args.dry_run,
+            verbose=True,
+            exclude=args.exclude,
+        )
     )
 
 
 if __name__ == "__main__":
-    import textwrap
-
-    sys.exit(main())
+    multiprocessing.freeze_support()
+    raise SystemExit(main())

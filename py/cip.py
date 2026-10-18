@@ -1,8 +1,5 @@
-#!/data/data/com.termux/files/usr/bin/env python
-
 import sys
 import time
-
 import requests
 
 
@@ -11,7 +8,6 @@ def get_connection_info():
         response = requests.get("http://ip-api.com/json/", timeout=5)
         response.raise_for_status()
         data = response.json()
-
         if data.get("status") == "success":
             return {
                 "ip": data.get("query"),
@@ -23,7 +19,6 @@ def get_connection_info():
         else:
             print("Error: Failed to retrieve location data.")
             return None
-
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to IP service: {e}")
         return None

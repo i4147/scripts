@@ -2,7 +2,6 @@ import os
 import shutil
 from pathlib import Path
 from sys import exit
-
 from termcolor import cprint
 
 

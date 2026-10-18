@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import logging
 import multiprocessing
@@ -8,7 +7,6 @@ import zipfile
 from concurrent.futures import TimeoutError
 from dataclasses import dataclass
 from pathlib import Path
-
 from fontTools.ttLib import TTFont
 
 logging.basicConfig(

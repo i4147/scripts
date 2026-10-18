@@ -1,7 +1,6 @@
 from multiprocessing import Pool
 from pathlib import Path
 from sys import exit
-
 from dh import folder_size, format_size
 from fastwalk import walk_files
 

@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from git import GitCommandError, Repo
 from git.exc import InvalidGitRepositoryError
 

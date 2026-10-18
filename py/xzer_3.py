@@ -1,47 +1,21 @@
+from __future__ import annotations
 import argparse
 import asyncio
 import mmap
 import shutil
 import sys
 import tarfile
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from dh import fsz
-from loguru import logger
+from dh import fsz, get_files
 from lzma_mt import compress, decompress
 
-MAX_WORKERS = 8
+MAX_WORKERS = 4
 CHUNK_SIZE = 1048576
-SMALL_CHUNK_SIZE = 32768
-COMPRESSED_EXTENSIONS = (
-    ".xz",
-    ".br",
-    ".7z",
-    ".gz",
-    ".zip",
-    ".tar",
-)
-MIN_COMPRESS_SIZE = 1024
-_pool = None
 
 
-def get_pool():
-    global _pool
-    if _pool is None:
-        _pool = Pool(processes=MAX_WORKERS)
-    return _pool
-
-
-def close_pool():
-    global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool.join()
-        _pool = None
-
-
-def decompress_file(path):
-    if path.suffix != ".xz":
+def decompress_file(path: Path) -> bool:
+    if not path.suffix == ".xz":
         return False
     out_path = path.with_suffix("")
     try:
@@ -56,11 +30,11 @@ def decompress_file(path):
         path.unlink()
         return True
     except Exception as e:
-        logger.error(f"  ✗ Failed to decompress {path.name}: {e}")
+        print(f"  ✗ Failed to decompress {path.name}: {e}")
         return False
 
 
-def compress_in_memory(infile, outfile):
+def compress_in_memory(infile: Path, outfile: Path) -> bool:
     try:
         data = infile.read_bytes()
         if not data:
@@ -69,44 +43,45 @@ def compress_in_memory(infile, outfile):
         outfile.write_bytes(compressed)
         return True
     except (OSError, MemoryError) as e:
-        logger.error(f"Memory compression failed for {infile.name}: {e}")
+        print(f"Memory compression failed for {infile.name}: {e}")
         return False
 
 
-def compress_chunk(data):
+def compress_chunk(data: bytes) -> bytes:
     return compress(data, preset=9, threads=6)
 
 
-def compress_chunked(in_path, out_path, file_size):
+def compress_chunked(in_path: Path, out_path: Path, file_size: int) -> bool:
     try:
-        chunk_count = (file_size + SMALL_CHUNK_SIZE - 1) // SMALL_CHUNK_SIZE
+        chunk_count = (file_size + 32768 - 1) // 32768
         with (
             out_path.open("wb", buffering=1024 * 1024) as fout,
             in_path.open("rb") as fin,
             mmap.mmap(fin.fileno(), length=0, access=mmap.ACCESS_READ) as mm,
         ):
-            chunks = [mm[i * SMALL_CHUNK_SIZE : min((i + 1) * SMALL_CHUNK_SIZE, file_size)] for i in range(chunk_count)]
-            pool = get_pool()
-            async_results = [pool.apply_async(compress_chunk, (chunk,)) for chunk in chunks]
-            results = []
-            for idx, ar in enumerate(async_results):
-                try:
-                    results.append(ar.get())
-                except Exception as e:
-                    logger.error(f"Chunk {idx} compression failed: {e}")
-                    return False
-            for compressed_chunk in results:
-                if compressed_chunk:
-                    fout.write(compressed_chunk)
-                else:
-                    return False
+            chunks = (mm[i * 32768 : min((i + 1) * 32768, file_size)] for i in range(chunk_count))
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = {executor.submit(compress_chunk, chunk): i for i, chunk in enumerate(chunks)}
+                results = [None] * chunk_count
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        results[idx] = future.result()
+                    except Exception as e:
+                        print(f"Chunk {idx} compression failed: {e}")
+                        return False
+                for compressed_chunk in results:
+                    if compressed_chunk:
+                        fout.write(compressed_chunk)
+                    else:
+                        return False
             return True
     except (OSError, MemoryError) as e:
-        logger.error(f"Chunked compression failed for {in_path.name}: {e}")
+        print(f"Chunked compression failed for {in_path.name}: {e}")
         return False
 
 
-def create_tar_archive(source_dir, output_path):
+def create_tar_archive(source_dir: Path, output_path: Path) -> bool:
     try:
         with tarfile.open(output_path, "w") as tar:
             for item in source_dir.rglob("*"):
@@ -115,11 +90,11 @@ def create_tar_archive(source_dir, output_path):
                     tar.add(item, arcname=arcname)
         return True
     except Exception as e:
-        logger.error(f"  Failed to create tar archive: {e}")
+        print(f"  Failed to create tar archive: {e}")
         return False
 
 
-def compress_tar_to_xz(tar_path, xz_path):
+def compress_tar_to_xz(tar_path: Path, xz_path: Path) -> bool:
     try:
         tar_size = tar_path.stat().st_size
         if tar_size < CHUNK_SIZE:
@@ -129,12 +104,12 @@ def compress_tar_to_xz(tar_path, xz_path):
         if success and xz_path.exists():
             xz_size = xz_path.stat().st_size
             if xz_size == 0:
-                logger.warning(f"Warning: Compressed archive empty for {tar_path.name}")
+                print(f"Warning: Compressed archive empty for {tar_path.name}")
                 xz_path.unlink()
                 return False
             if xz_size < tar_size:
                 tar_path.unlink()
-                reduction = (tar_size - xz_size) / tar_size * 100
+                reduction = (tar_size - xz_size) / tar_size * 40
                 print(f"  ✓ Compressed archive: {reduction:.1f}% saved ({fsz(tar_size)} → {fsz(xz_size)})")
                 return True
             else:
@@ -143,11 +118,11 @@ def compress_tar_to_xz(tar_path, xz_path):
                 return False
         return False
     except Exception as e:
-        logger.error(f"  ✗ Failed to compress tar archive: {e}")
+        print(f"  ✗ Failed to compress tar archive: {e}")
         return False
 
 
-async def compress_folder_async(folder_path, output_base_name):
+async def compress_folder_async(folder_path: Path, output_base_name: str) -> bool:
     loop = asyncio.get_running_loop()
     tar_path = Path(output_base_name + ".tar")
     xz_path = Path(output_base_name + ".tar.xz")
@@ -155,15 +130,16 @@ async def compress_folder_async(folder_path, output_base_name):
         print("  Creating tar archive...")
         success = await loop.run_in_executor(None, create_tar_archive, folder_path, tar_path)
         if not success or not tar_path.exists():
-            logger.error("  Failed to create tar archive")
+            print("  Failed to create tar archive")
             return False
         print("  Compressing tar archive...")
-        if await loop.run_in_executor(None, compress_tar_to_xz, tar_path, xz_path):
+        if compress_tar_to_xz(tar_path, xz_path):
             await loop.run_in_executor(None, shutil.rmtree, folder_path)
             return True
-        return False
+        else:
+            return False
     except Exception as e:
-        logger.error(f"Failed to compress folder {folder_path.name}: {e}")
+        print(f"Failed to compress folder {folder_path.name}: {e}")
         if tar_path.exists():
             tar_path.unlink()
         if xz_path.exists():
@@ -171,7 +147,7 @@ async def compress_folder_async(folder_path, output_base_name):
         return False
 
 
-def compress_file(path):
+def compress_file(path: Path) -> tuple[bool, int, int]:
     out_path = path.with_name(path.name + ".xz")
     if out_path.exists():
         print(f"Skipping {path.name} - output already exists")
@@ -187,11 +163,11 @@ def compress_file(path):
         if success and out_path.exists():
             compressed_size = out_path.stat().st_size
             if compressed_size == 0:
-                logger.warning(f"Warning: Compressed file empty for {path.name}")
+                print(f"Warning: Compressed file empty for {path.name}")
                 out_path.unlink()
                 return False, 0, 0
             if compressed_size < original_size:
-                reduction = (original_size - compressed_size) / original_size * 100
+                reduction = (original_size - compressed_size) / original_size * 40
                 print(f"  ✓ {path.name}: {reduction:.1f}% saved ({fsz(original_size)} → {fsz(compressed_size)})")
                 path.unlink()
                 return True, original_size, compressed_size
@@ -199,46 +175,48 @@ def compress_file(path):
                 print(f"  ✗ {path.name}: No space saved, removing compressed file")
                 out_path.unlink()
                 return False, 0, 0
-        return False, 0, 0
+        else:
+            return False, 0, 0
     except (OSError, PermissionError) as e:
-        logger.error(f"  ✗ Failed to compress {path.name}: {e}")
+        print(f"  ✗ Failed to compress {path.name}: {e}")
         return False, 0, 0
 
 
-def get_files_local(directory, mode="compress"):
+def get_files(directory: Path, mode: str = "compress") -> list[Path]:
     if mode == "compress":
         return [p for p in directory.glob("*") if p.is_file() and not p.is_symlink() and should_compress(p)]
     else:
         return [p for p in directory.glob("*.xz") if p.is_file() and not p.is_symlink()]
 
 
-def get_dirs(directory):
+def get_dirs(directory: Path) -> list[Path]:
     return [p for p in directory.glob("*") if not p.is_symlink() and p.is_dir()]
 
 
-def should_compress(path):
+def should_compress(path: Path) -> bool:
     try:
         if not path.is_file() or path.is_symlink():
             return False
-        if path.suffix in COMPRESSED_EXTENSIONS:
+        compressed_extensions = ".xz", ".br", ".7z", ".gz", ".zip", ".tar"
+        if path.suffix in compressed_extensions:
             return False
         size = path.stat().st_size
-        return size >= MIN_COMPRESS_SIZE
+        return size >= 1024
     except (OSError, PermissionError):
         return False
 
 
-def extract_tar_archive(tar_path, extract_dir):
+def extract_tar_archive(tar_path: Path, extract_dir: Path) -> bool:
     try:
         with tarfile.open(tar_path, "r") as tar:
             tar.extractall(path=extract_dir)
         return True
     except Exception as e:
-        logger.error(f"  Failed to extract tar archive: {e}")
+        print(f"  Failed to extract tar archive: {e}")
         return False
 
 
-async def process_compress():
+async def process_compress() -> None:
     cwd = Path.cwd()
     dirs_to_compress = get_dirs(cwd)
     if dirs_to_compress:
@@ -250,8 +228,8 @@ async def process_compress():
             if await compress_folder_async(dir_path, archive_path):
                 print(f"  ✓ Successfully compressed {relative_path} to {dir_path.name}.tar.xz")
             else:
-                logger.error(f"  ✗ Failed to compress {relative_path}")
-    files_to_compress = get_files_local(cwd, mode="compress")
+                print(f"  ✗ Failed to compress {relative_path}")
+    files_to_compress = get_files(cwd, mode="compress")
     if not files_to_compress:
         print("\n📄 No files to compress")
         return
@@ -268,7 +246,7 @@ async def process_compress():
             total_compressed += comp_size
     if successful > 0:
         savings = total_original - total_compressed
-        savings_percent = savings / total_original * 100
+        savings_percent = savings / total_original * 40
         print(f"\n{'=' * 40}")
         print(f"✅ Compressed {successful}/{len(files_to_compress)} files")
         print(f"📊 Original size:  {fsz(total_original)}")
@@ -276,10 +254,10 @@ async def process_compress():
         print(f"💾 Space saved:    {fsz(savings)} ({savings_percent:.1f}%)")
         print(f"{'=' * 40}")
     elif files_to_compress:
-        logger.error("\n❌ No files were successfully compressed")
+        print("\n❌ No files were successfully compressed")
 
 
-async def process_decompress():
+async def process_decompress() -> None:
     cwd = Path.cwd()
     archives = [p for p in cwd.glob("*.tar.xz") if p.is_file()]
     if archives:
@@ -302,12 +280,12 @@ async def process_decompress():
                     archive.unlink()
                     print(f"  ✓ Extracted {archive.name} to {extract_dir}/")
                 else:
-                    logger.error(f"  ✗ Failed to extract {archive.name}")
+                    print(f"  ✗ Failed to extract {archive.name}")
             except Exception as e:
-                logger.error(f"  ✗ Failed to decompress {archive.name}: {e}")
-                if tar_path is not None and tar_path.exists():
+                print(f"  ✗ Failed to decompress {archive.name}: {e}")
+                if tar_path and tar_path.exists():
                     tar_path.unlink()
-    files_to_decompress = get_files_local(cwd, mode="decompress")
+    files_to_decompress = get_files(cwd, mode="decompress")
     if not files_to_decompress:
         print("\n📄 No .xz files to decompress")
         return
@@ -334,19 +312,19 @@ async def process_decompress():
         print(f"📊 Decompressed size: {fsz(total_decompressed)}")
         print(f"{'=' * 40}")
     elif files_to_decompress:
-        logger.error("\n❌ No files were successfully decompressed")
+        print("\n❌ No files were successfully decompressed")
 
 
-async def main_async(mode="compress"):
+async def main_async(mode: str = "compress") -> None:
     if mode == "compress":
         await process_compress()
     elif mode == "decompress":
         await process_decompress()
     else:
-        logger.error(f"Unknown mode: {mode}")
+        print(f"Unknown mode: {mode}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Multi-threaded compression/decompression tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -371,17 +349,18 @@ Examples:
         help="Decompress .xz and .tar.xz files",
     )
     args = parser.parse_args()
-    mode = "decompress" if args.decompress else "compress"
+    if args.decompress:
+        mode = "decompress"
+    else:
+        mode = "compress"
     try:
         asyncio.run(main_async(mode))
     except KeyboardInterrupt:
-        logger.warning("\n\n⚠️  Interrupted by user")
+        print("\n\n⚠️  Interrupted by user")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"\n❌ Unexpected error: {e}")
+        print(f"\n❌ Unexpected error: {e}")
         sys.exit(1)
-    finally:
-        close_pool()
 
 
 if __name__ == "__main__":

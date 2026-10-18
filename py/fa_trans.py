@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import json
 import re
 import sys
@@ -7,7 +6,6 @@ import time
 from multiprocessing.pool import AsyncResult, Pool
 from pathlib import Path
 from typing import Final
-
 from deep_translator import GoogleTranslator
 from loguru import logger
 
@@ -15,7 +13,6 @@ MAX_WORKERS: Final[int] = 8
 RETRY_ATTEMPTS: Final[int] = 3
 RETRY_DELAY: Final[float] = 0.5
 MAX_CHUNK_SIZE: Final[int] = 2000
-
 PERSIAN_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]"
 )
@@ -29,15 +26,12 @@ def create_chunks(lines: list[str]) -> list[list[str]]:
     chunks: list[list[str]] = []
     current_chunk: list[str] = []
     current_size: int = 0
-
     for line in lines:
         line_size: int = len(line) + 1
-
         if current_size + line_size > MAX_CHUNK_SIZE and current_chunk:
             chunks.append(current_chunk)
             current_chunk = []
             current_size = 0
-
         if line_size > MAX_CHUNK_SIZE:
             if current_chunk:
                 chunks.append(current_chunk)
@@ -47,17 +41,14 @@ def create_chunks(lines: list[str]) -> list[list[str]]:
         else:
             current_chunk.append(line)
             current_size += line_size
-
     if current_chunk:
         chunks.append(current_chunk)
-
     return chunks
 
 
 def translate_chunk(chunk: list[str]) -> tuple[list[str], str | None]:
     chunk_text: str = "\n".join(chunk)
     translator: GoogleTranslator = GoogleTranslator(source="fa", target="en")
-
     for attempt in range(RETRY_ATTEMPTS):
         try:
             result: str | None = translator.translate(chunk_text)
@@ -73,7 +64,6 @@ def translate_chunk(chunk: list[str]) -> tuple[list[str], str | None]:
             )
             if attempt < RETRY_ATTEMPTS - 1:
                 time.sleep(RETRY_DELAY)
-
     return (chunk, None)
 
 
@@ -98,18 +88,15 @@ def collect_results(chunks: list[list[str]], pool: Pool) -> dict[str, str]:
     async_results: list[AsyncResult[tuple[list[str], str | None]]] = [
         pool.apply_async(translate_chunk, (chunk,)) for chunk in chunks
     ]
-
     for async_result in async_results:
         try:
             original_lines, translated_text = async_result.get()
         except Exception as e:
             logger.error("Unexpected error while translating chunk: {}", e)
             continue
-
         if not translated_text:
             logger.error("Failed to translate chunk starting with: {}", original_lines[0][:50])
             continue
-
         translated_lines: list[str] = translated_text.split("\n")
         for i, original_line in enumerate(original_lines):
             if i < len(translated_lines):
@@ -120,7 +107,6 @@ def collect_results(chunks: list[list[str]], pool: Pool) -> dict[str, str]:
                     "Line count mismatch in chunk, missing translation for: {}",
                     original_line,
                 )
-
     return results
 
 
@@ -128,36 +114,29 @@ def main() -> int:
     if len(sys.argv) < 2:
         logger.error("Usage: {} <input_file>", sys.argv[0])
         return 1
-
     input_path: Path = Path(sys.argv[1].strip())
     if not input_path.exists():
         logger.error("Input file not found: {}", input_path.name)
         return 1
-
     try:
         all_lines: list[str] = read_lines(input_path)
     except Exception as e:
         logger.error("Error reading input file: {}", e)
         return 1
-
     if not all_lines:
         print("No lines found in {}", input_path.name)
         return 0
-
     persian_lines: list[str] = [line for line in all_lines if contains_persian(line)]
     non_persian_count: int = len(all_lines) - len(persian_lines)
-
     print(
         "Loaded {} lines: {} with persian, {} already English/skipped",
         len(all_lines),
         len(persian_lines),
         non_persian_count,
     )
-
     if not persian_lines:
         print("No persian lines to translate in {}", input_path.name)
         return 0
-
     chunks: list[list[str]] = create_chunks(persian_lines)
     print(
         "Created {} chunks from {} persian lines (max {} chars per chunk)",
@@ -165,7 +144,6 @@ def main() -> int:
         len(persian_lines),
         MAX_CHUNK_SIZE,
     )
-
     results: dict[str, str] = {}
     pool: Pool = Pool(processes=MAX_WORKERS)
     try:
@@ -173,14 +151,12 @@ def main() -> int:
     finally:
         pool.close()
         pool.join()
-
     output_path: Path = input_path.with_suffix(".json")
     try:
         save_json(results, output_path)
         print("Saved {} translations to {}", len(results), output_path.name)
     except Exception as e:
         logger.error("Error saving JSON file: {}", e)
-
     try:
         rewrite_input(input_path, all_lines, results)
         print(
@@ -192,7 +168,6 @@ def main() -> int:
     except Exception as e:
         logger.error("Error updating input file: {}", e)
         return 1
-
     return 0
 
 

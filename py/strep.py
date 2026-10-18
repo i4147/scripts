@@ -47,10 +47,8 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     files = collect_files(cwd, args)
     so_files = [f for f in files if f.suffix in (".so",) or SO_PATTERN.search(f.name)]
-
     console.print("[bold green]Starting .so stripping process...[/]")
     show_summary(so_files)
-
     with Progress(
         TextColumn("[bold blue]{task.description}[/]"),
         BarColumn(),

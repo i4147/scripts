@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
 import numpy as np
 import pytesseract
 

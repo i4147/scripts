@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import sys
 from multiprocessing import get_context
 from pathlib import Path
-
 import tree_sitter_cpp as tscpp
 from dh import get_files
 from tree_sitter import Language, Parser, Query, QueryCursor

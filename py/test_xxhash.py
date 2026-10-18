@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-
 from dh import get_files
 from pbar import Pbar
 from xxhash import (

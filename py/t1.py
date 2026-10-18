@@ -8,9 +8,7 @@ try:
 except KeyboardInterrupt:
     import sys
     sys.exit(1)
-
 """
-
 counter = 0
 for i in range(0, 256, 5):
     for j in range(0, 256, 5):

@@ -10,7 +10,6 @@ def extract_imports(source):
         tree = ast.parse(source)
     except SyntaxError as e:
         raise ValueError(f"Syntax error in file: {e}")
-
     imports = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -37,7 +36,6 @@ def get_used_names(source):
         tree = ast.parse(source)
     except SyntaxError as e:
         raise ValueError(f"Syntax error in file: {e}")
-
     used = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
@@ -51,7 +49,6 @@ def get_used_names(source):
 def find_unused_imports(source):
     imports = extract_imports(source)
     used_names = get_used_names(source)
-
     unused = []
     for imp in imports:
         if imp["type"] == "import":
@@ -88,12 +85,10 @@ def process_file(filepath):
             source = f.read()
     except (UnicodeDecodeError, PermissionError) as e:
         return str(filepath), [], str(e)
-
     try:
         unused, _ = find_unused_imports(source)
     except ValueError as e:
         return str(filepath), [], str(e)
-
     unused_str = [format_import(imp) for imp in unused]
     return str(filepath), unused_str, None
 
@@ -115,7 +110,6 @@ def main():
     parser.add_argument("path", nargs="+", help="Python file(s) or directory(ies) to analyze")
     parser.add_argument("--quiet", "-q", action="store_true", help="Only show files with unused imports or errors")
     args = parser.parse_args()
-
     for path in args.path:
         path_obj = Path(path)
         if path_obj.is_file():

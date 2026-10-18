@@ -24,7 +24,6 @@ def get_source_segment(src: str, node: ast.AST) -> str:
             return seg
     except Exception:
         pass
-
     lines = src.splitlines(keepends=True)
     lineno = getattr(node, "lineno", None)
     end_lineno = getattr(node, "end_lineno", None)
@@ -54,7 +53,6 @@ def extract_top_level_entities_from_file(path: Path) -> list[tuple[str, str, int
         tree = ast.parse(text, filename=str(path))
     except SyntaxError:
         return []
-
     results: list[tuple[str, str, int, str]] = []
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
@@ -81,12 +79,10 @@ def write_entity(out_dir: Path, kind: str, name: str, relpath: str, lineno: int,
     subdir = OUTPUT_SUBDIRS.get(kind, kind)
     target_dir = out_dir / subdir
     target_dir.mkdir(parents=True, exist_ok=True)
-
     safe_name = sanitize_for_filename(name)
     safe_rel = sanitize_for_filename(relpath)
     filename = f"{safe_name}__{safe_rel}__L{lineno}.py"
     target_path = target_dir / filename
-
     header = f"# extracted {kind} {name} from {relpath}:{lineno}\n"
     content = header + src
     target_path.write_text(content, encoding="utf-8")
@@ -136,11 +132,9 @@ def main():
     args = parse_args()
     root = args.root
     out = args.out
-
     if not root.exists() or not root.is_dir():
         print(f"Root directory not found: {root}", file=sys.stderr)
         sys.exit(2)
-
     print(f"Scanning {root} for .py files...")
     summary = scan_and_extract(root, out)
     print(f"Done. Files scanned with extractions: {summary['files']}")

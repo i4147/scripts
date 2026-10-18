@@ -1,14 +1,11 @@
 from __future__ import annotations
-
 import argparse
 import os
 import sys
 from pathlib import Path
-
 from dh import MIME2EXT, SHEBANG_MAP, colored, cprint, is_binary, runcmd, unique_path
 
 SKIP_DIRS = {".git", "__pycache__"}
-
 SKIP_EXTS = {".css", ".js"}
 
 

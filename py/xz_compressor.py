@@ -783,7 +783,6 @@ def main():
         print(f"👷 Workers: {workers}")
     print()
     results = []
-
     if args.tar_subdirs_first:
         results = all_results
         if files:

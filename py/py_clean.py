@@ -19,7 +19,6 @@ from dataclasses import dataclass, field, replace
 from multiprocessing.pool import AsyncResult
 from pathlib import Path
 from typing import Final, Literal, TypeVar, get_args
-
 import libcst as cst
 from libcst.helpers import get_full_name_for_node
 from loguru import logger
@@ -35,9 +34,7 @@ DEFAULT_IGNORES: Final[tuple[str, ...]] = (
     "__pycache__",
     ".git",
 )
-
 PROTECTED_COMMENT: Final[re.Pattern[str]] = re.compile(r"^#(?:!|\s*(?:type|fmt):)")
-
 LINE_FIELDS: Final[tuple[str, ...]] = (
     "leading_lines",
     "lines_after_decorators",
@@ -45,11 +42,9 @@ LINE_FIELDS: Final[tuple[str, ...]] = (
     "header",
     "empty_lines",
 )
-
 PoolMethod = Literal["map", "imap", "imap_unordered", "apply", "apply_async"]
 POOL_METHODS: Final[tuple[str, ...]] = get_args(PoolMethod)
 Status = Literal["changed", "unchanged", "error"]
-
 NodeT = TypeVar("NodeT", bound=cst.CSTNode)
 DefT = TypeVar("DefT", cst.FunctionDef, cst.ClassDef)
 
@@ -472,7 +467,6 @@ def process_file(path_str: str) -> FileResult:
         return FileResult(path_str, "error", message=f"permission denied: {exc}")
     except OSError as exc:
         return FileResult(path_str, "error", message=f"cannot read: {exc}")
-
     notes: list[str] = []
     try:
         decoded = decode_source(raw)
@@ -485,15 +479,12 @@ def process_file(path_str: str) -> FileResult:
         return FileResult(path_str, "error", message=f"cannot parse: {exc}")
     except Exception as exc:
         return FileResult(path_str, "error", message=f"transformer failed: {exc!r}")
-
     if outcome.code == decoded.text:
         return FileResult(path_str, "unchanged", message="; ".join(notes))
-
     try:
         ast.parse(outcome.code, filename=path_str, feature_version=TARGET_VERSION)
     except (SyntaxError, ValueError, RecursionError) as exc:
         return FileResult(path_str, "error", message=f"output is invalid Python, skipped: {exc}")
-
     try:
         new_raw = decoded.encode(outcome.code)
         diff = ""
@@ -511,7 +502,6 @@ def process_file(path_str: str) -> FileResult:
         return FileResult(path_str, "error", message=f"permission denied: {exc}")
     except (OSError, UnicodeEncodeError) as exc:
         return FileResult(path_str, "error", message=f"write failed: {exc}")
-
     return FileResult(
         path_str,
         "changed",
@@ -778,7 +768,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     args = build_parser().parse_args(argv)
     configure_logging(args.verbose)
-
     config = CleanerConfig.from_flags(
         comments=args.strip_comments,
         docstrings=args.strip_docstrings,
@@ -792,13 +781,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if args.backup and args.dry_run:
         logger.info("--backup ignored in --dry-run mode")
-
     files = discover_files(args.paths or [Path.cwd()], args.ignore, args.ignore_file)
     if not files:
         logger.warning("no Python files found")
         return 0
     logger.info(f"processing {len(files)} file(s) with {WORKERS} workers ({args.pool_method})")
-
     totals = Totals()
     colorize = use_color()
     show_diff = args.diff or args.dry_run
@@ -824,7 +811,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         logger.error("interrupted; workers terminated (completed files were already written)")
         return 130
-
     verb = "would be changed" if run.dry_run else "changed"
     logger.info(
         f"{totals.changed} file(s) {verb}, {totals.unchanged} unchanged, "

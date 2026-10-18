@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import asyncio
 import gzip
 import mmap
@@ -8,7 +7,6 @@ import sys
 import tarfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from dh import fsz, get_files
 
 MAX_WORKERS = 4

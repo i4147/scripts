@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 import tree_sitter
 import tree_sitter_python
-
 
 # An edit is (start_byte, end_byte, replacement_bytes).
 # end_byte is exclusive; replacement is usually b"" (pure deletion).
@@ -11,13 +9,11 @@ _Edit = tuple[int, int, bytes]
 
 class TreeSitterStripper:
     """Structure-preserving comment & docstring stripper.
-
     Everything is done by editing byte ranges of the original UTF-8 source,
     so indentation, line endings (LF/CRLF), quoting, parentheses, and any
     other formatting are preserved exactly. The only structural change is
     that a docstring which is the sole statement of a block is rewritten to
     `pass` (in place, keeping the original indent) so the block stays valid.
-
     Parameters
     ----------
     strip_comments : bool
@@ -41,7 +37,6 @@ class TreeSitterStripper:
         self.strip_docstrings = strip_docstrings
         self.preserve_shebangs = preserve_shebangs
         self.preserve_module_docstring = preserve_module_docstring
-
         # Support both the pre-0.22 and >=0.22 tree_sitter APIs.
         try:
             self._language = tree_sitter.Language(tree_sitter_python.language())
@@ -57,16 +52,13 @@ class TreeSitterStripper:
     def strip(self, source: str) -> str:
         if not (self.strip_comments or self.strip_docstrings):
             return source
-
         src = source.encode("utf-8")
         tree = self._parser.parse(src)
         edits: list[_Edit] = []
-
         if self.strip_comments:
             self._collect_comments(tree.root_node, src, edits)
         if self.strip_docstrings:
             self._collect_docstrings(tree.root_node, src, edits)
-
         edits = self._merge(edits, src)
         return self._apply(src, edits).decode("utf-8")
 
@@ -92,16 +84,10 @@ class TreeSitterStripper:
     def _collect_comments(self, node, src: bytes, edits: list[_Edit]) -> None:
         if node.type == "comment":
             # Shebang: only the very first byte of the file qualifies.
-            if (
-                self.preserve_shebangs
-                and node.start_byte == 0
-                and src.startswith(b"#!")
-            ):
+            if self.preserve_shebangs and node.start_byte == 0 and src.startswith(b"#!"):
                 return
-
             line_start = self._line_start(src, node.start_byte)
             before = src[line_start : node.start_byte]
-
             if before.strip(b" \t") == b"":
                 # Full-line comment: delete the whole line including the
                 # trailing newline, so no blank line is left behind.
@@ -116,39 +102,26 @@ class TreeSitterStripper:
                     i -= 1
                 start = i + 1
                 end = node.end_byte
-
             edits.append((start, end, b""))
             return
-
         for child in node.children:
             self._collect_comments(child, src, edits)
 
     # ------------------------------------------------------------------ #
     # Docstring collection
     # ------------------------------------------------------------------ #
-    def _collect_docstrings(
-        self, node, src: bytes, edits: list[_Edit]
-    ) -> None:
+    def _collect_docstrings(self, node, src: bytes, edits: list[_Edit]) -> None:
         t = node.type
-
         if t == "module":
-            self._strip_container_docstring(
-                node, src, edits, is_module=True
-            )
+            self._strip_container_docstring(node, src, edits, is_module=True)
         elif t in ("function_definition", "class_definition"):
             body = node.child_by_field_name("body")
             if body is not None:
                 if body.type == "block":
-                    self._strip_container_docstring(
-                        body, src, edits, is_module=False
-                    )
-                elif (
-                    body.type == "expression_statement"
-                    and self._is_string_expr(body)
-                ):
+                    self._strip_container_docstring(body, src, edits, is_module=False)
+                elif body.type == "expression_statement" and self._is_string_expr(body):
                     # Single-line body: `def f(): "doc"`
                     edits.append((body.start_byte, body.end_byte, b"pass"))
-
         # Recurse into every child; the recursion will find nested
         # function/class definitions inside these bodies as well.
         for child in node.children:
@@ -159,10 +132,7 @@ class TreeSitterStripper:
         """True if `stmt` is an expression_statement whose only named
         child is a string literal (or a concatenation of them)."""
         named = [c for c in stmt.children if c.is_named]
-        return (
-            len(named) == 1
-            and named[0].type in ("string", "concatenated_string")
-        )
+        return len(named) == 1 and named[0].type in ("string", "concatenated_string")
 
     @staticmethod
     def _first_statement(container):
@@ -183,18 +153,13 @@ class TreeSitterStripper:
     ) -> None:
         if is_module and self.preserve_module_docstring:
             return
-
         first = self._first_statement(container)
         if first is None or first.type != "expression_statement":
             return
         if not self._is_string_expr(first):
             return
-
-        real_stmts = [
-            c for c in container.named_children if c.type != "comment"
-        ]
+        real_stmts = [c for c in container.named_children if c.type != "comment"]
         only_stmt = len(real_stmts) == 1
-
         if only_stmt and not is_module:
             # Rewrite the string literal in place to `pass` so the block
             # stays valid. Indentation is untouched because we only
@@ -213,7 +178,6 @@ class TreeSitterStripper:
     @staticmethod
     def _merge(edits: list[_Edit], src: bytes) -> list[_Edit]:
         """Sort and coalesce overlapping or adjacent edits.
-
         When two edits are adjacent (or overlap), the replacement of the
         first wins unless it is empty, in which case the non-empty one is
         kept. This lets a `pass`-injection absorb an immediately following

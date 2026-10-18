@@ -424,7 +424,6 @@ def find_py_files(py_files: set[str], base_dir: Path) -> None:
 
 
 def find_setup_pys(base_path: Path, exclude_patterns: set[str], follow_symlinks: bool = False) -> set[Path]:
-
     def _recursive_find_files(files: set[Path], base_dir: Path) -> None:
         dirs = [d for d in base_dir.iterdir() if d.is_dir()]
         files.update({x for x in base_dir.iterdir() if x.is_file() and x.name == "setup.py"})

@@ -1,6 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/python
 from __future__ import annotations
-
 import argparse
 import difflib
 import importlib
@@ -14,7 +12,6 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Iterator
-
 from tree_sitter import Language, Parser, Tree, Node
 
 
@@ -26,7 +23,6 @@ class LangSpec:
 
 
 _LANG_ATTR = "language"
-
 LANGUAGES: dict[str, LangSpec] = {
     "bash": LangSpec("tree_sitter_bash", _LANG_ATTR, frozenset({"comment"})),
     "c": LangSpec("tree_sitter_c", _LANG_ATTR, frozenset({"comment"})),
@@ -55,7 +51,6 @@ LANGUAGES: dict[str, LangSpec] = {
     "xml": LangSpec("tree_sitter_xml", "language_xml", frozenset({"Comment", "comment"})),
     "yaml": LangSpec("tree_sitter_yaml", _LANG_ATTR, frozenset({"comment"})),
 }
-
 EXTENSIONS: dict[str, str] = {
     ".sh": "bash",
     ".bash": "bash",
@@ -99,7 +94,6 @@ EXTENSIONS: dict[str, str] = {
     ".yaml": "yaml",
     ".yml": "yaml",
 }
-
 SHEBANG_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bpython[\d.]*\b"), "python"),
     (re.compile(r"\b(ba|z|k)?sh\b"), "bash"),
@@ -109,7 +103,6 @@ SHEBANG_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bruby\b"), "ruby"),
     (re.compile(r"\blua\b"), "lua"),
 ]
-
 VITAL_RE = re.compile(
     r"copyright|licen[cs]e|spdx|\(c\)\s*\d{4}|@preserve|@license|@ts-|@jsx|@flow|"
     r"eslint|jshint|prettier-ignore|noqa|type:\s*ignore|pylint:|pyright:|mypy:|pragma|"
@@ -117,9 +110,7 @@ VITAL_RE = re.compile(
     r"%!|\[if\b|/\*!|[#/]\s*(end)?region\b|sourceMappingURL|sourceURL",
     re.IGNORECASE,
 )
-
 DOC_PREFIXES = (b"/**", b"///", b"//!")
-
 DEFAULT_EXCLUDES = frozenset({
     ".git",
     ".hg",
@@ -229,14 +220,12 @@ def strip_spans(src: bytes, spans: list[tuple[int, int]]) -> bytes:
             while cut > line_start and src[cut - 1] in b" \t":
                 cut -= 1
             ranges.append((cut, end))
-
     merged: list[tuple[int, int]] = []
     for start, end in sorted(ranges):
         if merged and start <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
             merged.append((start, end))
-
     out = bytearray()
     pos = 0
     for start, end in merged:
@@ -300,30 +289,24 @@ def process_file(path: Path, opts: Options) -> Result:
             return Result(path, "skipped", message="not a regular file")
         if path.stat().st_size > opts.max_size:
             return Result(path, "skipped", message="exceeds max size")
-
         with path.open("rb") as fh:
             head = fh.read(256)
         lang = detect_language(path, head)
         if lang is None:
             return Result(path, "skipped", message="unsupported type")
-
         spec = LANGUAGES[lang]
         parser = get_parser(lang)
         src = path.read_bytes()
         tree = parser.parse(src)
-
         comments = collect_comments(tree.root_node, spec.comment_types)
         removable = [c for c in comments if not is_vital(src, c, opts.keep_doc)]
         if not removable:
             return Result(path, "unchanged")
-
         spans = [(c.start, c.end) for c in removable]
         new_src = strip_spans(src, spans)
-
         problem = validate(tree, src, new_src, parser, spec.comment_types, frozenset(spans))
         if problem:
             return Result(path, "rejected", message=problem)
-
         diff = ""
         if opts.diff:
             diff = "".join(
@@ -334,20 +317,16 @@ def process_file(path: Path, opts: Options) -> Result:
                     tofile=f"{path} (stripped)",
                 )
             )
-
         if opts.dryrun or opts.check:
             return Result(path, "would-change", len(removable), diff=diff)
-
         if opts.inplace:
             target = path
             if opts.backup:
                 shutil.copy2(path, path.with_name(path.name + opts.backup_suffix))
         else:
             target = path.with_name(f"{path.stem}.stripped{path.suffix}")
-
         write_atomic(target, new_src, mode_from=path)
         return Result(path, "changed", len(removable), diff=diff)
-
     except ImportError as exc:
         return Result(path, "skipped", message=f"grammar not installed: {exc.name}")
     except Exception as exc:
@@ -376,7 +355,6 @@ def discover(inputs: list[str], excludes: frozenset[str]) -> tuple[list[Path], l
     files: list[Path] = []
     seen: set[Path] = set()
     problems: list[str] = []
-
     for raw in inputs:
         path = Path(raw)
         if path.is_symlink():
@@ -385,7 +363,6 @@ def discover(inputs: list[str], excludes: frozenset[str]) -> tuple[list[Path], l
         if not path.exists():
             problems.append(f"not found: {raw}")
             continue
-
         candidates: Iterator[Path]
         if path.is_file():
             candidates = iter([path])
@@ -393,13 +370,11 @@ def discover(inputs: list[str], excludes: frozenset[str]) -> tuple[list[Path], l
             candidates = iter_files(path, excludes)
         else:
             candidates = iter([])
-
         for candidate in candidates:
             key = candidate.resolve()
             if key not in seen:
                 seen.add(key)
                 files.append(candidate)
-
     return files, problems
 
 
@@ -444,7 +419,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.jobs < 1:
         parser.error("--jobs must be >= 1")
-
     excludes = DEFAULT_EXCLUDES | frozenset(args.exclude)
     files, problems = discover(args.paths, excludes)
     for problem in problems:
@@ -452,7 +426,6 @@ def main(argv: list[str] | None = None) -> int:
     if not files:
         print("no candidate files found")
         return 2 if problems else 0
-
     opts = Options(
         diff=args.diff,
         backup=args.backup,
@@ -463,18 +436,15 @@ def main(argv: list[str] | None = None) -> int:
         keep_doc=args.keep_doc,
         max_size=args.max_size,
     )
-
     counts: Counter[str] = Counter()
     worker = partial(process_file, opts=opts)
     with mp.Pool(processes=args.jobs) as pool:
         for res in pool.imap_unordered(worker, files, chunksize=4):
             counts[res.status] += 1
             emit(res, args.quiet, args.verbose)
-
     if not args.quiet:
         summary = ", ".join(f"{key}={value}" for key, value in sorted(counts.items()))
         print(f"done: {summary}")
-
     if counts["error"] or counts["rejected"] or problems:
         return 2
     if args.check and counts["would-change"]:

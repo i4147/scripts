@@ -7,7 +7,6 @@ import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-
 from loguru import logger
 
 try:
@@ -16,7 +15,6 @@ try:
     HAS_ZSTD = True
 except ImportError:
     HAS_ZSTD = False
-
 SKIP_DIRS = frozenset({".git", "__pycache__", ".venv", "node_modules", ".env", ".pytest_cache"})
 COMMON_IMPORTS: dict[str, set[str]] = {
     "typing": {
@@ -185,9 +183,7 @@ class CodeValidator:
     def validate_python_code(source: str) -> tuple[bool, str | None]:
         try:
             tree = ast.parse(source)
-
             compile(source, "<validation>", "exec")
-
             undefined_names = CodeValidator._find_undefined_names(tree)
             if undefined_names:
                 builtins = set(dir(__builtins__)) if isinstance(__builtins__, dict) else set(dir(__builtins__))
@@ -222,7 +218,6 @@ class CodeValidator:
                 truly_undefined = undefined_names - builtins - common_names
                 if truly_undefined:
                     logger.debug(f"Potential undefined names: {truly_undefined}")
-
             return (True, None)
         except SyntaxError as e:
             return (False, f"Syntax error: {e}")
@@ -233,7 +228,6 @@ class CodeValidator:
     def _find_undefined_names(tree: ast.AST) -> set[str]:
         undefined = set()
         defined = set()
-
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 defined.add(node.name)
@@ -253,7 +247,6 @@ class CodeValidator:
                     name = alias.asname or alias.name
                     if name != "*":
                         defined.add(name)
-
         return undefined - defined
 
 
@@ -262,20 +255,15 @@ class MethodConverter:
     def method_to_function(source: str) -> str:
         try:
             tree = ast.parse(source)
-
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     if node.args.args and node.args.args[0].arg == "self":
                         node.args.args.pop(0)
                         if node.args.posonlyargs and node.args.posonlyargs[0].arg == "self":
                             node.args.posonlyargs.pop(0)
-
                     MethodConverter._remove_self_references(node)
-
                     node.decorator_list = [d for d in node.decorator_list if not MethodConverter._is_class_decorator(d)]
-
                     return ast.unparse(node)
-
             return source
         except Exception as e:
             logger.warning(f"Failed to convert method to function: {e}")
@@ -363,7 +351,6 @@ class ImportAnalyzer:
         stdlib_imports: list[str] = []
         thirdparty_imports: list[str] = []
         local_imports: list[str] = []
-
         for imp in sorted(all_imports):
             if imp.startswith(("from .", "import .")):
                 local_imports.append(imp)
@@ -387,7 +374,6 @@ class ImportAnalyzer:
                 stdlib_imports.append(imp)
             else:
                 thirdparty_imports.append(imp)
-
         organized.extend(sorted(stdlib_imports))
         if thirdparty_imports:
             organized.extend([""] + sorted(thirdparty_imports))
@@ -456,7 +442,6 @@ class EntityVisitor(ast.NodeVisitor):
         in_class: bool = False,
     ) -> None:
         source = self._get_source_slice(node)
-
         if in_class:
             entity_type = "function"
             source = MethodConverter.method_to_function(source)
@@ -464,7 +449,6 @@ class EntityVisitor(ast.NodeVisitor):
         else:
             entity_type = "function"
             full_name = node.name
-
         self.entities.append(
             Entity(
                 name=node.name,
@@ -617,7 +601,6 @@ def scan_directory(directory: str) -> tuple[list[Path], list[tuple[str, str]]]:
     base_dir = Path(directory).resolve()
     python_files: list[Path] = []
     archive_members: list[tuple[str, str]] = []
-
     for root, dirs, files in os.walk(base_dir):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         root_path = Path(root)
@@ -660,11 +643,9 @@ def write_entity(output_dir: Path, entity: Entity) -> Path | None:
     while path.exists():
         counter += 1
         path = entity_dir / f"{base_filename}_{counter}.py"
-
     existing_imports = ImportAnalyzer.extract_imports_from_source(entity.source)
     needed_imports = ImportAnalyzer.detect_needed_imports(entity.source)
     imports = ImportAnalyzer.consolidate_imports(existing_imports, needed_imports)
-
     lines: list[str] = []
     lines.append(f"# Extracted from: {entity.source_file}:{entity.line_number}\n")
     if imports:
@@ -673,14 +654,11 @@ def write_entity(output_dir: Path, entity: Entity) -> Path | None:
     lines.append(entity.source)
     if not entity.source.endswith("\n"):
         lines.append("\n")
-
     complete_code = "".join(lines)
     is_valid, error_msg = CodeValidator.validate_python_code(complete_code)
-
     if not is_valid:
         logger.warning(f"Skipping invalid entity {entity.full_name}: {error_msg}")
         return None
-
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(complete_code)
@@ -694,7 +672,6 @@ def write_imports_file(output_dir: Path, all_imports: set[str]) -> None:
     organized = ImportAnalyzer.consolidate_imports(all_imports, set())
     path = output_dir / "imports.py"
     content = "# Aggregated imports from extracted entities\n\n" + "".join(imp + "\n" for imp in organized)
-
     is_valid, error_msg = CodeValidator.validate_python_code(content)
     if is_valid:
         with open(path, "w", encoding="utf-8") as f:
@@ -730,24 +707,19 @@ def main() -> int:
         help="Directory to scan (default: current directory)",
     )
     args = parser.parse_args()
-
     if args.temp:
         output_dir = Path.home() / "tmp" / "output"
     else:
         output_dir = Path("output")
     output_dir.mkdir(parents=True, exist_ok=True)
-
     print(f"Scanning directory: {Path(args.directory).resolve()}")
     print(f"Output directory: {output_dir.resolve()}\n")
-
     python_files, archive_members = scan_directory(args.directory)
     print(f"Found {len(python_files):,} Python files and {len(archive_members):,} archive members\n")
-
     all_entities: list[Entity] = []
     all_imports: set[str] = set()
     entity_count: dict[str, int] = {"function": 0, "class": 0, "constant": 0}
     error_count = 0
-
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         futures: dict = {executor.submit(process_file_worker, fpath): ("file", str(fpath)) for fpath in python_files}
         for virtual_path, source in archive_members:
@@ -755,7 +727,6 @@ def main() -> int:
                 "archive",
                 virtual_path,
             )
-
         processed = 0
         for future in as_completed(futures):
             _source_type, source_path = futures[future]
@@ -775,12 +746,10 @@ def main() -> int:
             except Exception as e:
                 error_count += 1
                 logger.error(f"Error processing {source_path}: {e}")
-
     print(f"\nExtracted {len(all_entities):,} entities:")
     for etype, count in entity_count.items():
         if count > 0:
             print(f"  {etype}: {count}")
-
     print("\nValidating and writing entities to output directory...")
     written_count = 0
     skipped_count = 0
@@ -790,16 +759,13 @@ def main() -> int:
             written_count += 1
         else:
             skipped_count += 1
-
     print(f"Saved {written_count}/{len(all_entities)} entities")
     if skipped_count > 0:
         logger.warning(f"Skipped {skipped_count} invalid entities")
     print()
-
     write_imports_file(output_dir, all_imports)
     print("Saved aggregated imports to imports.py")
     print(f"\nTotal unique imports: {len(all_imports)}")
-
     if error_count > 0:
         logger.warning(f"Errors encountered: {error_count}")
     return 0

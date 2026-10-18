@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import functools
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -9,7 +8,6 @@ from os import scandir as os_scandir
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, overload
-
 from .const import BIN_EXT, EMULATED, IMGEXT, SDCARD, SKIP_DIRS, THRESHOLD, TXT_EXT
 from .isbinary import is_binary
 
@@ -19,8 +17,6 @@ if TYPE_CHECKING:
 
 @overload
 def get_file_age(path: str | Path, str_mode: bool = False) -> float: ...
-
-
 @overload
 def get_file_age(path: str | Path, str_mode: bool = True) -> str: ...
 
@@ -457,20 +453,15 @@ class _CommandRunner:
         if not self.cmd:
             msg = "cmd must be a non-empty list (e.g., ['ls', '-l'])"
             raise ValueError(msg)
-
         try:
             if self.run_silently:
                 result = subprocess_run(self.cmd, stdout=_DEVNULL, stderr=_DEVNULL, timeout=self.timeout)
                 return (result.returncode, "", "")
-
             result = subprocess_run(self.cmd, capture_output=True, text=True, timeout=self.timeout)
             stdout, stderr = (result.stdout, result.stderr)
-
             if self.show_output:
                 self._output_streams(stdout, stderr, sys_stdout, sys_stderr)
-
             return (result.returncode, stdout, stderr)
-
         except FileNotFoundError:
             return self._handle_error(127, "Command not found", sys_stderr)
         except PermissionError:
@@ -600,7 +591,6 @@ class _FileCollector:
         if not self.path.is_dir():
             msg = f"Path is not a directory: {self.path}"
             raise NotADirectoryError(msg)
-
         stack: list[Path] = [self.path]
         while stack:
             current = stack.pop()
@@ -855,17 +845,13 @@ class _DirectoryCopier:
             self._validate_source()
             dest_folder = self.dest_path / self.src_path.name
             dest_folder.mkdir(parents=True, exist_ok=True)
-
             files = _collect_files(self.src_path)
             if not files:
                 return True
-
             tasks = self._prepare_tasks(files, dest_folder)
             if not tasks:
                 return True
-
             return self._execute_copy(tasks)
-
         except Exception as e:
             print(f"Copy failed: {e}")
             return False
@@ -930,26 +916,21 @@ class _DirectoryMover:
         try:
             self._validate_source()
             dest_folder = self.dest_path / self.src_path.name
-
             if dest_folder.exists() and any(dest_folder.iterdir()):
                 print(f"Warning: Destination {dest_folder} already exists and is not empty")
                 return False
-
             files = _collect_files(self.src_path)
             if not files:
                 if self.src_path.exists():
                     move(str(self.src_path), str(dest_folder))
                 return True
-
             tasks = self._prepare_tasks(files, dest_folder)
             if not tasks:
                 return self._cleanup_empty_dirs()
-
             success = self._execute_move(tasks)
             if success:
                 self._cleanup_empty_dirs()
             return success
-
         except Exception as e:
             print(f"Move failed: {e}")
             return False
@@ -1032,7 +1013,6 @@ class _ConfigurableFileWalker:
         if not self.path.exists():
             print(f"{YELLOW}⚠ Warning:{RESET} '{self.path}' does not exist, skipping.")
             return
-
         if self.path.is_file():
             yield from self._yield_single_file()
         elif self.path.is_dir():
@@ -1243,7 +1223,6 @@ class _PythonFileChecker:
                 first100 = f.read(100)
                 if b"python" in first100:
                     return True
-
             try:
                 f.seek(0)
                 code = f.read().decode("utf-8")
@@ -1433,7 +1412,6 @@ def is_text_file(path: str | Path) -> bool:
 def _check_binary_chunk(chunk: bytes) -> bool:
     if not chunk:
         return False
-
     null_count = chunk.count(b"\x00")
     if len(chunk) < 100:
         null_ratio = null_count / len(chunk)
@@ -1443,12 +1421,10 @@ def _check_binary_chunk(chunk: bytes) -> bool:
         null_ratio = null_count / len(chunk)
         if null_ratio > 0.05:
             return True
-
     printable_chars = sum(1 for byte in chunk if 32 <= byte <= 126)
     total_chars = len(chunk)
     if total_chars > 0 and (printable_chars / total_chars) < 0.7:
         return True
-
     return bool(len(chunk) > 100 and null_count > 0 and printable_chars / total_chars < 0.5)
 
 

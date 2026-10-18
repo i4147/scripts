@@ -1,11 +1,9 @@
 from __future__ import annotations
-
 import csv
 import os
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from tqdm import tqdm
 
 binf = Path("/sdcard/bin").open(encoding="utf-8")

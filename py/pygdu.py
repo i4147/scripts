@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import sys
 import termios
 import tty
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-
 from dh import fsz
 
 

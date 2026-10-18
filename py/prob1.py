@@ -4,14 +4,12 @@ src_crlf = "x = 1\r\ny = 2\r\n"
 m = cst.parse_module(src_crlf)
 print("CRLF preserved:", m.code == src_crlf, repr(m.default_newline), repr(m.code[:20]))
 print("code_for_node:", repr(cst.Module([]).code_for_node(m))[:60])
-
 for v in ("3.12", "3.13", "3.9"):
     try:
         cfg = cst.PartialParserConfig(python_version=v)
         print("cfg", v, "ok")
     except Exception as e:
         print("cfg", v, "fail:", type(e).__name__, e)
-
 src = "#!/usr/bin/env python\n# -*- coding: utf-8 -*-\n# hello\nimport os\n"
 mod = cst.parse_module(src)
 print("header:", [(type(i).__name__, repr(i.comment.value if i.comment else None)) for i in mod.header.items])
@@ -36,7 +34,6 @@ print("---- drop comments only ----")
 print(repr(mod.visit(DropAll()).code))
 print("---- drop comments + emptied lines ----")
 print(repr(mod.visit(DropAndEmptyLines()).code))
-
 src2 = "# a\n# b\n\nx = 1  # tail\n# after\n"
 m2 = cst.parse_module(src2)
 print("---- src2 raw ----")

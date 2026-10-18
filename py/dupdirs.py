@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 from multiprocessing import Pool
-
 import xxhash
 
 NUM_WORKERS = 8
@@ -54,23 +53,17 @@ def _collect_files(root: Path):
 
 def folder_signature(root: Path):
     root = root.resolve()
-
     files = _collect_files(root)
-
     if not files:
         return None
-
     direct_files = [(rel, abs_) for rel, abs_ in files if "/" not in rel]
-
     if not direct_files:
         return None
-
     rel_paths = sorted(rel for rel, _ in files)
     struct_h = xxhash.xxh64()
     for rp in rel_paths:
         struct_h.update(rp.encode("utf-8"))
         struct_h.update(b"\x00")
-
     content_h = xxhash.xxh64()
     for rel, abs_path in sorted(files, key=lambda x: x[0]):
         try:
@@ -81,7 +74,6 @@ def folder_signature(root: Path):
         content_h.update(b"\x00")
         content_h.update(fh.encode("ascii"))
         content_h.update(b"\x01")
-
     return (
         root.name,
         struct_h.hexdigest(),
@@ -120,12 +112,9 @@ def main():
     start = Path.cwd()
     print(f"Scanning: {start}")
     print(f"Workers : {NUM_WORKERS}")
-
     folders = find_all_folders(start)
     print(f"Found {len(folders)} folder(s) (pre-filter).")
-
     results = []
-
     with Pool(processes=NUM_WORKERS) as pool:
         async_results = [pool.apply_async(folder_signature, (f,)) for f in folders]
         for ar in async_results:
@@ -136,17 +125,13 @@ def main():
                 continue
             if res is not None:
                 results.append(res)
-
     groups = defaultdict(list)
     for name, struct_h, content_h, path in results:
         groups[(struct_h, content_h)].append(path)
-
     duplicates = {k: v for k, v in groups.items() if len(v) > 1}
-
     if not duplicates:
         print("\nNo duplicate folders found.")
         return
-
     print(f"\nFound {len(duplicates)} set(s) of duplicate folders:\n")
     for i, (_, paths) in enumerate(sorted(duplicates.items(), key=lambda kv: kv[1][0]), start=1):
         print(f"--- Group {i} ({len(paths)} folders) ---")

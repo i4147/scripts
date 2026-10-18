@@ -1,5 +1,4 @@
 #!/data/data/com.termux/files/usr/bin/env python
-
 from __future__ import annotations
 import argparse
 import functools
@@ -12,7 +11,6 @@ import subprocess
 import sys
 from typing import Optional
 from urllib.parse import urlparse
-
 
 CURRENT_DIR = Path.cwd()
 HOME_ENV = Path.home() / ".env"

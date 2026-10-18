@@ -1,22 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/python
 """Find the top-N most similar files in ~/bin to a given file using ssdeep.
-
 Python sources are normalized before hashing: shebang, comments, docstrings,
 and type annotations are removed so similarity reflects structure, not
 formatting/comment noise.
-
 Targets Python 3.14+:
   * pathlib.Path.walk for traversal
   * selectable multiprocessing backend via --mp-method
     (serial | interpreter | process | thread | auto)
-
 Optimizations:
   * persistent hash cache keyed by (path, mtime_ns, size)
   * single lstat per file; symlinks and specials skipped
   * atomic cache writes; cache failures are non-fatal
 """
-from __future__ import annotations
 
+from __future__ import annotations
 import argparse
 import ast
 import json
@@ -33,33 +30,39 @@ from typing import Iterator
 
 try:
     from concurrent.futures import InterpreterPoolExecutor
+
     _HAVE_INTERPRETER = True
 except ImportError:  # pragma: no cover — only on <3.14
     InterpreterPoolExecutor = None  # type: ignore[assignment]
     _HAVE_INTERPRETER = False
-
 import ssdeep
 
 SKIP_DIRS = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
-    ".cache", ".idea", ".vscode",
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".cache",
+    ".idea",
+    ".vscode",
 })
-
 CACHE_VERSION = 1
 _CACHE_BASE = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
 CACHE_PATH = _CACHE_BASE / "bin-similar" / "ssdeep-hashes.json"
-
 # Below this many uncached jobs, `auto` stays serial.
 PARALLEL_THRESHOLD = 8
-
 MP_METHODS = ("auto", "serial", "interpreter", "process", "thread")
 
 
 # --------------------------------------------------------------------------- #
 # Normalization
 # --------------------------------------------------------------------------- #
-
 class _Normalizer(ast.NodeTransformer):
     """Strip docstrings and type annotations from a Python AST."""
 
@@ -105,9 +108,7 @@ class _Normalizer(ast.NodeTransformer):
         # `x: int = 1` -> `x = 1`  ;  bare `x: int` -> drop entirely
         self.generic_visit(node)
         if node.value is not None:
-            return ast.copy_location(
-                ast.Assign(targets=[node.target], value=node.value), node
-            )
+            return ast.copy_location(ast.Assign(targets=[node.target], value=node.value), node)
         return ast.copy_location(ast.Pass(), node)
 
 
@@ -118,12 +119,10 @@ def normalize_python(source: str) -> str:
     if lines and lines[0].startswith("#!"):
         lines = lines[1:]
     src = "\n".join(lines)
-
     try:
         tree = ast.parse(src)
     except SyntaxError:
         return src
-
     tree = _Normalizer().visit(tree)
     ast.fix_missing_locations(tree)
     try:
@@ -135,7 +134,6 @@ def normalize_python(source: str) -> str:
 # --------------------------------------------------------------------------- #
 # File discovery
 # --------------------------------------------------------------------------- #
-
 def iter_files(root: Path) -> Iterator[tuple[Path, int, int]]:
     """Yield (path, mtime_ns, size) for regular files under root."""
     for dirpath, dirnames, filenames in root.walk():
@@ -154,7 +152,6 @@ def iter_files(root: Path) -> Iterator[tuple[Path, int, int]]:
 # --------------------------------------------------------------------------- #
 # Hashing worker
 # --------------------------------------------------------------------------- #
-
 def _hash_job(job: tuple[Path, int, int]) -> tuple[Path, int, int, str | None]:
     """Must be module-level so it's picklable for process/interpreter pools."""
     path, mtime_ns, size = job
@@ -169,7 +166,6 @@ def _hash_job(job: tuple[Path, int, int]) -> tuple[Path, int, int, str | None]:
 # --------------------------------------------------------------------------- #
 # Multiprocessing backends
 # --------------------------------------------------------------------------- #
-
 def _default_parallel() -> str:
     return "interpreter" if _HAVE_INTERPRETER else "process"
 
@@ -178,9 +174,7 @@ def _resolve_method(requested: str, n_jobs: int) -> str:
     """Turn `auto` into a concrete method; pass others through."""
     if requested != "auto":
         if requested == "interpreter" and not _HAVE_INTERPRETER:
-            raise RuntimeError(
-                "InterpreterPoolExecutor unavailable (need Python 3.14+)"
-            )
+            raise RuntimeError("InterpreterPoolExecutor unavailable (need Python 3.14+)")
         return requested
     if n_jobs < PARALLEL_THRESHOLD:
         return "serial"
@@ -219,7 +213,6 @@ def _hash_all(
 # --------------------------------------------------------------------------- #
 # Cache
 # --------------------------------------------------------------------------- #
-
 def _load_cache(path: Path) -> dict[str, list]:
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -246,7 +239,6 @@ def _save_cache(path: Path, entries: dict[str, list]) -> None:
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-
 def parse_args(argv: list[str]) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         prog=Path(argv[0]).name,
@@ -260,7 +252,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="parallel backend (default: auto)",
     )
     ap.add_argument(
-        "-j", "--workers",
+        "-j",
+        "--workers",
         type=int,
         default=None,
         help="max workers for parallel methods (default: executor default)",
@@ -283,40 +276,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
-
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv
     args = parse_args(argv)
-
     target = args.file.expanduser()
     if not target.is_file():
         print(f"error: not a file: {target}", file=sys.stderr)
         return 1
     target = target.resolve()
-
     try:
         target_src = target.read_text(encoding="utf-8", errors="replace")
         target_hash = ssdeep.hash(normalize_python(target_src))
     except Exception as e:
         print(f"error: cannot hash {target}: {e}", file=sys.stderr)
         return 1
-
     bin_dir = args.bin_dir.expanduser().resolve()
     if not bin_dir.is_dir():
         print(f"error: no such directory: {bin_dir}", file=sys.stderr)
         return 1
-
     files = list(iter_files(bin_dir))
     if not files:
         print(f"no files found under {bin_dir}", file=sys.stderr)
         return 1
-
     cache = _load_cache(CACHE_PATH)
     hashes: dict[Path, str] = {}
     to_hash: list[tuple[Path, int, int]] = []
     seen: set[Path] = set()
-
     for path, mtime_ns, size in files:
         seen.add(path)
         ent = cache.get(str(path))
@@ -325,22 +311,17 @@ def main(argv: list[str] | None = None) -> int:
             hashes[path] = ent[2]
         else:
             to_hash.append((path, mtime_ns, size))
-
     method = _resolve_method(args.mp_method, len(to_hash))
-
     for path, mtime_ns, size, h in _hash_all(to_hash, method, args.workers):
         if h is None:
             cache.pop(str(path), None)
             continue
         hashes[path] = h
         cache[str(path)] = [mtime_ns, size, h]
-
     # Prune cache entries for files that no longer exist.
     for gone in [k for k in cache if Path(k) not in seen]:
         del cache[gone]
-
     _save_cache(CACHE_PATH, cache)
-
     scored: list[tuple[int, Path]] = []
     for path, h in hashes.items():
         if path == target:
@@ -350,11 +331,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             continue
         scored.append((score, path))
-
     if not scored:
         print("no comparable files found")
         return 0
-
     scored.sort(key=lambda t: (-t[0], str(t[1])))
     for score, path in scored[: args.top]:
         print(f"{score:>3}%  {path}")

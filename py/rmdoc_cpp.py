@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path
@@ -78,7 +77,6 @@ if __name__ == "__main__":
     errors = [r for r in results if r[0] == "error"]
     nochg = sum(1 for r in results if r[0] == "nochange")
     total_comments = sum(r[2] for r in results if r[0] == "changed")
-
     print(f"\n{'=' * 42}")
     print(f"Files: {len(files)} | Changed: {changed} | Unchanged: {nochg} | Errors: {len(errors)}")
     print(f"Total comment markers removed: ~{total_comments}")

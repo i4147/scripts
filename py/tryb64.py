@@ -3,7 +3,6 @@ from pathlib import Path
 
 fn = Path("2")
 lines = fn.read_text().splitlines()
-
 for line in lines:
     line = line.strip()
     try:

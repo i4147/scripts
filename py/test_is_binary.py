@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from binaryornot import is_binary as isb1
 from dh import cprint, get_files
 from dh import is_binary as isb2

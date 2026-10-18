@@ -1,324 +1,364 @@
-from __future__ import annotations
-
-import hashlib
 import re
 import sys
 import time
+from io import BytesIO
 from pathlib import Path
-from typing import Any
-from urllib.parse import quote
-
 import pycurl
+from bs4 import BeautifulSoup
+from dh import cprint
 
-RETRIES = 3
-TIMEOUT = 30
-CHUNK_SIZE = 1024 * 1024
-CHUNK_THRESHOLD = 5 * 1024 * 1024
-
-MIRRORS = [
-    "https://pypi.org",
-    "https://pypi.tuna.tsinghua.edu.cn",
-    "https://mirror-pypi.runflare.com",
+MIRROR_URLS = [
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://pypi.org/simple",
 ]
+TIMEOUT = 30
+DOWNLOAD_DIR = Path.cwd()
+MAX_RETRIES = 3
+RETRY_DELAY = 2
+ARCH_TAGS = [
+    "win32",
+    "win_amd64",
+    "win_arm64",
+    "win32",
+    "windows",
+    "manylinux",
+    "musllinux",
+    "linux_i686",
+    "linux_x86_64",
+    "linux_armv7l",
+    "linux_aarch64",
+    "linux_armv6l",
+    "linux_armv8l",
+    "macosx",
+    "darwin",
+    "x86_64",
+    "amd64",
+    "i686",
+    "i386",
+    "aarch64",
+    "armv7l",
+    "armv6l",
+    "armv8l",
+    "ppc64",
+    "ppc64le",
+    "s390x",
+    "riscv64",
+    "cp36",
+    "cp37",
+    "cp38",
+    "cp39",
+    "cp310",
+    "cp311",
+    "cp312",
+    "cp313",
+    "cp27",
+    "cp35",
+    "pp27",
+    "pp36",
+    "pp37",
+    "pp38",
+    "pp39",
+    "pypy",
+    "jython",
+    "32",
+    "64",
+]
+WHEEL_PLATFORM_RE = re.compile(
+    r"-(cp\d+|pp\d+|py\d+)"
+    r"(-(cp\d+|pp\d+|py\d+))?"
+    r"-(manylinux|musllinux|win|macosx|linux|darwin)",
+    re.IGNORECASE,
+)
 
-CURRENT_DIR = Path.cwd()
+
+def human_size(num_bytes: int) -> str:
+    if num_bytes is None or num_bytes < 0:
+        return "unknown"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024.0:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} PB"
 
 
-def parse_requirement(value: str) -> tuple[str, str | None]:
-    match = re.match(r"^([A-Za-z0-9_.-]+)(?:==([A-Za-z0-9_.!+-]+))?$", value)
-
-    if match:
-        return match.group(1), match.group(2)
-
-    package_name = re.split(r"[<>=!~\[]", value, maxsplit=1)[0].strip()
-    if not package_name:
-        raise ValueError(f"Invalid package specification: {value!r}")
-
-    print(f"Warning: {value!r} is not an exact version specification; downloading the latest release.")
-    return package_name, None
+def is_windows_url(url: str) -> bool:
+    lower = url.lower()
+    return "win32" in lower or "win_amd64" in lower or "win_arm64" in lower or "-win-" in lower
 
 
-def normalized_package_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def curl_get_bytes(url: str, byte_range: str | None = None) -> bytes:
-    response = bytearray()
-
-    curl = pycurl.Curl()
-    try:
-        curl.setopt(pycurl.URL, url)
-        curl.setopt(pycurl.FOLLOWLOCATION, True)
-        curl.setopt(pycurl.MAXREDIRS, 5)
-        curl.setopt(pycurl.CONNECTTIMEOUT, TIMEOUT)
-        curl.setopt(pycurl.TIMEOUT, TIMEOUT)
-        curl.setopt(pycurl.USERAGENT, "pypi-package-downloader/1.0")
-        curl.setopt(pycurl.WRITEFUNCTION, response.extend)
-
-        if byte_range is not None:
-            curl.setopt(pycurl.RANGE, byte_range)
-
-        curl.perform()
-
-        status = curl.getinfo(pycurl.RESPONSE_CODE)
-        if status not in (200, 206):
-            raise RuntimeError(f"HTTP {status}")
-
-        return bytes(response)
-    finally:
-        curl.close()
-
-
-def fetch_json(url: str) -> dict[str, Any]:
-    import json
-
-    return json.loads(curl_get_bytes(url).decode("utf-8"))
-
-
-def get_package_metadata(package: str, mirror: str) -> dict[str, Any]:
-    package_url = quote(normalized_package_name(package), safe="")
-    return fetch_json(f"{mirror}/pypi/{package_url}/json")
-
-
-def is_compatible_file(file_info: dict[str, Any]) -> bool:
-    filename = file_info.get("filename", "").lower()
-    package_type = file_info.get("packagetype", "")
-
-    if "darwin" in filename or "macosx" in filename or "win32" in filename:
-        return False
-
-    if package_type == "sdist":
-        return filename.endswith(".tar.gz")
-
-    if package_type == "bdist_wheel":
-        return (
-            filename.endswith(".whl")
-            and re.search(
-                r"-(py\d|py2\.py3)-none-any\.whl$",
-                filename,
-            )
-            is not None
-        )
-
+def has_arch_tag(url: str) -> bool:
+    lower = url.lower()
+    if WHEEL_PLATFORM_RE.search(lower):
+        return True
+    for tag in [
+        "manylinux",
+        "musllinux",
+        "macosx",
+        "darwin",
+        "x86_64",
+        "amd64",
+        "i686",
+        "aarch64",
+        "armv7l",
+        "armv6l",
+        "armv8l",
+        "ppc64",
+        "s390x",
+        "riscv64",
+    ]:
+        if tag in lower:
+            return True
     return False
 
 
-def choose_distribution(
-    metadata: dict[str, Any],
-    requested_version: str | None,
-) -> dict[str, Any]:
-    version = requested_version or metadata["info"]["version"]
-    releases = metadata.get("releases", {})
-
-    files = releases.get(version, [])
-    if not files:
-        raise RuntimeError(f"No files found for version {version}")
-
-    valid_files = [
-        file_info for file_info in files if not file_info.get("yanked", False) and is_compatible_file(file_info)
-    ]
-
-    tarballs = [
-        file_info
-        for file_info in valid_files
-        if file_info.get("packagetype") == "sdist" and file_info.get("filename", "").endswith(".tar.gz")
-    ]
-    if tarballs:
-        return tarballs[0]
-
-    wheels = [file_info for file_info in valid_files if file_info.get("packagetype") == "bdist_wheel"]
-    if wheels:
-        return wheels[0]
-
-    raise RuntimeError(f"No suitable .tar.gz source package or universal Python wheel was found for version {version}")
+def is_sdist(url: str) -> bool:
+    return url.lower().endswith(".tar.gz")
 
 
-def get_content_length(url: str) -> int | None:
-    curl = pycurl.Curl()
+def is_pure_wheel(url: str) -> bool:
+    lower = url.lower()
+    if not lower.endswith(".whl"):
+        return False
+    return "py3-none-any" in lower or "py2.py3-none-any" in lower
+
+
+def select_best_url(links: list, pkg_name: str) -> tuple[str, str, str] | None:
+    sdist_candidates = []
+    pure_wheel_candidates = []
+    arch_skipped = []
+    for link in links:
+        href = link.get("href", "").strip()
+        if not href:
+            continue
+        url = href.split("#")[0]
+        filename = link.get_text().strip() or url.split("/")[-1]
+        if is_windows_url(url):
+            continue
+        if has_arch_tag(url):
+            arch_skipped.append((url, filename))
+            continue
+        if is_sdist(url):
+            sdist_candidates.append((url, filename))
+        elif is_pure_wheel(url):
+            pure_wheel_candidates.append((url, filename))
+    if sdist_candidates:
+        url, filename = sdist_candidates[-1]
+        return (url, filename, "download")
+    if pure_wheel_candidates:
+        url, filename = pure_wheel_candidates[-1]
+        return (url, filename, "download")
+    if arch_skipped:
+        url, filename = arch_skipped[-1]
+        return (url, filename, "skip")
+    return None
+
+
+def fetch_package_page(pkg_name: str) -> str:
+    for mirror in MIRROR_URLS:
+        url = f"{mirror}/{pkg_name}/"
+        buffer = BytesIO()
+        curl = pycurl.Curl()
+        curl.setopt(curl.URL, url)
+        curl.setopt(curl.WRITEDATA, buffer)
+        curl.setopt(curl.FOLLOWLOCATION, 1)
+        curl.setopt(curl.TIMEOUT, TIMEOUT)
+        curl.setopt(
+            curl.USERAGENT,
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        curl.setopt(curl.ACCEPT_ENCODING, "gzip, deflate")
+        curl.setopt(
+            curl.HTTPHEADER,
+            [
+                "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language: en-US,en;q=0.5",
+            ],
+        )
+        try:
+            curl.perform()
+            response_code = curl.getinfo(curl.RESPONSE_CODE)
+            if response_code == 200:
+                html = buffer.getvalue().decode("utf-8")
+                if html.strip():
+                    return html
+                print(f"  Empty response from {mirror}, trying next...")
+            else:
+                if response_code == 404:
+                    print(f"  Package '{pkg_name}' not found on {mirror}, trying next...")
+                elif response_code == 403:
+                    print(f"  HTTP 403: Forbidden on {mirror}, trying next...")
+                elif response_code == 429:
+                    print(f"  HTTP 429: Rate limited on {mirror}, trying next...")
+                else:
+                    print(f"  HTTP {response_code} from {mirror}, trying next...")
+        except Exception as e:
+            print(f"  Error contacting {mirror}: {e}, trying next...")
+        finally:
+            curl.close()
+    return ""
+
+
+def extract_latest_download_url(html: str, pkg_name: str) -> tuple[str, str, str] | None:
     try:
-        curl.setopt(pycurl.URL, url)
-        curl.setopt(pycurl.NOBODY, True)
-        curl.setopt(pycurl.FOLLOWLOCATION, True)
-        curl.setopt(pycurl.MAXREDIRS, 5)
-        curl.setopt(pycurl.CONNECTTIMEOUT, TIMEOUT)
-        curl.setopt(pycurl.TIMEOUT, TIMEOUT)
-        curl.setopt(pycurl.USERAGENT, "pypi-package-downloader/1.0")
-        curl.perform()
+        soup = BeautifulSoup(html, "html.parser")
+        all_links = soup.find_all("a", href=True)
+        if not all_links:
+            return None
+        return select_best_url(all_links, pkg_name)
+    except Exception as e:
+        return None
 
-        size = curl.getinfo(pycurl.CONTENT_LENGTH_DOWNLOAD_T)
-        return size if size >= 0 else None
+
+def get_remote_size(url: str) -> int:
+    curl = pycurl.Curl()
+    curl.setopt(curl.URL, url)
+    curl.setopt(curl.NOBODY, 1)
+    curl.setopt(curl.FOLLOWLOCATION, 1)
+    curl.setopt(curl.TIMEOUT, TIMEOUT)
+    curl.setopt(
+        curl.USERAGENT,
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    )
+    curl.setopt(curl.ACCEPT_ENCODING, "gzip, deflate")
+    try:
+        curl.perform()
+        response_code = curl.getinfo(curl.RESPONSE_CODE)
+        if response_code == 200:
+            size = curl.getinfo(curl.CONTENT_LENGTH_DOWNLOAD)
+            if size and size > 0:
+                return int(size)
+    except Exception:
+        pass
     finally:
         curl.close()
+    return -1
 
 
-def format_size(size: int | None) -> str:
-    if size is None:
-        return "unknown size"
-
-    units = ("B", "KiB", "MiB", "GiB")
-    value = float(size)
-
-    for unit in units:
-        if value < 1024 or unit == units[-1]:
-            return f"{value:.2f} {unit}"
-        value /= 1024
-
-    return f"{size} B"
+def download_file_with_retry(url: str, filename: str, max_retries: int = MAX_RETRIES) -> bool:
+    for attempt in range(max_retries):
+        if attempt > 0:
+            time.sleep(RETRY_DELAY * attempt)
+        if download_file(url, filename):
+            return True
+    return False
 
 
-def download_regular(url: str, destination: Path) -> None:
-    temporary = destination.with_suffix(destination.suffix + ".part")
-
-    with temporary.open("wb") as file_handle:
+def download_file(url: str, filename: str) -> bool:
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = DOWNLOAD_DIR / filename
+    if output_path.exists() and output_path.stat().st_size > 0:
+        return True
+    remote_size = get_remote_size(url)
+    if remote_size > 0:
+        print(f"  Size: {human_size(remote_size)} ({remote_size:,} bytes)")
+    else:
+        print("  Size: unknown")
+    print(f"  Downloading: {filename}")
+    with open(output_path, "wb") as f:
         curl = pycurl.Curl()
-        try:
-            curl.setopt(pycurl.URL, url)
-            curl.setopt(pycurl.FOLLOWLOCATION, True)
-            curl.setopt(pycurl.MAXREDIRS, 5)
-            curl.setopt(pycurl.CONNECTTIMEOUT, TIMEOUT)
-            curl.setopt(pycurl.TIMEOUT, TIMEOUT)
-            curl.setopt(pycurl.USERAGENT, "pypi-package-downloader/1.0")
-            curl.setopt(pycurl.WRITEFUNCTION, file_handle.write)
-            curl.perform()
+        curl.setopt(curl.URL, url)
+        curl.setopt(curl.WRITEDATA, f)
+        curl.setopt(curl.FOLLOWLOCATION, 1)
+        curl.setopt(curl.TIMEOUT, 120)
+        curl.setopt(
+            curl.USERAGENT,
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        curl.setopt(curl.ACCEPT_ENCODING, "gzip, deflate")
+        curl.setopt(
+            curl.HTTPHEADER,
+            [
+                "Accept: */*",
+                "Accept-Language: en-US,en;q=0.5",
+            ],
+        )
+        curl.setopt(curl.NOPROGRESS, 0)
 
-            status = curl.getinfo(pycurl.RESPONSE_CODE)
-            if status != 200:
-                raise RuntimeError(f"HTTP {status}")
+        def progress_callback(download_t, download_d, upload_t, upload_d):
+            if download_t > 0:
+                percent = (download_d * 40) / download_t
+                if int(percent) % 10 == 0:
+                    cprint(
+                        f"  Progress: {percent:.1f}% ({human_size(download_d)}/{human_size(download_t)})",
+                        end="\r",
+                    )
+            else:
+                cprint(f"  Downloaded: {human_size(download_d)}", end="\r")
+            return 0
+
+        curl.setopt(curl.XFERINFOFUNCTION, progress_callback)
+        try:
+            curl.perform()
+            response_code = curl.getinfo(curl.RESPONSE_CODE)
+            if response_code == 200:
+                print()
+                file_size = output_path.stat().st_size
+                return True
+            else:
+                if response_code == 403:
+                    print("  HTTP 403: Forbidden - Access denied")
+                elif response_code == 404:
+                    print("  HTTP 404: File not found on mirror")
+                elif response_code == 429:
+                    print("  HTTP 429: Too Many Requests - Rate limited, try again later")
+                if output_path.exists():
+                    output_path.unlink()
+                return False
+        except Exception as e:
+            if output_path.exists():
+                output_path.unlink()
+            return False
         finally:
             curl.close()
 
-    temporary.replace(destination)
+
+def process_package(pkg_name: str) -> tuple[bool, bool]:
+    html = fetch_package_page(pkg_name)
+    if not html:
+        return (False, False)
+    download_info = extract_latest_download_url(html, pkg_name)
+    if not download_info:
+        return (False, False)
+    url, filename, status = download_info
+    if status == "skip":
+        return (True, True)
+    print(f"Download URL: {url}")
+    ok = download_file_with_retry(url, filename)
+    return (ok, False)
 
 
-def download_chunked(url: str, destination: Path, total_size: int) -> None:
-    temporary = destination.with_suffix(destination.suffix + ".part")
-
-    with temporary.open("wb") as file_handle:
-        downloaded = 0
-
-        while downloaded < total_size:
-            end = min(downloaded + CHUNK_SIZE - 1, total_size - 1)
-            print(
-                f"\rDownloading chunk {downloaded // CHUNK_SIZE + 1} "
-                f"({format_size(downloaded)} / {format_size(total_size)})",
-                end="",
-                flush=True,
-            )
-
-            chunk = curl_get_bytes(url, f"{downloaded}-{end}")
-            expected_size = end - downloaded + 1
-
-            if len(chunk) != expected_size:
-                raise RuntimeError(f"Invalid chunk size: expected {expected_size}, got {len(chunk)}")
-
-            file_handle.write(chunk)
-            downloaded += len(chunk)
-
-    print()
-    temporary.replace(destination)
-
-
-def verify_hash(path: Path, hashes: dict[str, str]) -> None:
-    expected_sha256 = hashes.get("sha256")
-    if not expected_sha256:
-        return
-
-    digest = hashlib.sha256()
-    with path.open("rb") as file_handle:
-        while data := file_handle.read(1024 * 1024):
-            digest.update(data)
-
-    actual_sha256 = digest.hexdigest()
-    if actual_sha256 != expected_sha256:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(f"SHA256 mismatch for {path.name}: expected {expected_sha256}, got {actual_sha256}")
-
-
-def download_from_mirror(
-    package: str,
-    requested_version: str | None,
-    mirror: str,
-) -> Path:
-    metadata = get_package_metadata(package, mirror)
-    selected = choose_distribution(metadata, requested_version)
-
-    filename = selected["filename"]
-    package_url = quote(normalized_package_name(package), safe="")
-    file_url = f"{mirror}/packages/{selected['url'].split('/packages/', 1)[-1]}"
-
-    original_url = selected["url"]
-    if "/packages/" in original_url:
-        file_url = mirror.rstrip("/") + "/packages/" + original_url.split("/packages/", 1)[1]
-    else:
-        file_url = original_url
-
-    destination = CURRENT_DIR / filename
-    expected_size = selected.get("size") or get_content_length(file_url)
-
-    print(f"Package:  {package}")
-    print(f"Mirror:   {mirror}")
-    print(f"File:     {filename}")
-    print(f"Size:     {format_size(expected_size)}")
-
-    if destination.exists():
-        print(f"Already exists: {destination}")
-        return destination
-
-    if expected_size is not None and expected_size > CHUNK_THRESHOLD:
-        print("Method:   chunked download")
-        download_chunked(file_url, destination, expected_size)
-    else:
-        print("Method:   regular download")
-        download_regular(file_url, destination)
-
-    verify_hash(destination, selected.get("digests", {}))
-    print(f"Saved:    {destination}")
-    return destination
-
-
-def download_package(specification: str) -> None:
-    package, version = parse_requirement(specification)
-    errors: list[str] = []
-
-    for mirror in MIRRORS:
-        for attempt in range(1, RETRIES + 1):
-            try:
-                download_from_mirror(package, version, mirror)
-                return
-            except Exception as error:
-                message = f"{mirror} attempt {attempt}/{RETRIES} failed: {error}"
-                print(message, file=sys.stderr)
-                errors.append(message)
-
-                if attempt < RETRIES:
-                    time.sleep(1)
-
-        print(f"Trying next mirror for {package}...", file=sys.stderr)
-
-    raise RuntimeError(f"Failed to download {specification} from all mirrors:\n" + "\n".join(errors))
-
-
-def main() -> int:
-    if len(sys.argv) < 2:
-        print(
-            f"Usage: {Path(sys.argv[0]).name} PACKAGE [PACKAGE ...]\n"
-            "Examples:\n"
-            f"  {Path(sys.argv[0]).name} requests\n"
-            f"  {Path(sys.argv[0]).name} requests==2.32.3 flask"
-        )
-        return 2
-
-    failed = False
-
-    for specification in sys.argv[1:]:
+def main():
+    packages = sys.argv[1:]
+    start_time = time.time()
+    successful = []
+    failed = []
+    skipped = []
+    for pkg_name in packages:
         try:
-            download_package(specification)
-        except Exception as error:
-            failed = True
-            print(f"ERROR: {specification}: {error}", file=sys.stderr)
-
-    return 1 if failed else 0
+            ok, was_skipped = process_package(pkg_name)
+            if was_skipped:
+                skipped.append(pkg_name)
+            elif ok:
+                successful.append(pkg_name)
+            else:
+                failed.append(pkg_name)
+        except Exception as e:
+            failed.append(pkg_name)
+    if successful:
+        print(f"\nSuccessfully downloaded:")
+        for pkg in successful:
+            print(f"  ✓ {pkg}")
+    if skipped:
+        print(f"\nSkipped (arch-specific, no pure source/wheel available):")
+        for pkg in skipped:
+            print(f"  ⚠ {pkg}")
+    if failed:
+        print(f"\nFailed to download:")
+        for pkg in failed:
+            print(f"  ✗ {pkg}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

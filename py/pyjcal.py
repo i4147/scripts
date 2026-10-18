@@ -1,7 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-
 from __future__ import annotations
-
 from datetime import datetime
 
 
@@ -355,29 +353,3 @@ if __name__ == "__main__":
             print(jcal(month, year, language=lang))
         else:
             print(jdate(language=lang))
-
-
-
-change this code to show output like this:
-     [37mMehr 1405[0m      
-[37mSh[0m [37mYe[0m [37mDo[0m [37mSe[0m [37mCh[0m [37mPa[0m [31mJo[0m
-             1  2 [31m 3[0m
- 4  5  6  7  8  9 [31m10[0m
-11 12 13 14 15 16 [31m17[0m
-18 19 [30;47m20[0m 21 22 23 [31m24[0m
-25 26 27 28 29 30   
-                    
-
-this is terminal output cleaned output is:
-
-     Mehr 1405      
-Sh Ye Do Se Ch Pa Jo
-             1  2  3
- 4  5  6  7  8  9 10
-11 12 13 14 15 16 17
-18 19 20 21 22 23 24
-25 26 27 28 29 30   
-                    
-
-
-Jo 3 10 17 24  should be printed in red color

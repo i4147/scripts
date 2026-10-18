@@ -4,7 +4,6 @@ import mimetypes
 import re
 import sys
 from pathlib import Path
-
 from dh import MIME_TO_EXT
 
 DATA_URL_RE = re.compile(

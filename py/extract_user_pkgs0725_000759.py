@@ -26,7 +26,6 @@ def get_matching_packages(pattern: str) -> list[str]:
 def resolve_package_list(patterns: list[str]) -> tuple[list[str], list[str]]:
     matched_packages = []
     unmatched_patterns = []
-
     for pattern in patterns:
         if any(c in pattern for c in "*?[]"):
             matches = get_matching_packages(pattern)
@@ -36,7 +35,6 @@ def resolve_package_list(patterns: list[str]) -> tuple[list[str], list[str]]:
                 unmatched_patterns.append(pattern)
         else:
             matched_packages.append(pattern)
-
     return matched_packages, unmatched_patterns
 
 
@@ -103,19 +101,14 @@ def main():
     )
     parser.add_argument("--list-only", action="store_true", help="Only list matching packages without extracting")
     args = parser.parse_args()
-
     matched_packages, unmatched_patterns = resolve_package_list(args.patterns)
-
     seen = set()
     matched_packages = [x for x in matched_packages if not (x in seen or seen.add(x))]
-
     if unmatched_patterns:
         print(f"⚠️  No packages found matching: {', '.join(unmatched_patterns)}")
-
     if not matched_packages:
         print("❌ No matching packages found.")
         return
-
     user_site = get_user_site_path()
     base_target_dir = Path.home() / "tmp" / "pkgs"
     print(f"🔍 System User-Site Path: {user_site}")
@@ -124,10 +117,8 @@ def main():
     for pkg in matched_packages:
         print(f"   - {pkg}")
     print("-" * 60)
-
     if args.list_only:
         return
-
     with concurrent.futures.ThreadPoolExecutor() as pkg_executor:
         future_to_pkg = {
             pkg_executor.submit(process_package, pkg, user_site, base_target_dir): pkg for pkg in matched_packages

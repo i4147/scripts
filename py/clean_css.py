@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import contextlib
 import multiprocessing as mp
@@ -10,7 +9,6 @@ import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-
 import tree_sitter_css
 from tree_sitter import Language, Parser
 

@@ -7,20 +7,15 @@ import time
 def translate_text(text, target_lang="en", retries=3):
     if not text or text.strip() == "":
         return text
-
     attempt = 0
-
     while attempt < retries:
         try:
             src_lang = detect_language(text)
-
             if src_lang == target_lang:
                 return text
-
             translator = GoogleTranslator(source=src_lang, target=target_lang)
             translated = translator.translate(text)
             return translated
-
         except Exception as e:
             attempt += 1
             if attempt < retries:
@@ -28,7 +23,6 @@ def translate_text(text, target_lang="en", retries=3):
             else:
                 print(f"Translation error after {retries} attempts: {e}", file=sys.stderr)
                 return f"[Translation failed: {text[:50]}...]"
-
     return text
 
 
@@ -71,31 +65,23 @@ def process_file(input_file, output_file=None):
     except Exception as e:
         print(f"Error reading file: {e}", file=sys.stderr)
         return
-
     output_lines = []
-
     for i, line in enumerate(lines):
         line = line.rstrip("\n")
-
         lang_type = detect_language_type(line)
-
         if lang_type in ["empty", "marker"]:
             output_lines.append(line)
             continue
-
         if lang_type == "english":
             output_lines.append(line)
             continue
-
         if lang_type in ["tamil", "chinese", "other"]:
             print(f"Translating line {i + 1} ({lang_type})...", file=sys.stderr)
             translated = translate_text(line)
             output_lines.append(line)
             output_lines.append(f"→ {translated}")
             output_lines.append("")
-
     output_text = "\n".join(output_lines)
-
     if output_file:
         try:
             with open(output_file, "w", encoding="utf-8") as f:

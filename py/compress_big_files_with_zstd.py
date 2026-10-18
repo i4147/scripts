@@ -1,11 +1,9 @@
 from __future__ import annotations
-
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import zstandard as zstd
 
 GREEN = "\x1b[92m"

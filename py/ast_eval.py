@@ -1,5 +1,3 @@
-#!/data/data/com.termux/files/usr/bin/python3.12
-
 from __future__ import annotations
 import argparse
 import ast
@@ -9,9 +7,7 @@ from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Sequence
-
 from loguru import logger
-
 from dh import get_pyfiles
 
 

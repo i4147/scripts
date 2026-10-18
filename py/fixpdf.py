@@ -1,6 +1,5 @@
 import pathlib
 import sys
-
 import pdfminer
 from pypdf import PdfReader, PdfWriter
 

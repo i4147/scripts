@@ -16,10 +16,8 @@ def parse_import(line):
         from_, module, import_, rest = line.split(None, 3)
     except ValueError:
         raise ImportParseException(line)
-
     if (from_, import_) != ("from", "import"):
         raise ImportParseException(line)
-
     symbols = [s.strip() for s in rest.split(",")]
     return module, symbols
 
@@ -30,7 +28,6 @@ def parse_splat_import(line):
         assert import_ == "import"
     except (ValueError, AssertionError):
         raise ImportParseException(line)
-
     return set((s.strip() for s in rest.split(",")))
 
 
@@ -49,19 +46,15 @@ def gather_imports(lines):
     imports = DefaultDict(set())
     splats = set()
     prev = ""
-
     for line in lines:
         if prev:
             line = prev + line
             prev = ""
-
         if line.endswith("\\"):
             prev = line[:-1]
             continue
-
         if not line.strip():
             continue
-
         try:
             module, symbols = parse_import(line)
         except ImportParseException:
@@ -69,7 +62,6 @@ def gather_imports(lines):
         else:
             for s in symbols:
                 imports[module].add(s)
-
     return imports, splats
 
 
@@ -111,7 +103,6 @@ def add_wrapped_import(output: list[str], module, symbols, maxlen=78) -> None:
     lower_syms = []
     upper_syms = []
     other_syms = []
-
     for s in symbols:
         if s.islower():
             lower_syms.append(s)
@@ -119,7 +110,6 @@ def add_wrapped_import(output: list[str], module, symbols, maxlen=78) -> None:
             upper_syms.append(s)
         else:
             other_syms.append(s)
-
     line = f"from {module} import "
     for s in chain(sorted(lower_syms), sorted(other_syms, key=str.lower), sorted(upper_syms)):
         if len(line) + len(s) > maxlen:
@@ -127,7 +117,6 @@ def add_wrapped_import(output: list[str], module, symbols, maxlen=78) -> None:
             line = f"from {module} import {s}, "
         else:
             line += f"{s}, "
-
     if line:
         output.append(line[:-2])
 
@@ -143,14 +132,11 @@ def format_imports(imports: DefaultDict, splats) -> list[str]:
 def cleanup_imports(input_lines):
     used_tokens = used_symbols(input_lines)
     imports, splats = gather_imports(input_lines)
-
     original_imports = deepcopy(imports)
     original_splats = deepcopy(splats)
-
     cull_unused(used_tokens, splats)
     for module in list(imports.keys()):
         cull_unused(used_tokens, imports[module])
-
     removed = set()
     for module in original_imports:
         for imp in original_imports[module]:
@@ -159,7 +145,6 @@ def cleanup_imports(input_lines):
     for imp in original_splats:
         if imp not in splats:
             removed.add(f"import {imp}")
-
     cleaned = format_imports(imports, splats)
     return cleaned, removed
 
@@ -168,11 +153,9 @@ def process_file(path: Path):
     path = Path(path)
     with open(path, "r") as f:
         lines = f.readlines()
-
     import_lines = []
     non_import_lines = []
     in_import_section = True
-
     for line in lines:
         stripped = line.strip()
         if in_import_section and (stripped.startswith(("import ", "from ")) or not stripped):
@@ -180,15 +163,12 @@ def process_file(path: Path):
         else:
             in_import_section = False
             non_import_lines.append(line)
-
     cleaned_imports, removed = cleanup_imports(import_lines)
-
     with open(path, "w") as f:
         f.writelines(cleaned_imports)
         if cleaned_imports and non_import_lines:
             f.write("\n")
         f.writelines(non_import_lines)
-
     return path, removed
 
 
@@ -200,9 +180,7 @@ def main() -> None:
     if len(sys.argv) > 2:
         print("Usage: python cleanup_imports.py [file_or_directory]")
         sys.exit(1)
-
     target = Path(sys.argv[1]) if len(sys.argv) == 2 else Path.cwd()
-
     if target.is_file():
         if target.suffix == ".py" and target.name != "__init__.py":
             path, removed = process_file(target)
@@ -218,7 +196,6 @@ def main() -> None:
         if not py_files:
             print(f"No Python files found in: {target}")
             return
-
         print(f"Processing {len(py_files)} Python files in parallel...")
         with ProcessPoolExecutor() as executor:
             futures = {executor.submit(process_file, file): file for file in py_files}

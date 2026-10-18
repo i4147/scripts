@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import multiprocessing as mp
 import sys
 import time

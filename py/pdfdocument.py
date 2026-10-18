@@ -3,7 +3,6 @@ import logging
 import re
 from collections.abc import Iterable, Iterator, KeysView
 from typing import Any, cast
-
 from pdfminer import settings
 from pdfminer.casting import safe_int
 from pdfminer.data_structures import NumberTree
@@ -137,7 +136,6 @@ class PDFXRef(PDFBaseXRef):
                 (pos_b, genno_b, use_b) = f
                 if use_b != b"n":
                     continue
-
                 pos_i = safe_int(pos_b)
                 genno_i = safe_int(genno_b)
                 if pos_i is not None and genno_i is not None:
@@ -150,7 +148,6 @@ class PDFXRef(PDFBaseXRef):
                         pos_b,
                         genno_b,
                     )
-
         log.debug("xref objects: %r", self.offsets)
         self.load_trailer(parser)
 
@@ -203,7 +200,6 @@ class PDFXRefFallback(PDFXRef):
             objid = int(objid_s)
             genno = int(genno_s)
             self.offsets[objid] = (None, pos, genno)
-
             parser.seek(pos)
             (_, obj) = parser.nextobject()
             if isinstance(obj, PDFStream) and obj.get("Type") is LITERAL_OBJSTM:
@@ -324,7 +320,6 @@ class PDFDocument:
         self._parser = parser
         self._parser.set_document(self)
         self.is_printable = self.is_modifiable = self.is_extractable = True
-
         try:
             pos = self.find_xref(parser)
             self.read_xref_from(parser, pos, self.xrefs)
@@ -334,15 +329,12 @@ class PDFDocument:
                 newxref = PDFXRefFallback()
                 newxref.load(parser)
                 self.xrefs.append(newxref)
-
         for xref in self.xrefs:
             trailer = xref.get_trailer()
             if not trailer:
                 continue
-
             if "Encrypt" in trailer:
                 log.warning("Encrypted PDF detected - encryption support has been removed")
-
             if "Info" in trailer:
                 self.info.append(dict_value(trailer["Info"]))
             if "Root" in trailer:
@@ -396,7 +388,6 @@ class PDFDocument:
         (_, objid1) = self._parser.nexttoken()
         (_, _genno) = self._parser.nexttoken()
         (_, kwd) = self._parser.nexttoken()
-
         if objid1 != objid:
             x = []
             while kwd is not self.KEYWORD_OBJ:
@@ -404,10 +395,8 @@ class PDFDocument:
                 x.append(kwd)
             if len(x) >= 2:
                 objid1 = x[-2]
-
         if objid1 != objid:
             raise PDFSyntaxError(f"objid mismatch: {objid1!r}={objid!r}")
-
         if kwd != KWD(b"obj"):
             raise PDFSyntaxError(f"Invalid object spec: offset={pos!r}")
         (_, obj) = self._parser.nextobject()
@@ -433,7 +422,6 @@ class PDFDocument:
                         obj = self._getobj_objstm(stream, index, objid)
                     else:
                         obj = self._getobj_parse(index, objid)
-
                     if isinstance(obj, PDFStream):
                         obj.set_objid(objid, genno)
                     break
@@ -469,12 +457,10 @@ class PDFDocument:
 
     def get_page_labels(self) -> Iterator[str]:
         assert self.catalog is not None
-
         try:
             page_labels = PageLabels(self.catalog["PageLabels"])
         except (PDFTypeError, KeyError) as err:
             raise PDFNoPageLabels from err
-
         return page_labels.labels
 
     def lookup_name(self, cat: str, key: str | bytes) -> Any:
@@ -482,7 +468,6 @@ class PDFDocument:
             names = dict_value(self.catalog["Names"])
         except (PDFTypeError, KeyError) as err:
             raise PDFKeyError((cat, key)) from err
-
         d0 = dict_value(names[cat])
 
         def lookup(d: dict[str, Any]) -> Any:
@@ -522,26 +507,18 @@ class PDFDocument:
         for line in parser.revreadlines():
             line = line.strip()
             log.debug("find_xref: %r", line)
-
             if line == b"startxref":
                 log.debug("xref found: pos=%r", prev)
-
                 if not prev.isdigit():
                     raise PDFNoValidXRef(f"Invalid xref position, no digit: {prev!r}")
-
                 start = int(prev)
-
                 if not start >= 0:
                     raise PDFNoValidXRef(f"Invalid xref position, negative: {start}")
-
                 if start >= 2**31:
                     raise PDFNoValidXRef(f"Invalid xref position, too large: {start!r}")
-
                 return start
-
             if line:
                 prev = line
-
         raise PDFNoValidXRef("Unexpected EOF")
 
     def read_xref_from(
@@ -582,26 +559,22 @@ class PageLabels(NumberTree):
     @property
     def labels(self) -> Iterator[str]:
         ranges = self.values
-
         if len(ranges) == 0 or ranges[0][0] != 0:
             if settings.STRICT:
                 raise PDFSyntaxError("PageLabels is missing page index 0")
             else:
                 ranges.insert(0, (0, {}))
-
         for next, (start, label_dict_unchecked) in enumerate(ranges, 1):
             label_dict = dict_value(label_dict_unchecked)
             style = label_dict.get("S")
             prefix = decode_text(str_value(label_dict.get("P", b"")))
             first_value = int_value(label_dict.get("St", 1))
-
             if next == len(ranges):
                 values: Iterable[int] = itertools.count(first_value)
             else:
                 end, _ = ranges[next]
                 range_length = end - start
                 values = range(first_value, first_value + range_length)
-
             for value in values:
                 label = self._format_page_label(value, style)
                 yield prefix + label

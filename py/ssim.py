@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 import argparse
 import os
 import shutil
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 import ssdeep
 import xxhash
 from tqdm import tqdm

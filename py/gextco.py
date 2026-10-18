@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import ast
 import logging
 import sys
@@ -7,7 +6,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
-
 from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

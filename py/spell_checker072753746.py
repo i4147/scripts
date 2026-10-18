@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import re
 import subprocess
 from abc import ABC, abstractmethod
@@ -128,7 +127,6 @@ class Aspell(Spellchecker):
                 count = int(parts[2])
                 offset = int(parts[3].rstrip(":"))
                 suggestions = parts[4 : 4 + count]
-
                 line_num = 1
                 col = offset
                 for i, text_line in enumerate(lines, 1):
@@ -136,7 +134,6 @@ class Aspell(Spellchecker):
                         line_num = i
                         break
                     col -= len(text_line) + 1
-
                 yield Misspelling(word, line_num, offset, suggestions, context)
 
 
@@ -197,12 +194,10 @@ class MisspellingFinder:
     def find(self, source: Source | str, languages: Sequence[str], context: list[str] | None = None) -> None:
         if isinstance(source, str):
             source = StringSource(source)
-
         ctx = context or []
         for text in source.to_texts(ctx):
             for processor in self.processors:
                 text = processor.process(text)
-
             for misspelling in self.spellchecker.check(text.content, languages, text.context):
                 self.handler.handle(misspelling)
 
@@ -223,13 +218,10 @@ class ParallelMisspellingFinder:
     def find(self, source: Source | str, languages: Sequence[str], context: list[str] | None = None) -> None:
         if isinstance(source, str):
             source = StringSource(source)
-
         ctx = context or []
         texts = list(source.to_texts(ctx))
-
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {executor.submit(self._process_text, text, languages): text for text in texts}
-
             for future in as_completed(futures):
                 for misspelling in future.result():
                     self.handler.handle(misspelling)
@@ -242,23 +234,19 @@ class ParallelMisspellingFinder:
 
 def check_files(spellchecker_name: str, *paths: str, languages: list[str] | None = None) -> None:
     languages = languages or ["en_US"]
-
     if spellchecker_name.lower() == "aspell":
         spellchecker = Aspell()
     elif spellchecker_name.lower() == "hunspell":
         spellchecker = Hunspell()
     else:
         raise ValueError(f"Unknown spellchecker: {spellchecker_name}")
-
     sources = [FileSource(p) for p in (paths or [Path.cwd()])]
     source = MultiSource(sources) if len(sources) > 1 else sources[0]
-
     finder = ParallelMisspellingFinder(
         spellchecker,
         EchoHandler(),
         max_workers=4,
     )
-
     finder.find(source, languages)
 
 

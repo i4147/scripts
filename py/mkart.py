@@ -175,14 +175,10 @@ def create_arabic_style_art(word):
             "   ",
         ],
     }
-
     if not word:
         return []
-
     chars = list(word)
-
     num_rows = 4
-
     art_lines = []
     for row in range(num_rows):
         line = ""
@@ -192,7 +188,6 @@ def create_arabic_style_art(word):
             else:
                 line += "   "
         art_lines.append(line)
-
     return art_lines
 
 
@@ -202,20 +197,15 @@ def main():
     print("Enter text to convert (Arabic letters supported)")
     print("Type 'quit' to exit")
     print()
-
     while True:
         text = input("Enter text: ").strip()
-
         if text.lower() in ["quit", "exit", "q"]:
             print("Goodbye!")
             break
-
         if not text:
             print("Please enter some text.")
             continue
-
         art = create_arabic_style_art(text)
-
         print("\n" + "=" * 40)
         for line in art:
             print(f'    "{line}",')

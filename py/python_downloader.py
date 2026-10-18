@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import hashlib
 import os
@@ -14,11 +13,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 __version__ = "1.0.0"
-
 CHUNK = 64 * 1024
 UA = f"dl/{__version__} (pip-style download manager)"
 FULL, HEAD, EMPTY = "━", "╸", " "
-
 STOP = threading.Event()
 
 
@@ -109,9 +106,7 @@ class Bar:
             el = self.elapsed
             rate = self.done / el if el > 0 else 0.0
             return f"{self.label}  {fmt_size(self.done)} in {fmt_time(el)} ({fmt_size(rate)}/s)"
-
         self._tick()
-
         if self.total:
             frac: float | None = self.done / self.total
             head = fmt_pair(self.done, self.total)
@@ -119,7 +114,6 @@ class Bar:
         else:
             frac = None
             parts = [fmt_size(self.done), f"{fmt_size(self.speed)}/s"]
-
         tail = "  ".join(parts)
         room = width - len(tail) - 1
         prefix = ""
@@ -190,7 +184,6 @@ class Progress:
         if self._thread is not None:
             self._thread.join(timeout=1.0)
             self._thread = None
-
         with self.lock:
             if self.enabled and self._drawn:
                 out = [f"\x1b[{self._drawn}A"]
@@ -198,7 +191,6 @@ class Progress:
                 out.append(f"\x1b[{self._drawn}A")
                 self.stream.write("".join(out))
                 self._drawn = 0
-
             if self.final:
                 width = self._width()
                 for b in self.bars:
@@ -258,33 +250,25 @@ def download_one(
 ) -> str:
     bar = Bar(shorten(url))
     progress.add(bar)
-
     try:
         tmp = part_path(outdir, url, dest)
-
         offset = 0
         if resume and os.path.exists(tmp):
             offset = os.path.getsize(tmp)
-
         headers = {"User-Agent": UA, "Accept-Encoding": "identity"}
         if offset:
             headers["Range"] = f"bytes={offset}-"
-
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = getattr(resp, "status", 200)
-
             if offset and status != 206:
                 offset = 0
-
             final = dest if dest is not None else unique_path(os.path.join(outdir, guess_filename(url, resp.headers)))
             bar.label = os.path.basename(final)
-
             length = resp.headers.get("Content-Length")
             total = int(length) + offset if length is not None else None
             bar.total = total
             bar.done = offset
-
             with open(tmp, "ab" if offset else "wb") as fh:
                 while not STOP.is_set():
                     data = resp.read(CHUNK)
@@ -292,16 +276,13 @@ def download_one(
                         break
                     fh.write(data)
                     bar.done += len(data)
-
             if STOP.is_set():
                 raise KeyboardInterrupt
             if total is not None and bar.done < total:
                 raise IOError(f"truncated download ({bar.done}/{total} bytes)")
-
         os.replace(tmp, final)
         bar.finished = True
         return final
-
     except BaseException as exc:
         bar.failed = True
         bar.error = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
@@ -330,34 +311,28 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
     if args.output and len(args.urls) > 1:
         parser.error("-o/--output can only be used with a single URL")
     if args.jobs < 1:
         parser.error("-j/--jobs must be >= 1")
-
     outdir = os.path.abspath(args.dir)
     try:
         os.makedirs(outdir, exist_ok=True)
     except OSError as exc:
         print(f"dl: cannot create {outdir}: {exc}", file=sys.stderr)
         return 2
-
     resume = not args.no_resume
     fixed_dest = os.path.abspath(args.output) if args.output else None
-
     stream = sys.stdout
     progress = Progress(
         stream,
         enabled=(not args.quiet) and stream.isatty(),
         final=not args.quiet,
     )
-
     done: list[str] = []
     failed: list[tuple[str, BaseException]] = []
     interrupted = False
     t0 = time.monotonic()
-
     pool = ThreadPoolExecutor(max_workers=min(args.jobs, len(args.urls)))
     try:
         with progress:
@@ -389,9 +364,7 @@ def main(argv=None) -> int:
     finally:
         STOP.set()
         pool.shutdown(wait=True, cancel_futures=True)
-
     elapsed = time.monotonic() - t0
-
     if not args.quiet:
         total_bytes = 0
         for path in done:
@@ -405,7 +378,6 @@ def main(argv=None) -> int:
             print(f"dl: {url}: {exc}", file=sys.stderr)
         if done:
             print(f"Downloaded {len(done)} file(s), {fmt_size(total_bytes)} in {fmt_time(elapsed)}")
-
     return 130 if interrupted else (1 if failed else 0)
 
 
